@@ -1,0 +1,10 @@
+{
+  "name": "nova-player",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Browser-based graphics renderer - Coming Soon",
+  "scripts": {
+    "dev": "echo 'Nova Player not yet implemented'",
+    "build": "echo 'Nova Player not yet implemented'"
+  }
+}

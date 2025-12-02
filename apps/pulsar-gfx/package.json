@@ -1,0 +1,10 @@
+{
+  "name": "pulsar-gfx",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Graphics control application - Coming Soon",
+  "scripts": {
+    "dev": "echo 'Pulsar GFX not yet implemented'",
+    "build": "echo 'Pulsar GFX not yet implemented'"
+  }
+}
