@@ -1,0 +1,29 @@
+{
+  "name": "@emergent-platform/gfx-renderer",
+  "version": "1.0.0",
+  "description": "Shared graphics rendering components for Nova GFX and Pulsar GFX",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "echo 'Built by consuming app'",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "motion": "^11.15.0",
+    "chart.js": "^4.4.1",
+    "react-chartjs-2": "^5.2.0",
+    "mapbox-gl": "^3.3.0",
+    "lucide-react": "^0.469.0"
+  },
+  "devDependencies": {
+    "@types/mapbox-gl": "^3.1.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0"
+  }
+}
