@@ -1,0 +1,7 @@
+[build]
+  command = "pnpm install && pnpm --filter nova-gfx build"
+  publish = "apps/nova-gfx/dist"
+  functions = "apps/nova-gfx/netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
