@@ -1,0 +1,3 @@
+[build]
+  command = "cd ../.. && pnpm install && pnpm --filter pulsar-gfx build"
+  publish = "dist"
