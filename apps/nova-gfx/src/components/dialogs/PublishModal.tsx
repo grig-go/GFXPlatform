@@ -52,6 +52,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   // Load available channels
   useEffect(() => {
     let isCancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     async function loadChannels() {
       if (!open) {
@@ -67,6 +68,15 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
       setIsLoading(true);
       setError(null);
+
+      // Set a timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        if (!isCancelled) {
+          console.error('[PublishModal] Loading timed out');
+          setError('Loading timed out. Please check your connection and try again.');
+          setIsLoading(false);
+        }
+      }, 10000);
 
       try {
         // First check if we have an authenticated session
@@ -103,6 +113,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         setError(err instanceof Error ? err.message : 'Failed to load channels');
       } finally {
         if (!isCancelled) {
+          clearTimeout(timeoutId);
           setIsLoading(false);
         }
       }
@@ -114,6 +125,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
     return () => {
       isCancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [open]);
 
