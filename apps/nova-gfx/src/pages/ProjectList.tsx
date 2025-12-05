@@ -34,6 +34,7 @@ export function ProjectList() {
   }, []);
 
   const loadProjects = async () => {
+    console.log('[ProjectList] Loading projects...');
     setIsLoading(true);
     try {
       // First, load localStorage projects
@@ -51,26 +52,34 @@ export function ProjectList() {
           }
         }
       }
-      
-      // Try to load from Supabase
-      const { data, error } = await supabase
+      console.log('[ProjectList] Found', localProjects.length, 'localStorage projects');
+
+      // Try to load from Supabase with timeout
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout')), 10000)
+      );
+
+      const queryPromise = supabase
         .from('gfx_projects')
         .select('*')
         .eq('archived', false)
         .order('updated_at', { ascending: false });
 
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
       if (error) {
-        console.error('Error loading projects from Supabase:', error);
+        console.error('[ProjectList] Error loading from Supabase:', error);
         // Use localStorage projects only
         const sortedLocalProjects = localProjects.sort(
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
         setProjects(sortedLocalProjects);
       } else {
+        console.log('[ProjectList] Loaded', data?.length || 0, 'projects from Supabase');
         // Merge Supabase projects with localStorage projects
         // localStorage projects override Supabase ones, but preserve thumbnail_url from Supabase
         const supabaseProjects = data || [];
-        const supabaseProjectMap = new Map(supabaseProjects.map(p => [p.id, p]));
+        const supabaseProjectMap = new Map(supabaseProjects.map((p: Project) => [p.id, p]));
         const localProjectIds = new Set(localProjects.map(p => p.id));
 
         // For localStorage projects that exist in Supabase, merge the thumbnail_url
@@ -84,13 +93,17 @@ export function ProjectList() {
 
         const mergedProjects = [
           ...mergedLocalProjects,
-          ...supabaseProjects.filter(p => !localProjectIds.has(p.id)),
+          ...supabaseProjects.filter((p: Project) => !localProjectIds.has(p.id)),
         ].sort(
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
+        console.log('[ProjectList] Total merged projects:', mergedProjects.length);
         setProjects(mergedProjects);
       }
+    } catch (err) {
+      console.error('[ProjectList] Unexpected error:', err);
     } finally {
+      console.log('[ProjectList] Done loading, setting isLoading=false');
       setIsLoading(false);
     }
   };
