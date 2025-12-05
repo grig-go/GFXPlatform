@@ -4,7 +4,7 @@ import {
   AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, cn } from '@emergent-platform/ui';
-import { sendChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, type ChatMessage as AIChatMessage } from '@/lib/ai';
+import { sendChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, type ChatMessage as AIChatMessage } from '@/lib/ai';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
@@ -1058,28 +1058,32 @@ export function ChatPanel() {
     }
   }, [elements.length]);
 
-  // Check if API key is configured (memoized to avoid recalculating)
-  const hasApiKey = useMemo(() => {
-    return !!import.meta.env.VITE_CLAUDE_API_KEY;
+  // Check if AI is available - either local keys OR production (where backend proxy handles keys)
+  const isAIAvailable = useMemo(() => {
+    // In production, the serverless function handles API keys
+    const isProduction = import.meta.env.PROD;
+    // In development, check for local keys
+    const hasLocalKey = !!getGeminiApiKey() || !!getClaudeApiKey();
+    return isProduction || hasLocalKey;
   }, []);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
-    
-    // Check if API key is configured
-    if (!hasApiKey) {
+
+    // Check if AI is available
+    if (!isAIAvailable) {
       await addChatMessage({
         role: 'assistant',
-        content: `**Claude API Key Not Configured**
+        content: `**AI Not Available**
 
-To use the AI chat feature, you need to set up your Claude API key:
+To use the AI chat feature in development, you need to set up an API key:
 
-1. Create a \`.env\` file in the project root
-2. Add: \`VITE_CLAUDE_API_KEY=your-api-key-here\`
-3. Get your API key from: https://console.anthropic.com/
+1. Create a \`.env.local\` file in the project root
+2. Add: \`VITE_GEMINI_API_KEY=your-key\` or \`VITE_CLAUDE_API_KEY=your-key\`
+3. Get keys from: https://aistudio.google.com/ or https://console.anthropic.com/
 4. Restart the development server
 
-Alternatively, check your project settings (⚙️) to configure the API key.`,
+Alternatively, configure your API key in Settings (⚙️).`,
         error: true,
       });
       return;
