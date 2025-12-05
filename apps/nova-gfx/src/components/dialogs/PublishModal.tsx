@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,30 @@ import {
 import { Send, Radio, Square, Loader2, Monitor, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useDesignerStore } from '@/stores/designerStore';
+
+// Timeout wrapper for async operations
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = 10000,
+  operation: string = 'Operation'
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
 
 interface Channel {
   id: string;
@@ -35,6 +59,10 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   const [liveChannelIds, setLiveChannelIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  // Track open player windows
+  const playerWindowsRef = useRef<Map<string, Window>>(new Map());
+  const windowCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const {
     project,
     currentTemplateId,
@@ -48,6 +76,88 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   // Get current template data
   const currentTemplate = templates.find(t => t.id === currentTemplateId);
   const templateElements = elements.filter(e => e.template_id === currentTemplateId);
+
+  // Send stop command to a channel (extracted for reuse)
+  const sendStopCommand = useCallback(async (channelId: string) => {
+    if (!supabase) return;
+
+    try {
+      const command = {
+        type: 'stop',
+        timestamp: new Date().toISOString(),
+      };
+
+      await withTimeout(
+        supabase
+          .from('pulsar_channel_state')
+          .update({
+            pending_command: command,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('channel_id', channelId),
+        5000,
+        'Send stop command'
+      );
+
+      console.log(`[PublishModal] Sent stop command to channel ${channelId}`);
+    } catch (err) {
+      console.error(`[PublishModal] Failed to send stop command to channel ${channelId}:`, err);
+    }
+  }, []);
+
+  // Monitor player windows and send stop when closed
+  useEffect(() => {
+    // Start checking for closed windows when we have live channels
+    if (liveChannelIds.size > 0 && !windowCheckIntervalRef.current) {
+      windowCheckIntervalRef.current = setInterval(() => {
+        const closedChannels: string[] = [];
+
+        playerWindowsRef.current.forEach((win, channelId) => {
+          if (win.closed) {
+            console.log(`[PublishModal] Player window for channel ${channelId} was closed`);
+            closedChannels.push(channelId);
+          }
+        });
+
+        // Send stop commands for closed windows
+        closedChannels.forEach(channelId => {
+          sendStopCommand(channelId);
+          playerWindowsRef.current.delete(channelId);
+        });
+
+        // Update live channels state
+        if (closedChannels.length > 0) {
+          setLiveChannelIds(prev => {
+            const next = new Set(prev);
+            closedChannels.forEach(id => next.delete(id));
+            return next;
+          });
+        }
+
+        // Stop checking if no more windows
+        if (playerWindowsRef.current.size === 0 && windowCheckIntervalRef.current) {
+          clearInterval(windowCheckIntervalRef.current);
+          windowCheckIntervalRef.current = null;
+        }
+      }, 1000); // Check every second
+    }
+
+    return () => {
+      if (windowCheckIntervalRef.current) {
+        clearInterval(windowCheckIntervalRef.current);
+        windowCheckIntervalRef.current = null;
+      }
+    };
+  }, [liveChannelIds.size, sendStopCommand]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (windowCheckIntervalRef.current) {
+        clearInterval(windowCheckIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Load available channels
   useEffect(() => {
@@ -170,9 +280,12 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     setIsPublishing(true);
     setError(null);
 
+    const PUBLISH_TIMEOUT = 20000; // 20 second timeout for publish operations
+
     try {
-      // Save project first to ensure all changes are persisted
-      await saveProject();
+      // Save project first to ensure all changes are persisted (has its own timeout)
+      console.log('[PublishModal] Saving project before publish...');
+      await withTimeout(saveProject(), PUBLISH_TIMEOUT, 'Save project');
 
       // Build the command payload
       const command = {
@@ -210,31 +323,38 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       // Send command to all selected channels
       const channelIds = Array.from(selectedChannelIds);
 
+      console.log('[PublishModal] Publishing to channels:', channelIds);
+
       // Update channel state and also set loaded_project_id on channel
-      const results = await Promise.all(
-        channelIds.flatMap(channelId => [
-          // Update channel state with pending command
-          supabase
-            .from('pulsar_channel_state')
-            .update({
-              pending_command: command,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('channel_id', channelId),
-          // Set loaded_project_id on channel for always-on layer support
-          supabase
-            .from('pulsar_channels')
-            .update({
-              loaded_project_id: project?.id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', channelId),
-        ])
+      const results = await withTimeout(
+        Promise.all(
+          channelIds.flatMap(channelId => [
+            // Update channel state with pending command
+            supabase
+              .from('pulsar_channel_state')
+              .update({
+                pending_command: command,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('channel_id', channelId),
+            // Set loaded_project_id on channel for always-on layer support
+            supabase
+              .from('pulsar_channels')
+              .update({
+                loaded_project_id: project?.id,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', channelId),
+          ])
+        ),
+        PUBLISH_TIMEOUT,
+        'Publish to channels'
       );
 
       // Check for errors
       const errors = results.filter(r => r.error);
       if (errors.length > 0) {
+        console.error('[PublishModal] Some publish operations failed:', errors);
         throw new Error(`Failed to publish to ${errors.length} channel(s)`);
       }
 
@@ -245,18 +365,25 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         return next;
       });
 
-      // Open player URL for each selected channel
+      // Open player URL for each selected channel and track window references
       channelIds.forEach(channelId => {
         const debugParam = debugMode ? '?debug=1' : '';
         const playerUrl = `${window.location.origin}/player/${channelId}${debugParam}`;
-        window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+        const playerWindow = window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+
+        // Track the window reference for close detection
+        if (playerWindow) {
+          playerWindowsRef.current.set(channelId, playerWindow);
+        }
       });
+
+      console.log('[PublishModal] Publish successful');
 
       // Close the modal after successful publish
       onOpenChange(false);
     } catch (err) {
-      console.error('Publish failed:', err);
-      setError('Failed to publish to channel');
+      console.error('[PublishModal] Publish failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to publish to channel');
     } finally {
       setIsPublishing(false);
     }
@@ -286,25 +413,31 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       };
 
       const channelIds = Array.from(liveChannelIds);
-      await Promise.all(
-        channelIds.map(channelId =>
-          supabase
-            .from('pulsar_channel_state')
-            .update({
-              pending_command: command,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('channel_id', channelId)
-        )
+      await withTimeout(
+        Promise.all(
+          channelIds.map(channelId =>
+            supabase
+              .from('pulsar_channel_state')
+              .update({
+                pending_command: command,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('channel_id', channelId)
+          )
+        ),
+        10000,
+        'Stop playback'
       );
 
       // Only clear live channels if we did a global stop (no layerId)
       if (!currentTemplate?.layer_id) {
         setLiveChannelIds(new Set());
+        // Clear all tracked windows
+        playerWindowsRef.current.clear();
       }
     } catch (err) {
       console.error('Stop failed:', err);
-      setError('Failed to stop playback');
+      setError(err instanceof Error ? err.message : 'Failed to stop playback');
     } finally {
       setIsPublishing(false);
     }
@@ -324,22 +457,28 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       };
 
       const channelIds = Array.from(liveChannelIds);
-      await Promise.all(
-        channelIds.map(channelId =>
-          supabase
-            .from('pulsar_channel_state')
-            .update({
-              pending_command: command,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('channel_id', channelId)
-        )
+      await withTimeout(
+        Promise.all(
+          channelIds.map(channelId =>
+            supabase
+              .from('pulsar_channel_state')
+              .update({
+                pending_command: command,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('channel_id', channelId)
+          )
+        ),
+        10000,
+        'Clear channels'
       );
 
       setLiveChannelIds(new Set());
+      // Clear all tracked windows
+      playerWindowsRef.current.clear();
     } catch (err) {
       console.error('Clear failed:', err);
-      setError('Failed to clear');
+      setError(err instanceof Error ? err.message : 'Failed to clear');
     } finally {
       setIsPublishing(false);
     }

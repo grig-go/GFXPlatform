@@ -30,6 +30,36 @@ import { supabase } from '@emergent-platform/supabase-client';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
 
 /**
+ * Wrap a promise with a timeout
+ * @param promise - The promise to wrap
+ * @param timeoutMs - Timeout in milliseconds (default: 10000)
+ * @param operation - Name of the operation for error messages
+ * @returns The result of the promise, or throws if timeout
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = 10000,
+  operation: string = 'Operation'
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
+
+/**
  * Upload a thumbnail to Supabase Storage
  * @param projectId - The project ID (used as filename)
  * @param dataUrl - Base64 data URL of the image
@@ -1034,9 +1064,17 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           const isValidUUID = UUID_REGEX.test(projectId);
 
           if (thumbnailDataUrl && isValidUUID && projectId !== 'demo') {
-            const uploadedUrl = await uploadThumbnailToStorage(projectId, thumbnailDataUrl);
-            if (uploadedUrl) {
-              thumbnailUrl = uploadedUrl;
+            try {
+              const uploadedUrl = await withTimeout(
+                uploadThumbnailToStorage(projectId, thumbnailDataUrl),
+                15000,
+                'Upload thumbnail'
+              );
+              if (uploadedUrl) {
+                thumbnailUrl = uploadedUrl;
+              }
+            } catch (thumbnailError) {
+              console.warn('Thumbnail upload timed out or failed, continuing with save:', thumbnailError);
             }
           }
 
@@ -1077,7 +1115,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           
           try {
             console.log('Saving project:', projectId);
-            
+            const SAVE_TIMEOUT = 15000; // 15 second timeout per operation
+
             // 1. Update project metadata (only include columns that exist in DB)
             const projectData: Record<string, unknown> = {
               name: state.project.name,
@@ -1089,22 +1128,26 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               thumbnail_url: thumbnailUrl,
               updated_at: new Date().toISOString(),
             };
-            
+
             // Add optional columns if they exist (may fail on older schemas)
             if (state.project.settings) {
               projectData.settings = state.project.settings;
             }
-            
-            const { error: projectError } = await supabase
-              .from('gfx_projects')
-              .update(projectData)
-              .eq('id', projectId);
-            
+
+            const { error: projectError } = await withTimeout(
+              supabase
+                .from('gfx_projects')
+                .update(projectData)
+                .eq('id', projectId),
+              SAVE_TIMEOUT,
+              'Save project metadata'
+            );
+
             if (projectError) {
               console.error('Error saving project:', projectError);
               // Don't throw - continue with other saves
             }
-            
+
             // 2. Save layers (only include DB columns)
             if (state.layers.length > 0) {
               const layersToSave = state.layers.map(l => ({
@@ -1129,12 +1172,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 locked: l.locked ?? false,
                 always_on: l.always_on ?? false,
               }));
-              const { error: layersError } = await supabase
-                .from('gfx_layers')
-                .upsert(layersToSave, { onConflict: 'id' });
+              const { error: layersError } = await withTimeout(
+                supabase
+                  .from('gfx_layers')
+                  .upsert(layersToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save layers'
+              );
               if (layersError) console.error('Error saving layers:', layersError);
             }
-            
+
             // 3. Save templates (only include DB columns)
             if (state.templates.length > 0) {
               const templatesToSave = state.templates.map(t => ({
@@ -1163,12 +1210,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 sort_order: t.sort_order,
                 updated_at: new Date().toISOString(),
               }));
-              const { error: templatesError } = await supabase
-                .from('gfx_templates')
-                .upsert(templatesToSave, { onConflict: 'id' });
+              const { error: templatesError } = await withTimeout(
+                supabase
+                  .from('gfx_templates')
+                  .upsert(templatesToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save templates'
+              );
               if (templatesError) console.error('Error saving templates:', templatesError);
             }
-            
+
             // 4. Save elements (only include DB columns)
             if (state.elements.length > 0) {
               const elementsToSave = state.elements.map(e => ({
@@ -1196,12 +1247,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 visible: e.visible,
                 locked: e.locked,
               }));
-              const { error: elementsError } = await supabase
-                .from('gfx_elements')
-                .upsert(elementsToSave, { onConflict: 'id' });
+              const { error: elementsError } = await withTimeout(
+                supabase
+                  .from('gfx_elements')
+                  .upsert(elementsToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save elements'
+              );
               if (elementsError) console.error('Error saving elements:', elementsError);
             }
-            
+
             // 5. Save animations
             if (state.animations.length > 0) {
               const animationsToSave = state.animations.map(a => ({
@@ -1216,12 +1271,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 easing: a.easing,
                 preset_id: a.preset_id,
               }));
-              const { error: animationsError } = await supabase
-                .from('gfx_animations')
-                .upsert(animationsToSave, { onConflict: 'id' });
+              const { error: animationsError } = await withTimeout(
+                supabase
+                  .from('gfx_animations')
+                  .upsert(animationsToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save animations'
+              );
               if (animationsError) console.error('Error saving animations:', animationsError);
             }
-            
+
             // 6. Save keyframes (use properties JSONB column)
             if (state.keyframes.length > 0) {
               const keyframesToSave = state.keyframes.map(k => ({
@@ -1241,12 +1300,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 background_color: k.properties?.backgroundColor ?? k.background_color ?? null,
                 sort_order: k.sort_order ?? 0,
               }));
-              const { error: keyframesError } = await supabase
-                .from('gfx_keyframes')
-                .upsert(keyframesToSave, { onConflict: 'id' });
+              const { error: keyframesError } = await withTimeout(
+                supabase
+                  .from('gfx_keyframes')
+                  .upsert(keyframesToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save keyframes'
+              );
               if (keyframesError) console.error('Error saving keyframes:', keyframesError);
             }
-            
+
             // 7. Save bindings
             if (state.bindings.length > 0) {
               const bindingsToSave = state.bindings.map(b => ({
@@ -1261,9 +1324,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 formatter_options: b.formatter_options,
                 required: b.required,
               }));
-              const { error: bindingsError } = await supabase
-                .from('gfx_bindings')
-                .upsert(bindingsToSave, { onConflict: 'id' });
+              const { error: bindingsError } = await withTimeout(
+                supabase
+                  .from('gfx_bindings')
+                  .upsert(bindingsToSave, { onConflict: 'id' }),
+                SAVE_TIMEOUT,
+                'Save bindings'
+              );
               if (bindingsError) console.error('Error saving bindings:', bindingsError);
             }
             
