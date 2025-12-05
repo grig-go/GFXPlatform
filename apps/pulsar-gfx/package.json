@@ -15,6 +15,7 @@
     "@emergent-platform/types": "workspace:*",
     "@emergent-platform/supabase-client": "workspace:*",
     "@emergent-platform/design-tokens": "workspace:*",
+    "@supabase/supabase-js": "^2.46.0",
     "lucide-react": "^0.303.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
