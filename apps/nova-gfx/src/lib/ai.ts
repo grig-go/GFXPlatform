@@ -99,15 +99,24 @@ export function setAIModel(modelId: AIModelId): void {
   localStorage.setItem('nova-ai-model', modelId);
 }
 
-// Get API keys (user-supplied keys override env variables)
+// Get API keys (user-supplied keys or VITE_ env vars for local dev)
 export function getGeminiApiKey(): string | null {
-  // First check localStorage (user-supplied), then env variable
+  // Check localStorage first (user-supplied), then env variable (local dev)
   return localStorage.getItem('nova-gemini-api-key') || import.meta.env.VITE_GEMINI_API_KEY || null;
 }
 
 export function getClaudeApiKey(): string | null {
-  // First check localStorage (user-supplied), then env variable
+  // Check localStorage first (user-supplied), then env variable (local dev)
   return localStorage.getItem('nova-claude-api-key') || import.meta.env.VITE_CLAUDE_API_KEY || null;
+}
+
+// Check if we should use the backend proxy (no local key available)
+// In production without VITE_ keys, this will use the serverless function
+function shouldUseBackendProxy(provider: AIProvider): boolean {
+  if (provider === 'gemini') {
+    return !getGeminiApiKey();
+  }
+  return !getClaudeApiKey();
 }
 
 // System prompt - lean version focused on editing existing elements
@@ -1403,13 +1412,10 @@ async function sendGeminiMessage(
   signal?: AbortSignal
 ): Promise<AIResponse> {
   const geminiApiKey = getGeminiApiKey();
-  
-  if (!geminiApiKey) {
-    throw new Error('Gemini API key is not configured. Add your API key in Settings → AI Model Settings, or set VITE_GEMINI_API_KEY in your .env file.');
-  }
+  const useProxy = shouldUseBackendProxy('gemini');
 
   const contextInfo = buildContextMessage(context);
-  
+
   // Build Gemini-format messages (convert assistant to model role)
   const geminiContents: any[] = [
     // Add system instruction as first user message with model acknowledgment
@@ -1431,7 +1437,7 @@ async function sendGeminiMessage(
   if (images && images.length > 0 && messages.length > 0) {
     const lastMessage = messages[messages.length - 1];
     const parts: any[] = [];
-    
+
     // Add images first
     images.forEach((img) => {
       parts.push({
@@ -1441,10 +1447,10 @@ async function sendGeminiMessage(
         },
       });
     });
-    
+
     // Add text
     parts.push({ text: lastMessage.content });
-    
+
     geminiContents.push({
       role: 'user',
       parts,
@@ -1452,29 +1458,50 @@ async function sendGeminiMessage(
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
-      {
+    let response;
+
+    if (useProxy) {
+      // Use backend proxy for API call
+      response = await fetch('/.netlify/functions/ai-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: geminiContents,
-          generationConfig: {
-            maxOutputTokens: 8192,
-            temperature: 0.7,
-          },
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-          ],
+          provider: 'gemini',
+          model: modelConfig.apiModel,
+          messages: geminiContents,
+          maxTokens: 8192,
+          temperature: 0.7,
         }),
         signal,
-      }
-    );
+      });
+    } else {
+      // Direct API call with user-supplied key
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: geminiContents,
+            generationConfig: {
+              maxOutputTokens: 8192,
+              temperature: 0.7,
+            },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
+          }),
+          signal,
+        }
+      );
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -1508,13 +1535,10 @@ async function sendClaudeMessage(
   signal?: AbortSignal
 ): Promise<AIResponse> {
   const claudeApiKey = getClaudeApiKey();
-  
-  if (!claudeApiKey) {
-    throw new Error('Claude API key is not configured. Add your API key in Settings → AI Model Settings, or set VITE_CLAUDE_API_KEY in your .env file.');
-  }
+  const useProxy = shouldUseBackendProxy('claude');
 
   const contextInfo = buildContextMessage(context);
-  
+
   // Build Claude-format messages
   const apiMessages: any[] = [
     ...(contextInfo ? [{
@@ -1535,7 +1559,7 @@ async function sendClaudeMessage(
   if (images && images.length > 0 && messages.length > 0) {
     const lastMessage = messages[messages.length - 1];
     const content: any[] = [];
-    
+
     // Add images first
     images.forEach((img) => {
       content.push({
@@ -1547,13 +1571,13 @@ async function sendClaudeMessage(
         },
       });
     });
-    
+
     // Add text
     content.push({
       type: 'text',
       text: lastMessage.content,
     });
-    
+
     apiMessages.push({
       role: 'user',
       content,
@@ -1561,22 +1585,43 @@ async function sendClaudeMessage(
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: modelConfig.apiModel,
-        max_tokens: 8192,
-        system: SYSTEM_PROMPT,
-        messages: apiMessages,
-      }),
-      signal,
-    });
+    let response;
+
+    if (useProxy) {
+      // Use backend proxy for API call
+      response = await fetch('/.netlify/functions/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'claude',
+          model: modelConfig.apiModel,
+          messages: apiMessages,
+          systemPrompt: SYSTEM_PROMPT,
+          maxTokens: 8192,
+        }),
+        signal,
+      });
+    } else {
+      // Direct API call with user-supplied key
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': claudeApiKey!,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: modelConfig.apiModel,
+          max_tokens: 8192,
+          system: SYSTEM_PROMPT,
+          messages: apiMessages,
+        }),
+        signal,
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

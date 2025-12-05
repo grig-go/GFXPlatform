@@ -259,8 +259,8 @@ export function ContentEditor() {
       }));
       setHasChanges(true);
 
-      // Update preview
-      updatePreviewField(`${keyframePickerFieldId}_keyframes`, JSON.stringify(updatedKeyframes));
+      // Update preview - send keyframes directly (not as JSON string)
+      updatePreviewField(`${keyframePickerFieldId}_keyframes`, updatedKeyframes);
     }
 
     setShowKeyframeLocationPicker(false);

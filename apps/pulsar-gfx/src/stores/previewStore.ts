@@ -22,7 +22,7 @@ interface PreviewStore {
   // Isolated mode state
   selectedTemplateId: string | null;
   selectedPageId: string | null;
-  previewPayload: Record<string, string | null>;
+  previewPayload: Record<string, any>;
   animationPhase: AnimationPhase;
 
   // Composite mode state
@@ -30,11 +30,11 @@ interface PreviewStore {
 
   // Selection
   selectTemplate: (templateId: string | null) => void;
-  selectPage: (pageId: string | null, payload?: Record<string, string | null>) => void;
+  selectPage: (pageId: string | null, payload?: Record<string, any>) => void;
 
   // Preview payload
-  updatePreviewField: (fieldId: string, value: string | null) => void;
-  setPreviewPayload: (payload: Record<string, string | null>) => void;
+  updatePreviewField: (fieldId: string, value: any) => void;
+  setPreviewPayload: (payload: Record<string, any>) => void;
 
   // Animation controls
   playIn: () => Promise<void>;
