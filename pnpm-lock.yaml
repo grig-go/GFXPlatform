@@ -210,6 +210,9 @@ importers:
       '@emergent-platform/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@supabase/supabase-js':
+        specifier: ^2.46.0
+        version: 2.86.0
       immer:
         specifier: ^10.2.0
         version: 10.2.0
