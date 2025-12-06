@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS invitations (
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   invited_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member', 'viewer')),
-  token TEXT UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'),
+  -- Use uuid without dashes as token (64 hex chars from 2 UUIDs)
+  token TEXT UNIQUE NOT NULL DEFAULT (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days'),
   accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

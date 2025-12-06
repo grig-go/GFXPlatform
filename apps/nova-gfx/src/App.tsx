@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Designer } from '@/components/designer/Designer';
 import { Player } from '@/components/player/Player';
 import { NovaPlayer } from '@/pages/NovaPlayer';
@@ -14,21 +14,34 @@ import { PrivateRoute } from '@/components/auth';
 import { useAuthStore } from '@/stores/authStore';
 import { ConfirmProvider } from '@/hooks/useConfirm';
 
-export default function App() {
+// Routes that don't require auth initialization
+const PUBLIC_ROUTES = ['/preview', '/play', '/player'];
+
+function AppContent() {
+  const location = useLocation();
   const [authReady, setAuthReady] = useState(false);
   const initialize = useAuthStore((state) => state.initialize);
 
+  // Check if current path is a public route that doesn't need auth
+  const isPublicRoute = PUBLIC_ROUTES.some(route => location.pathname.startsWith(route));
+
   useEffect(() => {
+    // Skip auth initialization for public routes
+    if (isPublicRoute) {
+      setAuthReady(true);
+      return;
+    }
+
     // Initialize auth on app startup
     const init = async () => {
       await initialize();
       setAuthReady(true);
     };
     init();
-  }, [initialize]);
+  }, [initialize, isPublicRoute]);
 
-  // Show loading while auth initializes
-  if (!authReady) {
+  // Show loading while auth initializes (only for non-public routes)
+  if (!authReady && !isPublicRoute) {
     return (
       <div className="dark absolute inset-0 flex items-center justify-center bg-background">
         <div className="text-center">
@@ -42,62 +55,67 @@ export default function App() {
   }
 
   return (
+    <div className="dark absolute inset-0 overflow-hidden">
+      {/* Global confirm dialog */}
+      <ConfirmProvider />
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+        {/* Protected routes */}
+        <Route path="/" element={<Navigate to="/projects" replace />} />
+        <Route
+          path="/projects"
+          element={
+            <PrivateRoute>
+              <ProjectList />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/projects/:projectId"
+          element={
+            <PrivateRoute>
+              <Designer />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Settings routes */}
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <SettingsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings/:tab"
+          element={
+            <PrivateRoute>
+              <SettingsPage />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Public player routes (for OBS/broadcast) */}
+        <Route path="/preview" element={<Preview />} />
+        <Route path="/play/:projectSlug" element={<Player />} />
+        <Route path="/play/:orgSlug/:projectSlug" element={<Player />} />
+        <Route path="/player/:channelId" element={<NovaPlayer />} />
+      </Routes>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
     <BrowserRouter>
-      {/* Using absolute positioning to fill the fixed #root container */}
-      <div className="dark absolute inset-0 overflow-hidden">
-        {/* Global confirm dialog */}
-        <ConfirmProvider />
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-
-          {/* Protected routes */}
-          <Route path="/" element={<Navigate to="/projects" replace />} />
-          <Route
-            path="/projects"
-            element={
-              <PrivateRoute>
-                <ProjectList />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId"
-            element={
-              <PrivateRoute>
-                <Designer />
-              </PrivateRoute>
-            }
-          />
-
-          {/* Settings routes */}
-          <Route
-            path="/settings"
-            element={
-              <PrivateRoute>
-                <SettingsPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/settings/:tab"
-            element={
-              <PrivateRoute>
-                <SettingsPage />
-              </PrivateRoute>
-            }
-          />
-
-          {/* Public player routes (for OBS/broadcast) */}
-          <Route path="/preview" element={<Preview />} />
-          <Route path="/play/:projectSlug" element={<Player />} />
-          <Route path="/play/:orgSlug/:projectSlug" element={<Player />} />
-          <Route path="/player/:channelId" element={<NovaPlayer />} />
-        </Routes>
-      </div>
+      <AppContent />
     </BrowserRouter>
   );
 }

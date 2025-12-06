@@ -114,6 +114,12 @@ export function Preview() {
   // Content overrides from postMessage (for real-time updates)
   const [contentOverrides, setContentOverrides] = useState<Record<string, any>>({});
 
+  // Ref to track current localData for use in event handlers (avoids stale closure)
+  const localDataRef = useRef<PreviewData | null>(null);
+  useEffect(() => {
+    localDataRef.current = localData;
+  }, [localData]);
+
   useEffect(() => {
     // Check if store has data
     if (storeData.templates.length === 0) {
@@ -500,17 +506,29 @@ export function Preview() {
           setCurrentPhase('in');
           break;
 
-        case 'setTemplate':
+        case 'setTemplate': {
           // Handle template change with optional mode
           if (payload?.mode) {
             setPreviewMode(payload.mode);
           }
           if (payload?.mode === 'composite') {
             setSelectedTemplateId('all');
+            setSelectedLayerId('all');
           } else if (payload?.templateId) {
+            // Get current templates to verify the template exists (use ref for current value)
+            const currentTemplates = localDataRef.current?.templates || [];
+            const templateExists = currentTemplates.some(t => t.id === payload.templateId);
+            console.log('[Preview] Setting template to:', payload.templateId,
+              'exists:', templateExists,
+              'available templates:', currentTemplates.map(t => ({ id: t.id, name: t.name })));
+
             setSelectedTemplateId(payload.templateId);
+            // Reset layer filter to 'all' so the template isn't filtered out
+            // by a previously selected layer
+            setSelectedLayerId('all');
           }
           break;
+        }
 
         case 'setMode':
           // Handle mode change

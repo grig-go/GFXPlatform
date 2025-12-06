@@ -189,20 +189,31 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       }, 10000);
 
       try {
-        // First check if we have an authenticated session
-        const { data: sessionData } = await supabase.auth.getSession();
-        console.log('[PublishModal] Auth session:', sessionData?.session ? 'authenticated' : 'not authenticated');
-
-        if (!sessionData?.session) {
-          throw new Error('Not authenticated. Please log in first.');
+        // First check if we have an authenticated session (with timeout)
+        let isAuthenticated = false;
+        try {
+          const sessionResult = await withTimeout(
+            supabase.auth.getSession(),
+            5000,
+            'Get auth session'
+          );
+          isAuthenticated = !!sessionResult?.data?.session;
+          console.log('[PublishModal] Auth session:', isAuthenticated ? 'authenticated' : 'not authenticated');
+        } catch (authErr) {
+          console.warn('[PublishModal] Auth check failed or timed out, proceeding anyway:', authErr);
+          // Continue anyway - RLS policies may allow unauthenticated access
         }
 
         console.log('[PublishModal] Loading channels...');
 
-        const { data, error: fetchError } = await supabase
-          .from('pulsar_channels')
-          .select('id, name, channel_code, player_url, player_status')
-          .order('name');
+        const { data, error: fetchError } = await withTimeout(
+          supabase
+            .from('pulsar_channels')
+            .select('id, name, channel_code, player_url, player_status')
+            .order('name'),
+          8000,
+          'Load channels'
+        );
 
         if (isCancelled) return;
 
