@@ -233,9 +233,10 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.open('http://localhost:3001/docs/apps/nova-gfx', '_blank')}>
               <HelpCircle className="mr-2 h-4 w-4" />
               Documentation
+              <ExternalLink className="ml-auto h-3 w-3 text-muted-foreground" />
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onShowKeyboardShortcuts}>
               <Keyboard className="mr-2 h-4 w-4" />

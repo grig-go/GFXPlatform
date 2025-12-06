@@ -1,18 +1,19 @@
 /**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
+ * Nova GFX Documentation - Homepage Styles
+ * Matches the design system used in Nova GFX and Pulsar GFX
  */
 
 .heroBanner {
-  padding: 4rem 0;
+  padding: 6rem 0;
   text-align: center;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
 }
 
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 2rem;
+    padding: 3rem 1.5rem;
   }
 }
 
@@ -20,4 +21,84 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+}
+
+.features {
+  padding: 4rem 0;
+  background-color: #ffffff;
+}
+
+.featureCard {
+  border: 1px solid #e5e5e5;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  height: 100%;
+  transition: all 0.2s ease;
+  background-color: #ffffff;
+}
+
+.featureCard:hover {
+  border-color: #171717;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.featureCard h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #171717;
+}
+
+.featureCard p {
+  color: #525252;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.featureCard a {
+  color: #171717;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.featureCard a:hover {
+  color: #525252;
+  text-decoration: underline;
+}
+
+/* Dark mode overrides */
+:global([data-theme='dark']) .heroBanner {
+  background: linear-gradient(180deg, #0a0a0a 0%, #171717 100%);
+}
+
+:global([data-theme='dark']) .features {
+  background-color: #0a0a0a;
+}
+
+:global([data-theme='dark']) .featureCard {
+  background-color: #171717;
+  border-color: #262626;
+}
+
+:global([data-theme='dark']) .featureCard:hover {
+  border-color: #fafafa;
+}
+
+:global([data-theme='dark']) .featureCard h3 {
+  color: #fafafa;
+}
+
+:global([data-theme='dark']) .featureCard p {
+  color: #a3a3a3;
+}
+
+:global([data-theme='dark']) .featureCard a {
+  color: #fafafa;
+}
+
+:global([data-theme='dark']) .featureCard a:hover {
+  color: #d4d4d4;
 }

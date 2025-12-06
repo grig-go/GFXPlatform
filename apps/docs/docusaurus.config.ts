@@ -50,14 +50,15 @@ const config: Config = {
   themeConfig: {
     image: 'img/nova-gfx-social-card.jpg',
     colorMode: {
-      defaultMode: 'dark',
-      respectPrefersColorScheme: true,
+      defaultMode: 'light',
+      disableSwitch: false,
+      respectPrefersColorScheme: false,
     },
     navbar: {
-      title: 'Nova GFX',
+      title: '',
       logo: {
         alt: 'Nova GFX Logo',
-        src: 'img/logo.svg',
+        src: 'img/nova-logo.svg',
       },
       items: [
         {
@@ -73,15 +74,10 @@ const config: Config = {
           label: 'API Reference',
         },
         {to: '/blog', label: 'Changelog', position: 'left'},
-        {
-          href: 'https://github.com/emergent-solutions/nova-gfx',
-          label: 'GitHub',
-          position: 'right',
-        },
       ],
     },
     footer: {
-      style: 'dark',
+      style: 'light',
       links: [
         {
           title: 'Documentation',

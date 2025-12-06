@@ -10,7 +10,7 @@ import styles from './index.module.css';
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={styles.heroBanner}>
       <div className="container">
         <Heading as="h1" className="hero__title">
           {siteConfig.title}
@@ -18,9 +18,14 @@ function HomepageHeader() {
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <div className={styles.buttons}>
           <Link
-            className="button button--secondary button--lg"
+            className="button button--primary button--lg"
             to="/docs/getting-started">
             Get Started
+          </Link>
+          <Link
+            className="button button--secondary button--lg"
+            to="/docs/apps/nova-gfx">
+            View Docs
           </Link>
         </div>
       </div>
@@ -31,7 +36,7 @@ function HomepageHeader() {
 function Feature({title, description, link}: {title: string; description: string; link: string}) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="padding-horiz--md padding-vert--lg">
+      <div className={styles.featureCard}>
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
         <Link to={link}>Learn more →</Link>
@@ -44,7 +49,7 @@ function HomepageFeatures() {
   return (
     <section className={styles.features}>
       <div className="container">
-        <div className="row">
+        <div className="row" style={{gap: '1.5rem'}}>
           <Feature
             title="Design with Nova GFX"
             description="Create stunning animated graphics with our intuitive designer. Support for text, images, maps, charts, and more."

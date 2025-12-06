@@ -120,6 +120,9 @@ export function Preview() {
     localDataRef.current = localData;
   }, [localData]);
 
+  // Ref to track current templates array (whichever source is being used)
+  const templatesRef = useRef<Template[]>([]);
+
   useEffect(() => {
     // Check if store has data
     if (storeData.templates.length === 0) {
@@ -144,6 +147,11 @@ export function Preview() {
   const animations = storeData.animations.length > 0 ? storeData.animations : (localData?.animations || []);
   const keyframes = storeData.keyframes.length > 0 ? storeData.keyframes : (localData?.keyframes || []);
   const currentProject = storeData.currentProject || localData?.project || null;
+
+  // Keep templatesRef updated with the actual templates array (for event handler access)
+  useEffect(() => {
+    templatesRef.current = templates;
+  }, [templates]);
 
   // Preview mode: 'isolated' shows single template, 'composite' shows all
   const [previewMode, setPreviewMode] = useState<'isolated' | 'composite'>(modeParam || 'isolated');
@@ -176,7 +184,7 @@ export function Preview() {
   // Get templates to show based on selection
   const visibleTemplates = useMemo(() => {
     let filtered = templates.filter(t => t.enabled !== false);
-    
+
     // Filter by layer if a specific layer is selected
     if (selectedLayerId !== 'all') {
       filtered = filtered.filter(t => t.layer_id === selectedLayerId);
@@ -185,12 +193,20 @@ export function Preview() {
       const enabledLayerIds = new Set(enabledLayers.map(l => l.id));
       filtered = filtered.filter(t => enabledLayerIds.has(t.layer_id));
     }
-    
+
     // Filter by specific template if selected
     if (selectedTemplateId !== 'all') {
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(t => t.id === selectedTemplateId);
+      console.log(`[Preview] visibleTemplates: filtering for template ${selectedTemplateId}`, {
+        beforeFilter,
+        afterFilter: filtered.length,
+        matchedTemplate: filtered[0]?.name || 'none',
+        selectedLayerId,
+        enabledLayerIds: enabledLayers.map(l => l.id),
+      });
     }
-    
+
     // Sort by layer z-index
     return filtered.sort((a, b) => {
       const layerA = layers.find(l => l.id === a.layer_id);
@@ -310,10 +326,23 @@ export function Preview() {
   // Get all visible elements (from all visible templates, sorted by z-index)
   const visibleElements = useMemo(() => {
     const templateIds = new Set(visibleTemplates.map(t => t.id));
-    return elementsWithOverrides
+    const result = elementsWithOverrides
       .filter(e => templateIds.has(e.template_id) && e.visible !== false && !e.parent_element_id)
       .sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
-  }, [elementsWithOverrides, visibleTemplates]);
+
+    // Debug logging when we have a specific template selected
+    if (selectedTemplateId !== 'all') {
+      console.log('[Preview] visibleElements:', {
+        selectedTemplateId,
+        visibleTemplateIds: Array.from(templateIds),
+        visibleTemplateNames: visibleTemplates.map(t => t.name),
+        elementCount: result.length,
+        elementTemplateIds: [...new Set(result.map(e => e.template_id))],
+      });
+    }
+
+    return result;
+  }, [elementsWithOverrides, visibleTemplates, selectedTemplateId]);
 
   // Get animations for current phase and visible elements
   const currentAnimations = useMemo(() => {
@@ -439,12 +468,23 @@ export function Preview() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Track connection state for debugging
+  const [isConnected, setIsConnected] = useState(false);
+  const lastMessageTimeRef = useRef<number>(Date.now());
+
   // PostMessage handler for external control (from Pulsar GFX)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       // Validate message structure
       if (!event.data || typeof event.data !== 'object') return;
       if (event.data.source !== 'pulsar-gfx') return;
+
+      // Track that we received a message (for connection monitoring)
+      lastMessageTimeRef.current = Date.now();
+      if (!isConnected) {
+        setIsConnected(true);
+        console.log('[Preview] Connected to Pulsar GFX');
+      }
 
       const { type, payload } = event.data;
       console.log('Preview received message:', type, payload);
@@ -453,9 +493,10 @@ export function Preview() {
         case 'loadData':
           // Load full preview data from Pulsar (cross-origin compatible)
           if (payload && typeof payload === 'object') {
-            console.log('Preview received loadData:', payload);
+            const previewData = payload as PreviewData;
+            console.log('Preview received loadData:', previewData);
             // Debug: Log element types
-            const elements = (payload as PreviewData).elements || [];
+            const elements = previewData.elements || [];
             console.log('Preview elements received:', elements.map((e: Element) => ({
               id: e.id,
               name: e.name,
@@ -463,7 +504,17 @@ export function Preview() {
               content_type: e.content?.type,
               content: e.content
             })));
-            setLocalData(payload as PreviewData);
+            // Also log templates for debugging
+            console.log('[Preview] Templates received:', previewData.templates?.map(t => ({
+              id: t.id,
+              name: t.name,
+              layer_id: t.layer_id,
+            })));
+            setLocalData(previewData);
+            // Update templatesRef immediately for use in subsequent messages
+            if (previewData.templates) {
+              templatesRef.current = previewData.templates;
+            }
           }
           break;
 
@@ -515,17 +566,22 @@ export function Preview() {
             setSelectedTemplateId('all');
             setSelectedLayerId('all');
           } else if (payload?.templateId) {
-            // Get current templates to verify the template exists (use ref for current value)
-            const currentTemplates = localDataRef.current?.templates || [];
+            // Get current templates to verify the template exists (use templatesRef for current rendered templates)
+            const currentTemplates = templatesRef.current;
             const templateExists = currentTemplates.some(t => t.id === payload.templateId);
+            const matchedTemplate = currentTemplates.find(t => t.id === payload.templateId);
             console.log('[Preview] Setting template to:', payload.templateId,
               'exists:', templateExists,
-              'available templates:', currentTemplates.map(t => ({ id: t.id, name: t.name })));
+              'matched:', matchedTemplate?.name,
+              'layer_id:', matchedTemplate?.layer_id,
+              'totalTemplates:', currentTemplates.length,
+              'available templates:', currentTemplates.map(t => ({ id: t.id, name: t.name, layer_id: t.layer_id })));
 
-            setSelectedTemplateId(payload.templateId);
-            // Reset layer filter to 'all' so the template isn't filtered out
-            // by a previously selected layer
+            // First reset layer to 'all' to ensure template won't be filtered
             setSelectedLayerId('all');
+            // Then set the template ID
+            setSelectedTemplateId(payload.templateId);
+            console.log('[Preview] State updates queued: selectedLayerId=all, selectedTemplateId=', payload.templateId);
           }
           break;
         }
@@ -542,13 +598,115 @@ export function Preview() {
           }
           break;
 
+        case 'ping':
+          // Respond to ping with pong (keep-alive)
+          if (event.source && typeof (event.source as Window).postMessage === 'function') {
+            (event.source as Window).postMessage({
+              source: 'nova-preview',
+              type: 'pong',
+              timestamp: Date.now(),
+            }, '*');
+          }
+          break;
+
+        case 'refresh':
+          // Force refresh data from localStorage
+          const savedData = localStorage.getItem('nova-preview-data');
+          if (savedData) {
+            try {
+              const parsed = JSON.parse(savedData);
+              setLocalData(parsed);
+              if (parsed.templates) {
+                templatesRef.current = parsed.templates;
+              }
+              console.log('[Preview] Data refreshed from localStorage');
+            } catch (e) {
+              console.error('[Preview] Failed to refresh data:', e);
+            }
+          }
+          break;
+
         default:
           console.log('Unknown message type:', type);
       }
     };
 
     window.addEventListener('message', handleMessage);
+
+    // Send ready signal to parent (in case parent is waiting)
+    if (window.opener || window.parent !== window) {
+      const target = window.opener || window.parent;
+      target.postMessage({
+        source: 'nova-preview',
+        type: 'ready',
+        timestamp: Date.now(),
+      }, '*');
+      console.log('[Preview] Sent ready signal to parent');
+    }
+
     return () => window.removeEventListener('message', handleMessage);
+  }, [isConnected]);
+
+  // Periodic localStorage sync and visibility change handler
+  useEffect(() => {
+    // Refresh data when window becomes visible (user switches back to preview tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Preview] Window became visible, checking for data updates...');
+        const savedData = localStorage.getItem('nova-preview-data');
+        if (savedData) {
+          try {
+            const parsed = JSON.parse(savedData);
+            // Only update if data has changed (compare template count as simple check)
+            const currentCount = templatesRef.current.length;
+            const newCount = parsed.templates?.length || 0;
+            if (newCount !== currentCount || newCount === 0) {
+              setLocalData(parsed);
+              if (parsed.templates) {
+                templatesRef.current = parsed.templates;
+              }
+              console.log('[Preview] Data refreshed after visibility change');
+            }
+          } catch (e) {
+            console.error('[Preview] Failed to refresh data on visibility change:', e);
+          }
+        }
+
+        // Re-send ready signal in case parent lost reference
+        if (window.opener || window.parent !== window) {
+          const target = window.opener || window.parent;
+          target.postMessage({
+            source: 'nova-preview',
+            type: 'ready',
+            timestamp: Date.now(),
+          }, '*');
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Also check localStorage periodically (every 5 seconds) in case we missed an update
+    const intervalId = setInterval(() => {
+      const savedData = localStorage.getItem('nova-preview-data');
+      if (savedData && templatesRef.current.length === 0) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed.templates?.length > 0) {
+            setLocalData(parsed);
+            templatesRef.current = parsed.templates;
+            console.log('[Preview] Data loaded from periodic localStorage check');
+          }
+        } catch (e) {
+          // Ignore parse errors in periodic check
+        }
+      }
+    }, 5000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
   }, []);
 
   const canvasWidth = currentProject?.canvas_width || 1920;

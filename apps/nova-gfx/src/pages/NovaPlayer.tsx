@@ -34,6 +34,16 @@ import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
 
+// Timeout wrapper for async operations
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 // Helper to convert color to rgba with opacity
 function colorToRgba(color: string, opacity: number): string {
   if (color.startsWith('#')) {
@@ -220,21 +230,33 @@ export function NovaPlayer() {
     }
 
     console.log(`[Nova Player] Loading project: ${projectId}`);
+    const startTime = Date.now();
     try {
-      // Fetch project metadata
-      const projectData = await fetchProject(projectId);
+      // Fetch project metadata with timeout
+      const projectData = await withTimeout(
+        fetchProject(projectId),
+        10000,
+        'Fetch project metadata'
+      );
       if (!projectData) {
         console.error('[Nova Player] Project not found:', projectId);
         return { success: false, templates: [], layers: [] };
       }
 
       setProject(projectData);
+      console.log(`[Nova Player] Project metadata loaded: ${projectData.name} (${Date.now() - startTime}ms)`);
 
-      // Fetch layers and templates
-      const [layersData, templatesData] = await Promise.all([
-        fetchLayers(projectId),
-        fetchTemplates(projectId),
-      ]);
+      // Fetch layers and templates with timeout
+      const [layersData, templatesData] = await withTimeout(
+        Promise.all([
+          fetchLayers(projectId),
+          fetchTemplates(projectId),
+        ]),
+        15000,
+        'Fetch layers and templates'
+      );
+
+      console.log(`[Nova Player] Layers (${layersData.length}) and templates (${templatesData.length}) loaded (${Date.now() - startTime}ms)`);
 
       // Update refs immediately for synchronous access
       loadedLayersRef.current = layersData;
@@ -250,17 +272,25 @@ export function NovaPlayer() {
       const allKeyframes: Keyframe[] = [];
 
       for (const template of templatesData) {
-        const [templateElements, templateAnimations] = await Promise.all([
-          fetchElements(template.id),
-          fetchAnimations(template.id),
-        ]);
+        const [templateElements, templateAnimations] = await withTimeout(
+          Promise.all([
+            fetchElements(template.id),
+            fetchAnimations(template.id),
+          ]),
+          10000,
+          `Fetch elements/animations for template ${template.name || template.id}`
+        );
 
         allElements.push(...templateElements);
         allAnimations.push(...templateAnimations);
 
-        // Fetch keyframes for each animation
+        // Fetch keyframes for each animation with timeout
         for (const anim of templateAnimations) {
-          const animKeyframes = await fetchKeyframes(anim.id);
+          const animKeyframes = await withTimeout(
+            fetchKeyframes(anim.id),
+            5000,
+            `Fetch keyframes for animation ${anim.id}`
+          );
           console.log(`[Nova Player] Animation ${anim.id} (${anim.phase}) has ${animKeyframes.length} keyframes:`, animKeyframes.map(kf => ({pos: kf.position, props: kf.properties})));
           allKeyframes.push(...animKeyframes);
         }
@@ -274,10 +304,12 @@ export function NovaPlayer() {
       // Mark as loaded
       loadedProjectIdRef.current = projectId;
 
-      console.log(`[Nova Player] Project loaded: ${projectData.name} (${allElements.length} elements, ${layersData.length} layers)`);
+      const totalTime = Date.now() - startTime;
+      console.log(`[Nova Player] Project loaded successfully: ${projectData.name} (${allElements.length} elements, ${layersData.length} layers) in ${totalTime}ms`);
       return { success: true, templates: templatesData, layers: layersData };
     } catch (err) {
-      console.error('[Nova Player] Failed to load project:', err);
+      const totalTime = Date.now() - startTime;
+      console.error(`[Nova Player] Failed to load project after ${totalTime}ms:`, err);
     }
     return { success: false, templates: [], layers: [] };
   }, []);
@@ -596,13 +628,19 @@ export function NovaPlayer() {
 
     // Load channel info and initial project
     const loadChannelAndProject = async () => {
+      console.log(`[Nova Player] Loading channel and project for channel: ${channelId}`);
+      const startTime = Date.now();
       try {
         // First, get the channel info to find the loaded_project_id
-        const { data: channelData, error: channelError } = await supabase
-          .from('pulsar_channels')
-          .select('loaded_project_id, name')
-          .eq('id', channelId)
-          .single();
+        const { data: channelData, error: channelError } = await withTimeout(
+          supabase
+            .from('pulsar_channels')
+            .select('loaded_project_id, name')
+            .eq('id', channelId)
+            .single(),
+          10000,
+          'Load channel info'
+        );
 
         if (channelError) {
           console.error('[Nova Player] Failed to load channel info:', channelError);
@@ -610,25 +648,36 @@ export function NovaPlayer() {
           // Load the project assigned to this channel
           console.log(`[Nova Player] Loading assigned project: ${channelData.loaded_project_id}`);
           await loadProject(channelData.loaded_project_id);
+        } else {
+          console.log(`[Nova Player] No project assigned to channel ${channelId}`);
         }
 
         // Then check for any pending command
-        const { data: stateData, error: stateError } = await supabase
-          .from('pulsar_channel_state')
-          .select('pending_command, last_command')
-          .eq('channel_id', channelId)
-          .single();
+        const { data: stateData, error: stateError } = await withTimeout(
+          supabase
+            .from('pulsar_channel_state')
+            .select('pending_command, last_command')
+            .eq('channel_id', channelId)
+            .single(),
+          8000,
+          'Load channel state'
+        );
 
         if (stateError) {
           console.error('[Nova Player] Failed to load initial state:', stateError);
           return;
         }
 
+        console.log(`[Nova Player] Channel state loaded (${Date.now() - startTime}ms):`, {
+          hasPendingCommand: !!stateData?.pending_command,
+          hasLastCommand: !!stateData?.last_command,
+        });
+
         if (stateData?.pending_command) {
           handleCommandRef.current(stateData.pending_command as PlayerCommand);
         }
       } catch (err) {
-        console.error('[Nova Player] Error loading initial state:', err);
+        console.error(`[Nova Player] Error loading initial state after ${Date.now() - startTime}ms:`, err);
       }
     };
 
