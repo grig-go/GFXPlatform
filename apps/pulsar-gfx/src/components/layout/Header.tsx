@@ -8,12 +8,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuCheckboxItem,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  cn,
 } from '@emergent-platform/ui';
 import {
   Settings,
@@ -49,7 +43,7 @@ interface HeaderProps {
 
 export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const { currentProject, projects, selectProject, refreshProject, isLoading: projectLoading } = useProjectStore();
-  const { channels, selectedChannel, selectChannel, initializeChannel } = useChannelStore();
+  const { channels, initializeChannel } = useChannelStore();
   const {
     showPlayoutControls,
     showPreview,
@@ -246,43 +240,7 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
               <span className="hidden sm:inline">Settings</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Default Channel</DropdownMenuLabel>
-            <div className="px-2 pb-2">
-              <Select
-                value={selectedChannel?.id || ''}
-                onValueChange={(channelId) => selectChannel(channelId)}
-              >
-                <SelectTrigger className="w-full h-8 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Radio className="w-3.5 h-3.5 text-cyan-500" />
-                    <SelectValue placeholder="Select channel...">
-                      {selectedChannel?.channelCode || 'Select channel...'}
-                    </SelectValue>
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  {channels.map((channel) => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            'w-2 h-2 rounded-full',
-                            channel.playerStatus === 'connected'
-                              ? 'bg-green-500'
-                              : channel.playerStatus === 'error'
-                              ? 'bg-red-500'
-                              : 'bg-muted-foreground'
-                          )}
-                        />
-                        {channel.channelCode}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DropdownMenuSeparator />
+          <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>Application</DropdownMenuLabel>
             <DropdownMenuItem>
               <Settings className="mr-2 h-4 w-4" />
@@ -290,9 +248,6 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {/* User Menu */}
-        <UserMenu />
 
         {/* Help Menu - hidden on very small screens */}
         <DropdownMenu>
@@ -318,6 +273,8 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* User Menu - icon only, last in menu order */}
+        <UserMenu />
 
         {/* Edit in Nova GFX */}
         {currentProject && (

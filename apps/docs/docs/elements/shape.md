@@ -118,13 +118,14 @@ Shape elements create vector graphics like rectangles, circles, and custom paths
 
 ```typescript
 {
-  fill: {
+  gradient: {
+    enabled: true,
     type: 'linear',
-    angle: 90,  // 0 = left to right, 90 = top to bottom
-    stops: [
-      { offset: 0, color: '#3B82F6' },
-      { offset: 0.5, color: '#8B5CF6' },
-      { offset: 1, color: '#EC4899' }
+    direction: 90,  // 0-360 degrees
+    colors: [
+      { color: '#3B82F6', stop: 0 },
+      { color: '#8B5CF6', stop: 50 },
+      { color: '#EC4899', stop: 100 }
     ]
   }
 }
@@ -134,18 +135,80 @@ Shape elements create vector graphics like rectangles, circles, and custom paths
 
 ```typescript
 {
-  fill: {
+  gradient: {
+    enabled: true,
     type: 'radial',
-    centerX: 0.5,  // 0-1 relative position
-    centerY: 0.5,
-    radius: 0.5,
-    stops: [
-      { offset: 0, color: '#FFFFFF' },
-      { offset: 1, color: '#000000' }
+    radialPosition: { x: 50, y: 50 },  // 0-100 percentage
+    colors: [
+      { color: '#FFFFFF', stop: 0 },
+      { color: '#000000', stop: 100 }
     ]
   }
 }
 ```
+
+### Conic Gradient
+
+```typescript
+{
+  gradient: {
+    enabled: true,
+    type: 'conic',
+    direction: 0,  // Starting angle
+    colors: [
+      { color: '#FF0000', stop: 0 },
+      { color: '#00FF00', stop: 50 },
+      { color: '#0000FF', stop: 100 }
+    ]
+  }
+}
+```
+
+## Advanced Effects
+
+### Glassmorphism
+
+Create frosted glass effects:
+
+```typescript
+{
+  glass: {
+    enabled: true,
+    blur: 10,           // 0-50 pixels
+    opacity: 0.8,       // 0-1
+    borderWidth: 1,     // pixels
+    borderColor: 'rgba(255,255,255,0.2)',
+    saturation: 100     // 0-200%
+  }
+}
+```
+
+### Glow Effect
+
+Add glowing edges:
+
+```typescript
+{
+  glow: {
+    enabled: true,
+    color: '#3B82F6',   // Glow color
+    blur: 20,           // 0-100 pixels
+    spread: 0,          // -50 to 50 pixels
+    intensity: 0.8      // 0-1
+  }
+}
+```
+
+## Shape Types
+
+Nova GFX supports multiple shape types:
+
+| Shape | Description |
+|-------|-------------|
+| `rectangle` | Standard rectangle with corner radius |
+| `rhombus` | Diamond/rotated square |
+| `trapezoid` | Four-sided with two parallel sides |
+| `parallelogram` | Slanted rectangle |
 
 ## Common Use Cases
 

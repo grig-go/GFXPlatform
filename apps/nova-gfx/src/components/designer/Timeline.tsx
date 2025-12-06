@@ -795,11 +795,16 @@ export function Timeline() {
           store.setPlayhead(0);
           timelineRef.current?.setTime(0);
         } else {
-          // Set playhead to exact end position BEFORE pausing
-          // This ensures the position is set before any re-renders triggered by pause()
+          // Set playhead to exact end position BEFORE stopping
+          // This ensures the position is set before any re-renders
           store.setPlayhead(currentPhaseDuration);
           timelineRef.current?.setTime(currentPhaseDuration);
-          store.pause();
+          // If in full preview mode, keep template isolated after playback ends
+          if (isPlayingFullPreview) {
+            store.endPreviewPlayback();
+          } else {
+            store.pause();
+          }
           return;
         }
       } else {
@@ -1171,13 +1176,15 @@ export function Timeline() {
                   className={cn(
                     'h-8 w-8',
                     currentTemplate && 'text-violet-400 hover:text-violet-300 hover:bg-violet-500/10',
-                    isPlayingFullPreview && 'bg-violet-500/20'
+                    isPlaying && isPlayingFullPreview && 'bg-violet-500/20'
                   )}
                   disabled={!currentTemplate}
                   onClick={() => {
-                    if (isPlayingFullPreview) {
+                    if (isPlaying && isPlayingFullPreview) {
+                      // Currently playing - pause it
                       pause();
                     } else {
+                      // Not playing (either never started or animation ended) - start/restart
                       playFullPreview();
                     }
                   }}
@@ -1186,7 +1193,7 @@ export function Timeline() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isPlayingFullPreview ? 'Stop Preview' : 'Play Template Preview'}
+                {isPlaying && isPlayingFullPreview ? 'Stop Preview' : 'Play Template Preview'}
               </TooltipContent>
             </Tooltip>
 

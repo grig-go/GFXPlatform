@@ -13,6 +13,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Pro
   ]);
 }
 
+// Timeout helper that resolves to null instead of rejecting
+function withTimeoutNull<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<T | null>((resolve) =>
+      setTimeout(() => resolve(null), ms)
+    ),
+  ]);
+}
+
 // Types
 export interface AppUser {
   id: string;
@@ -167,12 +177,29 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
 
         try {
-          // Get current session
-          const { data: { session } } = await supabase.auth.getSession();
+          // Get current session with a timeout to prevent hanging
+          // If session fetch times out, continue without session (user can log in manually)
+          const sessionResult = await withTimeoutNull(
+            supabase.auth.getSession(),
+            5000 // 5 second timeout
+          );
+
+          const session = sessionResult?.data?.session;
 
           if (session?.user) {
-            // Fetch user data from our users table
-            await fetchAndSetUserData(session.user.id, set);
+            // Fetch user data from our users table (also with timeout)
+            try {
+              await withTimeout(
+                fetchAndSetUserData(session.user.id, set),
+                5000,
+                'Fetch user data'
+              );
+            } catch (userDataErr) {
+              console.warn('Failed to fetch user data (continuing):', userDataErr);
+              // Continue anyway - user is authenticated but we don't have their full profile
+            }
+          } else if (sessionResult === null) {
+            console.warn('Auth session check timed out - continuing without session');
           }
 
           // Set up auth listener only once

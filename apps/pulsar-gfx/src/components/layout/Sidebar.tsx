@@ -84,40 +84,6 @@ export function Sidebar() {
           );
         })}
 
-        {/* Quick Access Section */}
-        <div className="mt-auto space-y-1.5 sm:space-y-2">
-          <div className="w-10 sm:w-12 h-px bg-border/50" />
-
-          {/* Keyboard Shortcuts Hint */}
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center text-[9px] sm:text-[10px] text-muted-foreground cursor-default">
-                <span className="font-mono bg-muted/50 px-1 sm:px-1.5 py-0.5 rounded text-cyan-400">F1</span>
-                <span className="mt-0.5">Take</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <div className="text-xs space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-cyan-400">F1</span>
-                  <span>Take/Play</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-cyan-400">F2</span>
-                  <span>Stop</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-cyan-400">F3</span>
-                  <span>Clear Layer</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-cyan-400">F4</span>
-                  <span>Clear All</span>
-                </div>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </div>
       </aside>
     </TooltipProvider>
   );

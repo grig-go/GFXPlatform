@@ -115,25 +115,24 @@ export function VideoElement({
     if (videoType === 'youtube') {
       const videoId = getYouTubeId(videoSrc);
       if (videoId) {
+        // Build params for YouTube embed
         const params = new URLSearchParams({
           autoplay: isPlaying ? '1' : '0',
           mute: isMuted ? '1' : '0',
           loop: content.loop ? '1' : '0',
-          controls: '0', // Hide all controls
-          modestbranding: '1', // Hide YouTube logo
-          rel: '0', // Don't show related videos
-          showinfo: '0', // Hide video info
+          controls: '0', // Hide player controls
+          rel: '0', // Don't show related videos at end
+          modestbranding: '1', // Reduce YouTube branding
           fs: '0', // Disable fullscreen button
           iv_load_policy: '3', // Hide annotations
-          cc_load_policy: '0', // Hide captions
           disablekb: '1', // Disable keyboard controls
           playsinline: '1', // Play inline on mobile
-          enablejsapi: '0', // Disable JS API (cleaner)
-          origin: window.location.origin, // Set origin for security
-          playlist: content.loop ? videoId : '', // Required for loop
+          enablejsapi: '1', // Enable JS API for control
+          origin: window.location.origin, // Required for some embeds
+          playlist: content.loop ? videoId : '', // Required for loop to work
         });
-        // Use youtube-nocookie.com for privacy and cleaner embed
-        return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+        // Use standard youtube.com embed (youtube-nocookie.com can have stricter requirements)
+        return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
       }
     }
     
@@ -259,7 +258,9 @@ export function VideoElement({
             width="100%"
             height="100%"
             frameBorder="0"
-            allow="autoplay"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen={false}
+            referrerPolicy="strict-origin-when-cross-origin"
             style={{
               pointerEvents: isPreview ? 'auto' : 'none',
               border: 'none',

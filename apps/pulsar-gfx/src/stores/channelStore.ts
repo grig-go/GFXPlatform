@@ -70,17 +70,31 @@ export interface PlayerCommand {
     name: string;
     projectId?: string;
     layerId?: string;
-    // Elements can be sent with the command for templates not yet saved to DB
+    // Elements with FULL data for proper rendering (position, transform, etc.)
     elements?: Array<{
       id: string;
+      template_id: string;
       name: string;
-      type: string;
+      element_id?: string;
+      element_type?: string;
+      parent_element_id?: string | null;
+      sort_order?: number;
+      z_index?: number;
+      position_x: number;
+      position_y: number;
+      width?: number | null;
+      height?: number | null;
+      rotation?: number;
+      scale_x?: number;
+      scale_y?: number;
+      anchor_x?: number;
+      anchor_y?: number;
+      opacity?: number;
       content: any;
-      position_x?: number;
-      position_y?: number;
-      width?: number;
-      height?: number;
       styles?: Record<string, any>;
+      classes?: string[];
+      visible?: boolean;
+      locked?: boolean;
     }>;
     // Animation data for direct rendering
     animations?: any[];
@@ -124,14 +138,28 @@ interface ChannelStore {
       layerId?: string;
       elements?: Array<{
         id: string;
+        template_id: string;
         name: string;
-        type: string;
+        element_id?: string;
+        element_type?: string;
+        parent_element_id?: string | null;
+        sort_order?: number;
+        z_index?: number;
+        position_x: number;
+        position_y: number;
+        width?: number | null;
+        height?: number | null;
+        rotation?: number;
+        scale_x?: number;
+        scale_y?: number;
+        anchor_x?: number;
+        anchor_y?: number;
+        opacity?: number;
         content: any;
-        position_x?: number;
-        position_y?: number;
-        width?: number;
-        height?: number;
         styles?: Record<string, any>;
+        classes?: string[];
+        visible?: boolean;
+        locked?: boolean;
       }>;
       animations?: any[];
       keyframes?: any[];

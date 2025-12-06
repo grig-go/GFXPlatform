@@ -156,12 +156,25 @@ body {
 }
 
 .navbar__brand {
-  font-weight: 700;
-  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  margin-right: 1rem;
+}
+
+.navbar__brand:hover {
+  text-decoration: none;
+}
+
+.navbar__logo {
+  height: 28px !important;
+  margin-right: 8px;
 }
 
 .navbar__title {
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 1.125rem;
 }
 
 .navbar__link {

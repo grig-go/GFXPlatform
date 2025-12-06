@@ -131,6 +131,7 @@ export function PlaylistPanel() {
     setMode,
     setDefaultDuration,
     setEndBehavior,
+    setChannelId,
     setCurrentIndex,
   } = usePlaylistStore();
 
@@ -168,6 +169,9 @@ export function PlaylistPanel() {
 
   // Track last played groups that are "on air" (pages use isOnAir from store)
   const [onAirGroupIds, setOnAirGroupIds] = useState<Set<string>>(new Set());
+
+  // Track last played page ID for quick "Play Out" action
+  const [lastPlayedPageId, setLastPlayedPageId] = useState<string | null>(null);
 
   // Track external page drag (from PageList)
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
@@ -439,6 +443,47 @@ export function PlaylistPanel() {
     await updatePageChannel(pageId, channelId);
   };
 
+  // Helper to get animations and keyframes from localStorage for a template
+  const getAnimationDataForTemplate = (templateId: string) => {
+    try {
+      const previewDataStr = localStorage.getItem('nova-preview-data');
+      if (!previewDataStr) return { animations: [], keyframes: [] };
+
+      const previewData = JSON.parse(previewDataStr);
+      const allAnimations = previewData.animations || [];
+      const allKeyframes = previewData.keyframes || [];
+      const elements = previewData.elements || [];
+
+      // Get element IDs for this template
+      const templateElementIds = new Set(
+        elements.filter((e: any) => e.template_id === templateId).map((e: any) => e.id)
+      );
+
+      // Filter animations for this template's elements
+      const templateAnimations = allAnimations.filter((a: any) =>
+        templateElementIds.has(a.element_id)
+      );
+
+      // Get animation IDs for keyframe filtering
+      const templateAnimationIds = new Set(templateAnimations.map((a: any) => a.id));
+
+      // Filter keyframes for this template's animations
+      const templateKeyframes = allKeyframes.filter((k: any) =>
+        templateAnimationIds.has(k.animation_id)
+      );
+
+      console.log(`[PlaylistPanel] Animation data for template ${templateId}:`, {
+        animations: templateAnimations.length,
+        keyframes: templateKeyframes.length,
+      });
+
+      return { animations: templateAnimations, keyframes: templateKeyframes };
+    } catch (e) {
+      console.warn('[PlaylistPanel] Failed to get animation data from localStorage:', e);
+      return { animations: [], keyframes: [] };
+    }
+  };
+
   const handlePlayIn = async (page: Page, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!page.channelId) {
@@ -480,14 +525,36 @@ export function PlaylistPanel() {
     }
 
     try {
-      // Send elements with the command so NovaPlayer can render even if DB doesn't have them
+      // Send FULL element data so NovaPlayer can render correctly (position, transform, etc.)
       const elementsForCommand = template.elements?.map(el => ({
         id: el.id,
+        template_id: el.templateId,
         name: el.name,
-        type: el.elementType,
+        element_id: el.elementId,
+        element_type: el.elementType,
+        parent_element_id: el.parentElementId,
+        sort_order: el.sortOrder,
+        z_index: el.zIndex,
+        position_x: el.positionX,
+        position_y: el.positionY,
+        width: el.width,
+        height: el.height,
+        rotation: el.rotation,
+        scale_x: el.scaleX,
+        scale_y: el.scaleY,
+        anchor_x: el.anchorX,
+        anchor_y: el.anchorY,
+        opacity: el.opacity,
         content: el.content,
         styles: el.styles,
+        classes: el.classes,
+        visible: el.visible,
+        locked: el.locked,
       }));
+
+      // Get animation data from localStorage
+      const { animations: animationsForCommand, keyframes: keyframesForCommand } =
+        getAnimationDataForTemplate(template.id);
 
       await playOnChannel(
         page.channelId,
@@ -499,6 +566,8 @@ export function PlaylistPanel() {
           projectId: currentProject.id,
           layerId: template.layerId,
           elements: elementsForCommand,
+          animations: animationsForCommand,
+          keyframes: keyframesForCommand,
         },
         filteredPayload
       );
@@ -522,6 +591,9 @@ export function PlaylistPanel() {
 
       // Mark page as on-air (persisted to database)
       await setPageOnAir(page.id, true);
+
+      // Track last played page for quick Play Out action
+      setLastPlayedPageId(page.id);
     } catch (error) {
       console.error('Failed to play in:', error);
     }
@@ -612,6 +684,73 @@ export function PlaylistPanel() {
   };
 
   // ========================================
+  // QUICK ACTION HANDLERS (for top bar buttons)
+  // ========================================
+
+  // Quick Play Current - plays the currently selected page
+  const handleQuickPlayCurrent = async () => {
+    if (!selectedPage) {
+      return;
+    }
+    // Get fresh page data from pages array to ensure we have latest channelId
+    const freshPage = pages.find(p => p.id === selectedPage.id);
+    if (!freshPage) {
+      return;
+    }
+    const fakeEvent = { stopPropagation: () => {} } as React.MouseEvent;
+    await handlePlayIn(freshPage, fakeEvent);
+  };
+
+  // Quick Play Current & Next - plays current page and selects next in list
+  const handleQuickPlayCurrentAndNext = async () => {
+    if (!selectedPage) {
+      return;
+    }
+    // Get fresh page data from pages array to ensure we have latest channelId
+    const freshPage = pages.find(p => p.id === selectedPage.id);
+    if (!freshPage) {
+      return;
+    }
+    const fakeEvent = { stopPropagation: () => {} } as React.MouseEvent;
+    await handlePlayIn(freshPage, fakeEvent);
+
+    // Select the next page in the list using the properly ordered loopFlatPages
+    // Use same behavior as handleSelectPage: update both page store AND preview store
+    const currentIdx = loopFlatPages.findIndex(p => p.id === selectedPage.id);
+    if (currentIdx !== -1 && loopFlatPages.length > 1) {
+      const nextIdx = (currentIdx + 1) % loopFlatPages.length;
+      const nextPage = loopFlatPages[nextIdx];
+      selectPage(nextPage.id);
+      selectPageForPreview(nextPage.id, nextPage.payload);
+    }
+  };
+
+  // Quick Play Out - plays out the last played page (not dependent on selection)
+  const handleQuickPlayOut = async () => {
+    // Find any page that is currently on air, prioritizing the last played one
+    let pageToPlayOut: Page | undefined;
+
+    if (lastPlayedPageId) {
+      pageToPlayOut = loopFlatPages.find(p => p.id === lastPlayedPageId && p.isOnAir);
+    }
+
+    // If last played page is not on air, find any page that is on air
+    if (!pageToPlayOut) {
+      pageToPlayOut = loopFlatPages.find(p => p.isOnAir);
+    }
+
+    if (!pageToPlayOut) {
+      return;
+    }
+
+    const fakeEvent = { stopPropagation: () => {} } as React.MouseEvent;
+    await handlePlayOut(pageToPlayOut, fakeEvent);
+  };
+
+  // Check if any page is currently on air
+  const hasOnAirPage = useMemo(() => loopFlatPages.some(p => p.isOnAir), [loopFlatPages]);
+
+  // ========================================
   // LOOP MODE HANDLERS
   // ========================================
 
@@ -646,13 +785,36 @@ export function PlaylistPanel() {
       );
     }
 
+    // Send FULL element data so NovaPlayer can render correctly (position, transform, etc.)
     const elementsForCommand = template.elements?.map(el => ({
       id: el.id,
+      template_id: el.templateId,
       name: el.name,
-      type: el.elementType,
+      element_id: el.elementId,
+      element_type: el.elementType,
+      parent_element_id: el.parentElementId,
+      sort_order: el.sortOrder,
+      z_index: el.zIndex,
+      position_x: el.positionX,
+      position_y: el.positionY,
+      width: el.width,
+      height: el.height,
+      rotation: el.rotation,
+      scale_x: el.scaleX,
+      scale_y: el.scaleY,
+      anchor_x: el.anchorX,
+      anchor_y: el.anchorY,
+      opacity: el.opacity,
       content: el.content,
       styles: el.styles,
+      classes: el.classes,
+      visible: el.visible,
+      locked: el.locked,
     }));
+
+    // Get animation data from localStorage
+    const { animations: animationsForCommand, keyframes: keyframesForCommand } =
+      getAnimationDataForTemplate(template.id);
 
     await playOnChannel(
       page.channelId,
@@ -664,6 +826,8 @@ export function PlaylistPanel() {
         projectId: currentProject.id,
         layerId: template.layerId,
         elements: elementsForCommand,
+        animations: animationsForCommand,
+        keyframes: keyframesForCommand,
       },
       filteredPayload
     );
@@ -1147,6 +1311,48 @@ export function PlaylistPanel() {
             {currentPlaylist.mode === 'loop' ? 'Loop' : currentPlaylist.mode === 'timed' ? 'Timed' : 'Manual'}
           </div>
 
+          {/* Quick Action Buttons */}
+          <div className="flex items-center gap-1 ml-2">
+            {/* Play Current */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleQuickPlayCurrent}
+              disabled={!selectedPage || !selectedPage.channelId}
+              title={selectedPage ? `Play "${selectedPage.name}"` : 'Select a page to play'}
+              className="h-7 px-2 text-xs text-green-500 hover:text-green-400 hover:bg-green-500/10"
+            >
+              <Play className="w-3.5 h-3.5 mr-1 fill-current" />
+              Play
+            </Button>
+
+            {/* Play Current & Read Next */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleQuickPlayCurrentAndNext}
+              disabled={!selectedPage || !selectedPage.channelId}
+              title="Play current page and select next"
+              className="h-7 px-2 text-xs text-cyan-500 hover:text-cyan-400 hover:bg-cyan-500/10"
+            >
+              <SkipForward className="w-3.5 h-3.5 mr-1" />
+              Next
+            </Button>
+
+            {/* Play Out */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleQuickPlayOut}
+              disabled={!hasOnAirPage}
+              title="Play out the last played page"
+              className="h-7 px-2 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10"
+            >
+              <Square className="w-3.5 h-3.5 mr-1 fill-current" />
+              Out
+            </Button>
+          </div>
+
           {/* Right side controls */}
           <div className="flex items-center gap-1.5 flex-1 justify-end">
             {/* Group Button with Dropdown */}
@@ -1259,6 +1465,42 @@ export function PlaylistPanel() {
         {/* Playlist Settings (collapsed by default) */}
         {showSettings && (
           <div className="bg-muted/50 rounded-lg p-3 mb-3 space-y-3">
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-muted-foreground w-20">Channel:</label>
+              <Select
+                value={currentPlaylist.channelId || ''}
+                onValueChange={(v) => setChannelId(v || null)}
+              >
+                <SelectTrigger className="h-7 w-[140px]">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-3.5 h-3.5 text-cyan-500" />
+                    <SelectValue placeholder="Select...">
+                      {channels.find(c => c.id === currentPlaylist.channelId)?.channelCode || 'Select...'}
+                    </SelectValue>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {channels.map((channel) => (
+                    <SelectItem key={channel.id} value={channel.id}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'w-2 h-2 rounded-full',
+                            channel.playerStatus === 'connected'
+                              ? 'bg-green-500'
+                              : channel.playerStatus === 'error'
+                              ? 'bg-red-500'
+                              : 'bg-muted-foreground'
+                          )}
+                        />
+                        {channel.channelCode}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center gap-3">
               <label className="text-xs text-muted-foreground w-20">Mode:</label>
               <Select

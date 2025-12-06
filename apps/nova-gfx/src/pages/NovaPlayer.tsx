@@ -10,15 +10,8 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
-import {
-  fetchProject,
-  fetchLayers,
-  fetchTemplates,
-  fetchElements,
-  fetchAnimations,
-  fetchKeyframes,
-} from '@/services/projectService';
+import { supabase, markSupabaseSuccess, directRestSelect, directRestUpdate, sendBeaconUpdate } from '@/lib/supabase';
+// NOTE: We use directRestSelect instead of projectService functions to avoid Supabase client timeout issues
 import { getAnimatedProperties } from '@/lib/animation';
 import { ChartElement } from '@/components/canvas/ChartElement';
 import { MapElement } from '@/components/canvas/MapElement';
@@ -34,15 +27,7 @@ import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
 
-// Timeout wrapper for async operations
-function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
+// NOTE: withTimeout was previously used but is now replaced by directRestSelect with built-in timeout
 
 // Helper to convert color to rgba with opacity
 function colorToRgba(color: string, opacity: number): string {
@@ -90,6 +75,8 @@ function convertBoxShadowToFilter(boxShadow: string): string {
 // Command types from Pulsar
 interface PlayerCommand {
   type: 'play' | 'load' | 'update' | 'stop' | 'clear' | 'clear_all' | 'initialize';
+  // Project ID for initialize commands
+  projectId?: string;
   template?: {
     id: string;
     name: string;
@@ -221,7 +208,8 @@ export function NovaPlayer() {
   const loadedLayersRef = useRef<Layer[]>([]);
   const loadedTemplatesRef = useRef<Template[]>([]);
 
-  // Load project data - returns templates AND layers for immediate use (since state updates are async)
+  // Load project data using DIRECT REST API (bypasses Supabase client to avoid timeout issues)
+  // Returns templates AND layers for immediate use (since state updates are async)
   const loadProject = useCallback(async (projectId: string): Promise<{ success: boolean; templates: Template[]; layers: Layer[] }> => {
     // Skip if already loaded - return cached ref data (not state, which may be stale in closures)
     if (loadedProjectIdRef.current === projectId) {
@@ -229,32 +217,51 @@ export function NovaPlayer() {
       return { success: true, templates: loadedTemplatesRef.current, layers: loadedLayersRef.current };
     }
 
-    console.log(`[Nova Player] Loading project: ${projectId}`);
+    console.log(`[Nova Player] Loading project via REST API: ${projectId}`);
     const startTime = Date.now();
     try {
-      // Fetch project metadata with timeout
-      const projectData = await withTimeout(
-        fetchProject(projectId),
-        10000,
-        'Fetch project metadata'
+      // Fetch project metadata via direct REST
+      const projectResult = await directRestSelect<Project>(
+        'gfx_projects',
+        '*',
+        { column: 'id', value: projectId },
+        10000
       );
-      if (!projectData) {
-        console.error('[Nova Player] Project not found:', projectId);
+
+      if (projectResult.error || !projectResult.data || projectResult.data.length === 0) {
+        console.error('[Nova Player] Project not found:', projectId, projectResult.error);
         return { success: false, templates: [], layers: [] };
       }
 
+      const projectData = projectResult.data[0];
       setProject(projectData);
       console.log(`[Nova Player] Project metadata loaded: ${projectData.name} (${Date.now() - startTime}ms)`);
 
-      // Fetch layers and templates with timeout
-      const [layersData, templatesData] = await withTimeout(
-        Promise.all([
-          fetchLayers(projectId),
-          fetchTemplates(projectId),
-        ]),
-        15000,
-        'Fetch layers and templates'
-      );
+      // Fetch layers and templates via direct REST (in parallel)
+      const [layersResult, templatesResult] = await Promise.all([
+        directRestSelect<Layer>(
+          'gfx_layers',
+          '*',
+          { column: 'project_id', value: projectId },
+          10000
+        ),
+        directRestSelect<Template>(
+          'gfx_templates',
+          '*',
+          { column: 'project_id', value: projectId },
+          10000
+        ),
+      ]);
+
+      if (layersResult.error) {
+        console.error('[Nova Player] Failed to load layers:', layersResult.error);
+      }
+      if (templatesResult.error) {
+        console.error('[Nova Player] Failed to load templates:', templatesResult.error);
+      }
+
+      const layersData = layersResult.data || [];
+      const templatesData = templatesResult.data || [];
 
       console.log(`[Nova Player] Layers (${layersData.length}) and templates (${templatesData.length}) loaded (${Date.now() - startTime}ms)`);
 
@@ -266,34 +273,59 @@ export function NovaPlayer() {
       setLayers(layersData);
       setTemplates(templatesData);
 
-      // Fetch elements and animations for all templates
+      // Fetch elements for all templates via direct REST
+      // We need to use a different approach since directRestSelect doesn't support IN queries
+      // Fetch elements for each template in parallel
       const allElements: Element[] = [];
       const allAnimations: Animation[] = [];
       const allKeyframes: Keyframe[] = [];
 
-      for (const template of templatesData) {
-        const [templateElements, templateAnimations] = await withTimeout(
-          Promise.all([
-            fetchElements(template.id),
-            fetchAnimations(template.id),
-          ]),
-          10000,
-          `Fetch elements/animations for template ${template.name || template.id}`
+      // Batch fetch elements and animations for all templates in parallel
+      const templateFetches = templatesData.map(async (template: Template) => {
+        const [elementsResult, animationsResult] = await Promise.all([
+          directRestSelect<Element>(
+            'gfx_elements',
+            '*',
+            { column: 'template_id', value: template.id },
+            8000
+          ),
+          directRestSelect<Animation>(
+            'gfx_animations',
+            '*',
+            { column: 'template_id', value: template.id },
+            8000
+          ),
+        ]);
+
+        const templateElements = elementsResult.data || [];
+        const templateAnimations = animationsResult.data || [];
+
+        return { templateElements, templateAnimations };
+      });
+
+      const templateResults = await Promise.all(templateFetches);
+
+      for (const result of templateResults) {
+        allElements.push(...result.templateElements);
+        allAnimations.push(...result.templateAnimations);
+      }
+
+      // Fetch keyframes for all animations in parallel
+      const keyframeFetches = allAnimations.map(async (anim) => {
+        const keyframesResult = await directRestSelect<Keyframe>(
+          'gfx_keyframes',
+          '*',
+          { column: 'animation_id', value: anim.id },
+          5000
         );
+        const animKeyframes = keyframesResult.data || [];
+        console.log(`[Nova Player] Animation ${anim.id} (${anim.phase}) has ${animKeyframes.length} keyframes`);
+        return animKeyframes;
+      });
 
-        allElements.push(...templateElements);
-        allAnimations.push(...templateAnimations);
-
-        // Fetch keyframes for each animation with timeout
-        for (const anim of templateAnimations) {
-          const animKeyframes = await withTimeout(
-            fetchKeyframes(anim.id),
-            5000,
-            `Fetch keyframes for animation ${anim.id}`
-          );
-          console.log(`[Nova Player] Animation ${anim.id} (${anim.phase}) has ${animKeyframes.length} keyframes:`, animKeyframes.map(kf => ({pos: kf.position, props: kf.properties})));
-          allKeyframes.push(...animKeyframes);
-        }
+      const keyframeResults = await Promise.all(keyframeFetches);
+      for (const kfs of keyframeResults) {
+        allKeyframes.push(...kfs);
       }
 
       console.log(`[Nova Player] Loaded ${allAnimations.length} animations, ${allKeyframes.length} keyframes total`);
@@ -339,27 +371,79 @@ export function NovaPlayer() {
 
     switch (cmd.type) {
       case 'play':
-        if (cmd.template?.projectId) {
-          // Load project if not already loaded - loadProject handles the check internally
-          // Returns templates AND layers for immediate use (state updates are async)
-          const result = await loadProject(cmd.template.projectId);
-          const loadedTemplates: Template[] = result.templates;
-          const loadedLayers: Layer[] = result.layers;
-
+        if (cmd.template) {
           const templateId = cmd.template.id;
-          // Get layerId from command or look it up from templates (use loadedTemplates for immediate access)
-          // Support both layerId (UUID) and layerIndex (numeric 0-3)
-          let layerId: string | undefined = cmd.template.layerId || cmd.layerId;
-          if (!layerId && cmd.layerIndex !== undefined) {
-            // Use loadedLayers (returned from loadProject) instead of layers state
-            layerId = resolveLayerId(cmd.layerIndex, loadedLayers);
+
+          // REAL-TIME OPTIMIZATION: Use embedded command data if available
+          // This avoids Supabase fetch delays for immediate playback
+          const hasEmbeddedData = cmd.template.elements && cmd.template.elements.length > 0;
+
+          if (hasEmbeddedData && cmd.template.elements) {
+            const embeddedElements = cmd.template.elements;
+            console.log(`[Nova Player] Using embedded command data for real-time playback (${embeddedElements.length} elements)`);
+
+            // Merge embedded elements into state (use command data directly)
+            // This ensures we have the element data immediately available for rendering
+            setElements(prev => {
+              // Filter out existing elements for this template, add new ones
+              const otherElements = prev.filter(e => e.template_id !== templateId);
+              const newElements = embeddedElements.map((el: any) => ({
+                ...el,
+                template_id: templateId,
+              }));
+              return [...otherElements, ...newElements];
+            });
+
+            // Merge embedded animations if present
+            const embeddedAnimations = cmd.template.animations;
+            if (embeddedAnimations && embeddedAnimations.length > 0) {
+              setAnimations(prev => {
+                const elementIds = new Set(embeddedElements.map((e: any) => e.id));
+                const otherAnimations = prev.filter(a => !elementIds.has(a.element_id));
+                return [...otherAnimations, ...embeddedAnimations];
+              });
+            }
+
+            // Merge embedded keyframes if present
+            const embeddedKeyframes = cmd.template.keyframes;
+            if (embeddedKeyframes && embeddedKeyframes.length > 0) {
+              setKeyframes(prev => {
+                const animationIds = new Set((embeddedAnimations || []).map((a: any) => a.id));
+                const otherKeyframes = prev.filter(k => !animationIds.has(k.animation_id));
+                return [...otherKeyframes, ...embeddedKeyframes];
+              });
+            }
           }
+
+          // Get layerId directly from command (don't wait for project load)
+          let layerId: string | undefined = cmd.template.layerId || cmd.layerId;
+
+          // If we don't have layerId and need to resolve from layerIndex, try cached data first
+          if (!layerId && cmd.layerIndex !== undefined) {
+            layerId = resolveLayerId(cmd.layerIndex, loadedLayersRef.current);
+          }
+
+          // Background load project data for future use (non-blocking)
+          // Only if we don't have embedded data or need layer resolution
+          if (cmd.template.projectId && (!hasEmbeddedData || !layerId)) {
+            // Fire and forget - don't await
+            loadProject(cmd.template.projectId).then(result => {
+              if (!layerId && result.layers.length > 0 && cmd.layerIndex !== undefined) {
+                // Late resolution - template may have already started playing
+                console.log(`[Nova Player] Late layer resolution from loaded project`);
+              }
+            }).catch(err => {
+              console.warn(`[Nova Player] Background project load failed (non-critical):`, err);
+            });
+          }
+
+          // If still no layerId, try to get from loaded templates cache
           if (!layerId) {
-            const template = loadedTemplates.find(t => t.id === templateId);
+            const template = loadedTemplatesRef.current.find(t => t.id === templateId);
             layerId = template?.layer_id;
           }
 
-          console.log(`[Nova Player] Playing template ${templateId} on layer ${layerId} (loadedLayers: ${loadedLayers.length})`);
+          console.log(`[Nova Player] Playing template ${templateId} on layer ${layerId} (hasEmbeddedData: ${hasEmbeddedData})`);
           console.log(`[Nova Player] Current layerTemplates size:`, layerTemplates.size);
           console.log(`[Nova Player] Elements count:`, elements.length);
 
@@ -569,7 +653,7 @@ export function NovaPlayer() {
         break;
 
       case 'initialize':
-        // Reset state
+        // Reset state first
         setIsOnAir(false);
         setIsPlaying(false);
         setCurrentTemplateId(null);
@@ -577,6 +661,16 @@ export function NovaPlayer() {
         setCurrentPhase('in');
         setPlayheadPosition(0);
         setLayerTemplates(new Map());
+
+        // Load the project data if projectId is provided
+        if (cmd.projectId) {
+          console.log(`[Nova Player] Initialize: Loading project ${cmd.projectId}`);
+          loadProject(cmd.projectId).then(() => {
+            console.log(`[Nova Player] Initialize: Project loaded successfully`);
+          }).catch(err => {
+            console.error(`[Nova Player] Initialize: Failed to load project:`, err);
+          });
+        }
         break;
     }
   }, [isOnAir, loadProject, layerTemplates, resolveLayerId, currentTemplateId]);
@@ -597,6 +691,10 @@ export function NovaPlayer() {
     console.log(`[Nova Player] Subscribing to channel: ${channelId}`);
     setConnectionStatus('connecting');
 
+    // Note: We no longer call ensureFreshConnection() here since it was causing issues.
+    // The realtime subscription will establish its own WebSocket connection.
+    // Initial data loading uses direct REST API which bypasses the Supabase client.
+
     const channel = supabase
       .channel(`nova-player:${channelId}`)
       .on(
@@ -616,76 +714,110 @@ export function NovaPlayer() {
           }
         }
       )
-      .subscribe((status: string) => {
+      .subscribe(async (status: string) => {
         console.log(`[Nova Player] Subscription status:`, status);
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           setIsReady(true);
+          markSupabaseSuccess(); // Mark successful realtime connection
+
+          // Update player_status in pulsar_channels to 'connected'
+          console.log(`[Nova Player] Updating channel status to connected`);
+          await directRestUpdate(
+            'pulsar_channels',
+            {
+              player_status: 'connected',
+              last_heartbeat: new Date().toISOString(),
+            },
+            { column: 'id', value: channelId },
+            5000
+          );
         } else if (status === 'CHANNEL_ERROR') {
           setConnectionStatus('error');
+          // Update player_status to 'error'
+          await directRestUpdate(
+            'pulsar_channels',
+            { player_status: 'error' },
+            { column: 'id', value: channelId },
+            5000
+          );
         }
       });
 
-    // Load channel info and initial project
-    const loadChannelAndProject = async () => {
-      console.log(`[Nova Player] Loading channel and project for channel: ${channelId}`);
+    // Load channel state using DIRECT REST API
+    // Skip project loading here - commands contain embedded data for real-time playback
+    // Project loading via Supabase client can timeout and block the player
+    const loadChannelState = async () => {
+      console.log(`[Nova Player] Loading channel state for channel: ${channelId}`);
       const startTime = Date.now();
       try {
-        // First, get the channel info to find the loaded_project_id
-        const { data: channelData, error: channelError } = await withTimeout(
-          supabase
-            .from('pulsar_channels')
-            .select('loaded_project_id, name')
-            .eq('id', channelId)
-            .single(),
-          10000,
-          'Load channel info'
+        // Check for any pending command using direct REST
+        const stateResult = await directRestSelect<{ pending_command: PlayerCommand | null; last_command: PlayerCommand | null }>(
+          'pulsar_channel_state',
+          'pending_command,last_command',
+          { column: 'channel_id', value: channelId },
+          8000
         );
 
-        if (channelError) {
-          console.error('[Nova Player] Failed to load channel info:', channelError);
-        } else if (channelData?.loaded_project_id) {
-          // Load the project assigned to this channel
-          console.log(`[Nova Player] Loading assigned project: ${channelData.loaded_project_id}`);
-          await loadProject(channelData.loaded_project_id);
-        } else {
-          console.log(`[Nova Player] No project assigned to channel ${channelId}`);
-        }
-
-        // Then check for any pending command
-        const { data: stateData, error: stateError } = await withTimeout(
-          supabase
-            .from('pulsar_channel_state')
-            .select('pending_command, last_command')
-            .eq('channel_id', channelId)
-            .single(),
-          8000,
-          'Load channel state'
-        );
-
-        if (stateError) {
-          console.error('[Nova Player] Failed to load initial state:', stateError);
+        if (stateResult.error) {
+          console.error('[Nova Player] Failed to load initial state:', stateResult.error);
           return;
         }
 
+        const stateData = stateResult.data?.[0];
         console.log(`[Nova Player] Channel state loaded (${Date.now() - startTime}ms):`, {
           hasPendingCommand: !!stateData?.pending_command,
           hasLastCommand: !!stateData?.last_command,
         });
 
+        // Execute pending command - the command handler will use embedded data
         if (stateData?.pending_command) {
-          handleCommandRef.current(stateData.pending_command as PlayerCommand);
+          handleCommandRef.current(stateData.pending_command);
         }
       } catch (err) {
         console.error(`[Nova Player] Error loading initial state after ${Date.now() - startTime}ms:`, err);
       }
     };
 
-    loadChannelAndProject();
+    loadChannelState();
+
+    // Handle window close/unload - use sendBeacon for reliable status update
+    const handleBeforeUnload = () => {
+      console.log(`[Nova Player] Window closing, sending disconnect beacon`);
+      sendBeaconUpdate(
+        'pulsar_channels',
+        { player_status: 'disconnected' },
+        { column: 'id', value: channelId }
+      );
+    };
+
+    // Add beforeunload listener for window close
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       console.log(`[Nova Player] Unsubscribing from channel: ${channelId}`);
+
+      // Remove beforeunload listener
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Unsubscribe from realtime channel
       supabase.removeChannel(channel);
+
+      // Update player_status to 'disconnected' - use both methods for reliability
+      // sendBeacon for window close, directRestUpdate for component unmount
+      sendBeaconUpdate(
+        'pulsar_channels',
+        { player_status: 'disconnected' },
+        { column: 'id', value: channelId }
+      );
+
+      // Also try async update as fallback (won't complete if window is closing)
+      directRestUpdate(
+        'pulsar_channels',
+        { player_status: 'disconnected' },
+        { column: 'id', value: channelId },
+        5000
+      ).catch(err => console.warn('[Nova Player] Failed to update disconnect status:', err));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);

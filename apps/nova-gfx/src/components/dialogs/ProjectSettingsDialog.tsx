@@ -29,6 +29,8 @@ import {
   RotateCcw,
   Database,
   CheckCircle2,
+  Youtube,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface ProjectSettingsDialogProps {
@@ -385,6 +387,37 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
                     <code className="text-xs bg-background px-2 py-0.5 rounded font-mono">
                       media-assets
                     </code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4" />
+
+              {/* YouTube */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Youtube className="w-4 h-4 text-red-500" />
+                  <Label>YouTube Videos</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Embed YouTube videos directly in your graphics. Videos must be public or unlisted.
+                </p>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs text-amber-200 space-y-1">
+                      <p><strong>Limitations:</strong></p>
+                      <ul className="list-disc list-inside space-y-0.5 text-amber-300/80">
+                        <li>YouTube branding (title, logo) cannot be fully hidden</li>
+                        <li>Videos are always muted for autoplay to work</li>
+                        <li>Age-restricted videos require sign-in and won&apos;t work</li>
+                        <li>Some videos may block embedding</li>
+                      </ul>
+                      <p className="pt-1">
+                        <strong>Recommendation:</strong> For clean broadcast output, upload videos to{' '}
+                        <span className="text-emerald-400">Supabase Storage</span> and use direct MP4/WebM URLs.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -13,6 +13,7 @@ export interface Playlist {
   endBehavior: 'stop' | 'hold' | 'loop';
   status: 'idle' | 'playing' | 'paused';
   currentPageId?: string;
+  channelId?: string; // Default channel for this playlist
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -60,6 +61,7 @@ interface PlaylistStore {
   setMode: (mode: 'manual' | 'timed' | 'loop') => Promise<void>;
   setEndBehavior: (behavior: 'stop' | 'hold' | 'loop') => Promise<void>;
   setDefaultDuration: (duration: number) => Promise<void>;
+  setChannelId: (channelId: string | null) => Promise<void>;
 
   // Loop mode state
   setCurrentIndex: (index: number) => void;
@@ -100,6 +102,7 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
         endBehavior: p.end_behavior,
         status: p.status,
         currentPageId: p.current_page_id,
+        channelId: p.channel_id,
         createdAt: new Date(p.created_at),
         updatedAt: new Date(p.updated_at),
         createdBy: p.created_by,
@@ -271,6 +274,7 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
     if (updates.mode !== undefined) dbUpdates.mode = updates.mode;
     if (updates.defaultDuration !== undefined) dbUpdates.default_duration = updates.defaultDuration;
     if (updates.endBehavior !== undefined) dbUpdates.end_behavior = updates.endBehavior;
+    if (updates.channelId !== undefined) dbUpdates.channel_id = updates.channelId;
     dbUpdates.updated_at = new Date().toISOString();
 
     const { error } = await supabase
@@ -417,6 +421,12 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
     const playlist = get().currentPlaylist;
     if (!playlist) return;
     await get().updatePlaylist(playlist.id, { defaultDuration: duration });
+  },
+
+  setChannelId: async (channelId) => {
+    const playlist = get().currentPlaylist;
+    if (!playlist) return;
+    await get().updatePlaylist(playlist.id, { channelId: channelId || undefined });
   },
 
   setCurrentIndex: (index) => {

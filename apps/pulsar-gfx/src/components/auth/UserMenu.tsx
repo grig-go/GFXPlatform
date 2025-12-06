@@ -48,14 +48,11 @@ export function UserMenu() {
         <Button
           variant="ghost"
           size="sm"
-          className="gap-2 px-2"
+          className="px-1.5 h-7 sm:h-8"
         >
-          <div className="w-7 h-7 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-medium text-cyan-400">
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-medium text-cyan-400">
             {initials}
           </div>
-          <span className="text-sm font-medium max-w-[120px] truncate hidden sm:inline">
-            {user.name || user.email}
-          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

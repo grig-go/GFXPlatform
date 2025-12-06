@@ -78,7 +78,7 @@ export function MainLayout() {
         </ResizablePanelGroup>
       </div>
 
-      {/* Bottom Status Bar - Layer Status */}
+      {/* Bottom Status Bar - Channel Status */}
       <StatusBar />
     </div>
   );

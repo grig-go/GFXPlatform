@@ -1,4 +1,4 @@
-import { createClient, User, Session } from '@supabase/supabase-js';
+import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
 
 // Get Supabase credentials from environment variables
 // Note: These are accessed via import.meta.env in Vite apps
@@ -31,18 +31,365 @@ const customFetch = (url: RequestInfo | URL, options: RequestInit = {}) => {
   return fetch(url, { ...options, headers, cache: 'no-store' });
 };
 
-// Create Supabase client (will be null if credentials are missing)
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+/**
+ * Send a beacon update - use this for window close/unload scenarios.
+ * Uses navigator.sendBeacon which is designed to survive page unload.
+ * Returns true if beacon was queued (doesn't mean it succeeded on server).
+ */
+export function sendBeaconUpdate(
+  table: string,
+  data: Record<string, any>,
+  filter: { column: string; value: string }
+): boolean {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('[Supabase Beacon] Cannot send - not configured');
+    return false;
+  }
+
+  const url = `${supabaseUrl}/rest/v1/${table}?${filter.column}=eq.${filter.value}`;
+
+  // Note: sendBeacon uses POST but Supabase REST API needs PATCH for updates
+  // Unfortunately sendBeacon only supports POST, so we need a workaround
+  // Option 1: Use a serverless function that accepts POST
+  // Option 2: Use fetch with keepalive flag (more reliable for PATCH)
+
+  // Using fetch with keepalive - this allows the request to outlive the page
+  try {
+    fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Prefer': 'return=minimal',
       },
-      global: {
-        fetch: customFetch,
+      body: JSON.stringify(data),
+      keepalive: true, // Key: allows request to complete after page unload
+    }).catch(() => {
+      // Ignore errors - we're closing anyway
+    });
+
+    console.log(`[Supabase Beacon] Queued update for ${table}`);
+    return true;
+  } catch (err) {
+    console.warn('[Supabase Beacon] Failed to queue:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct REST API call that completely bypasses the Supabase client.
+ * Use this for critical operations when the Supabase client is unresponsive.
+ * This is the most reliable way to interact with Supabase when connections are stale.
+ */
+export async function directRestUpdate(
+  table: string,
+  data: Record<string, any>,
+  filter: { column: string; value: string },
+  timeoutMs = 10000
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    console.log(`[Supabase REST] PATCH ${table} where ${filter.column}=${filter.value}`);
+
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/${table}?${filter.column}=eq.${filter.value}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Prefer': 'return=minimal',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+        cache: 'no-store',
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Supabase REST] Error: ${response.status} ${errorText}`);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    console.log(`[Supabase REST] Success`);
+    markSupabaseSuccess();
+    return { success: true };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.error(`[Supabase REST] Timeout after ${timeoutMs}ms`);
+      return { success: false, error: `Timeout after ${timeoutMs}ms` };
+    }
+    console.error(`[Supabase REST] Error:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Direct REST API select that completely bypasses the Supabase client.
+ */
+export async function directRestSelect<T = any>(
+  table: string,
+  columns = '*',
+  filter?: { column: string; value: string },
+  timeoutMs = 10000
+): Promise<{ data: T[] | null; error?: string }> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { data: null, error: 'Supabase not configured' };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    let url = `${supabaseUrl}/rest/v1/${table}?select=${columns}`;
+    if (filter) {
+      url += `&${filter.column}=eq.${filter.value}`;
+    }
+
+    console.log(`[Supabase REST] GET ${table}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       },
-    })
-  : null as any; // Fallback to allow app to load, but DB operations will fail
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Supabase REST] Error: ${response.status} ${errorText}`);
+      return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    console.log(`[Supabase REST] Success, ${data.length} rows`);
+    markSupabaseSuccess();
+    return { data };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.error(`[Supabase REST] Timeout after ${timeoutMs}ms`);
+      return { data: null, error: `Timeout after ${timeoutMs}ms` };
+    }
+    console.error(`[Supabase REST] Error:`, err);
+    return { data: null, error: err.message };
+  }
+}
+
+// Track last successful operation time
+let lastSuccessfulOperation = Date.now();
+let consecutiveFailures = 0;
+
+// Function to create a new Supabase client
+function createSupabaseClient(): SupabaseClient | null {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    global: {
+      fetch: customFetch,
+    },
+  });
+}
+
+/**
+ * Create a completely fresh, isolated Supabase client for one-time operations.
+ * Use this for critical operations that need a guaranteed fresh connection.
+ * The client does NOT persist session and does NOT share state with the main client.
+ * @returns A fresh SupabaseClient or null if not configured
+ */
+export function createFreshClient(): SupabaseClient | null {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[Supabase] Cannot create fresh client - missing credentials');
+    return null;
+  }
+
+  console.log('[Supabase] Creating fresh isolated client...');
+
+  // Create a completely independent client with NO session persistence
+  // This ensures no stale state from the main client
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false, // Don't persist - this is a one-shot client
+      autoRefreshToken: false, // Don't auto-refresh - we're doing a quick operation
+    },
+    global: {
+      fetch: customFetch,
+    },
+  });
+}
+
+// Create initial Supabase client
+let _supabase: SupabaseClient | null = createSupabaseClient();
+
+// Export a proxy that allows us to swap the underlying client
+export const supabase = _supabase as SupabaseClient;
+
+/**
+ * Check if the Supabase connection is healthy by doing a quick ping
+ * @param timeoutMs - Timeout in milliseconds (default 5000)
+ * @returns true if healthy, false if not
+ */
+export async function isSupabaseHealthy(timeoutMs = 5000): Promise<boolean> {
+  if (!_supabase || !supabaseUrl || !supabaseAnonKey) return false;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Use a simple REST API call to check connection
+    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+      method: 'HEAD',
+      headers: {
+        'apikey': supabaseAnonKey,
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    return response.ok || response.status === 404; // 404 is OK, means server responded
+  } catch (err) {
+    console.warn('[Supabase] Health check failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Recreate the Supabase client to get a fresh connection
+ * Call this when operations are timing out
+ */
+export async function reconnectSupabase(): Promise<boolean> {
+  console.log('[Supabase] Attempting to reconnect...');
+
+  try {
+    // Create a new client
+    const newClient = createSupabaseClient();
+    if (!newClient) {
+      console.error('[Supabase] Failed to create new client - missing credentials');
+      return false;
+    }
+
+    // Restore the auth session if we had one
+    if (_supabase) {
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (session) {
+        console.log('[Supabase] Restoring session...');
+        await newClient.auth.setSession(session);
+      }
+    }
+
+    // Replace the client reference
+    // Note: This replaces the internal reference, existing imports will get stale
+    // But new calls through the proxy-like export will use the new client
+    _supabase = newClient;
+    Object.assign(supabase, newClient);
+
+    // Test the new connection
+    const isHealthy = await isSupabaseHealthy(3000);
+    if (isHealthy) {
+      console.log('[Supabase] Reconnected successfully');
+      consecutiveFailures = 0;
+      lastSuccessfulOperation = Date.now();
+      return true;
+    } else {
+      console.error('[Supabase] Reconnected but health check failed');
+      return false;
+    }
+  } catch (err) {
+    console.error('[Supabase] Reconnection failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Mark a successful Supabase operation (call after successful queries)
+ */
+export function markSupabaseSuccess(): void {
+  consecutiveFailures = 0;
+  lastSuccessfulOperation = Date.now();
+}
+
+/**
+ * Mark a failed Supabase operation and potentially trigger reconnection
+ * @returns true if we should retry the operation
+ */
+export async function markSupabaseFailure(): Promise<boolean> {
+  consecutiveFailures++;
+
+  // After 2 consecutive failures, try to reconnect
+  if (consecutiveFailures >= 2) {
+    console.log(`[Supabase] ${consecutiveFailures} consecutive failures, attempting reconnect...`);
+    const reconnected = await reconnectSupabase();
+    if (reconnected) {
+      return true; // Caller should retry
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get time since last successful operation
+ */
+export function getTimeSinceLastSuccess(): number {
+  return Date.now() - lastSuccessfulOperation;
+}
+
+/**
+ * Ensure connection is fresh before critical operations
+ * Reconnects if no successful operation in the last 2 minutes OR if health check fails
+ */
+export async function ensureFreshConnection(forceHealthCheck = false): Promise<void> {
+  const timeSinceSuccess = getTimeSinceLastSuccess();
+  const STALE_THRESHOLD = 2 * 60 * 1000; // 2 minutes (reduced from 5)
+
+  // Always do health check if forced or if stale
+  if (forceHealthCheck || timeSinceSuccess > STALE_THRESHOLD) {
+    console.log(`[Supabase] Checking connection health (${Math.round(timeSinceSuccess / 1000)}s since last success, forced=${forceHealthCheck})...`);
+    const isHealthy = await isSupabaseHealthy(3000);
+
+    if (!isHealthy) {
+      console.log('[Supabase] Connection unhealthy, reconnecting...');
+      await reconnectSupabase();
+    } else {
+      console.log('[Supabase] Connection healthy');
+      lastSuccessfulOperation = Date.now();
+    }
+  }
+}
+
+/**
+ * Force reconnect - use this before critical operations that have been failing
+ */
+export async function forceReconnect(): Promise<boolean> {
+  console.log('[Supabase] Forcing reconnection...');
+  return reconnectSupabase();
+}
 
 // Helper to check if Supabase is configured
 export function isSupabaseConfigured(): boolean {

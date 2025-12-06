@@ -55,25 +55,26 @@ const config: Config = {
       respectPrefersColorScheme: false,
     },
     navbar: {
-      title: '',
+      title: 'Nova GFX',
       logo: {
-        alt: 'Nova GFX Logo',
-        src: 'img/nova-logo.svg',
+        alt: 'Emergent Nova GFX',
+        src: 'img/navbar-logo.svg',
+        style: {height: '28px', width: 'auto'},
       },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'docsSidebar',
-          position: 'left',
+          position: 'right',
           label: 'Documentation',
         },
         {
           type: 'docSidebar',
           sidebarId: 'apiSidebar',
-          position: 'left',
+          position: 'right',
           label: 'API Reference',
         },
-        {to: '/blog', label: 'Changelog', position: 'left'},
+        {to: '/blog', label: 'Changelog', position: 'right'},
       ],
     },
     footer: {

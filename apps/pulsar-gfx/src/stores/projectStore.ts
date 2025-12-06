@@ -38,10 +38,28 @@ export interface Template {
 
 export interface TemplateElement {
   id: string;
+  templateId: string;
   name: string;
-  elementType: 'text' | 'shape' | 'image' | 'video' | 'group';
+  elementId?: string;
+  elementType: 'text' | 'shape' | 'image' | 'video' | 'group' | 'line' | 'icon' | 'svg' | 'chart' | 'map' | 'table' | 'ticker' | 'topic-badge' | 'countdown' | 'div';
+  parentElementId?: string | null;
+  sortOrder?: number;
+  zIndex?: number;
+  positionX: number;
+  positionY: number;
+  width?: number | null;
+  height?: number | null;
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
   content: any;
   styles?: Record<string, any>;
+  classes?: string[];
+  visible?: boolean;
+  locked?: boolean;
 }
 
 export interface AnimationSequence {
@@ -245,10 +263,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       if (elementsFromStorage.length > 0) {
         const elements: TemplateElement[] = elementsFromStorage.map((e: any) => ({
           id: e.id,
+          templateId: e.template_id,
           name: e.name,
+          elementId: e.element_id,
           elementType: e.element_type,
+          parentElementId: e.parent_element_id,
+          sortOrder: e.sort_order,
+          zIndex: e.z_index,
+          positionX: e.position_x ?? 0,
+          positionY: e.position_y ?? 0,
+          width: e.width,
+          height: e.height,
+          rotation: e.rotation ?? 0,
+          scaleX: e.scale_x ?? 1,
+          scaleY: e.scale_y ?? 1,
+          anchorX: e.anchor_x ?? 0.5,
+          anchorY: e.anchor_y ?? 0.5,
+          opacity: e.opacity ?? 1,
           content: e.content,
           styles: e.styles,
+          classes: e.classes,
+          visible: e.visible ?? true,
+          locked: e.locked ?? false,
         }));
 
         console.log('[projectStore] Using localStorage elements:', elements);
@@ -283,10 +319,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       const elements: TemplateElement[] = (data || []).map((e: any) => ({
         id: e.id,
+        templateId: e.template_id,
         name: e.name,
+        elementId: e.element_id,
         elementType: e.element_type,
+        parentElementId: e.parent_element_id,
+        sortOrder: e.sort_order,
+        zIndex: e.z_index,
+        positionX: e.position_x ?? 0,
+        positionY: e.position_y ?? 0,
+        width: e.width,
+        height: e.height,
+        rotation: e.rotation ?? 0,
+        scaleX: e.scale_x ?? 1,
+        scaleY: e.scale_y ?? 1,
+        anchorX: e.anchor_x ?? 0.5,
+        anchorY: e.anchor_y ?? 0.5,
+        opacity: e.opacity ?? 1,
         content: e.content,
         styles: e.styles,
+        classes: e.classes,
+        visible: e.visible ?? true,
+        locked: e.locked ?? false,
       }));
 
       console.log('[projectStore] Mapped elements from DB:', elements);

@@ -7,34 +7,16 @@ import {
   DialogDescription,
   Button,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@emergent-platform/ui';
 import { Send, Radio, Square, Loader2, Monitor, Plus } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, directRestUpdate, markSupabaseSuccess, markSupabaseFailure } from '@/lib/supabase';
 import { useDesignerStore } from '@/stores/designerStore';
-
-// Timeout wrapper for async operations
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number = 10000,
-  operation: string = 'Operation'
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout>;
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    clearTimeout(timeoutId!);
-    return result;
-  } catch (error) {
-    clearTimeout(timeoutId!);
-    throw error;
-  }
-}
+import type { Project } from '@emergent-platform/types';
 
 interface Channel {
   id: string;
@@ -52,12 +34,16 @@ interface PublishModalProps {
 export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
-  const [playImmediately, setPlayImmediately] = useState(true);
+  const [playImmediately, setPlayImmediately] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [liveChannelIds, setLiveChannelIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  // Project selection state
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Track open player windows
   const playerWindowsRef = useRef<Map<string, Window>>(new Map());
@@ -70,36 +56,48 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     elements,
     animations,
     keyframes,
-    saveProject,
   } = useDesignerStore();
+
+  // Initialize selected project to current project when modal opens
+  useEffect(() => {
+    if (open && project) {
+      setSelectedProjectId(project.id);
+    }
+  }, [open, project]);
 
   // Get current template data
   const currentTemplate = templates.find(t => t.id === currentTemplateId);
   const templateElements = elements.filter(e => e.template_id === currentTemplateId);
 
+  // Get selected project info (current project from Nova or selected from dropdown)
+  const selectedProject = selectedProjectId === project?.id
+    ? project
+    : availableProjects.find(p => p.id === selectedProjectId);
+
   // Send stop command to a channel (extracted for reuse)
   const sendStopCommand = useCallback(async (channelId: string) => {
-    if (!supabase) return;
-
     try {
       const command = {
         type: 'stop',
         timestamp: new Date().toISOString(),
       };
 
-      await withTimeout(
-        supabase
-          .from('pulsar_channel_state')
-          .update({
-            pending_command: command,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('channel_id', channelId),
-        5000,
-        'Send stop command'
+      // Use direct REST API for reliability
+      const result = await directRestUpdate(
+        'pulsar_channel_state',
+        {
+          pending_command: command,
+          updated_at: new Date().toISOString(),
+        },
+        { column: 'channel_id', value: channelId },
+        5000
       );
 
-      console.log(`[PublishModal] Sent stop command to channel ${channelId}`);
+      if (result.success) {
+        console.log(`[PublishModal] Sent stop command to channel ${channelId}`);
+      } else {
+        console.error(`[PublishModal] Failed to send stop command to channel ${channelId}:`, result.error);
+      }
     } catch (err) {
       console.error(`[PublishModal] Failed to send stop command to channel ${channelId}:`, err);
     }
@@ -179,47 +177,79 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       setIsLoading(true);
       setError(null);
 
-      // Set a timeout to prevent infinite loading
+      // Set a timeout to prevent infinite loading (increased to 30s for slow connections)
       timeoutId = setTimeout(() => {
         if (!isCancelled) {
           console.error('[PublishModal] Loading timed out');
           setError('Loading timed out. Please check your connection and try again.');
           setIsLoading(false);
         }
-      }, 10000);
+      }, 30000);
 
-      try {
-        // First check if we have an authenticated session (with timeout)
-        let isAuthenticated = false;
-        try {
-          const sessionResult = await withTimeout(
-            supabase.auth.getSession(),
-            5000,
-            'Get auth session'
-          );
-          isAuthenticated = !!sessionResult?.data?.session;
-          console.log('[PublishModal] Auth session:', isAuthenticated ? 'authenticated' : 'not authenticated');
-        } catch (authErr) {
-          console.warn('[PublishModal] Auth check failed or timed out, proceeding anyway:', authErr);
-          // Continue anyway - RLS policies may allow unauthenticated access
+      // Helper to load channels with retry - ALWAYS uses direct REST API
+      // This completely bypasses the Supabase client to avoid stale connection issues
+      const loadChannelsWithRetry = async (retries = 3): Promise<typeof channels> => {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+          throw new Error('Supabase configuration missing');
         }
 
-        console.log('[PublishModal] Loading channels...');
+        for (let attempt = 1; attempt <= retries; attempt++) {
+          try {
+            console.log(`[PublishModal] Loading channels via REST API (attempt ${attempt}/${retries})...`);
 
-        const { data, error: fetchError } = await withTimeout(
-          supabase
-            .from('pulsar_channels')
-            .select('id, name, channel_code, player_url, player_status')
-            .order('name'),
-          8000,
-          'Load channels'
-        );
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const response = await fetch(
+              `${supabaseUrl}/rest/v1/pulsar_channels?select=id,name,channel_code,player_url,player_status&order=name`,
+              {
+                headers: {
+                  'apikey': supabaseKey,
+                  'Authorization': `Bearer ${supabaseKey}`,
+                  'Content-Type': 'application/json',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                },
+                signal: controller.signal,
+              }
+            );
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              throw new Error(`REST API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[PublishModal] Loaded ${data.length} channels via REST API`);
+            return data || [];
+          } catch (err: any) {
+            if (err.name === 'AbortError') {
+              console.warn(`[PublishModal] Attempt ${attempt} timed out`);
+            } else {
+              console.warn(`[PublishModal] Attempt ${attempt} failed:`, err);
+            }
+            if (attempt === retries) throw err;
+            // Wait 1 second before retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        return [];
+      };
+
+      try {
+        // Skip auth check entirely - it's not needed since RLS policies allow access
+        // This removes a potential timeout point
+        console.log('[PublishModal] Skipping auth check, loading channels directly...');
+
+        const data = await loadChannelsWithRetry(3);
 
         if (isCancelled) return;
 
-        console.log('[PublishModal] Channels query result:', { data, error: fetchError });
-
-        if (fetchError) throw fetchError;
+        console.log('[PublishModal] Channels loaded:', data.length, 'channels');
+        markSupabaseSuccess(); // Mark successful operation
 
         if (data) {
           setChannels(data);
@@ -228,10 +258,14 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
             setSelectedChannelIds(new Set([data[0].id]));
           }
         }
+
+        // Also load available projects using direct REST API
+        await loadProjectsWithRetry();
       } catch (err) {
         if (isCancelled) return;
-        console.error('[PublishModal] Failed to load channels:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load channels');
+        console.error('[PublishModal] Failed to load channels after retries:', err);
+        await markSupabaseFailure(); // Track failure for potential reconnect
+        setError('Failed to load channels. Please check your connection and try again.');
       } finally {
         if (!isCancelled) {
           clearTimeout(timeoutId);
@@ -239,6 +273,44 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         }
       }
     }
+
+    // Load projects using direct REST API
+    const loadProjectsWithRetry = async () => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) return;
+
+      try {
+        console.log('[PublishModal] Loading projects via REST API...');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/gfx_projects?select=id,name,thumbnail_url,updated_at&archived=eq.false&order=updated_at.desc`,
+          {
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+            },
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const projects = await response.json();
+          console.log(`[PublishModal] Loaded ${projects.length} projects via REST API`);
+          setAvailableProjects(projects);
+        }
+      } catch (err) {
+        console.warn('[PublishModal] Failed to load projects (non-critical):', err);
+      }
+    };
 
     if (open) {
       loadChannels();
@@ -286,87 +358,143 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
   // Publish to selected channels
   const handlePublish = async () => {
-    if (selectedChannelIds.size === 0 || !currentTemplate || !supabase) return;
+    // For current project, require a template. For other projects, just need the project ID
+    const isCurrentProject = selectedProjectId === project?.id;
+    if (selectedChannelIds.size === 0 || !selectedProjectId) return;
+    if (isCurrentProject && !currentTemplate) return;
 
     setIsPublishing(true);
     setError(null);
 
-    const PUBLISH_TIMEOUT = 20000; // 20 second timeout for publish operations
-
     try {
-      // Save project first to ensure all changes are persisted (has its own timeout)
-      console.log('[PublishModal] Saving project before publish...');
-      await withTimeout(saveProject(), PUBLISH_TIMEOUT, 'Save project');
-
       // Build the command payload
-      const command = {
-        type: playImmediately ? 'play' : 'load',
-        template: {
-          id: currentTemplate.id,
-          name: currentTemplate.name,
-          projectId: project?.id,
-          layerId: currentTemplate.layer_id, // Include layerId for animated layer switching
-          // Include element data for dynamic rendering
-          elements: templateElements.map(el => ({
-            id: el.id,
-            name: el.name,
-            type: el.content?.type,
-            content: el.content,
-            position_x: el.position_x,
-            position_y: el.position_y,
-            width: el.width,
-            height: el.height,
-            styles: el.styles,
-          })),
-          // Include animation data
-          animations: animations.filter(a =>
-            templateElements.some(e => e.id === a.element_id)
-          ),
-          keyframes: keyframes.filter(k =>
-            animations.some(a => a.id === k.animation_id &&
-              templateElements.some(e => e.id === a.element_id))
-          ),
-        },
-        payload: buildPayload(),
-        timestamp: new Date().toISOString(),
-      };
+      let command: any;
 
-      // Send command to all selected channels
+      if (isCurrentProject && currentTemplate) {
+        // Publishing current project - include full template data for real-time playback
+        console.log('[PublishModal] Publishing current project with embedded data...');
+
+        // Backup to localStorage (instant and reliable)
+        try {
+          const localBackup = {
+            project,
+            templates,
+            elements,
+            animations,
+            keyframes,
+            timestamp: new Date().toISOString(),
+          };
+          localStorage.setItem(`nova-project-backup-${project?.id}`, JSON.stringify(localBackup));
+        } catch (backupErr) {
+          console.warn('[PublishModal] localStorage backup failed (non-critical):', backupErr);
+        }
+
+        command = {
+          type: playImmediately ? 'play' : 'load',
+          template: {
+            id: currentTemplate.id,
+            name: currentTemplate.name,
+            projectId: project?.id,
+            layerId: currentTemplate.layer_id,
+            // Include FULL element data for proper rendering
+            elements: templateElements.map(el => ({
+              id: el.id,
+              template_id: el.template_id,
+              name: el.name,
+              element_id: el.element_id,
+              element_type: el.element_type,
+              parent_element_id: el.parent_element_id,
+              sort_order: el.sort_order,
+              z_index: el.z_index,
+              position_x: el.position_x,
+              position_y: el.position_y,
+              width: el.width,
+              height: el.height,
+              rotation: el.rotation,
+              scale_x: el.scale_x,
+              scale_y: el.scale_y,
+              anchor_x: el.anchor_x,
+              anchor_y: el.anchor_y,
+              opacity: el.opacity,
+              content: el.content,
+              styles: el.styles,
+              classes: el.classes,
+              visible: el.visible,
+              locked: el.locked,
+            })),
+            // Include animation data
+            animations: animations.filter(a =>
+              templateElements.some(e => e.id === a.element_id)
+            ),
+            keyframes: keyframes.filter(k =>
+              animations.some(a => a.id === k.animation_id &&
+                templateElements.some(e => e.id === a.element_id))
+            ),
+          },
+          payload: buildPayload(),
+          timestamp: new Date().toISOString(),
+        };
+      } else {
+        // Publishing different project - send initialize command with project ID
+        // NovaPlayer will load the project data from DB
+        console.log(`[PublishModal] Publishing project ${selectedProjectId} (initialize mode)...`);
+        command = {
+          type: 'initialize',
+          projectId: selectedProjectId,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Send command to all selected channels using DIRECT REST API
+      // This completely bypasses the Supabase client which may have stale connections
       const channelIds = Array.from(selectedChannelIds);
 
-      console.log('[PublishModal] Publishing to channels:', channelIds);
+      console.log('[PublishModal] Publishing to channels via direct REST API:', channelIds);
 
-      // Update channel state and also set loaded_project_id on channel
-      const results = await withTimeout(
-        Promise.all(
-          channelIds.flatMap(channelId => [
-            // Update channel state with pending command
-            supabase
-              .from('pulsar_channel_state')
-              .update({
-                pending_command: command,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('channel_id', channelId),
-            // Set loaded_project_id on channel for always-on layer support
-            supabase
-              .from('pulsar_channels')
-              .update({
-                loaded_project_id: project?.id,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', channelId),
-          ])
-        ),
-        PUBLISH_TIMEOUT,
-        'Publish to channels'
+      // Publish to each channel using direct REST (no Supabase client)
+      const publishResults = await Promise.all(
+        channelIds.map(async (channelId) => {
+          // Update channel state with pending command
+          const stateResult = await directRestUpdate(
+            'pulsar_channel_state',
+            {
+              pending_command: command,
+              updated_at: new Date().toISOString(),
+            },
+            { column: 'channel_id', value: channelId },
+            10000
+          );
+
+          if (!stateResult.success) {
+            console.error(`[PublishModal] Failed to update channel state for ${channelId}:`, stateResult.error);
+            return { channelId, success: false, error: stateResult.error };
+          }
+
+          // Set loaded_project_id on channel for always-on layer support
+          const channelResult = await directRestUpdate(
+            'pulsar_channels',
+            {
+              loaded_project_id: selectedProjectId,
+              updated_at: new Date().toISOString(),
+            },
+            { column: 'id', value: channelId },
+            10000
+          );
+
+          if (!channelResult.success) {
+            console.warn(`[PublishModal] Failed to update channel loaded_project_id for ${channelId}:`, channelResult.error);
+            // Don't fail the whole publish for this
+          }
+
+          return { channelId, success: true };
+        })
       );
 
       // Check for errors
-      const errors = results.filter(r => r.error);
+      const errors = publishResults.filter(r => !r.success);
       if (errors.length > 0) {
         console.error('[PublishModal] Some publish operations failed:', errors);
-        throw new Error(`Failed to publish to ${errors.length} channel(s)`);
+        throw new Error(`Failed to publish to ${errors.length} channel(s): ${errors.map(e => e.error).join(', ')}`);
       }
 
       // Track which channels are live
@@ -403,7 +531,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   // Take off air (stop) - stops all live channels
   // If current template is selected, stop only that layer; otherwise stop all layers
   const handleStop = async () => {
-    if (liveChannelIds.size === 0 || !supabase) return;
+    if (liveChannelIds.size === 0) return;
 
     setIsPublishing(true);
     setError(null);
@@ -423,22 +551,29 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         timestamp: new Date().toISOString(),
       };
 
+      // Use direct REST API for reliability (bypasses Supabase client)
       const channelIds = Array.from(liveChannelIds);
-      await withTimeout(
-        Promise.all(
-          channelIds.map(channelId =>
-            supabase
-              .from('pulsar_channel_state')
-              .update({
-                pending_command: command,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('channel_id', channelId)
+      console.log('[PublishModal] Sending stop command via direct REST API to channels:', channelIds);
+
+      const stopResults = await Promise.all(
+        channelIds.map(channelId =>
+          directRestUpdate(
+            'pulsar_channel_state',
+            {
+              pending_command: command,
+              updated_at: new Date().toISOString(),
+            },
+            { column: 'channel_id', value: channelId },
+            10000
           )
-        ),
-        10000,
-        'Stop playback'
+        )
       );
+
+      const errors = stopResults.filter((r: { success: boolean; error?: string }) => !r.success);
+      if (errors.length > 0) {
+        console.error('[PublishModal] Some stop operations failed:', errors);
+        throw new Error(`Failed to stop ${errors.length} channel(s)`);
+      }
 
       // Only clear live channels if we did a global stop (no layerId)
       if (!currentTemplate?.layer_id) {
@@ -456,7 +591,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
   // Clear (immediate, no animation) - clears all live channels
   const handleClear = async () => {
-    if (liveChannelIds.size === 0 || !supabase) return;
+    if (liveChannelIds.size === 0) return;
 
     setIsPublishing(true);
     setError(null);
@@ -467,22 +602,29 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         timestamp: new Date().toISOString(),
       };
 
+      // Use direct REST API for reliability (bypasses Supabase client)
       const channelIds = Array.from(liveChannelIds);
-      await withTimeout(
-        Promise.all(
-          channelIds.map(channelId =>
-            supabase
-              .from('pulsar_channel_state')
-              .update({
-                pending_command: command,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('channel_id', channelId)
+      console.log('[PublishModal] Sending clear command via direct REST API to channels:', channelIds);
+
+      const clearResults = await Promise.all(
+        channelIds.map(channelId =>
+          directRestUpdate(
+            'pulsar_channel_state',
+            {
+              pending_command: command,
+              updated_at: new Date().toISOString(),
+            },
+            { column: 'channel_id', value: channelId },
+            10000
           )
-        ),
-        10000,
-        'Clear channels'
+        )
       );
+
+      const errors = clearResults.filter((r: { success: boolean; error?: string }) => !r.success);
+      if (errors.length > 0) {
+        console.error('[PublishModal] Some clear operations failed:', errors);
+        throw new Error(`Failed to clear ${errors.length} channel(s)`);
+      }
 
       setLiveChannelIds(new Set());
       // Clear all tracked windows
@@ -617,24 +759,55 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
                 </label>
               </div>
 
-              {/* Template Info */}
-              {currentTemplate && (
-                <div className="rounded-lg bg-muted/50 border border-border p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{currentTemplate.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {templateElements.length} element{templateElements.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
+              {/* Project Selection */}
+              <div className="space-y-3">
+                <Label>Project</Label>
+                <Select
+                  value={selectedProjectId || ''}
+                  onValueChange={(value) => setSelectedProjectId(value)}
+                  disabled={isPublishing}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a project">
+                      {selectedProject ? (
+                        <div className="flex items-center gap-2">
+                          <span>{selectedProject.name}</span>
+                          {selectedProjectId === project?.id && (
+                            <span className="text-xs text-muted-foreground">(current)</span>
+                          )}
+                        </div>
+                      ) : (
+                        'Select a project'
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Current project first */}
                     {project && (
-                      <div className="text-xs text-muted-foreground">
-                        {project.name}
-                      </div>
+                      <SelectItem value={project.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{project.name}</span>
+                          <span className="text-xs text-muted-foreground">(current)</span>
+                        </div>
+                      </SelectItem>
                     )}
+                    {/* Other available projects */}
+                    {availableProjects
+                      .filter(p => p.id !== project?.id)
+                      .map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {/* Template info for current project */}
+                {currentTemplate && selectedProjectId === project?.id && (
+                  <div className="text-xs text-muted-foreground">
+                    Template: {currentTemplate.name} ({templateElements.length} element{templateElements.length !== 1 ? 's' : ''})
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Player URL Info */}
               {hasSelectedChannels && (
@@ -693,7 +866,13 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
             </Button>
             <Button
               onClick={handlePublish}
-              disabled={!hasSelectedChannels || !currentTemplate || isPublishing || channels.length === 0}
+              disabled={
+                !hasSelectedChannels ||
+                !selectedProjectId ||
+                (selectedProjectId === project?.id && !currentTemplate) ||
+                isPublishing ||
+                channels.length === 0
+              }
               className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
             >
               {isPublishing ? (

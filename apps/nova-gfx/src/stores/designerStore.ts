@@ -26,7 +26,7 @@ import {
   fetchKeyframes,
   fetchBindings,
 } from '@/services/projectService';
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, markSupabaseSuccess, markSupabaseFailure, directRestUpdate } from '@emergent-platform/supabase-client';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
 
 /**
@@ -56,6 +56,56 @@ async function withTimeout<T>(
   } catch (error) {
     clearTimeout(timeoutId!);
     throw error;
+  }
+}
+
+/**
+ * Direct REST API upsert - bypasses Supabase client to avoid stale connection issues.
+ * Uses POST with Prefer: resolution=merge-duplicates for upsert behavior.
+ */
+async function directRestUpsert(
+  table: string,
+  data: Record<string, unknown> | Record<string, unknown>[],
+  timeoutMs: number = 15000
+): Promise<{ success: boolean; error?: string }> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        'Cache-Control': 'no-cache',
+      },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[directRestUpsert] ${table} failed:`, response.status, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { success: false, error: `Request timed out after ${timeoutMs}ms` };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
 
@@ -293,6 +343,7 @@ interface DesignerActions {
   pause: () => void;
   stop: () => void;
   playFullPreview: () => void; // Play through all phases (IN → LOOP → OUT)
+  endPreviewPlayback: () => void; // End preview but keep template isolated
   isPlayingFullPreview: boolean; // Whether playing through all phases
 
   // On-Air controls
@@ -1139,12 +1190,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           }
           
           set({ isSaving: true, error: null });
-          
+
           try {
             console.log('Saving project:', projectId);
+
+            // Use direct REST API to bypass stale Supabase client connections
+            console.log('[designerStore] Saving via direct REST API...');
+
             const SAVE_TIMEOUT = 15000; // 15 second timeout per operation
 
-            // 1. Update project metadata (only include columns that exist in DB)
+            // 1. Update project metadata using direct REST API
             const projectData: Record<string, unknown> = {
               name: state.project.name,
               description: state.project.description,
@@ -1161,17 +1216,15 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               projectData.settings = state.project.settings;
             }
 
-            const { error: projectError } = await withTimeout(
-              supabase
-                .from('gfx_projects')
-                .update(projectData)
-                .eq('id', projectId),
-              SAVE_TIMEOUT,
-              'Save project metadata'
+            const projectResult = await directRestUpdate(
+              'gfx_projects',
+              projectData,
+              { column: 'id', value: projectId },
+              SAVE_TIMEOUT
             );
 
-            if (projectError) {
-              console.error('Error saving project:', projectError);
+            if (!projectResult.success) {
+              console.error('Error saving project:', projectResult.error);
               // Don't throw - continue with other saves
             }
 
@@ -1199,14 +1252,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 locked: l.locked ?? false,
                 always_on: l.always_on ?? false,
               }));
-              const { error: layersError } = await withTimeout(
-                supabase
-                  .from('gfx_layers')
-                  .upsert(layersToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save layers'
-              );
-              if (layersError) console.error('Error saving layers:', layersError);
+              const layersResult = await directRestUpsert('gfx_layers', layersToSave, SAVE_TIMEOUT);
+              if (!layersResult.success) console.error('Error saving layers:', layersResult.error);
             }
 
             // 3. Save templates (only include DB columns)
@@ -1237,14 +1284,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 sort_order: t.sort_order,
                 updated_at: new Date().toISOString(),
               }));
-              const { error: templatesError } = await withTimeout(
-                supabase
-                  .from('gfx_templates')
-                  .upsert(templatesToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save templates'
-              );
-              if (templatesError) console.error('Error saving templates:', templatesError);
+              const templatesResult = await directRestUpsert('gfx_templates', templatesToSave, SAVE_TIMEOUT);
+              if (!templatesResult.success) console.error('Error saving templates:', templatesResult.error);
             }
 
             // 4. Save elements (only include DB columns)
@@ -1274,14 +1315,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 visible: e.visible,
                 locked: e.locked,
               }));
-              const { error: elementsError } = await withTimeout(
-                supabase
-                  .from('gfx_elements')
-                  .upsert(elementsToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save elements'
-              );
-              if (elementsError) console.error('Error saving elements:', elementsError);
+              const elementsResult = await directRestUpsert('gfx_elements', elementsToSave, SAVE_TIMEOUT);
+              if (!elementsResult.success) console.error('Error saving elements:', elementsResult.error);
             }
 
             // 5. Save animations
@@ -1298,14 +1333,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 easing: a.easing,
                 preset_id: a.preset_id,
               }));
-              const { error: animationsError } = await withTimeout(
-                supabase
-                  .from('gfx_animations')
-                  .upsert(animationsToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save animations'
-              );
-              if (animationsError) console.error('Error saving animations:', animationsError);
+              const animationsResult = await directRestUpsert('gfx_animations', animationsToSave, SAVE_TIMEOUT);
+              if (!animationsResult.success) console.error('Error saving animations:', animationsResult.error);
             }
 
             // 6. Save keyframes (use properties JSONB column)
@@ -1327,14 +1356,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 background_color: k.properties?.backgroundColor ?? k.background_color ?? null,
                 sort_order: k.sort_order ?? 0,
               }));
-              const { error: keyframesError } = await withTimeout(
-                supabase
-                  .from('gfx_keyframes')
-                  .upsert(keyframesToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save keyframes'
-              );
-              if (keyframesError) console.error('Error saving keyframes:', keyframesError);
+              const keyframesResult = await directRestUpsert('gfx_keyframes', keyframesToSave, SAVE_TIMEOUT);
+              if (!keyframesResult.success) console.error('Error saving keyframes:', keyframesResult.error);
             }
 
             // 7. Save bindings
@@ -1351,14 +1374,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 formatter_options: b.formatter_options,
                 required: b.required,
               }));
-              const { error: bindingsError } = await withTimeout(
-                supabase
-                  .from('gfx_bindings')
-                  .upsert(bindingsToSave, { onConflict: 'id' }),
-                SAVE_TIMEOUT,
-                'Save bindings'
-              );
-              if (bindingsError) console.error('Error saving bindings:', bindingsError);
+              const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT);
+              if (!bindingsResult.success) console.error('Error saving bindings:', bindingsResult.error);
             }
             
             // Also save to localStorage as backup (for Supabase projects too)
@@ -1378,11 +1395,17 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               isSaving: false,
               lastSaved: new Date(),
             });
-            
+
+            // Mark successful Supabase operation
+            markSupabaseSuccess();
+
             console.log('✅ Project saved successfully to Supabase + localStorage backup');
           } catch (error) {
             console.error('❌ Error saving project:', error);
-            
+
+            // Track Supabase failure for potential reconnection
+            await markSupabaseFailure();
+
             // Even if Supabase fails, try to save to localStorage as fallback
             try {
               const localData = {
@@ -2595,6 +2618,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             isPlaying: true,
             isPlayingFullPreview: true
           });
+        },
+
+        endPreviewPlayback: () => {
+          // End playback but keep template isolated (isPlayingFullPreview stays true)
+          // This is called when the animation naturally finishes
+          set({ isPlaying: false });
         },
 
         // On-Air controls
