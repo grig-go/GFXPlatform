@@ -845,18 +845,34 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               return;
             }
             
-            // Fetch real project from database
-            project = await fetchProject(projectId);
+            // Fetch real project from database (with timeout)
+            const LOAD_TIMEOUT = 15000; // 15 second timeout for load operations
+
+            try {
+              project = await withTimeout(fetchProject(projectId), LOAD_TIMEOUT, 'Fetch project');
+            } catch (err) {
+              console.error('Timeout fetching project:', err);
+              set({ isLoading: false, error: 'Failed to load project - request timed out' });
+              return;
+            }
+
             if (!project) {
               set({ isLoading: false, error: 'Project not found' });
               return;
             }
-            
-            // Fetch layers - ensure all are enabled by default
-            let layers = (await fetchLayers(projectId)).map(layer => ({
-              ...layer,
-              enabled: true, // Always show all layers on load
-            }));
+
+            // Fetch layers - ensure all are enabled by default (with timeout)
+            let layers: Layer[] = [];
+            try {
+              const fetchedLayers = await withTimeout(fetchLayers(projectId), LOAD_TIMEOUT, 'Fetch layers');
+              layers = fetchedLayers.map(layer => ({
+                ...layer,
+                enabled: true, // Always show all layers on load
+              }));
+            } catch (err) {
+              console.error('Timeout fetching layers:', err);
+              // Continue with empty layers - they'll be created below
+            }
             
             // If no layers found, create default layers
             if (layers.length === 0) {
@@ -960,63 +976,74 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               ];
             }
             
-            // Fetch templates - ensure all are enabled by default
+            // Fetch templates - ensure all are enabled by default (with timeout)
             let templates: Template[] = [];
             try {
-              templates = (await fetchTemplates(projectId)).map(template => ({
+              const fetchedTemplates = await withTimeout(fetchTemplates(projectId), LOAD_TIMEOUT, 'Fetch templates');
+              templates = fetchedTemplates.map(template => ({
                 ...template,
                 enabled: true, // Always show all templates on load
               }));
             } catch (e) {
-              console.error('Error fetching templates:', e);
+              console.error('Error/timeout fetching templates:', e);
               templates = [];
             }
-            
-            // Fetch all elements, animations, keyframes for all templates
+
+            // Fetch all elements, animations, keyframes for all templates (with timeout on batch)
             const allElements: Element[] = [];
             const allAnimations: Animation[] = [];
             const allKeyframes: Keyframe[] = [];
             const allBindings: Binding[] = [];
-            
+
             for (const template of templates) {
               try {
-                const [elements, animations, bindings] = await Promise.all([
-                  fetchElements(template.id).catch(e => { console.error(`Error fetching elements for template ${template.id}:`, e); return []; }),
-                  fetchAnimations(template.id).catch(e => { console.error(`Error fetching animations for template ${template.id}:`, e); return []; }),
-                  fetchBindings(template.id).catch(e => { console.error(`Error fetching bindings for template ${template.id}:`, e); return []; }),
-                ]);
-                
+                const [elements, animations, bindings] = await withTimeout(
+                  Promise.all([
+                    fetchElements(template.id).catch(e => { console.error(`Error fetching elements for template ${template.id}:`, e); return []; }),
+                    fetchAnimations(template.id).catch(e => { console.error(`Error fetching animations for template ${template.id}:`, e); return []; }),
+                    fetchBindings(template.id).catch(e => { console.error(`Error fetching bindings for template ${template.id}:`, e); return []; }),
+                  ]),
+                  LOAD_TIMEOUT,
+                  `Fetch template data for ${template.name}`
+                );
+
                 // Validate arrays
                 if (Array.isArray(elements)) allElements.push(...elements);
                 if (Array.isArray(animations)) allAnimations.push(...animations);
                 if (Array.isArray(bindings)) allBindings.push(...bindings);
-                
-                // Fetch keyframes for each animation
-                for (const anim of animations) {
+
+                // Fetch keyframes for each animation (batch with timeout)
+                if (animations.length > 0) {
                   try {
-                    const keyframes = await fetchKeyframes(anim.id);
-                    if (Array.isArray(keyframes)) allKeyframes.push(...keyframes);
+                    const keyframeResults = await withTimeout(
+                      Promise.all(animations.map(anim => fetchKeyframes(anim.id).catch(() => []))),
+                      LOAD_TIMEOUT,
+                      'Fetch keyframes'
+                    );
+                    keyframeResults.forEach(keyframes => {
+                      if (Array.isArray(keyframes)) allKeyframes.push(...keyframes);
+                    });
                   } catch (e) {
-                    console.error(`Error fetching keyframes for animation ${anim.id}:`, e);
+                    console.error('Error/timeout fetching keyframes:', e);
                   }
                 }
               } catch (e) {
-                console.error(`Error processing template ${template.id}:`, e);
+                console.error(`Error/timeout processing template ${template.id}:`, e);
                 // Continue with next template
               }
             }
             
-            // Load chat history with error handling
+            // Load chat history with error handling (with timeout)
             let chatMessages: ChatMessage[] = [];
             try {
-              const chatHistory = await loadChatHistory(projectId);
+              const chatHistory = await withTimeout(loadChatHistory(projectId), LOAD_TIMEOUT, 'Load chat history');
               chatMessages = (Array.isArray(chatHistory) ? chatHistory : []).map((msg) => ({
                 ...msg,
                 attachments: msg.attachments || undefined, // Convert null to undefined
                 isApplied: msg.changes_applied !== null,
               }));
             } catch (e) {
-              console.error('Error loading chat history:', e);
+              console.error('Error/timeout loading chat history:', e);
               chatMessages = [];
             }
             

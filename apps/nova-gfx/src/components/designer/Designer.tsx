@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -346,11 +346,18 @@ export function Designer() {
 
   // Track if we're creating a new project to avoid showing "not found" during creation
   const [isCreating, setIsCreating] = useState(false);
-  
+
+  // Prevent double loading in React Strict Mode
+  const hasStartedLoading = useRef<string | null>(null);
+
   // Load project on mount
   useEffect(() => {
     async function initProject() {
       if (!projectId) return;
+
+      // Prevent double loading for the same project (React Strict Mode)
+      if (hasStartedLoading.current === projectId) return;
+      hasStartedLoading.current = projectId;
       
       // Check if this is a UUID (real project from database)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId);
@@ -514,7 +521,6 @@ export function Designer() {
         onOpenAISettings={() => setShowAISettingsDialog(true)}
         onOpenSystemTemplates={() => setShowSystemTemplatesDialog(true)}
         onShowKeyboardShortcuts={() => setShowShortcutsDialog(true)}
-        onSave={handleSave}
       />
       
       {/* Dialogs */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, Search, MoreHorizontal, Trash2, Copy, Settings, Sparkles, Layers } from 'lucide-react';
 import {
@@ -29,8 +29,14 @@ export function ProjectList() {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const starterProjects = getStarterProjects();
 
+  // Track if we've already started loading to prevent double-loading in strict mode
+  const hasStartedLoading = useRef(false);
+
   useEffect(() => {
-    loadProjects();
+    if (!hasStartedLoading.current) {
+      hasStartedLoading.current = true;
+      loadProjects();
+    }
   }, []);
 
   const loadProjects = async () => {

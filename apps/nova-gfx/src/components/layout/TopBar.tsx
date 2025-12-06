@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  Save, Play, Settings, HelpCircle, Cpu, Palette,
+  Play, Settings, HelpCircle, Cpu, Palette,
   ChevronDown, Grid3X3, Wrench, FolderOpen, Sparkles,
   ExternalLink, Copy, Check, Monitor, Keyboard, Send,
 } from 'lucide-react';
@@ -26,15 +26,12 @@ interface TopBarProps {
   onOpenAISettings?: () => void;
   onOpenSystemTemplates?: () => void;
   onShowKeyboardShortcuts?: () => void;
-  onSave?: () => void;
 }
 
-export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, onOpenSystemTemplates, onShowKeyboardShortcuts, onSave }: TopBarProps) {
+export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, onOpenSystemTemplates, onShowKeyboardShortcuts }: TopBarProps) {
   const { aiEnabled, toggleAi } = useAIPreferenceStore();
   const {
     project,
-    isDirty,
-    isSaving,
     saveProject,
     currentTemplateId,
   } = useDesignerStore();
@@ -227,9 +224,6 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User Menu */}
-        <UserMenu />
-
         {/* Help Menu - hidden on very small screens */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -253,20 +247,11 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* User Menu - just initials circle */}
+        <UserMenu />
+
         {/* Divider */}
         <div className="w-px h-5 sm:h-6 bg-border mx-1 sm:mx-2" />
-
-        {/* Save Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSave ? onSave() : saveProject()}
-          disabled={isSaving || !isDirty}
-          className="h-7 sm:h-8 px-2 sm:px-3"
-        >
-          <Save className="w-3.5 sm:w-4 h-3.5 sm:h-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
-        </Button>
 
         {/* Publish Button with Dropdown */}
         <div className="flex items-center">

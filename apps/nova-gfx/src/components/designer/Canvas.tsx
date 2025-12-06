@@ -118,6 +118,24 @@ export function Canvas() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
+  // Track if we've done the initial fit for the current project
+  const initialFitDoneRef = useRef<string | null>(null);
+
+  // Auto-fit canvas when project is loaded (same as clicking "Fit" button)
+  useEffect(() => {
+    // Only fit if we have a project and haven't done the initial fit for this project yet
+    if (project && project.id !== initialFitDoneRef.current) {
+      // Use requestAnimationFrame to ensure container is rendered and has dimensions
+      requestAnimationFrame(() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect && rect.width > 0 && rect.height > 0) {
+          fitToScreen(rect.width, rect.height);
+          initialFitDoneRef.current = project.id;
+        }
+      });
+    }
+  }, [project, fitToScreen]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

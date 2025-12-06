@@ -47,15 +47,12 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className="gap-2 px-2"
+          size="icon"
+          className="h-7 w-7 sm:h-8 sm:w-8 rounded-full p-0"
         >
-          <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-medium text-violet-400">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-medium text-violet-400">
             {initials}
           </div>
-          <span className="text-sm font-medium max-w-[120px] truncate hidden sm:inline">
-            {user.name || user.email}
-          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

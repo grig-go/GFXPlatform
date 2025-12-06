@@ -3,6 +3,16 @@ import { persist } from 'zustand/middleware';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
+// Timeout helper for async operations
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 // Types
 export interface AppUser {
   id: string;
@@ -539,11 +549,15 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('id, email, name, role')
-            .eq('organization_id', organization.id)
-            .order('created_at', { ascending: true });
+          const { data, error } = await withTimeout(
+            supabase
+              .from('users')
+              .select('id, email, name, role')
+              .eq('organization_id', organization.id)
+              .order('created_at', { ascending: true }),
+            10000,
+            'Fetch organization members'
+          );
 
           if (error) {
             console.error('Error fetching members:', error);
@@ -559,7 +573,8 @@ export const useAuthStore = create<AuthState>()(
             role: u.role,
             isEmergentUser: isEmergentEmail(u.email),
           }));
-        } catch {
+        } catch (err) {
+          console.error('Error fetching members:', err);
           return [];
         }
       },

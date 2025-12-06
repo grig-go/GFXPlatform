@@ -27,7 +27,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
   const {
     setTool,
     selectedElementIds,
-    setSelectedElementIds,
+    selectElements,
     elements,
     updateElement,
     deleteElements,
@@ -110,7 +110,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         return true;
 
       case 'escape':
-        setSelectedElementIds([]);
+        selectElements([], 'replace');
         setTool('select');
         return true;
 
@@ -208,13 +208,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
       case 'selectAll':
         if (currentTemplateId) {
           const templateElements = elements.filter(e => e.template_id === currentTemplateId);
-          setSelectedElementIds(templateElements.map(e => e.id));
+          selectElements(templateElements.map(e => e.id), 'replace');
           return true;
         }
         return false;
 
       case 'deselectAll':
-        setSelectedElementIds([]);
+        selectElements([], 'replace');
         return true;
 
       case 'toggleLock':
@@ -338,6 +338,39 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         }
         return false;
 
+      // Hierarchy Navigation
+      case 'selectParent':
+        if (selectedElementIds.length === 1) {
+          const selectedElement = elements.find(e => e.id === selectedElementIds[0]);
+          console.log('[Shortcuts] selectParent - selected element:', selectedElement?.name, 'parent:', selectedElement?.parent_element_id);
+          if (selectedElement?.parent_element_id) {
+            // Select the parent element (the group)
+            selectElements([selectedElement.parent_element_id], 'replace');
+            return true;
+          }
+        }
+        return false;
+
+      case 'selectChild':
+        if (selectedElementIds.length === 1) {
+          const selectedElement = elements.find(e => e.id === selectedElementIds[0]);
+          // Find children of the selected element (elements that have this element as parent)
+          const children = elements.filter(e => e.parent_element_id === selectedElementIds[0]);
+          console.log('[Shortcuts] selectChild - selected element:', selectedElement?.name, 'type:', selectedElement?.element_type, 'children count:', children.length);
+          if (children.length > 0) {
+            // Select the first child (sorted by sort_order if available)
+            const sortedChildren = [...children].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+            selectElements([sortedChildren[0].id], 'replace');
+            // Also expand the group node so the child is visible in the outline
+            const { toggleNode, expandedNodes } = useDesignerStore.getState();
+            if (!expandedNodes.has(selectedElementIds[0])) {
+              toggleNode(selectedElementIds[0]);
+            }
+            return true;
+          }
+        }
+        return false;
+
       // View
       case 'zoomIn':
         setZoom(Math.min(zoom * 1.25, 4));
@@ -429,7 +462,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     phaseDurations,
     isTimelinePlaying,
     setTool,
-    setSelectedElementIds,
+    selectElements,
     updateElement,
     deleteElements,
     duplicateElements,

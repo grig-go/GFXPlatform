@@ -148,6 +148,17 @@ CREATE POLICY "Allow all update bindings" ON gfx_bindings FOR UPDATE USING (true
 CREATE POLICY "Allow all delete bindings" ON gfx_bindings FOR DELETE USING (true);
 
 -- ============================================
+-- STEP 11: Fix users table RLS policies
+-- ============================================
+
+DROP POLICY IF EXISTS "Users can view own profile" ON users;
+DROP POLICY IF EXISTS "Users can view org members" ON users;
+DROP POLICY IF EXISTS "Users can update own profile" ON users;
+
+CREATE POLICY "Allow all read users" ON users FOR SELECT USING (true);
+CREATE POLICY "Allow all update users" ON users FOR UPDATE USING (true) WITH CHECK (true);
+
+-- ============================================
 -- DONE - Database should now work without authentication
 -- ============================================
 

@@ -202,12 +202,24 @@ export function OutlinePanel() {
           </DropdownMenuContent>
         </DropdownMenu>
         
-        {/* Unsaved indicator */}
+        {/* Unsaved indicator with Save button */}
         {isDirty && (
-          <span className="text-[9px] text-amber-500 flex items-center gap-0.5">
-            <span className="w-1 h-1 bg-amber-500 rounded-full animate-pulse" />
-            Unsaved
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-amber-500 flex items-center gap-0.5">
+              <span className="w-1 h-1 bg-amber-500 rounded-full animate-pulse" />
+              Unsaved
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => saveProject()}
+              disabled={isSaving}
+              className="h-5 px-1.5 text-[9px] text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+            >
+              <Save className="w-3 h-3 mr-0.5" />
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         )}
         
         <div className="flex-1" />

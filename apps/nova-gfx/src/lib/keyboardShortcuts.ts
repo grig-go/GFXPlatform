@@ -36,6 +36,8 @@ export const KEY_DISPLAY_NAMES: Record<string, string> = {
   'arrowleft': '←',
   'arrowright': '→',
   'tab': 'Tab',
+  'pageup': 'Page Up',
+  'pagedown': 'Page Down',
 };
 
 // Category display names
@@ -435,6 +437,26 @@ export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
     defaultKeys: ['shift+arrowright'],
     keys: ['shift+arrowright'],
     action: 'nudgeRightBig',
+  },
+
+  // Hierarchy Navigation
+  {
+    id: 'select-parent',
+    name: 'Select Parent Group',
+    description: 'Select the parent group of the current element',
+    category: 'editing',
+    defaultKeys: ['ctrl+alt+u'],
+    keys: ['ctrl+alt+u'],
+    action: 'selectParent',
+  },
+  {
+    id: 'select-child',
+    name: 'Select First Child',
+    description: 'Select the first child element of the current group',
+    category: 'editing',
+    defaultKeys: ['ctrl+alt+d'],
+    keys: ['ctrl+alt+d'],
+    action: 'selectChild',
   },
 
   // View
