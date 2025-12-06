@@ -217,6 +217,11 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     ? { ...element.styles, boxShadow: undefined }
     : element.styles;
 
+  // Extract opacity from containerStyles to prevent it from overriding master opacity
+  // The master opacity (animatedOpacity) controls the entire element's visibility
+  // Background opacity in styles should be handled at the element content level, not container level
+  const { opacity: _styleOpacity, ...containerStylesWithoutOpacity } = (containerStyles || {}) as Record<string, unknown>;
+
   const transformStyle: React.CSSProperties = {
     position: 'absolute',
     left: animatedX,
@@ -225,7 +230,6 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     height: animatedHeight ?? 'auto',
     transform: animatedTransform,
     transformOrigin: `${element.anchor_x * 100}% ${element.anchor_y * 100}%`,
-    opacity: animatedOpacity,
     zIndex: effectiveZIndex, // Layer z_index + element z_index for proper layering
     cursor: !element.locked
       ? (tool === 'select'
@@ -236,13 +240,15 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       : 'default',
     // When using add tools, disable pointer events so clicks pass through to canvas
     pointerEvents: isAddTool ? 'none' : 'auto',
-    ...containerStyles,
+    ...containerStylesWithoutOpacity,
     // Apply any other animated properties (excluding ones we've already handled)
     ...Object.fromEntries(
-      Object.entries(animatedProps).filter(([key]) => 
+      Object.entries(animatedProps).filter(([key]) =>
         !['opacity', 'position_x', 'position_y', 'rotation', 'scale_x', 'scale_y', 'width', 'height', 'transform'].includes(key)
       )
     ),
+    // Master opacity always takes precedence - applied last to ensure it's not overridden
+    opacity: animatedOpacity,
   };
 
   // Render content based on type
@@ -712,6 +718,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             items={element.content.items || []}
             config={element.content.config || {}}
             className="w-full h-full"
+            style={element.styles}
           />
         );
 

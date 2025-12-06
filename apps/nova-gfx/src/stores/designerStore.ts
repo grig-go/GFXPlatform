@@ -1229,25 +1229,26 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 2. Save layers (only include DB columns)
+            // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
             if (state.layers.length > 0) {
               const layersToSave = state.layers.map(l => ({
                 id: l.id,
                 project_id: projectId,
-                name: l.name,
-                layer_type: l.layer_type,
-                z_index: l.z_index,
-                sort_order: l.sort_order,
-                position_anchor: l.position_anchor,
-                position_offset_x: l.position_offset_x,
-                position_offset_y: l.position_offset_y,
-                width: l.width,
-                height: l.height,
-                auto_out: l.auto_out,
-                allow_multiple: l.allow_multiple,
-                transition_in: l.transition_in,
-                transition_in_duration: l.transition_in_duration,
-                transition_out: l.transition_out,
-                transition_out_duration: l.transition_out_duration,
+                name: l.name ?? 'Layer',
+                layer_type: l.layer_type ?? 'fullscreen',
+                z_index: l.z_index ?? 0,
+                sort_order: l.sort_order ?? 0,
+                position_anchor: l.position_anchor ?? 'center',
+                position_offset_x: l.position_offset_x ?? 0,
+                position_offset_y: l.position_offset_y ?? 0,
+                width: l.width ?? null,
+                height: l.height ?? null,
+                auto_out: l.auto_out ?? true,
+                allow_multiple: l.allow_multiple ?? false,
+                transition_in: l.transition_in ?? 'fade',
+                transition_in_duration: l.transition_in_duration ?? 500,
+                transition_out: l.transition_out ?? 'fade',
+                transition_out_duration: l.transition_out_duration ?? 500,
                 enabled: l.enabled ?? true,
                 locked: l.locked ?? false,
                 always_on: l.always_on ?? false,
@@ -1257,31 +1258,32 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 3. Save templates (only include DB columns)
+            // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
             if (state.templates.length > 0) {
               const templatesToSave = state.templates.map(t => ({
                 id: t.id,
                 project_id: projectId,
                 layer_id: t.layer_id,
-                folder_id: t.folder_id,
-                name: t.name,
-                description: t.description,
-                tags: t.tags,
-                thumbnail_url: t.thumbnail_url,
-                html_template: t.html_template,
-                css_styles: t.css_styles,
-                width: t.width,
-                height: t.height,
-                in_duration: t.in_duration,
-                loop_duration: t.loop_duration,
-                loop_iterations: t.loop_iterations,
-                out_duration: t.out_duration,
-                libraries: t.libraries,
-                custom_script: t.custom_script,
+                folder_id: t.folder_id ?? null,
+                name: t.name ?? 'Template',
+                description: t.description ?? null,
+                tags: t.tags ?? [],
+                thumbnail_url: t.thumbnail_url ?? null,
+                html_template: t.html_template ?? null,
+                css_styles: t.css_styles ?? null,
+                width: t.width ?? 1920,
+                height: t.height ?? 1080,
+                in_duration: t.in_duration ?? 500,
+                loop_duration: t.loop_duration ?? 5000,
+                loop_iterations: t.loop_iterations ?? 1,
+                out_duration: t.out_duration ?? 500,
+                libraries: t.libraries ?? [],
+                custom_script: t.custom_script ?? null,
                 enabled: t.enabled ?? true,
                 locked: t.locked ?? false,
-                archived: t.archived,
-                version: t.version,
-                sort_order: t.sort_order,
+                archived: t.archived ?? false,
+                version: t.version ?? 1,
+                sort_order: t.sort_order ?? 0,
                 updated_at: new Date().toISOString(),
               }));
               const templatesResult = await directRestUpsert('gfx_templates', templatesToSave, SAVE_TIMEOUT);
@@ -1289,49 +1291,52 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 4. Save elements (only include DB columns)
+            // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
             if (state.elements.length > 0) {
               const elementsToSave = state.elements.map(e => ({
                 id: e.id,
                 template_id: e.template_id,
-                name: e.name,
-                element_id: e.element_id,
+                name: e.name ?? 'Element',
+                element_id: e.element_id ?? null,
                 element_type: e.element_type,
-                parent_element_id: e.parent_element_id,
-                sort_order: e.sort_order,
+                parent_element_id: e.parent_element_id ?? null,
+                sort_order: e.sort_order ?? 0,
                 z_index: e.z_index ?? 0,
-                position_x: e.position_x,
-                position_y: e.position_y,
-                width: e.width,
-                height: e.height,
-                rotation: e.rotation,
-                scale_x: e.scale_x,
-                scale_y: e.scale_y,
-                anchor_x: e.anchor_x,
-                anchor_y: e.anchor_y,
-                opacity: e.opacity,
-                content: e.content,
-                styles: e.styles,
-                classes: e.classes,
-                visible: e.visible,
-                locked: e.locked,
+                position_x: e.position_x ?? 0,
+                position_y: e.position_y ?? 0,
+                width: e.width ?? 100,
+                height: e.height ?? 100,
+                rotation: e.rotation ?? 0,
+                scale_x: e.scale_x ?? 1,
+                scale_y: e.scale_y ?? 1,
+                anchor_x: e.anchor_x ?? 0.5,
+                anchor_y: e.anchor_y ?? 0.5,
+                opacity: e.opacity ?? 1,
+                content: e.content ?? {},
+                styles: e.styles ?? {},
+                classes: e.classes ?? [],
+                visible: e.visible ?? true,
+                locked: e.locked ?? false,
               }));
               const elementsResult = await directRestUpsert('gfx_elements', elementsToSave, SAVE_TIMEOUT);
               if (!elementsResult.success) console.error('Error saving elements:', elementsResult.error);
             }
 
             // 5. Save animations
+            // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
+            // Use null (not undefined) for optional fields to ensure consistent object shapes
             if (state.animations.length > 0) {
               const animationsToSave = state.animations.map(a => ({
                 id: a.id,
                 template_id: a.template_id,
                 element_id: a.element_id,
                 phase: a.phase,
-                delay: a.delay,
-                duration: a.duration,
-                iterations: a.iterations,
-                direction: a.direction,
-                easing: a.easing,
-                preset_id: a.preset_id,
+                delay: a.delay ?? 0,
+                duration: a.duration ?? 1000,
+                iterations: a.iterations ?? 1,
+                direction: a.direction ?? 'normal',
+                easing: a.easing ?? 'ease',
+                preset_id: a.preset_id ?? null, // Ensure null, not undefined
               }));
               const animationsResult = await directRestUpsert('gfx_animations', animationsToSave, SAVE_TIMEOUT);
               if (!animationsResult.success) console.error('Error saving animations:', animationsResult.error);
@@ -1361,6 +1366,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 7. Save bindings
+            // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
             if (state.bindings.length > 0) {
               const bindingsToSave = state.bindings.map(b => ({
                 id: b.id,
@@ -1368,11 +1374,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 element_id: b.element_id,
                 binding_key: b.binding_key,
                 target_property: b.target_property,
-                binding_type: b.binding_type,
-                default_value: b.default_value,
-                formatter: b.formatter,
-                formatter_options: b.formatter_options,
-                required: b.required,
+                binding_type: b.binding_type ?? 'text',
+                default_value: b.default_value ?? null,
+                formatter: b.formatter ?? null,
+                formatter_options: b.formatter_options ?? null,
+                required: b.required ?? false,
               }));
               const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT);
               if (!bindingsResult.success) console.error('Error saving bindings:', bindingsResult.error);

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   DropdownMenu,
@@ -23,6 +24,7 @@ import {
   Play,
   ChevronDown,
   ListOrdered,
+  ScrollText,
 } from 'lucide-react';
 import { UserMenu } from '@/components/auth';
 import { useProjectStore } from '@/stores/projectStore';
@@ -42,6 +44,7 @@ interface HeaderProps {
 }
 
 export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
+  const navigate = useNavigate();
   const { currentProject, projects, selectProject, refreshProject, isLoading: projectLoading } = useProjectStore();
   const { channels, initializeChannel } = useChannelStore();
   const {
@@ -228,6 +231,10 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
             <DropdownMenuItem onClick={() => setShowProjectsModal(true)}>
               <FolderOpen className="mr-2 h-4 w-4" />
               Projects
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/tools/playout-log')}>
+              <ScrollText className="mr-2 h-4 w-4" />
+              Playout Logs
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

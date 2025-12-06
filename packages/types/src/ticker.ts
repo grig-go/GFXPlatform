@@ -164,6 +164,7 @@ export interface TickerConfig {
 
   // Flip-specific
   flipDuration?: number;
+  showIndicator?: boolean; // Show progress dots (flip/fade modes)
 
   // Styling
   className?: string;
@@ -186,6 +187,7 @@ export const DEFAULT_TICKER_CONFIG: TickerConfig = {
   gradientWidth: 50,
   gradientColor: 'rgba(0, 0, 0, 0)',
   flipDuration: 500,
+  showIndicator: false,
   textAlign: 'left',
 };
 

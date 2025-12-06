@@ -16,6 +16,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Track if this effect was cleaned up (for StrictMode)
     let cancelled = false;
+    let unsubscribeChannelStatus: (() => void) | null = null;
 
     async function init() {
       try {
@@ -52,6 +53,11 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
         ]);
         if (cancelled) return;
         console.log('Data loaded');
+
+        // Subscribe to channel status changes (player online/offline)
+        // This resets page on-air states when channels go offline
+        unsubscribeChannelStatus = useChannelStore.getState().subscribeToChannelStatus();
+        console.log('Subscribed to channel status updates');
 
         // Restore last project from preferences
         const prefs = useUIPreferencesStore.getState();
@@ -92,6 +98,9 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      if (unsubscribeChannelStatus) {
+        unsubscribeChannelStatus();
+      }
     };
   }, []);
 

@@ -4,7 +4,7 @@ import {
   AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, cn } from '@emergent-platform/ui';
-import { sendChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, type ChatMessage as AIChatMessage } from '@/lib/ai';
+import { sendChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
@@ -382,8 +382,13 @@ export function ChatPanel() {
           return;
         }
       } else {
-        // For UPDATE/DELETE actions, use current template or find by layer
-        if (changes.layerType) {
+        // For UPDATE/DELETE actions, ALWAYS prioritize the currently selected template
+        // The layerType from AI is just a hint - user's current selection takes precedence
+        if (templateId) {
+          // User has a template selected - use it regardless of AI's layerType guess
+          console.log(`[AI] Using currently selected template: ${templateId} for ${changes.action} action`);
+        } else if (changes.layerType) {
+          // No template selected, try to find one in the suggested layer
           targetLayer = store.layers.find(l => l.layer_type === changes.layerType);
           if (targetLayer) {
             const existingTemplate = store.templates.find(t => t.layer_id === targetLayer!.id);
@@ -1058,14 +1063,9 @@ export function ChatPanel() {
     }
   }, [elements.length]);
 
-  // Check if AI is available - either local keys OR production (where backend proxy handles keys)
-  const isAIAvailable = useMemo(() => {
-    // In production, the serverless function handles API keys
-    const isProduction = import.meta.env.PROD;
-    // In development, check for local keys
-    const hasLocalKey = !!getGeminiApiKey() || !!getClaudeApiKey();
-    return isProduction || hasLocalKey;
-  }, []);
+  // Check if AI is available - uses centralized check from ai.ts
+  const aiAvailability = useMemo(() => isAIAvailableInCurrentEnv(), []);
+  const isAIAvailable = aiAvailability.available;
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -1076,8 +1076,9 @@ export function ChatPanel() {
         role: 'assistant',
         content: `**AI Not Available**
 
-To use the AI chat feature in development, you need to set up an API key:
+${aiAvailability.reason || 'AI is not configured.'}
 
+**Setup Instructions:**
 1. Create a \`.env.local\` file in the project root
 2. Add: \`VITE_GEMINI_API_KEY=your-key\` or \`VITE_CLAUDE_API_KEY=your-key\`
 3. Get keys from: https://aistudio.google.com/ or https://console.anthropic.com/

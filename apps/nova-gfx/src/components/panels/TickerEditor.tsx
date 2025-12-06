@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, GripVertical, Edit2, Check, X, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   Button,
   Input,
@@ -18,6 +18,7 @@ import {
 import type { TickerItem, TickerConfig, TickerMode, TickerDirection, TickerTopic, TickerTextAlign } from '@emergent-platform/types';
 import { DEFAULT_TICKER_CONFIG, TICKER_TEMPLATES, TOPIC_BADGE_STYLES } from '@emergent-platform/types';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
+import { IconPickerDialog } from '@/components/dialogs/IconPickerDialog';
 
 interface TickerEditorProps {
   items: TickerItem[];
@@ -340,6 +341,7 @@ function TickerItemRow({
 }: TickerItemRowProps) {
   const [editValue, setEditValue] = useState(item.content);
   const [showTopicSelect, setShowTopicSelect] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
 
   const handleSave = () => {
     if (editValue.trim()) {
@@ -350,6 +352,10 @@ function TickerItemRow({
   };
 
   const topicStyle = item.topic ? TOPIC_BADGE_STYLES[item.topic] : null;
+
+  // Parse item icon if it's stored as an object
+  const itemIcon = item.icon as string | { library: string; name: string; weight?: string } | undefined;
+  const hasIconObject = itemIcon && typeof itemIcon === 'object' && 'name' in itemIcon;
 
   if (isEditing) {
     return (
@@ -373,6 +379,34 @@ function TickerItemRow({
             <X className="w-3 h-3" />
           </Button>
         </div>
+        {/* Icon selector */}
+        <div className="flex items-center gap-2">
+          <Label className="text-[10px] text-muted-foreground w-12">Icon:</Label>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-[10px] flex-1"
+            onClick={() => setShowIconPicker(true)}
+          >
+            {item.icon ? (
+              <span className="truncate">
+                {typeof item.icon === 'string' ? item.icon : (hasIconObject ? (itemIcon as { name: string }).name : 'Selected')}
+              </span>
+            ) : (
+              'Select Icon'
+            )}
+          </Button>
+          {item.icon && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => onUpdate({ icon: undefined })}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          )}
+        </div>
         {/* Topic selector */}
         <div className="flex items-center gap-2">
           <Label className="text-[10px] text-muted-foreground w-12">Topic:</Label>
@@ -389,30 +423,43 @@ function TickerItemRow({
             ))}
           </select>
         </div>
+        {/* Icon Picker Dialog */}
+        {showIconPicker && (
+          <IconPickerDialog
+            open={showIconPicker}
+            onOpenChange={setShowIconPicker}
+            onSelect={(library, iconName, weight) => {
+              // Store as emoji/unicode for simple display, or as object for complex icons
+              onUpdate({ icon: { library, name: iconName, weight } as unknown as string });
+              setShowIconPicker(false);
+            }}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="flex items-center gap-1 p-1 hover:bg-muted/50 rounded group">
-      <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Reorder buttons - always visible */}
+      <div className="flex flex-col">
         <button
           onClick={onMoveUp}
           disabled={!canMoveUp}
-          className="p-0.5 hover:bg-muted rounded disabled:opacity-30"
+          className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+          title="Move up"
         >
-          <ChevronDown className="w-3 h-3 rotate-180" />
+          <ChevronUp className="w-3 h-3" />
         </button>
         <button
           onClick={onMoveDown}
           disabled={!canMoveDown}
-          className="p-0.5 hover:bg-muted rounded disabled:opacity-30"
+          className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+          title="Move down"
         >
           <ChevronDown className="w-3 h-3" />
         </button>
       </div>
-      
-      <GripVertical className="w-3 h-3 text-muted-foreground cursor-grab" />
       
       {/* Topic badge indicator */}
       {topicStyle && (

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@emergent-platform/supabase-client';
+import { usePlaylistStore } from './playlistStore';
+import { usePageStore } from './pageStore';
 
 // Types - these will move to @emergent-platform/types
 export interface Project {
@@ -208,6 +210,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       console.log('[projectStore] Setting currentProject:', currentProject.name, 'with', templates.length, 'templates');
       set({ currentProject, templates, isLoading: false });
+
+      // Clear and reload playlists for the new project
+      console.log('[projectStore] Clearing and reloading playlists for project:', projectId);
+      usePlaylistStore.getState().clearPlaylists();
+      usePageStore.getState().clearPages();
+      await usePlaylistStore.getState().loadPlaylists(projectId);
+
       console.log('[projectStore] selectProject complete');
     } catch (error) {
       console.error('[projectStore] Failed to select project:', error);

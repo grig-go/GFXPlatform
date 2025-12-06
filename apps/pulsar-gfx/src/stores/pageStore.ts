@@ -84,6 +84,7 @@ interface PageStore {
 
   // On-air state
   setPageOnAir: (pageId: string, isOnAir: boolean) => Promise<void>;
+  resetPagesOnAirForChannel: (channelId: string) => Promise<void>;
 }
 
 export const usePageStore = create<PageStore>((set, get) => ({
@@ -685,6 +686,45 @@ export const usePageStore = create<PageStore>((set, get) => ({
       set({
         pages: get().pages.map((p) =>
           p.id === pageId ? { ...p, isOnAir: !isOnAir } : p
+        ),
+      });
+      throw error;
+    }
+  },
+
+  resetPagesOnAirForChannel: async (channelId: string) => {
+    // Find all pages assigned to this channel that are currently on-air
+    const pagesToReset = get().pages.filter(
+      (p) => p.channelId === channelId && p.isOnAir
+    );
+
+    if (pagesToReset.length === 0) {
+      console.log('[pageStore] No on-air pages to reset for channel:', channelId);
+      return;
+    }
+
+    console.log('[pageStore] Resetting on-air state for', pagesToReset.length, 'pages on channel:', channelId);
+
+    // Optimistically update UI first
+    set({
+      pages: get().pages.map((p) =>
+        p.channelId === channelId && p.isOnAir ? { ...p, isOnAir: false } : p
+      ),
+    });
+
+    // Update all pages in the database
+    const pageIds = pagesToReset.map((p) => p.id);
+    const { error } = await supabase
+      .from('pulsar_pages')
+      .update({ is_on_air: false })
+      .in('id', pageIds);
+
+    if (error) {
+      console.error('[pageStore] Failed to reset on-air state for channel:', error);
+      // Revert on error
+      set({
+        pages: get().pages.map((p) =>
+          pageIds.includes(p.id) ? { ...p, isOnAir: true } : p
         ),
       });
       throw error;

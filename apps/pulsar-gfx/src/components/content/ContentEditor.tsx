@@ -15,7 +15,9 @@ import {
   DialogTitle,
   ScrollArea,
 } from '@emergent-platform/ui';
-import { Type, Image, Hash, Save, RotateCcw, FileText, Library, MapPin, Palette, FilePlus, Search, ImagePlus, Loader2, Navigation, Clock, ChevronDown, ChevronRight, Filter } from 'lucide-react';
+import { Type, Image, Hash, Save, RotateCcw, FileText, Library, MapPin, Palette, FilePlus, Search, ImagePlus, Loader2, Navigation, Clock, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Trash2, Edit2, Check, X, ScrollText } from 'lucide-react';
+import type { TickerItem, TickerTopic } from '@emergent-platform/types';
+import { TOPIC_BADGE_STYLES } from '@emergent-platform/types';
 import * as LucideIcons from 'lucide-react';
 import { usePageStore } from '@/stores/pageStore';
 import { usePreviewStore } from '@/stores/previewStore';
@@ -59,12 +61,14 @@ interface LocationKeyframe {
 interface FieldConfig {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select';
+  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select' | 'ticker';
   placeholder?: string;
   defaultValue?: string | number;
   options?: { value: string; label: string }[];
   // For map fields with keyframes
   locationKeyframes?: LocationKeyframe[];
+  // For ticker fields
+  tickerItems?: TickerItem[];
 }
 
 // Icon libraries available
@@ -411,9 +415,37 @@ export function ContentEditor() {
 
       // Infer from page payload keys, but use template element info when available
       const payload = previewPage.payload || {};
-      return Object.keys(payload)
-        // Filter out _keyframes keys - they're handled by the map field's Flight Path section
-        .filter(key => !key.endsWith('_keyframes'))
+
+      // First, add ticker fields for all ticker elements in the template (even if not in payload)
+      const tickerFields: FieldConfig[] = [];
+      pageTemplateElements.forEach((el: any) => {
+        const elType = el.elementType || el.element_type;
+        const isTicker = elType === 'ticker' || el.content?.type === 'ticker';
+        if (isTicker) {
+          const itemsKey = `${el.id}_items`;
+          const tickerItems = payload[itemsKey] || el.content?.items || [];
+          tickerFields.push({
+            id: el.id,
+            label: el.name || 'Ticker',
+            type: 'ticker' as const,
+            tickerItems: tickerItems,
+          });
+        }
+      });
+
+      const payloadFields = Object.keys(payload)
+        // Filter out _keyframes and _items keys - they're handled by their respective field sections
+        .filter(key => !key.endsWith('_keyframes') && !key.endsWith('_items'))
+        // Filter out ticker element IDs (they're handled above)
+        .filter(key => {
+          const element = elementMap.get(key);
+          if (element) {
+            const elType = element.elementType || element.element_type;
+            const isTicker = elType === 'ticker' || element.content?.type === 'ticker';
+            return !isTicker;
+          }
+          return true;
+        })
         .map((key) => {
         const value = payload[key];
 
@@ -464,6 +496,9 @@ export function ContentEditor() {
           options: type === 'icon' ? ICON_LIBRARIES : undefined,
         };
       });
+
+      // Combine ticker fields with payload fields
+      return [...tickerFields, ...payloadFields];
     }
 
     // Check if template has elements with content (use localStorage elements)
@@ -480,10 +515,19 @@ export function ContentEditor() {
         const isImage = elType === 'image' || el.content?.type === 'image';
         const isShape = elType === 'shape' || el.content?.type === 'shape';
         const isMap = elType === 'map' || el.content?.type === 'map';
+        const isTicker = elType === 'ticker' || el.content?.type === 'ticker';
 
-        console.log('[ContentEditor] Element:', el.name, 'type:', elType, 'content.type:', el.content?.type, 'isText:', isText, 'isImage:', isImage, 'isShape:', isShape, 'isMap:', isMap);
+        console.log('[ContentEditor] Element:', el.name, 'type:', elType, 'content.type:', el.content?.type, 'isText:', isText, 'isImage:', isImage, 'isShape:', isShape, 'isMap:', isMap, 'isTicker:', isTicker);
 
-        if (isMap) {
+        if (isTicker) {
+          // Ticker element - add ticker items editor
+          fields.push({
+            id: el.id,
+            label: el.name,
+            type: 'ticker' as const,
+            tickerItems: el.content?.items || [],
+          });
+        } else if (isMap) {
           // Map element - add location field with keyframes if available
           fields.push({
             id: el.id,
@@ -684,6 +728,8 @@ export function ContentEditor() {
         return <Palette className="w-3.5 h-3.5" />;
       case 'map':
         return <MapPin className="w-3.5 h-3.5" />;
+      case 'ticker':
+        return <ScrollText className="w-3.5 h-3.5" />;
       default:
         return <Type className="w-3.5 h-3.5" />;
     }
@@ -792,7 +838,7 @@ export function ContentEditor() {
       </div>
 
       {/* Fields */}
-      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3 flex flex-col">
         {fields.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             <p className="text-xs sm:text-sm">No editable fields</p>
@@ -809,7 +855,7 @@ export function ContentEditor() {
           </div>
         ) : (
           fields.map((field) => (
-            <div key={field.id} className="space-y-1">
+            <div key={field.id} className={cn("space-y-1", field.type === 'ticker' && "flex-1 flex flex-col min-h-0")}>
               <Label className="text-[10px] sm:text-xs flex items-center gap-1.5 text-muted-foreground">
                 {getFieldIcon(field.type)}
                 {field.label}
@@ -1092,6 +1138,20 @@ export function ContentEditor() {
                     );
                   })()}
                 </div>
+              ) : field.type === 'ticker' ? (
+                <TickerContentEditor
+                  fieldId={field.id}
+                  items={(localPayload[`${field.id}_items`] as TickerItem[] | undefined) || field.tickerItems || []}
+                  onItemsChange={(items) => {
+                    setLocalPayload((prev) => ({
+                      ...prev,
+                      [`${field.id}_items`]: items,
+                    }));
+                    setHasChanges(true);
+                    // Update preview with items array
+                    updatePreviewField(`${field.id}_items`, JSON.stringify(items));
+                  }}
+                />
               ) : (
                 <Input
                   type="text"
@@ -1369,6 +1429,217 @@ export function ContentEditor() {
         </DialogContent>
       </Dialog>
 
+    </div>
+  );
+}
+
+// ============================================
+// TICKER CONTENT EDITOR COMPONENT
+// Allows editing ticker items inline within the content editor
+// ============================================
+interface TickerContentEditorProps {
+  fieldId: string;
+  items: TickerItem[];
+  onItemsChange: (items: TickerItem[]) => void;
+}
+
+function TickerContentEditor({ fieldId, items, onItemsChange }: TickerContentEditorProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [newItemText, setNewItemText] = useState('');
+
+  const handleAddItem = () => {
+    if (!newItemText.trim()) return;
+    const newItem: TickerItem = {
+      id: `ticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      content: newItemText.trim(),
+    };
+    onItemsChange([...items, newItem]);
+    setNewItemText('');
+  };
+
+  const handleRemoveItem = (id: string) => {
+    onItemsChange(items.filter((item) => item.id !== id));
+  };
+
+  const handleUpdateItem = (id: string, updates: Partial<TickerItem>) => {
+    onItemsChange(
+      items.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+    setEditingId(null);
+  };
+
+  const handleMoveItem = (fromIndex: number, direction: 'up' | 'down') => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= items.length) return;
+    const newItems = [...items];
+    const [removed] = newItems.splice(fromIndex, 1);
+    newItems.splice(toIndex, 0, removed);
+    onItemsChange(newItems);
+  };
+
+  const startEditing = (item: TickerItem) => {
+    setEditingId(item.id);
+    setEditValue(item.content);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditValue('');
+  };
+
+  const saveEditing = () => {
+    if (editingId && editValue.trim()) {
+      handleUpdateItem(editingId, { content: editValue.trim() });
+    }
+    cancelEditing();
+  };
+
+  return (
+    <div className="flex flex-col border border-cyan-500/30 rounded-md bg-cyan-500/5 p-2 min-h-[300px] flex-1">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-cyan-400 font-medium uppercase">
+          Ticker Items ({items.length})
+        </span>
+      </div>
+
+      {/* Add new item */}
+      <div className="flex gap-1 mb-2">
+        <Input
+          value={newItemText}
+          onChange={(e) => setNewItemText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+          placeholder="Add ticker item..."
+          className="h-7 text-xs flex-1"
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleAddItem}
+          disabled={!newItemText.trim()}
+          className="h-7 w-7 p-0 text-cyan-400 hover:text-cyan-300"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+
+      {/* Items list - expanded to fill available space */}
+      <div className="space-y-1 flex-1 overflow-y-auto">
+        {items.map((item, index) => {
+          const topicStyle = item.topic ? TOPIC_BADGE_STYLES[item.topic] : null;
+
+          if (editingId === item.id) {
+            // Editing mode
+            return (
+              <div key={item.id} className="space-y-1.5 p-1.5 bg-muted/50 rounded">
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveEditing();
+                      if (e.key === 'Escape') cancelEditing();
+                    }}
+                    className="h-6 text-[10px] flex-1"
+                    autoFocus
+                  />
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={saveEditing}>
+                    <Check className="w-3 h-3 text-green-400" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={cancelEditing}>
+                    <X className="w-3 h-3 text-red-400" />
+                  </Button>
+                </div>
+                {/* Topic selector */}
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-[9px] text-muted-foreground">Topic:</Label>
+                  <select
+                    value={item.topic || ''}
+                    onChange={(e) => handleUpdateItem(item.id, { topic: e.target.value as TickerTopic || undefined })}
+                    className="flex-1 h-5 text-[9px] bg-background border border-input rounded px-1"
+                  >
+                    <option value="">None</option>
+                    {Object.entries(TOPIC_BADGE_STYLES).map(([key, style]) => (
+                      <option key={key} value={key}>
+                        {style.icon} {style.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          }
+
+          // Display mode
+          return (
+            <div
+              key={item.id}
+              className="flex items-center gap-1 p-1 hover:bg-muted/50 rounded group"
+            >
+              {/* Reorder buttons */}
+              <div className="flex flex-col">
+                <button
+                  onClick={() => handleMoveItem(index, 'up')}
+                  disabled={index === 0}
+                  className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronUp className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={() => handleMoveItem(index, 'down')}
+                  disabled={index === items.length - 1}
+                  className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className="w-2.5 h-2.5" />
+                </button>
+              </div>
+
+              {/* Topic badge */}
+              {topicStyle && (
+                <div
+                  className="px-1 py-0.5 rounded text-[7px] font-bold uppercase shrink-0"
+                  style={{
+                    backgroundColor: topicStyle.backgroundColor,
+                    color: topicStyle.textColor,
+                  }}
+                >
+                  {topicStyle.icon}
+                </div>
+              )}
+
+              {/* Content */}
+              <span className="flex-1 text-[10px] truncate">{item.content}</span>
+
+              {/* Actions */}
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5"
+                  onClick={() => startEditing(item)}
+                >
+                  <Edit2 className="w-2.5 h-2.5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 text-red-400 hover:text-red-300"
+                  onClick={() => handleRemoveItem(item.id)}
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+
+        {items.length === 0 && (
+          <p className="text-[10px] text-muted-foreground text-center py-2">
+            No ticker items. Add items above.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

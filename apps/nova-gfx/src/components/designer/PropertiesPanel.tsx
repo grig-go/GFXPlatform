@@ -40,6 +40,54 @@ import { getWeatherIcon } from '@/lib/weatherIcons';
 // @ts-ignore - react-animated-weather types
 import ReactAnimatedWeather from 'react-animated-weather';
 
+// Helper function to convert color to rgba with specified opacity
+function applyOpacityToColor(color: string, opacity: number): string {
+  // Handle rgba/rgb colors
+  const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+  if (rgbaMatch) {
+    return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+  }
+
+  // Handle hex colors
+  const hexMatch = color.match(/^#?([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  }
+
+  // Handle named colors or transparent
+  if (color === 'transparent') {
+    return 'transparent';
+  }
+
+  // For other colors, just return with opacity (browser will handle)
+  return color;
+}
+
+// Helper function to extract base color without alpha
+function getBaseColor(color: string): string {
+  const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+  if (rgbaMatch) {
+    return `rgb(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]})`;
+  }
+  return color;
+}
+
+// Helper to extract opacity from rgba color
+function getOpacityFromColor(color: string): number {
+  const rgbaMatch = color.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+  if (rgbaMatch) {
+    return parseFloat(rgbaMatch[1]);
+  }
+  return 1;
+}
+
 // Icon Preview Component for Properties Panel
 function IconPreview({
   library,
@@ -1177,8 +1225,9 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
 // Ticker Style Editor - handles all styling options for tickers
 function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const { updateElement } = useDesignerStore();
+
   const tickerContent = element.content.type === 'ticker' ? element.content : null;
-  
+
   if (!tickerContent) return null;
 
   const config = tickerContent.config || {};
@@ -1198,11 +1247,6 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
   const updateConfig = (updates: Partial<typeof config>) => {
     updateContent({ config: { ...config, ...updates } });
   };
-
-  const [showIconPicker, setShowIconPicker] = useState(false);
-  // Extended ticker content type for icon support
-  const tickerContentExtended = tickerContent as typeof tickerContent & { icon?: { library: 'lucide' | 'phosphor'; name: string; weight?: string } };
-  const tickerIcon = tickerContentExtended.icon || { library: 'lucide' as const, name: '', weight: undefined };
 
   return (
     <div className="space-y-2">
@@ -1255,6 +1299,80 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
         </KeyframableProperty>
       </PropertySection>
 
+      <PropertySection title="Background Color">
+        {(() => {
+          const bgColor = getStyle('backgroundColor', 'transparent');
+          const currentOpacity = getOpacityFromColor(bgColor);
+          // Convert to hex for the color picker, preserving underlying color
+          const baseColor = getBaseColor(bgColor);
+          let hexValue = '#000000';
+          const rgbMatch = baseColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            hexValue = `#${parseInt(rgbMatch[1]).toString(16).padStart(2, '0')}${parseInt(rgbMatch[2]).toString(16).padStart(2, '0')}${parseInt(rgbMatch[3]).toString(16).padStart(2, '0')}`;
+          } else if (baseColor.startsWith('#')) {
+            hexValue = baseColor;
+          }
+
+          return (
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="color"
+                  value={hexValue}
+                  onChange={(e) => {
+                    // Preserve current opacity when changing color
+                    const newColor = e.target.value;
+                    updateStyle('backgroundColor', applyOpacityToColor(newColor, currentOpacity));
+                  }}
+                  className="w-8 h-8 rounded border border-input cursor-pointer bg-transparent"
+                />
+              </div>
+              <Input
+                value={bgColor}
+                onChange={(e) => updateStyle('backgroundColor', e.target.value)}
+                className="h-8 text-xs flex-1"
+                placeholder="rgba(0, 0, 0, 1)"
+              />
+            </div>
+          );
+        })()}
+      </PropertySection>
+
+      <PropertySection title="Background Opacity">
+        {(() => {
+          const bgColor = getStyle('backgroundColor', 'transparent');
+          const currentOpacity = getOpacityFromColor(bgColor);
+
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={currentOpacity}
+                  onChange={(e) => {
+                    const newOpacity = parseFloat(e.target.value);
+                    const baseColor = getBaseColor(bgColor);
+                    // If transparent or no color, use a default
+                    if (baseColor === 'transparent' || !baseColor) {
+                      updateStyle('backgroundColor', `rgba(0, 0, 0, ${newOpacity})`);
+                    } else {
+                      updateStyle('backgroundColor', applyOpacityToColor(baseColor, newOpacity));
+                    }
+                  }}
+                  className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+                />
+                <span className="text-[10px] text-muted-foreground w-8 text-right">
+                  {Math.round(currentOpacity * 100)}%
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+      </PropertySection>
+
       <PropertySection title="Font Family">
         <FontFamilyPicker
           value={getStyle('fontFamily', 'Inter')}
@@ -1262,54 +1380,90 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
         />
       </PropertySection>
 
-      <PropertySection title="Icon Next to Font">
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 text-[10px] flex-1"
-            onClick={() => setShowIconPicker(true)}
-          >
-            {tickerIcon.name ? (
-              <div className="flex items-center gap-1">
-                <IconPreview
-                  library={tickerIcon.library as 'lucide' | 'fontawesome' | 'lottie' | 'weather'}
-                  iconName={tickerIcon.name}
-                  weight={tickerIcon.weight as 'solid' | 'regular' | 'brands' | undefined}
-                  size={14}
-                />
-                <span className="truncate">{tickerIcon.name}</span>
-              </div>
-            ) : (
-              'Select Icon'
-            )}
-          </Button>
-          {tickerIcon.name && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={() => updateContent({ icon: undefined } as Partial<typeof tickerContent>)}
+      <PropertySection title="Text Alignment">
+        <div className="flex gap-1">
+          {[
+            { value: 'left', icon: AlignLeft },
+            { value: 'center', icon: AlignCenter },
+            { value: 'right', icon: AlignRight },
+          ].map(({ value, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => updateStyle('textAlign', value)}
+              className={cn(
+                'flex-1 h-7 flex items-center justify-center rounded border',
+                getStyle('textAlign', 'left') === value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-muted border-input hover:bg-accent'
+              )}
             >
-              <X className="w-3 h-3" />
-            </Button>
-          )}
+              <Icon className="w-3.5 h-3.5" />
+            </button>
+          ))}
         </div>
-        {showIconPicker && (
-          <IconPickerDialog
-            open={showIconPicker}
-            onOpenChange={setShowIconPicker}
-            onSelect={(library, iconName, weight) => {
-              updateContent({
-                icon: { library, name: iconName, weight },
-              } as Partial<typeof tickerContent>);
-              setShowIconPicker(false);
-            }}
-            currentLibrary={tickerIcon.library as 'lucide' | 'fontawesome' | 'lottie' | 'weather'}
-            currentIconName={tickerIcon.name}
-            currentWeight={tickerIcon.weight as 'solid' | 'regular' | 'brands' | undefined}
+      </PropertySection>
+
+      <PropertySection title="Letter Spacing">
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            min="-5"
+            max="20"
+            step="0.5"
+            value={parseFloat(getStyle('letterSpacing', '0').replace('px', '')) || 0}
+            onChange={(e) => updateStyle('letterSpacing', `${e.target.value}px`)}
+            className="h-6 text-[10px]"
           />
-        )}
+          <span className="text-xs text-muted-foreground">px</span>
+        </div>
+      </PropertySection>
+
+      <PropertySection title="Padding">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[9px] text-muted-foreground mb-0.5 block">Left</label>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="0"
+                max="200"
+                step="1"
+                value={parseInt(getStyle('paddingLeft', '0').replace('px', '')) || 0}
+                onChange={(e) => updateStyle('paddingLeft', `${e.target.value}px`)}
+                className="h-6 text-[10px]"
+              />
+              <span className="text-[9px] text-muted-foreground">px</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] text-muted-foreground mb-0.5 block">Right</label>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="0"
+                max="200"
+                step="1"
+                value={parseInt(getStyle('paddingRight', '0').replace('px', '')) || 0}
+                onChange={(e) => updateStyle('paddingRight', `${e.target.value}px`)}
+                className="h-6 text-[10px]"
+              />
+              <span className="text-[9px] text-muted-foreground">px</span>
+            </div>
+          </div>
+        </div>
+      </PropertySection>
+
+      <PropertySection title="Text Transform">
+        <select
+          value={getStyle('textTransform', 'none')}
+          onChange={(e) => updateStyle('textTransform', e.target.value)}
+          className="w-full h-7 text-[10px] bg-muted border border-input rounded-md px-2 cursor-pointer"
+        >
+          <option value="none">None</option>
+          <option value="uppercase">UPPERCASE</option>
+          <option value="lowercase">lowercase</option>
+          <option value="capitalize">Capitalize</option>
+        </select>
       </PropertySection>
 
       <Separator className="my-2" />
@@ -1435,10 +1589,198 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
   );
 }
 
+// Ticker Content Editor - handles ticker items (separate from style editor)
+function TickerContentEditor({ element, updateContent }: { element: Element; updateContent: (updates: Record<string, unknown>) => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newItemText, setNewItemText] = useState('');
+
+  const tickerContent = element.content.type === 'ticker' ? element.content : null;
+
+  if (!tickerContent) return null;
+
+  const items = tickerContent.items || [];
+
+  const handleAddItem = () => {
+    if (!newItemText.trim()) return;
+    const newItem = {
+      id: `item-${Date.now()}`,
+      content: newItemText.trim(),
+    };
+    updateContent({ items: [...items, newItem] });
+    setNewItemText('');
+  };
+
+  const handleRemoveItem = (id: string) => {
+    updateContent({ items: items.filter((item: { id: string }) => item.id !== id) });
+  };
+
+  const handleUpdateItem = (id: string, updates: Record<string, unknown>) => {
+    updateContent({
+      items: items.map((item: { id: string }) => (item.id === id ? { ...item, ...updates } : item))
+    });
+    setEditingId(null);
+  };
+
+  const handleMoveItem = (fromIndex: number, direction: 'up' | 'down') => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= items.length) return;
+    const newItems = [...items];
+    const [removed] = newItems.splice(fromIndex, 1);
+    newItems.splice(toIndex, 0, removed);
+    updateContent({ items: newItems });
+  };
+
+  return (
+    <div className="space-y-2">
+      <PropertySection title={`Ticker Items (${items.length})`}>
+        <div className="space-y-2">
+          {/* Add new item */}
+          <div className="flex gap-1">
+            <Input
+              value={newItemText}
+              onChange={(e) => setNewItemText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+              placeholder="Add ticker item..."
+              className="h-6 text-[10px]"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-6 px-2"
+              onClick={handleAddItem}
+              disabled={!newItemText.trim()}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
+
+          {/* Items list */}
+          <div className="space-y-1 max-h-60 overflow-y-auto">
+            {items.map((item: { id: string; content: string }, index: number) => (
+              <TickerItemRowEditor
+                key={item.id}
+                item={item}
+                index={index}
+                totalItems={items.length}
+                isEditing={editingId === item.id}
+                onEdit={() => setEditingId(item.id)}
+                onCancelEdit={() => setEditingId(null)}
+                onUpdate={(updates) => handleUpdateItem(item.id, updates)}
+                onRemove={() => handleRemoveItem(item.id)}
+                onMoveUp={() => handleMoveItem(index, 'up')}
+                onMoveDown={() => handleMoveItem(index, 'down')}
+              />
+            ))}
+
+            {items.length === 0 && (
+              <div className="text-[10px] text-muted-foreground text-center py-4">
+                No items. Add your first ticker item above.
+              </div>
+            )}
+          </div>
+        </div>
+      </PropertySection>
+    </div>
+  );
+}
+
+// Ticker Item Row Editor - handles individual item editing
+function TickerItemRowEditor({
+  item,
+  index,
+  totalItems,
+  isEditing,
+  onEdit,
+  onCancelEdit,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  item: { id: string; content: string };
+  index: number;
+  totalItems: number;
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onUpdate: (updates: Record<string, unknown>) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const [editValue, setEditValue] = useState(item.content);
+
+  // Reset edit value when item changes
+  useEffect(() => {
+    setEditValue(item.content);
+  }, [item.content]);
+
+  const canMoveUp = index > 0;
+  const canMoveDown = index < totalItems - 1;
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1 p-1 bg-muted/50 rounded">
+        <Input
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onUpdate({ content: editValue.trim() });
+            if (e.key === 'Escape') onCancelEdit();
+          }}
+          className="h-6 text-[10px] flex-1"
+          autoFocus
+        />
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onUpdate({ content: editValue.trim() })}>
+          <Check className="w-3 h-3" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onCancelEdit}>
+          <X className="w-3 h-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 p-1 hover:bg-muted/50 rounded group">
+      {/* Reorder buttons */}
+      <div className="flex flex-col">
+        <button
+          onClick={onMoveUp}
+          disabled={!canMoveUp}
+          className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+          title="Move up"
+        >
+          <ArrowUp className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={!canMoveDown}
+          className="p-0.5 hover:bg-muted rounded disabled:opacity-20 text-muted-foreground hover:text-foreground"
+          title="Move down"
+        >
+          <ArrowDown className="w-3 h-3" />
+        </button>
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className="text-[10px] truncate block">{item.content}</span>
+      </div>
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={onEdit}>
+          <Edit2 className="w-3 h-3" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-destructive" onClick={onRemove}>
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Chart Style Editor - handles all styling options for charts
 function ShapeStyleEditor({ element, updateContent }: { element: Element; updateContent: (updates: Record<string, unknown>) => void }) {
   const shapeContent = element.content.type === 'shape' ? element.content : null;
-  
+
   if (!shapeContent) return null;
 
   const hasGradient = shapeContent.gradient?.enabled ?? false;
@@ -3684,111 +4026,11 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
   }
 
   if (element.content.type === 'ticker') {
-    const tickerContent = element.content;
-    // Only show items editor in Content tab (config moved to Style tab)
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [newItemText, setNewItemText] = useState('');
-
-    const handleAddItem = () => {
-      if (!newItemText.trim()) return;
-      const newItem = {
-        id: `item-${Date.now()}`,
-        content: newItemText.trim(),
-      };
-      updateContent({ items: [...(tickerContent.items || []), newItem] });
-      setNewItemText('');
-    };
-
-    const handleRemoveItem = (id: string) => {
-      updateContent({ items: (tickerContent.items || []).filter((item) => item.id !== id) });
-    };
-
-    const handleUpdateItem = (id: string, updates: Partial<typeof tickerContent.items[0]>) => {
-      updateContent({
-        items: (tickerContent.items || []).map((item) => (item.id === id ? { ...item, ...updates } : item))
-      });
-      setEditingId(null);
-    };
-
     return (
-      <div className="space-y-2">
-        <PropertySection title={`Ticker Items (${tickerContent.items?.length || 0})`}>
-          <div className="space-y-2">
-            {/* Add new item */}
-            <div className="flex gap-1">
-              <Input
-                value={newItemText}
-                onChange={(e) => setNewItemText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-                placeholder="Add ticker item..."
-                className="h-6 text-[10px]"
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-6 px-2"
-                onClick={handleAddItem}
-                disabled={!newItemText.trim()}
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
-            </div>
-
-            {/* Items list */}
-            <div className="space-y-1 max-h-60 overflow-y-auto">
-              {(tickerContent.items || []).map((item, index) => {
-                const isEditing = editingId === item.id;
-                const [editValue, setEditValue] = useState(item.content);
-
-                if (isEditing) {
-                  return (
-                    <div key={item.id} className="flex items-center gap-1 p-1 bg-muted/50 rounded">
-                      <Input
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleUpdateItem(item.id, { content: editValue.trim() });
-                          if (e.key === 'Escape') setEditingId(null);
-                        }}
-                        className="h-6 text-[10px] flex-1"
-                        autoFocus
-                      />
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => handleUpdateItem(item.id, { content: editValue.trim() })}>
-                        <Check className="w-3 h-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingId(null)}>
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={item.id} className="flex items-center gap-1 p-1 hover:bg-muted/50 rounded group">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[10px] truncate block">{item.content}</span>
-                    </div>
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => setEditingId(item.id)}>
-                        <Edit2 className="w-3 h-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-destructive" onClick={() => handleRemoveItem(item.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {(tickerContent.items || []).length === 0 && (
-                <div className="text-[10px] text-muted-foreground text-center py-4">
-                  No items. Add your first ticker item above.
-                </div>
-              )}
-            </div>
-          </div>
-        </PropertySection>
-      </div>
+      <TickerContentEditor
+        element={element}
+        updateContent={updateContent}
+      />
     );
   }
 

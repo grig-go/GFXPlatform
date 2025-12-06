@@ -11,17 +11,18 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
-    "@emergent-platform/ui": "workspace:*",
-    "@emergent-platform/types": "workspace:*",
-    "@emergent-platform/supabase-client": "workspace:*",
     "@emergent-platform/design-tokens": "workspace:*",
+    "@emergent-platform/supabase-client": "workspace:*",
+    "@emergent-platform/types": "workspace:*",
+    "@emergent-platform/ui": "workspace:*",
     "@supabase/supabase-js": "^2.46.0",
+    "date-fns": "^4.1.0",
+    "immer": "^10.2.0",
     "lucide-react": "^0.303.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
-    "zustand": "^4.5.7",
-    "immer": "^10.2.0"
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",

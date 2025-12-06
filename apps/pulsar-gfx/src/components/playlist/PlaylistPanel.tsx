@@ -486,6 +486,7 @@ export function PlaylistPanel() {
 
   const handlePlayIn = async (page: Page, e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log('[PlaylistPanel] handlePlayIn called for page:', page.name, 'channelId:', page.channelId);
     if (!page.channelId) {
       alert('Please assign a channel to this page first');
       return;
@@ -556,6 +557,15 @@ export function PlaylistPanel() {
       const { animations: animationsForCommand, keyframes: keyframesForCommand } =
         getAnimationDataForTemplate(template.id);
 
+      console.log('[PlaylistPanel] Calling playOnChannel with:', {
+        channelId: page.channelId,
+        pageId: page.id,
+        layerIndex,
+        templateId: template.id,
+        pageName: page.name,
+        projectName: currentProject.name,
+      });
+
       await playOnChannel(
         page.channelId,
         page.id,
@@ -569,7 +579,9 @@ export function PlaylistPanel() {
           animations: animationsForCommand,
           keyframes: keyframesForCommand,
         },
-        filteredPayload
+        filteredPayload,
+        page.name,
+        currentProject.name
       );
 
       // Clear on-air state from other pages on the same channel + layer
@@ -829,7 +841,9 @@ export function PlaylistPanel() {
         animations: animationsForCommand,
         keyframes: keyframesForCommand,
       },
-      filteredPayload
+      filteredPayload,
+      page.name,
+      currentProject.name
     );
 
     // Clear on-air from other pages on same channel + layer, then set this page

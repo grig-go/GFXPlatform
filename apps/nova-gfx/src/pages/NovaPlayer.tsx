@@ -13,6 +13,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase, markSupabaseSuccess, directRestSelect, directRestUpdate, sendBeaconUpdate } from '@/lib/supabase';
 // NOTE: We use directRestSelect instead of projectService functions to avoid Supabase client timeout issues
 import { getAnimatedProperties } from '@/lib/animation';
+import { loadFonts, SYSTEM_FONTS } from '@/lib/fonts';
 import { ChartElement } from '@/components/canvas/ChartElement';
 import { MapElement } from '@/components/canvas/MapElement';
 import { VideoElement } from '@/components/canvas/VideoElement';
@@ -919,6 +920,60 @@ export function NovaPlayer() {
     return [];
   }, [keyframes, localStorageData]);
 
+  // Load fonts for all elements when they change
+  // This ensures fonts are available before rendering in the player
+  useEffect(() => {
+    if (mergedElements.length === 0) return;
+
+    // Extract unique font families from all elements
+    const fontFamilies = new Set<string>();
+    const systemFontFamilies = new Set(SYSTEM_FONTS.map(f => f.family));
+
+    mergedElements.forEach(element => {
+      // Check element.styles.fontFamily
+      const fontFamily = element.styles?.fontFamily;
+      if (fontFamily && typeof fontFamily === 'string') {
+        // Handle font family strings like "'Inter', sans-serif" - extract the first font
+        const primaryFont = fontFamily.split(',')[0].trim().replace(/['"]/g, '');
+        if (primaryFont && !systemFontFamilies.has(primaryFont)) {
+          fontFamilies.add(primaryFont);
+        }
+      }
+
+      // Check chart options for font families
+      if (element.content?.type === 'chart' && element.content.options) {
+        const chartFont = element.content.options.fontFamily;
+        if (chartFont && typeof chartFont === 'string' && !systemFontFamilies.has(chartFont)) {
+          fontFamilies.add(chartFont);
+        }
+      }
+
+      // Check table content for font families (via styles or headerFontFamily)
+      if (element.content?.type === 'table') {
+        const tableContent = element.content as Record<string, unknown>;
+        const headerFont = tableContent.headerFontFamily;
+        if (headerFont && typeof headerFont === 'string' && !systemFontFamilies.has(headerFont)) {
+          fontFamilies.add(headerFont);
+        }
+      }
+
+      // Check ticker config for font families
+      if (element.content?.type === 'ticker' && element.content.config) {
+        const tickerConfig = element.content.config as unknown as Record<string, unknown>;
+        const tickerFont = tickerConfig.fontFamily;
+        if (tickerFont && typeof tickerFont === 'string' && !systemFontFamilies.has(tickerFont)) {
+          fontFamilies.add(tickerFont);
+        }
+      }
+    });
+
+    if (fontFamilies.size > 0) {
+      const fontsToLoad = Array.from(fontFamilies);
+      console.log('[Nova Player] Loading fonts:', fontsToLoad);
+      loadFonts(fontsToLoad);
+    }
+  }, [mergedElements]);
+
   // Apply content overrides to elements - per-template basis
   const elementsWithOverrides = useMemo((): Element[] => {
     if (templateOverrides.size === 0) {
@@ -932,42 +987,63 @@ export function NovaPlayer() {
         return element;
       }
 
+      let updatedElement = element;
+
       // Check by ID
       if (overrides[element.id] !== undefined) {
         const override = overrides[element.id];
         if (element.content?.type === 'text') {
-          return {
-            ...element,
-            content: { ...element.content, text: override },
+          updatedElement = {
+            ...updatedElement,
+            content: { ...updatedElement.content, text: override },
           } as Element;
         } else if (element.content?.type === 'image') {
-          return {
-            ...element,
-            content: { ...element.content, src: override, url: override },
+          updatedElement = {
+            ...updatedElement,
+            content: { ...updatedElement.content, src: override, url: override },
           } as Element;
         }
       }
 
+      // Check for ticker items override (key format: `${elementId}_items`)
+      const tickerItemsKey = `${element.id}_items`;
+      if (overrides[tickerItemsKey] !== undefined && element.content?.type === 'ticker') {
+        try {
+          const itemsOverride = typeof overrides[tickerItemsKey] === 'string'
+            ? JSON.parse(overrides[tickerItemsKey])
+            : overrides[tickerItemsKey];
+
+          if (Array.isArray(itemsOverride)) {
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, items: itemsOverride },
+            } as Element;
+          }
+        } catch (e) {
+          console.warn('Failed to parse ticker items override:', e);
+        }
+      }
+
       // Check by element name
-      const elementNameLower = element.name?.toLowerCase().replace(/\s+/g, '_');
+      const elementNameLower = updatedElement.name?.toLowerCase().replace(/\s+/g, '_');
       for (const [key, value] of Object.entries(overrides)) {
         const keyLower = key.toLowerCase().replace(/\s+/g, '_');
-        if (elementNameLower === keyLower || element.name === key) {
-          if (element.content?.type === 'text') {
-            return {
-              ...element,
-              content: { ...element.content, text: value },
+        if (elementNameLower === keyLower || updatedElement.name === key) {
+          if (updatedElement.content?.type === 'text') {
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, text: value },
             } as Element;
-          } else if (element.content?.type === 'image') {
-            return {
-              ...element,
-              content: { ...element.content, src: value, url: value },
+          } else if (updatedElement.content?.type === 'image') {
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, src: value, url: value },
             } as Element;
           }
         }
       }
 
-      return element;
+      return updatedElement;
     });
   }, [mergedElements, templateOverrides]);
 
@@ -1293,7 +1369,9 @@ export function NovaPlayer() {
 
       {/* Connection status */}
       {!isReady && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-black/50 text-white/70 text-sm px-4 py-2 rounded-lg">
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2 rounded-lg ${
+          connectionStatus === 'connecting' ? 'bg-red-600' : 'bg-red-700'
+        }`}>
           {connectionStatus === 'connecting' && 'Connecting to channel...'}
           {connectionStatus === 'error' && 'Connection error'}
         </div>
@@ -1700,16 +1778,69 @@ function PlayerElement({
           />
         );
 
-      case 'map':
+      case 'map': {
+        const mapContent = element.content as typeof element.content & {
+          locationKeyframes?: Array<{ time: number; phase?: string }>;
+        };
+
+        // Check if we have location keyframes for flight path animation
+        const hasLocationKeyframes = mapContent.locationKeyframes && mapContent.locationKeyframes.length >= 2;
+
+        // Check if any map properties are animated via regular keyframes
+        const hasAnimatedMapProps = animatedProps.mapCenter !== undefined ||
+          animatedProps.mapCenterLng !== undefined ||
+          animatedProps.mapCenterLat !== undefined ||
+          animatedProps.mapZoom !== undefined ||
+          animatedProps.mapPitch !== undefined ||
+          animatedProps.mapBearing !== undefined;
+
+        // Get animated center
+        let centerLng = mapContent.center?.[0] ?? 0;
+        let centerLat = mapContent.center?.[1] ?? 0;
+
+        if (animatedProps.mapCenter !== undefined) {
+          const centerStr = String(animatedProps.mapCenter);
+          const [lng, lat] = centerStr.split(',').map(v => parseFloat(v.trim()) || 0);
+          if (!isNaN(lng) && !isNaN(lat)) {
+            centerLng = lng;
+            centerLat = lat;
+          }
+        } else {
+          if (animatedProps.mapCenterLng !== undefined) {
+            centerLng = Number(animatedProps.mapCenterLng);
+          }
+          if (animatedProps.mapCenterLat !== undefined) {
+            centerLat = Number(animatedProps.mapCenterLat);
+          }
+        }
+
+        const animatedMapContent = {
+          ...mapContent,
+          center: [centerLng, centerLat] as [number, number],
+          zoom: animatedProps.mapZoom !== undefined
+            ? Number(animatedProps.mapZoom)
+            : (mapContent.zoom ?? 10),
+          pitch: animatedProps.mapPitch !== undefined
+            ? Number(animatedProps.mapPitch)
+            : (mapContent.pitch ?? 0),
+          bearing: animatedProps.mapBearing !== undefined
+            ? Number(animatedProps.mapBearing)
+            : (mapContent.bearing ?? 0),
+        };
+
         return (
           <MapElement
-            content={element.content}
+            content={animatedMapContent}
             width={animatedWidth}
             height={animatedHeight}
             interactive={false}
             isPlaying={isPlaying}
+            isAnimated={hasAnimatedMapProps || hasLocationKeyframes}
+            playheadPosition={effectivePosition}
+            currentPhase={effectivePhase}
           />
         );
+      }
 
       case 'video':
         return (

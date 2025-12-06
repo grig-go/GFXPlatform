@@ -110,41 +110,99 @@ export function getClaudeApiKey(): string | null {
   return localStorage.getItem('nova-claude-api-key') || import.meta.env.VITE_CLAUDE_API_KEY || null;
 }
 
+// Check if we're in production (backend proxy available)
+function isProductionMode(): boolean {
+  return import.meta.env.PROD;
+}
+
 // Check if we should use the backend proxy (no local key available)
 // In production without VITE_ keys, this will use the serverless function
+// In development, we require a local API key
 function shouldUseBackendProxy(provider: AIProvider): boolean {
+  // In development, never use backend proxy - require local key
+  if (!isProductionMode()) {
+    return false;
+  }
+  // In production, use proxy only if no local key
   if (provider === 'gemini') {
     return !getGeminiApiKey();
   }
   return !getClaudeApiKey();
 }
 
+// Check if AI is available in current environment
+export function isAIAvailableInCurrentEnv(): { available: boolean; reason?: string } {
+  const isProduction = isProductionMode();
+  const hasGeminiKey = !!getGeminiApiKey();
+  const hasClaudeKey = !!getClaudeApiKey();
+
+  if (isProduction) {
+    // In production, backend proxy is available
+    return { available: true };
+  }
+
+  // In development, need a local API key
+  if (hasGeminiKey || hasClaudeKey) {
+    return { available: true };
+  }
+
+  return {
+    available: false,
+    reason: 'No API key configured. In development mode, please set VITE_GEMINI_API_KEY or VITE_CLAUDE_API_KEY in .env.local, or configure via Settings.',
+  };
+}
+
 // System prompt - lean version focused on editing existing elements
 const SYSTEM_PROMPT = `You are Nova, an AI assistant for broadcast graphics design.
 
 ## QUICK REFERENCE
-- **Always check context** for existing elements before creating new ones
+- **ALWAYS check context FIRST** for existing elements in the current template
 - **Use element IDs** when updating existing elements
 - **Shapes**: Use "content.gradient" and "content.glass" (not "styles")
 - **Other elements**: Use "styles" for CSS properties
 - **Available elements**: text, shape, image, icon, svg, table, chart, map, video, ticker, topic-badge
 
-## CRITICAL: EDITING vs CREATING
+## CRITICAL: PRIORITIZE CURRENT TEMPLATE
+
+**The user is ALWAYS working on their CURRENTLY SELECTED TEMPLATE.** When you see "Currently Editing Template" in the context, that's what the user is focused on. ALL elements listed under "EXISTING ELEMENTS ON CANVAS" belong to this template.
+
+## CRITICAL: UPDATE vs CREATE
+
+**KEYWORDS THAT MEAN UPDATE (not create):**
+- "improve", "enhance", "better", "nicer", "cleaner"
+- "update", "change", "modify", "edit", "adjust"
+- "fix", "tweak", "refine", "polish"
+- "make it", "make the", "make this"
+- References to "this", "the", "current", "my"
+
+**When user uses ANY of these words → UPDATE the existing elements, don't create new ones!**
 
 **ALWAYS check the context for existing elements before responding!**
 
-**CRITICAL: ALWAYS INCLUDE BOTH IN AND OUT ANIMATIONS!** When creating new elements, you MUST include animations in the "animations" array. Every element MUST have BOTH:
+When the context shows "EXISTING ELEMENTS ON CANVAS" with elements listed:
+1. The user wants to work with THESE elements
+2. Use "action": "update" with the element IDs shown
+3. Do NOT create new elements unless explicitly asked to "create", "add", or "make new"
+
+**IMPORTANT**: Do NOT assume what type of graphic the user has. Look at the ACTUAL elements in the context. If there are shapes and text elements, those ARE the graphic - update THOSE elements regardless of whether it's a "lower third", "score bug", or any other type.
+
+**CRITICAL: ALWAYS INCLUDE BOTH IN AND OUT ANIMATIONS!** When creating NEW elements, you MUST include animations in the "animations" array. Every element MUST have BOTH:
 - An "in" animation (entrance: fade-in, slide-in, scale-in, etc.)
 - An "out" animation (exit: fade-out, slide-out, scale-out, etc.)
 
 The "out" animation should be the reverse/opposite of the "in" animation. This is REQUIRED for broadcast graphics to work properly.
 
-When the user references something that already exists on canvas:
-- "change the background to red" → Find the element and UPDATE it
-- "make the text bigger" → Find the text element and UPDATE it
-- "move the lower third up" → Find the lower third element and UPDATE it
+### Examples of UPDATE requests (use existing element IDs!):
+- "improve the design" → UPDATE all elements in context with better styling
+- "make it look better" → UPDATE elements with improved colors, spacing, effects
+- "change the background to red" → Find the shape element and UPDATE its fill/backgroundColor
+- "make the text bigger" → Find text elements and UPDATE their fontSize
+- "update this graphic" → UPDATE all elements shown in EXISTING ELEMENTS ON CANVAS
+- "move this up" → UPDATE position_y of existing elements
 
-**USE THE ELEMENT ID** when updating! Look in "Existing Elements" in the context.
+**NEVER say "no elements found" or "no lower third found" if there ARE elements in the context!** The elements in context ARE the user's graphic - update them!
+
+**USE THE ELEMENT ID** when updating! Copy the exact ID from "EXISTING ELEMENTS ON CANVAS".
 
 ### Action Types:
 - **"create"** - Only for NEW elements that don't exist
@@ -166,7 +224,9 @@ When the user references something that already exists on canvas:
 
 Only include the properties you want to change. Keep the ID from the existing element!
 
-## Layer Detection
+**IMPORTANT: Do NOT include "layer_type" for update/delete actions!** The user's currently selected template will be used. Only include "layer_type" when creating NEW graphics.
+
+## Layer Detection (Only for CREATE actions!)
 
 | Keyword(s)                          | Layer Type      |
 |-------------------------------------|-----------------|
@@ -181,7 +241,7 @@ Only include the properties you want to change. Keep the ID from the existing el
 
 ALWAYS include a JSON code block:
 
-### For CREATING new elements:
+### For CREATING new elements (include layer_type):
 \`\`\`json
 {
   "action": "create",
@@ -1363,38 +1423,80 @@ export async function sendChatMessage(
   const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
   const provider = modelConfig.provider;
 
-  // Try Supabase Edge Function first (without images for now)
-  if (!images || images.length === 0) {
+  // Try Supabase Edge Function first (only in production, without images)
+  // In development, Edge Function has CORS issues, so skip directly to direct API
+  const shouldTryEdgeFunction = isProductionMode() && (!images || images.length === 0);
+
+  if (shouldTryEdgeFunction) {
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: {
-          message: contextInfo 
-            ? `[Context]\n${contextInfo}\n[End Context]\n\n${messages[messages.length - 1]?.content || ''}` 
-            : messages[messages.length - 1]?.content || '',
-          history: messages.slice(0, -1).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          systemPrompt: SYSTEM_PROMPT,
-          model: selectedModel,
-          provider: provider,
-        },
-      });
+      // Check if already aborted before making the request
+      if (signal?.aborted) {
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
 
-      if (error) throw error;
+      // Create an AbortController for the Edge Function call
+      const edgeFunctionController = new AbortController();
 
-      const responseText = data.message || '';
-      const changes = parseChangesFromResponse(responseText);
+      // Link the external signal to our internal controller
+      const abortListener = () => edgeFunctionController.abort();
+      signal?.addEventListener('abort', abortListener);
 
-      return {
-        message: responseText,
-        changes: changes || undefined,
-      };
-    } catch (edgeFunctionError) {
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-chat', {
+          body: {
+            message: contextInfo
+              ? `[Context]\n${contextInfo}\n[End Context]\n\n${messages[messages.length - 1]?.content || ''}`
+              : messages[messages.length - 1]?.content || '',
+            history: messages.slice(0, -1).map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            systemPrompt: SYSTEM_PROMPT,
+            model: selectedModel,
+            provider: provider,
+          },
+        });
+
+        // Check if aborted after the request
+        if (signal?.aborted) {
+          const abortError = new Error('Request was cancelled');
+          abortError.name = 'AbortError';
+          throw abortError;
+        }
+
+        if (error) throw error;
+
+        const responseText = data.message || '';
+        const changes = parseChangesFromResponse(responseText);
+
+        return {
+          message: responseText,
+          changes: changes || undefined,
+        };
+      } finally {
+        // Clean up the abort listener
+        signal?.removeEventListener('abort', abortListener);
+      }
+    } catch (edgeFunctionError: any) {
+      // If user cancelled, propagate the abort error immediately
+      if (edgeFunctionError?.name === 'AbortError' || signal?.aborted) {
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
       console.warn('Edge function not available, trying direct API...', edgeFunctionError);
     }
   }
   
+  // Check if aborted before falling back to direct API
+  if (signal?.aborted) {
+    const abortError = new Error('Request was cancelled');
+    abortError.name = 'AbortError';
+    throw abortError;
+  }
+
   // Direct API call (supports images)
   if (provider === 'gemini') {
     return await sendGeminiMessage(messages, context, modelConfig, images, signal);
@@ -1413,6 +1515,11 @@ async function sendGeminiMessage(
 ): Promise<AIResponse> {
   const geminiApiKey = getGeminiApiKey();
   const useProxy = shouldUseBackendProxy('gemini');
+
+  // In development without API key, throw a clear error
+  if (!useProxy && !geminiApiKey) {
+    throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
+  }
 
   const contextInfo = buildContextMessage(context);
 
@@ -1536,6 +1643,11 @@ async function sendClaudeMessage(
 ): Promise<AIResponse> {
   const claudeApiKey = getClaudeApiKey();
   const useProxy = shouldUseBackendProxy('claude');
+
+  // In development without API key, throw a clear error
+  if (!useProxy && !claudeApiKey) {
+    throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
+  }
 
   const contextInfo = buildContextMessage(context);
 
@@ -1719,24 +1831,32 @@ function buildContextMessage(context: AIContext): string {
   }
 
   if (context.currentTemplate) {
-    parts.push(`Currently Editing Template: "${context.currentTemplate.name}"`);
+    parts.push(`🎯 CURRENT TEMPLATE: "${context.currentTemplate.name}" - This is what the user is working on!`);
     if (context.currentTemplate.elements.length > 0) {
       // Include element IDs so AI can reference them for updates
       const elementList = context.currentTemplate.elements
         .map((e) => {
           const details = [`id: ${e.id}`, `type: ${e.element_type}`];
           if (e.position_x !== undefined) details.push(`pos: ${e.position_x},${e.position_y}`);
+          if (e.width !== undefined) details.push(`size: ${e.width}x${e.height}`);
           if (e.styles?.backgroundColor) details.push(`bg: ${e.styles.backgroundColor}`);
-          if (e.content?.type === 'text' && e.content.text) {
-            details.push(`text: "${e.content.text.substring(0, 30)}${e.content.text.length > 30 ? '...' : ''}"`);
+          // Type-safe content access
+          const content = e.content as Record<string, any> | undefined;
+          if (content?.type === 'text' && content.text) {
+            const text = content.text as string;
+            details.push(`text: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
           }
-          return `- "${e.name}" (${details.join(', ')})`;
+          if (content?.fill) details.push(`fill: ${content.fill}`);
+          if (content?.shape) details.push(`shape: ${content.shape}`);
+          return `  • "${e.name}" (${details.join(', ')})`;
         })
         .join('\n');
-      parts.push(`EXISTING ELEMENTS ON CANVAS (use "id" for updates):\n${elementList}`);
+      parts.push(`⚠️ EXISTING ELEMENTS ON CANVAS (${context.currentTemplate.elements.length} total) - USE THESE IDs FOR UPDATES:\n${elementList}\n\n👆 These ARE the user's graphic! When they say "improve", "update", "change", "modify" - UPDATE these elements using their IDs!`);
+    } else {
+      parts.push(`📭 Template has NO elements yet - you should CREATE new elements.`);
     }
   } else {
-    parts.push(`No template selected - will auto-create one in the appropriate layer.`);
+    parts.push(`⚠️ No template selected - will auto-create one in the appropriate layer.`);
   }
 
   if (context.selectedElements.length > 0) {
@@ -1744,7 +1864,7 @@ function buildContextMessage(context: AIContext): string {
     const selected = context.selectedElements
       .map((e) => `"${e.name}" (id: ${e.id}, type: ${e.element_type})`)
       .join(', ');
-    parts.push(`SELECTED (user wants to modify these): ${selected}`);
+    parts.push(`🎯 SELECTED ELEMENT(S) - User specifically selected these to modify: ${selected}`);
   }
 
   return parts.join('\n\n');

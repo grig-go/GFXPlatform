@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import { supabase } from '@emergent-platform/supabase-client';
 import { useUIPreferencesStore } from './uiPreferencesStore';
 
+// Dev organization ID for development (no auth)
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000001';
+
 export interface Playlist {
   id: string;
   organizationId: string;
@@ -192,6 +195,8 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
   },
 
   createPlaylist: async (name, projectId, mode = 'manual') => {
+    console.log('[playlistStore] createPlaylist called:', { name, projectId, mode });
+
     // Get the organization_id from the project
     const { data: projectData, error: projectError } = await supabase
       .from('gfx_projects')
@@ -199,13 +204,21 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
       .eq('id', projectId)
       .single();
 
-    if (projectError) throw projectError;
+    console.log('[playlistStore] Project query result:', { projectData, projectError });
 
-    let organizationId = projectData.organization_id;
+    if (projectError) {
+      console.error('[playlistStore] Error fetching project:', projectError);
+      throw projectError;
+    }
+
+    let organizationId = projectData?.organization_id;
+    console.log('[playlistStore] Project organization_id:', organizationId);
 
     // If project doesn't have an organization_id, try to get one from user's memberships
     if (!organizationId) {
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('[playlistStore] Current user:', user?.id);
+
       if (user) {
         // Try to get user's organization membership
         const { data: membershipData } = await supabase
@@ -214,6 +227,8 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
           .eq('user_id', user.id)
           .limit(1)
           .single();
+
+        console.log('[playlistStore] User membership:', membershipData);
 
         if (membershipData) {
           organizationId = membershipData.organization_id;
@@ -227,9 +242,16 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
       }
     }
 
-    // If still no organization_id, create a default one or throw error
+    // If still no organization_id, use dev organization as fallback (for anon/dev mode)
     if (!organizationId) {
-      throw new Error('No organization found. Please ensure you belong to an organization.');
+      console.log('[playlistStore] No organization found, using dev organization');
+      organizationId = DEV_ORG_ID;
+
+      // Also update the project to have this organization_id
+      await supabase
+        .from('gfx_projects')
+        .update({ organization_id: organizationId })
+        .eq('id', projectId);
     }
 
     const { data, error } = await supabase

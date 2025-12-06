@@ -29,6 +29,12 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  ContextMenuShortcut,
   cn,
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -126,43 +132,56 @@ export function Timeline() {
   const [isEditingDuration, setIsEditingDuration] = useState(false);
   const [durationInput, setDurationInput] = useState('');
 
+  // Context menu state
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuTime, setContextMenuTime] = useState<number>(0);
+  const [contextMenuElementId, setContextMenuElementId] = useState<string | null>(null);
+  const [contextMenuSelectedKeyframes, setContextMenuSelectedKeyframes] = useState<string[]>([]);
+
   // Playback loop ref
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
 
   // Keyboard event handler for deleting keyframes
+  // Use refs to avoid stale closures and ensure the handler always has latest state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Get fresh state from store to avoid stale closure issues
+      const store = useDesignerStore.getState();
+      const currentSelectedKeyframeIds = store.selectedKeyframeIds;
+
       // Delete selected keyframes with Delete or Backspace
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedKeyframeIds.length > 0) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && currentSelectedKeyframeIds.length > 0) {
         // Only handle if not in an input field
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
           return;
         }
         e.preventDefault();
-        deleteSelectedKeyframes();
+        e.stopPropagation();
+        console.log('[Timeline] Deleting keyframes:', currentSelectedKeyframeIds);
+        store.deleteSelectedKeyframes();
       }
-      
+
       // Escape to deselect keyframes
-      if (e.key === 'Escape' && selectedKeyframeIds.length > 0) {
-        selectKeyframes([]);
+      if (e.key === 'Escape' && currentSelectedKeyframeIds.length > 0) {
+        store.selectKeyframes([]);
       }
-      
+
       // Space to play/pause (when timeline is focused)
       if (e.key === ' ' && e.target === document.body) {
         e.preventDefault();
-        if (isPlaying) {
-          pause();
+        if (store.isPlaying) {
+          store.pause();
         } else {
-          play();
+          store.play();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedKeyframeIds, deleteSelectedKeyframes, selectKeyframes, isPlaying, play, pause]);
+  }, []); // Empty deps - handler gets fresh state from store
 
   // Filter elements by current template
   const templateElements = useMemo(() => 
@@ -460,6 +479,136 @@ export function Timeline() {
     return () => observer.disconnect();
   }, []);
 
+  // Handle context menu (right-click) on timeline canvas
+  const handleContextMenu = useCallback((e: MouseEvent) => {
+    e.preventDefault();
+
+    const tl = timelineRef.current;
+    const container = timelineContainerRef.current;
+    if (!tl || !container) return;
+
+    const canvas = container.querySelector('canvas');
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // Convert click position to time
+    const timeAtClick = tl.pxToVal(clickX);
+
+    // Find which element row was clicked (if any)
+    const headerHeight = 30;
+    const rowIndex = Math.floor((clickY - headerHeight) / ROW_HEIGHT);
+    const clickedElement = rowIndex >= 0 && rowIndex < templateElements.length
+      ? templateElements[rowIndex]
+      : null;
+
+    // Capture current selected keyframes from store (fresh state)
+    const store = useDesignerStore.getState();
+    let currentSelectedKeyframes = [...store.selectedKeyframeIds];
+
+    // Check if we right-clicked on a keyframe - if so, select it (or add to selection)
+    // This handles the case where the user right-clicks directly on a keyframe
+    const targetElementId = clickedElement?.id || (store.selectedElementIds.length > 0 ? store.selectedElementIds[0] : null);
+
+    if (targetElementId) {
+      const elementAnimations = store.animations.filter(
+        a => a.element_id === targetElementId && a.phase === store.currentPhase
+      );
+
+      let closestKeyframeId: string | null = null;
+      let closestDistance = 25; // Pixel tolerance for right-click detection
+
+      elementAnimations.forEach(anim => {
+        const animKeyframes = store.keyframes.filter(kf => kf.animation_id === anim.id);
+        const phaseDur = store.phaseDurations[store.currentPhase];
+
+        animKeyframes.forEach(kf => {
+          const kfTime = (kf.position / 100) * phaseDur;
+          const kfX = tl.valToPx(kfTime);
+          const distance = Math.abs(kfX - clickX);
+
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestKeyframeId = kf.id;
+          }
+        });
+      });
+
+      if (closestKeyframeId) {
+        // If the keyframe we clicked on isn't already selected, select it
+        if (!currentSelectedKeyframes.includes(closestKeyframeId)) {
+          store.selectKeyframes([closestKeyframeId]);
+          currentSelectedKeyframes = [closestKeyframeId];
+        }
+      }
+    }
+
+    console.log('[Timeline] Context menu - selected keyframes:', currentSelectedKeyframes);
+
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setContextMenuTime(Math.max(0, timeAtClick));
+    setContextMenuElementId(clickedElement?.id || null);
+    setContextMenuSelectedKeyframes(currentSelectedKeyframes);
+  }, [templateElements]);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenuPosition(null);
+    setContextMenuElementId(null);
+  }, []);
+
+  // Add keyframe at specific time for selected element
+  const handleAddKeyframeAtTime = useCallback((timeMs: number, elementId?: string | null) => {
+    const store = useDesignerStore.getState();
+    const targetElementId = elementId || (store.selectedElementIds.length > 0 ? store.selectedElementIds[0] : null);
+
+    if (!targetElementId || !currentTemplateId) {
+      console.log('[Timeline] No element selected to add keyframe');
+      return;
+    }
+
+    // Find or create animation for this element in current phase
+    let anim = store.animations.find(
+      a => a.element_id === targetElementId && a.phase === currentPhase
+    );
+
+    if (!anim) {
+      // Create a new animation for this element
+      const { animation, keyframes: kfs } = createDefaultAnimation(
+        targetElementId,
+        currentTemplateId,
+        currentPhase,
+        'custom'
+      );
+
+      const animId = crypto.randomUUID();
+      anim = { ...animation, id: animId };
+
+      store.setAnimations([...store.animations, anim]);
+    }
+
+    // Calculate position as percentage of phase duration
+    const phaseDur = store.phaseDurations[currentPhase];
+    const position = Math.max(0, Math.min(100, (timeMs / phaseDur) * 100));
+
+    // Create new keyframe
+    const newKeyframe: StoreKeyframe = {
+      id: crypto.randomUUID(),
+      animation_id: anim.id,
+      position: Math.round(position),
+      properties: {},
+      easing: 'linear',
+    };
+
+    store.setKeyframes([...store.keyframes, newKeyframe]);
+    store.selectKeyframes([newKeyframe.id]);
+
+    console.log('[Timeline] Added keyframe at', Math.round(position) + '%', 'for element', targetElementId);
+    closeContextMenu();
+  }, [currentTemplateId, currentPhase, closeContextMenu]);
+
   // Initialize and reinitialize timeline when phase changes
   useEffect(() => {
     if (!timelineContainerRef.current || !isVisible) return;
@@ -605,17 +754,20 @@ export function Timeline() {
       // Keyframe selection via library event
       timeline.onSelected((event: TimelineSelectedEvent) => {
         const store = useDesignerStore.getState();
+        console.log('[Timeline] onSelected event fired:', event);
 
         if (event.selected && event.selected.length > 0) {
           const selectedIds: string[] = [];
 
           event.selected.forEach((sel) => {
             const data = sel.keyframe?.data;
+            console.log('[Timeline] Selected keyframe data:', data);
             if (data?.keyframeId && !data?.isPlaceholder) {
               selectedIds.push(data.keyframeId);
             }
           });
 
+          console.log('[Timeline] Selecting keyframe IDs:', selectedIds);
           if (selectedIds.length > 0) {
             store.selectKeyframes(selectedIds);
             // DO NOT deselect element when keyframe is selected
@@ -626,6 +778,7 @@ export function Timeline() {
             store.setPlayhead(keyframeTime);
           }
         } else {
+          console.log('[Timeline] Clearing keyframe selection');
           store.selectKeyframes([]);
         }
       });
@@ -675,32 +828,56 @@ export function Timeline() {
           // Get click position relative to canvas
           const rect = canvas.getBoundingClientRect();
           const clickX = e.clientX - rect.left;
+          const clickY = e.clientY - rect.top;
 
-          // Only look for keyframes in the CURRENTLY SELECTED element's animations
-          // This prevents clicking anywhere on the timeline from selecting random elements
+          // Calculate which row was clicked based on Y position
+          const headerHeight = 30;
+          const rowIndex = Math.floor((clickY - headerHeight) / ROW_HEIGHT);
+
           const {
             animations: storeAnimations,
             keyframes: storeKeyframes,
             currentPhase: phase,
-            selectedElementIds
+            selectedElementIds,
+            phaseDurations
           } = store;
 
-          // If no element is selected, don't try to find keyframes
-          if (selectedElementIds.length === 0) return;
+          const phaseDur = phaseDurations[phase];
 
-          // Only search within the selected element's animations
-          const selectedElementAnimations = storeAnimations.filter(
-            a => a.phase === phase && selectedElementIds.includes(a.element_id)
+          // Get elements for current template to determine which row was clicked
+          const currentElements = store.elements.filter(el => el.template_id === store.currentTemplateId);
+          const clickedElement = rowIndex >= 0 && rowIndex < currentElements.length
+            ? currentElements[rowIndex]
+            : null;
+
+          // Determine which element's keyframes to search
+          // Priority: clicked row's element > selected element > none
+          let targetElementId: string | null = null;
+          if (clickedElement) {
+            targetElementId = clickedElement.id;
+          } else if (selectedElementIds.length > 0) {
+            targetElementId = selectedElementIds[0];
+          }
+
+          if (!targetElementId) {
+            console.log('[Timeline] No element to search for keyframes');
+            return;
+          }
+
+          // Search within the target element's animations
+          const targetAnimations = storeAnimations.filter(
+            a => a.phase === phase && a.element_id === targetElementId
           );
 
           let foundKeyframeId: string | null = null;
           let closestDistance = 30; // Pixel tolerance for click detection
 
-          selectedElementAnimations.forEach(anim => {
+          targetAnimations.forEach(anim => {
             const animKeyframes = storeKeyframes.filter(kf => kf.animation_id === anim.id);
 
             animKeyframes.forEach(kf => {
-              const kfTime = anim.delay + (kf.position / 100) * anim.duration;
+              // Use phase duration for time calculation (same as buildTimelineModel)
+              const kfTime = (kf.position / 100) * phaseDur;
               const kfX = tl.valToPx(kfTime);
               const distance = Math.abs(kfX - clickX);
 
@@ -712,22 +889,25 @@ export function Timeline() {
           });
 
           if (foundKeyframeId) {
-            // Only select the keyframe - DO NOT change element selection
-            // Element selection is managed via the element list on the left side
+            console.log('[Timeline] Canvas click selecting keyframe:', foundKeyframeId);
             store.selectKeyframes([foundKeyframeId]);
+          } else {
+            console.log('[Timeline] No keyframe found near click');
           }
         };
 
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mousemove', handleMouseMove);
         canvas.addEventListener('click', handleCanvasClick);
-        
+        canvas.addEventListener('contextmenu', handleContextMenu as EventListener);
+
         // Store cleanup function to remove all listeners
         const originalDispose = timeline.dispose?.bind(timeline);
         timeline.dispose = () => {
           canvas.removeEventListener('mousedown', handleMouseDown);
           canvas.removeEventListener('mousemove', handleMouseMove);
           canvas.removeEventListener('click', handleCanvasClick);
+          canvas.removeEventListener('contextmenu', handleContextMenu as EventListener);
           if (originalDispose) originalDispose();
         };
       }
@@ -741,7 +921,7 @@ export function Timeline() {
         timelineRef.current = null;
       }
     };
-  }, [currentPhase, maxDuration, buildTimelineModel, isVisible]);
+  }, [currentPhase, maxDuration, buildTimelineModel, isVisible, handleContextMenu]);
 
   // Update timeline model when data changes
   useEffect(() => {
@@ -1554,6 +1734,83 @@ export function Timeline() {
           <span><kbd className="px-1 py-0.5 bg-muted rounded text-[9px]">Esc</kbd> Deselect</span>
         </div>
       </div>
+
+      {/* Context Menu (right-click menu) */}
+      {contextMenuPosition && (
+        <>
+          {/* Backdrop to close menu on click outside */}
+          <div
+            className="fixed inset-0 z-50"
+            onClick={closeContextMenu}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              closeContextMenu();
+            }}
+          />
+          {/* Context menu */}
+          <div
+            className="fixed z-50 min-w-[180px] bg-popover border border-border rounded-md shadow-lg py-1 text-sm"
+            style={{
+              left: contextMenuPosition.x,
+              top: contextMenuPosition.y,
+            }}
+          >
+            {/* Delete Selected Keyframes */}
+            <button
+              className={cn(
+                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                contextMenuSelectedKeyframes.length === 0 && "opacity-50 cursor-not-allowed"
+              )}
+              disabled={contextMenuSelectedKeyframes.length === 0}
+              onClick={() => {
+                if (contextMenuSelectedKeyframes.length > 0) {
+                  deleteSelectedKeyframes();
+                  closeContextMenu();
+                }
+              }}
+            >
+              <span className="flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-red-400" />
+                <span>Delete Keyframe{contextMenuSelectedKeyframes.length > 1 ? 's' : ''}</span>
+              </span>
+              <span className="text-xs text-muted-foreground">Del</span>
+            </button>
+
+            {/* Separator */}
+            <div className="h-px bg-border my-1" />
+
+            {/* Add Keyframe Here */}
+            <button
+              className={cn(
+                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+              )}
+              disabled={!contextMenuElementId && selectedElementIds.length === 0}
+              onClick={() => handleAddKeyframeAtTime(contextMenuTime, contextMenuElementId)}
+            >
+              <span className="flex items-center gap-2">
+                <Diamond className="w-4 h-4 text-amber-400" />
+                <span>Add Keyframe at {formatTime(contextMenuTime)}</span>
+              </span>
+            </button>
+
+            {/* Add Keyframe at Playhead */}
+            <button
+              className={cn(
+                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+              )}
+              disabled={!contextMenuElementId && selectedElementIds.length === 0}
+              onClick={() => handleAddKeyframeAtTime(playheadPosition, contextMenuElementId)}
+            >
+              <span className="flex items-center gap-2">
+                <Plus className="w-4 h-4 text-violet-400" />
+                <span>Add Keyframe at Playhead</span>
+              </span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

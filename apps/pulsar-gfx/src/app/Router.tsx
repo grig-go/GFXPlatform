@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { WorkspacePage } from '@/pages/WorkspacePage';
 import { TemplatesPage } from '@/pages/TemplatesPage';
+import { PlayoutLogPage } from '@/pages/PlayoutLogPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { SignUpPage } from '@/pages/SignUpPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
@@ -40,6 +41,16 @@ export function Router() {
         <Route path="custom-ui" element={<div className="h-full flex items-center justify-center text-muted-foreground">Custom UI Builder - Coming Soon</div>} />
         <Route path="custom-ui/:id" element={<div className="h-full flex items-center justify-center text-muted-foreground">Custom UI Editor - Coming Soon</div>} />
       </Route>
+
+      {/* Tools routes (outside main layout) */}
+      <Route
+        path="/tools/playout-log"
+        element={
+          <PrivateRoute>
+            <PlayoutLogPage />
+          </PrivateRoute>
+        }
+      />
 
       {/* Settings routes (outside main layout) */}
       <Route

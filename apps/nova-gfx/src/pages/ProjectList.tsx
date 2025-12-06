@@ -83,27 +83,34 @@ export function ProjectList() {
       } else {
         console.log('[ProjectList] Loaded', data?.length || 0, 'projects from Supabase');
         // Merge Supabase projects with localStorage projects
-        // localStorage projects override Supabase ones, but preserve thumbnail_url from Supabase
-        const supabaseProjects = data || [];
-        const supabaseProjectMap = new Map(supabaseProjects.map((p: Project) => [p.id, p]));
-        const localProjectIds = new Set(localProjects.map(p => p.id));
+        // Use a Map to ensure unique IDs - localStorage projects take priority but preserve Supabase thumbnail
+        const supabaseProjects: Project[] = data || [];
 
-        // For localStorage projects that exist in Supabase, merge the thumbnail_url
-        const mergedLocalProjects = localProjects.map(localProject => {
-          const supabaseProject = supabaseProjectMap.get(localProject.id);
-          if (supabaseProject?.thumbnail_url) {
-            return { ...localProject, thumbnail_url: supabaseProject.thumbnail_url };
-          }
-          return localProject;
+        // Create a map with project ID as key to ensure uniqueness
+        const projectMap = new Map<string, Project>();
+
+        // First, add all Supabase projects
+        supabaseProjects.forEach(p => {
+          projectMap.set(p.id, p);
         });
 
-        const mergedProjects = [
-          ...mergedLocalProjects,
-          ...supabaseProjects.filter((p: Project) => !localProjectIds.has(p.id)),
-        ].sort(
+        // Then, overlay localStorage projects (they take priority but preserve Supabase thumbnail_url)
+        localProjects.forEach(localProject => {
+          const existingProject = projectMap.get(localProject.id);
+          if (existingProject?.thumbnail_url && !localProject.thumbnail_url) {
+            // Preserve Supabase thumbnail if localStorage doesn't have one
+            projectMap.set(localProject.id, { ...localProject, thumbnail_url: existingProject.thumbnail_url });
+          } else {
+            // localStorage takes priority
+            projectMap.set(localProject.id, localProject);
+          }
+        });
+
+        // Convert map to array and sort by updated_at
+        const mergedProjects = Array.from(projectMap.values()).sort(
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
-        console.log('[ProjectList] Total merged projects:', mergedProjects.length);
+        console.log('[ProjectList] Total merged projects:', mergedProjects.length, '(deduplicated by ID)');
         setProjects(mergedProjects);
       }
     } catch (err) {

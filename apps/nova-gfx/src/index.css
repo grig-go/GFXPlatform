@@ -145,6 +145,42 @@
   to { transform: scale(1); opacity: 1; }
 }
 
+/* Ticker flip animation - enter from bottom */
+@keyframes flipEnter {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-flip-enter {
+  animation: flipEnter var(--flip-duration, 500ms) ease-out forwards;
+}
+
+/* Ticker flip animation - exit to top */
+@keyframes flipExit {
+  from { transform: translateY(0); }
+  to { transform: translateY(-100%); }
+}
+
+.animate-flip-exit {
+  animation: flipExit var(--flip-duration, 500ms) ease-out forwards;
+}
+
+/* Ticker scroll animations - consistent gap between all items */
+@keyframes ticker-scroll-px {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--ticker-translate, -50%)); }
+}
+
+@keyframes ticker-scroll-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes ticker-scroll-right {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
 /* Loading animation */
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; }

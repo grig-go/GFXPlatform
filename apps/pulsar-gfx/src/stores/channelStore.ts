@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '@emergent-platform/supabase-client';
 import { useUIPreferencesStore } from './uiPreferencesStore';
+import { usePageStore } from './pageStore';
+import { usePlayoutLogStore } from './playoutLogStore';
 
 // Dev user ID for development (no auth)
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000002';
@@ -164,12 +166,15 @@ interface ChannelStore {
       animations?: any[];
       keyframes?: any[];
     },
-    payload?: Record<string, any>
+    payload?: Record<string, any>,
+    pageName?: string,
+    projectName?: string
   ) => Promise<void>;
   stopOnChannel: (channelId: string, layerIndex: number, layerId?: string) => Promise<void>;
 
   // Realtime subscription
   subscribeToChannelState: (channelId: string) => () => void;
+  subscribeToChannelStatus: () => () => void;
 }
 
 export const useChannelStore = create<ChannelStore>((set, get) => ({
@@ -466,7 +471,45 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     }
   },
 
-  playOnChannel: async (channelId, pageId, layerIndex, template, payload) => {
+  playOnChannel: async (channelId, pageId, layerIndex, template, payload, pageName?: string, projectName?: string) => {
+    const channel = get().channels.find((c) => c.id === channelId);
+    console.log('[channelStore] playOnChannel called:', { channelId, pageId, layerIndex, pageName, projectName, channel: !!channel });
+
+    // Fire-and-forget: Log events async without blocking command execution
+    // This ensures logging doesn't affect graphics performance or FPS
+    if (channel) {
+      console.log('[channelStore] Logging playout event for channel:', channel.name);
+
+      // End any active playout on this layer (mark as 'replaced')
+      usePlayoutLogStore.getState().logStop({
+        channelId,
+        layerIndex,
+        endReason: 'replaced',
+      }).catch((err) => console.warn('Failed to log stop:', err));
+
+      // Log the new play event
+      const layerConfig = channel.layerConfig?.find((l) => l.index === layerIndex);
+      usePlayoutLogStore.getState().logPlay({
+        organizationId: channel.organizationId,
+        channelId,
+        channelCode: channel.channelCode,
+        channelName: channel.name,
+        layerIndex,
+        layerName: layerConfig?.name,
+        pageId,
+        pageName: pageName || 'Unknown Page',
+        templateId: template.id,
+        templateName: template.name,
+        projectId: template.projectId,
+        projectName: projectName,
+        payload: payload,
+        operatorId: DEV_USER_ID,
+        triggerSource: 'manual',
+      }).catch((err) => console.warn('Failed to log play:', err));
+    } else {
+      console.warn('[channelStore] Channel not found, skipping playout log');
+    }
+
     await get().sendCommandToChannel(channelId, {
       type: 'play',
       layerIndex,
@@ -487,6 +530,13 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   stopOnChannel: async (channelId, layerIndex, layerId) => {
+    // Fire-and-forget: Log stop event async without blocking command execution
+    usePlayoutLogStore.getState().logStop({
+      channelId,
+      layerIndex,
+      endReason: 'manual',
+    }).catch((err) => console.warn('Failed to log stop:', err));
+
     await get().sendCommandToChannel(channelId, {
       type: 'stop',
       layerIndex,
@@ -525,6 +575,78 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
             get().channelStates.set(channelId, state);
             set({ channelStates: new Map(get().channelStates) });
           }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  },
+
+  subscribeToChannelStatus: () => {
+    // Subscribe to all channel status changes (player_status updates)
+    const subscription = supabase
+      .channel('channel-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'pulsar_channels',
+        },
+        (payload: any) => {
+          const newData = payload.new as any;
+          const oldData = payload.old as any;
+
+          // Check if player_status changed to 'disconnected'
+          if (newData.player_status === 'disconnected' && oldData?.player_status !== 'disconnected') {
+            console.log('[channelStore] Channel went offline:', newData.id, newData.channel_code);
+
+            // Reset on-air state for all pages assigned to this channel
+            usePageStore.getState().resetPagesOnAirForChannel(newData.id);
+
+            // End all active playout log entries for this channel (fire-and-forget)
+            supabase.rpc('end_all_channel_playout', {
+              p_channel_id: newData.id,
+              p_end_reason: 'channel_offline',
+            }).then(({ error }) => {
+              if (error) console.warn('Failed to end playout logs:', error);
+            });
+          }
+
+          // Update the channel in our local state
+          const updatedChannel: Channel = {
+            id: newData.id,
+            organizationId: newData.organization_id,
+            name: newData.name,
+            channelCode: newData.channel_code,
+            channelType: newData.channel_type,
+            playerUrl: newData.player_url,
+            playerStatus: newData.player_status,
+            lastHeartbeat: newData.last_heartbeat ? new Date(newData.last_heartbeat) : undefined,
+            loadedProjectId: newData.loaded_project_id,
+            lastInitialized: newData.last_initialized ? new Date(newData.last_initialized) : undefined,
+            layerCount: newData.layer_count,
+            layerConfig: newData.layer_config || [],
+            assignedOperators: newData.assigned_operators || [],
+            isLocked: newData.is_locked,
+            lockedBy: newData.locked_by,
+            autoInitializeOnConnect: newData.auto_initialize_on_connect,
+            autoInitializeOnPublish: newData.auto_initialize_on_publish,
+            createdAt: new Date(newData.created_at),
+            updatedAt: new Date(newData.updated_at),
+          };
+
+          set({
+            channels: get().channels.map((c) =>
+              c.id === updatedChannel.id ? updatedChannel : c
+            ),
+            // Update selectedChannel if it's the one that changed
+            selectedChannel: get().selectedChannel?.id === updatedChannel.id
+              ? updatedChannel
+              : get().selectedChannel,
+          });
         }
       )
       .subscribe();

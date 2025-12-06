@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useDesignerStore } from '@/stores/designerStore';
 import { getAnimatedProperties } from '@/lib/animation';
+import { loadFonts, SYSTEM_FONTS } from '@/lib/fonts';
 import { ChartElement } from '@/components/canvas/ChartElement';
 import { MapElement } from '@/components/canvas/MapElement';
 import { VideoElement } from '@/components/canvas/VideoElement';
@@ -276,6 +277,26 @@ export function Preview() {
         }
       }
 
+      // Check for ticker items override (key format: `${elementId}_items`)
+      const tickerItemsKey = `${element.id}_items`;
+      if (contentOverrides[tickerItemsKey] !== undefined && element.content?.type === 'ticker') {
+        try {
+          // Parse items - can be a JSON string or already an array
+          const itemsOverride = typeof contentOverrides[tickerItemsKey] === 'string'
+            ? JSON.parse(contentOverrides[tickerItemsKey])
+            : contentOverrides[tickerItemsKey];
+
+          if (Array.isArray(itemsOverride)) {
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, items: itemsOverride },
+            };
+          }
+        } catch (e) {
+          console.warn('Failed to parse ticker items override:', e);
+        }
+      }
+
       // Check by element name (case-insensitive, with underscore normalization)
       const elementNameLower = element.name?.toLowerCase().replace(/\s+/g, '_');
       for (const [key, value] of Object.entries(contentOverrides)) {
@@ -343,6 +364,60 @@ export function Preview() {
 
     return result;
   }, [elementsWithOverrides, visibleTemplates, selectedTemplateId]);
+
+  // Load fonts for all elements when they change
+  // This ensures fonts are available in preview mode (especially for OBS/external windows)
+  useEffect(() => {
+    if (elements.length === 0) return;
+
+    // Extract unique font families from all elements
+    const fontFamilies = new Set<string>();
+    const systemFontFamilies = new Set(SYSTEM_FONTS.map(f => f.family));
+
+    elements.forEach(element => {
+      // Check element.styles.fontFamily
+      const fontFamily = element.styles?.fontFamily;
+      if (fontFamily && typeof fontFamily === 'string') {
+        // Handle font family strings like "'Inter', sans-serif" - extract the first font
+        const primaryFont = fontFamily.split(',')[0].trim().replace(/['"]/g, '');
+        if (primaryFont && !systemFontFamilies.has(primaryFont)) {
+          fontFamilies.add(primaryFont);
+        }
+      }
+
+      // Check chart options for font families
+      if (element.content?.type === 'chart' && element.content.options) {
+        const chartFont = element.content.options.fontFamily;
+        if (chartFont && typeof chartFont === 'string' && !systemFontFamilies.has(chartFont)) {
+          fontFamilies.add(chartFont);
+        }
+      }
+
+      // Check table content for font families (via styles or headerFontFamily)
+      if (element.content?.type === 'table') {
+        const tableContent = element.content as Record<string, unknown>;
+        const headerFont = tableContent.headerFontFamily;
+        if (headerFont && typeof headerFont === 'string' && !systemFontFamilies.has(headerFont)) {
+          fontFamilies.add(headerFont);
+        }
+      }
+
+      // Check ticker config for font families
+      if (element.content?.type === 'ticker' && element.content.config) {
+        const tickerConfig = element.content.config as unknown as Record<string, unknown>;
+        const tickerFont = tickerConfig.fontFamily;
+        if (tickerFont && typeof tickerFont === 'string' && !systemFontFamilies.has(tickerFont)) {
+          fontFamilies.add(tickerFont);
+        }
+      }
+    });
+
+    if (fontFamilies.size > 0) {
+      const fontsToLoad = Array.from(fontFamilies);
+      console.log('[Preview] Loading fonts:', fontsToLoad);
+      loadFonts(fontsToLoad);
+    }
+  }, [elements]);
 
   // Get animations for current phase and visible elements
   const currentAnimations = useMemo(() => {
