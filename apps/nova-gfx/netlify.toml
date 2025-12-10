@@ -1,5 +1,5 @@
 [build]
-  command = "cd ../.. && pnpm install && pnpm --filter nova-gfx build && pnpm --filter docs build && cp -r ../docs/build dist/docs"
+  command = "cd ../.. && pnpm install && pnpm --filter nova-gfx build && pnpm --filter docs build && cp -r apps/docs/build apps/nova-gfx/dist/docs"
   publish = "dist"
   functions = "netlify/functions"
 
