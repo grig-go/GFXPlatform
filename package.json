@@ -5,9 +5,10 @@
   "description": "Emergent Platform - Broadcast Graphics Design & Control",
   "scripts": {
     "dev": "turbo dev",
-    "dev:nova": "turbo dev --filter=nova-gfx",
-    "dev:pulsar": "turbo dev --filter=pulsar-gfx",
+    "dev:nova": "turbo dev --filter=nova-gfx --filter=docs",
+    "dev:pulsar": "turbo dev --filter=pulsar-gfx --filter=docs",
     "dev:player": "turbo dev --filter=nova-player",
+    "dev:docs": "turbo dev --filter=docs",
     "build": "turbo build",
     "build:nova": "turbo build --filter=nova-gfx",
     "build:packages": "turbo build --filter='./packages/*'",

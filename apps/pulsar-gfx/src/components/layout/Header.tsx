@@ -253,6 +253,11 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
               <Settings className="mr-2 h-4 w-4" />
               Preferences
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowKeyboardShortcuts}>
+              <Keyboard className="mr-2 h-4 w-4" />
+              Keyboard Shortcuts
+              <span className="ml-auto text-xs text-muted-foreground">Ctrl+/</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -265,15 +270,10 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onClick={() => window.open('http://localhost:3001/docs/apps/pulsar-gfx', '_blank')}>
+            <DropdownMenuItem onClick={() => window.open(import.meta.env.DEV ? 'http://localhost:3000/docs/apps/nova-gfx' : `${import.meta.env.VITE_NOVA_GFX_URL || ''}/docs/apps/nova-gfx`, '_blank')}>
               <HelpCircle className="mr-2 h-4 w-4" />
               Documentation
               <ExternalLink className="ml-auto h-3 w-3 text-muted-foreground" />
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onShowKeyboardShortcuts}>
-              <Keyboard className="mr-2 h-4 w-4" />
-              Keyboard Shortcuts
-              <span className="ml-auto text-xs text-muted-foreground">Ctrl+/</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Contact Support</DropdownMenuItem>

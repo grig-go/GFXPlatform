@@ -59,15 +59,32 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
         unsubscribeChannelStatus = useChannelStore.getState().subscribeToChannelStatus();
         console.log('Subscribed to channel status updates');
 
+        // Check for project ID in URL query params (for "Open in Pulsar" from Nova)
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectIdFromUrl = urlParams.get('project');
+
         // Restore last project from preferences
         const prefs = useUIPreferencesStore.getState();
         const projects = useProjectStore.getState().projects;
-        console.log('Restoring project from preferences:', {
+        console.log('Restoring project:', {
+          projectIdFromUrl,
           lastProjectId: prefs.lastProjectId,
           projectsCount: projects.length,
         });
 
-        if (prefs.lastProjectId) {
+        // Priority: URL param > saved preference > first project
+        if (projectIdFromUrl) {
+          const urlProject = projects.find(p => p.id === projectIdFromUrl);
+          if (urlProject) {
+            console.log('Selecting project from URL:', urlProject.name);
+            await useProjectStore.getState().selectProject(projectIdFromUrl);
+            prefs.setLastProjectId(projectIdFromUrl);
+            // Clean up URL by removing the query param
+            window.history.replaceState({}, '', window.location.pathname);
+          } else {
+            console.warn('Project from URL not found:', projectIdFromUrl);
+          }
+        } else if (prefs.lastProjectId) {
           const savedProject = projects.find(p => p.id === prefs.lastProjectId);
           if (savedProject) {
             console.log('Selecting saved project:', savedProject.name);

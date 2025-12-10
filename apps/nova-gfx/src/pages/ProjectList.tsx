@@ -1,6 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FolderOpen, Search, MoreHorizontal, Trash2, Copy, Settings, Sparkles, Layers } from 'lucide-react';
+import {
+  Plus,
+  FolderOpen,
+  Search,
+  MoreHorizontal,
+  Trash2,
+  Copy,
+  Pencil,
+  LayoutGrid,
+  List,
+  Eye,
+  Send,
+  Gamepad2,
+  Library,
+  BookTemplate,
+  ArrowUpDown,
+  ChevronDown,
+} from 'lucide-react';
 import {
   Button,
   Input,
@@ -9,35 +26,73 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@emergent-platform/ui';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { ConfirmDialog } from '@/components/dialogs/ConfirmDialog';
+import { AIModelSettingsDialog } from '@/components/dialogs/AIModelSettingsDialog';
+import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
+import { SystemTemplatesDialog } from '@/components/dialogs/SystemTemplatesDialog';
+import { TopBar } from '@/components/layout/TopBar';
 import { supabase } from '@emergent-platform/supabase-client';
-import { getStarterProjects, createLocalProjectFromStarter } from '@/services/starterProjectService';
-import { useDesignerStore } from '@/stores/designerStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import {
+  fetchProject,
+  fetchLayers,
+  fetchTemplates,
+  fetchElements,
+  fetchAnimations,
+  fetchKeyframes,
+} from '@/services/projectService';
 import type { Project } from '@emergent-platform/types';
-import type { StarterProject } from '@/data/starterProjects/types';
+
+type ViewMode = 'list' | 'cards';
+type SortBy = 'name' | 'updated_at' | 'created_at';
+type SortOrder = 'asc' | 'desc';
 
 export function ProjectList() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
-  const [isCreatingFromStarter, setIsCreatingFromStarter] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
-  const starterProjects = getStarterProjects();
+  const [showAISettingsDialog, setShowAISettingsDialog] = useState(false);
+  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+  const [showTemplatesDialog, setShowTemplatesDialog] = useState(false);
+
+  // View and filter state
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sortBy, setSortBy] = useState<SortBy>('updated_at');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  // Keyboard shortcuts
+  const { shortcuts, updateShortcut, resetAllShortcuts } = useKeyboardShortcuts({
+    onShowShortcuts: () => setShowShortcutsDialog(true),
+  });
 
   // Track if we've already started loading to prevent double-loading in strict mode
   const hasStartedLoading = useRef(false);
+  const lastOrgId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!hasStartedLoading.current) {
+    // Load projects on initial mount or when organization changes
+    const orgChanged = lastOrgId.current !== undefined && lastOrgId.current !== user?.organizationId;
+
+    if (!hasStartedLoading.current || orgChanged) {
       hasStartedLoading.current = true;
+      lastOrgId.current = user?.organizationId;
       loadProjects();
     }
-  }, []);
+  }, [user?.organizationId]);
 
   const loadProjects = async () => {
     console.log('[ProjectList] Loading projects...');
@@ -65,11 +120,18 @@ export function ProjectList() {
         setTimeout(() => reject(new Error('Query timeout')), 10000)
       );
 
-      const queryPromise = supabase
+      // Build query - filter by organization if user is logged in
+      let query = supabase
         .from('gfx_projects')
         .select('*')
-        .eq('archived', false)
-        .order('updated_at', { ascending: false });
+        .eq('archived', false);
+
+      // Filter by user's organization if they have one
+      if (user?.organizationId) {
+        query = query.eq('organization_id', user.organizationId);
+      }
+
+      const queryPromise = query.order('updated_at', { ascending: false });
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
@@ -83,7 +145,6 @@ export function ProjectList() {
       } else {
         console.log('[ProjectList] Loaded', data?.length || 0, 'projects from Supabase');
         // Merge Supabase projects with localStorage projects
-        // Use a Map to ensure unique IDs - localStorage projects take priority but preserve Supabase thumbnail
         const supabaseProjects: Project[] = data || [];
 
         // Create a map with project ID as key to ensure uniqueness
@@ -98,10 +159,8 @@ export function ProjectList() {
         localProjects.forEach(localProject => {
           const existingProject = projectMap.get(localProject.id);
           if (existingProject?.thumbnail_url && !localProject.thumbnail_url) {
-            // Preserve Supabase thumbnail if localStorage doesn't have one
             projectMap.set(localProject.id, { ...localProject, thumbnail_url: existingProject.thumbnail_url });
           } else {
-            // localStorage takes priority
             projectMap.set(localProject.id, localProject);
           }
         });
@@ -121,42 +180,32 @@ export function ProjectList() {
     }
   };
 
-  const filteredProjects = projects.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter and sort projects
+  const filteredAndSortedProjects = projects
+    .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = (a.name || '').localeCompare(b.name || '');
+      } else if (sortBy === 'updated_at') {
+        comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      } else if (sortBy === 'created_at') {
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
   const createNewProject = () => {
     setShowNewProjectDialog(true);
   };
 
-  const createFromStarter = async (starter: StarterProject) => {
-    setIsCreatingFromStarter(true);
-    try {
-      // Create local project from starter
-      const projectData = createLocalProjectFromStarter(starter);
-      
-      // Save to localStorage (for demo)
-      localStorage.setItem(`nova-project-${projectData.project.id}`, JSON.stringify(projectData));
-      
-      // Navigate to the new project
-      navigate(`/projects/${projectData.project.id}`);
-    } catch (error) {
-      console.error('Error creating project from starter:', error);
-    } finally {
-      setIsCreatingFromStarter(false);
-    }
-  };
-  
   const duplicateProject = async (projectId: string) => {
     try {
       const { duplicateProject: duplicateProjectService } = await import('@/services/projectService');
       const newProject = await duplicateProjectService(projectId);
-      
+
       if (newProject) {
-        // Reload projects to show the new duplicate
         await loadProjects();
-        // Optionally navigate to the new project
-        // navigate(`/projects/${newProject.id}`);
       } else {
         console.error('Failed to duplicate project');
       }
@@ -164,7 +213,7 @@ export function ProjectList() {
       console.error('Error duplicating project:', err);
     }
   };
-  
+
   const handleDeleteClick = (projectId: string) => {
     setProjectToDelete(projectId);
     setDeleteConfirmOpen(true);
@@ -176,9 +225,8 @@ export function ProjectList() {
     try {
       const { deleteProject: deleteProjectService } = await import('@/services/projectService');
       const success = await deleteProjectService(projectToDelete);
-      
+
       if (success) {
-        // Remove from local state
         setProjects(projects.filter(p => p.id !== projectToDelete));
       } else {
         console.error('Failed to delete project');
@@ -191,142 +239,310 @@ export function ProjectList() {
     }
   };
 
+  // Preview project - loads project data and opens preview window
+  const handlePreview = async (projectId: string) => {
+    console.log('[ProjectList] handlePreview called for project:', projectId);
+    try {
+      // Load project data from database
+      const project = await fetchProject(projectId);
+      if (!project) {
+        console.error('Project not found:', projectId);
+        return;
+      }
+
+      const [layers, templates] = await Promise.all([
+        fetchLayers(projectId),
+        fetchTemplates(projectId),
+      ]);
+
+      // Fetch all elements, animations, and keyframes for all templates
+      const allElements: any[] = [];
+      const allAnimations: any[] = [];
+      const allKeyframes: any[] = [];
+
+      for (const template of templates) {
+        const [elements, animations] = await Promise.all([
+          fetchElements(template.id),
+          fetchAnimations(template.id),
+        ]);
+
+        allElements.push(...elements);
+
+        // Fetch keyframes for each animation
+        for (const anim of animations) {
+          const keyframes = await fetchKeyframes(anim.id);
+          allKeyframes.push(...keyframes);
+        }
+        allAnimations.push(...animations);
+      }
+
+      // Store preview data in localStorage for the preview window
+      const previewData = {
+        layers,
+        templates,
+        elements: allElements,
+        animations: allAnimations,
+        keyframes: allKeyframes,
+        currentTemplateId: templates[0]?.id || null,
+        project,
+      };
+      localStorage.setItem('nova-preview-data', JSON.stringify(previewData));
+
+      // Open preview window with project dimensions
+      const width = project.canvas_width || 1920;
+      const height = project.canvas_height || 1080;
+      const windowWidth = Math.min(width + 60, window.screen.width - 100);
+      const windowHeight = Math.min(height + 140, window.screen.height - 100);
+
+      window.open(
+        '/preview',
+        `nova-preview-${projectId}`,
+        `width=${windowWidth},height=${windowHeight},menubar=no,toolbar=no,location=no,status=no,resizable=yes`
+      );
+    } catch (err) {
+      console.error('Failed to load project for preview:', err);
+    }
+  };
+
+  // Publish project - opens the project and shows publish dialog
+  const handlePublish = (projectId: string) => {
+    console.log('[ProjectList] handlePublish called for project:', projectId);
+    // Navigate to project with publish param to auto-open publish dialog
+    navigate(`/projects/${projectId}?action=publish`);
+  };
+
+  // Control project - open Pulsar GFX with this project selected
+  const handleControl = (projectId: string) => {
+    // Open Pulsar GFX (port 5174) with the project ID
+    // Pulsar will load the project's templates for playback control
+    window.open(
+      `http://localhost:5174/templates?projectId=${projectId}`,
+      `pulsar-gfx-${projectId}`,
+      'width=1400,height=900,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
+    );
+  };
+
+  const handleLibrary = () => {
+    console.log('Open Library');
+    // TODO: Implement library
+  };
+
+  const handleTemplates = () => {
+    setShowTemplatesDialog(true);
+  };
+
   return (
-    <div className="absolute inset-0 bg-background overflow-y-auto">
-      {/* Header */}
-      <header className="sticky top-0 z-50 h-12 sm:h-14 border-b bg-card flex items-center px-3 sm:px-6 shadow-md">
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
-          {/* Emergent Logo - hidden on small screens */}
-          <svg 
-            className="h-4 text-foreground hidden md:block"
-            viewBox="0 0 1185 176" 
-            xmlns="http://www.w3.org/2000/svg"
-            aria-label="EMERGENT"
-          >
-            <g transform="translate(0,176) scale(0.1,-0.1)" fill="currentColor">
-              {/* E */}
-              <path d="M712 1377 l-122 -122 0 -498 0 -497 570 0 570 0 0 135 0 135 -435 0 -435 0 0 110 0 110 350 0 350 0 0 130 0 130 -350 0 -350 0 0 110 0 110 435 0 435 0 0 135 0 135 -448 0 -447 0 -123 -123z"/>
-              {/* M */}
-              <path d="M1860 880 l0 -620 135 0 135 0 2 412 3 411 210 -251 c160 -192 212 -249 220 -239 6 8 100 122 210 255 l200 242 3 -415 2 -415 130 0 130 0 0 620 0 620 -137 0 -138 -1 -205 -249 c-192 -234 -206 -249 -221 -232 -9 9 -103 122 -208 250 l-192 232 -140 0 -139 0 0 -620z"/>
-              {/* E */}
-              <path d="M3450 880 l0 -620 570 0 570 0 0 135 0 135 -435 0 -435 0 0 110 0 110 350 0 350 0 0 130 0 130 -350 0 -350 0 0 110 0 110 435 0 435 0 0 135 0 135 -570 0 -570 0 0 -620z"/>
-              {/* R */}
-              <path d="M4760 880 l0 -620 130 0 130 0 0 205 0 205 174 0 174 0 171 -205 171 -205 135 0 135 0 0 48 c0 46 -4 51 -130 202 l-129 155 43 7 c63 9 110 34 152 80 66 74 69 88 69 333 l0 220 -30 55 c-33 60 -96 114 -153 130 -23 6 -224 10 -539 10 l-503 0 0 -620z m960 205 l0 -145 -350 0 -350 0 0 145 0 145 350 0 350 0 0 -145z"/>
-              {/* G */}
-              <path d="M6315 1476 c-28 -12 -65 -40 -84 -61 -68 -77 -66 -65 -66 -535 0 -470 -2 -458 66 -535 19 -21 56 -49 84 -61 50 -24 51 -24 465 -24 396 0 417 1 460 21 60 27 98 64 126 124 23 49 24 57 24 313 l0 262 -265 0 -265 0 0 -135 0 -135 135 0 135 0 0 -90 0 -90 -350 0 -350 0 0 350 0 350 350 0 350 0 0 -50 0 -50 130 0 130 0 0 88 c0 134 -46 214 -150 261 -43 20 -64 21 -460 21 -414 0 -415 0 -465 -24z"/>
-              {/* E */}
-              <path d="M7590 880 l0 -620 565 0 565 0 0 135 0 135 -435 0 -436 0 3 108 3 107 348 3 347 2 0 130 0 130 -347 2 -348 3 -3 108 -3 107 436 0 435 0 0 135 0 135 -565 0 -565 0 0 -620z"/>
-              {/* N */}
-              <path d="M8890 880 l0 -620 130 0 130 0 0 411 c0 234 4 409 9 407 5 -1 161 -186 347 -410 l338 -408 138 0 138 0 0 620 0 620 -135 0 -135 0 -2 -410 -3 -410 -340 410 -340 410 -137 0 -138 0 0 -620z"/>
-              {/* T */}
-              <path d="M10250 1365 l0 -135 240 0 240 0 0 -485 0 -485 135 0 135 0 0 485 0 485 125 0 c69 0 125 3 125 8 0 4 -57 65 -128 135 l-127 127 -373 0 -372 0 0 -135z"/>
-            </g>
-          </svg>
+    <div className="absolute inset-0 bg-background flex flex-col overflow-hidden">
+      {/* Top Menu Bar - same as Designer */}
+      <TopBar
+        onOpenAISettings={() => setShowAISettingsDialog(true)}
+        onShowKeyboardShortcuts={() => setShowShortcutsDialog(true)}
+      />
 
-          {/* App Icon */}
-          <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-[8px] sm:rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-[11px] sm:text-xs font-bold sm:text-[15px]">N</span>
-          </div>
-          <span className="text-sm sm:text-[18px] font-medium whitespace-nowrap">
-            Nova GFX
-          </span>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
-        {/* Title and Actions */}
-        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-3 mb-4 sm:mb-6">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold">Projects</h1>
-            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5 sm:mt-1">
-              Create and manage your broadcast graphics projects
-            </p>
-          </div>
-          <Button
-            onClick={createNewProject}
-            className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white border-0 w-full xs:w-auto"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Project
-          </Button>
-        </div>
-
-        {/* Search */}
-        <div className="relative mb-4 sm:mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search projects..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-card h-9 sm:h-10"
-          />
-        </div>
-
-        {/* Starter Templates Section */}
-        {!search && (
-          <div className="mb-6 sm:mb-8">
-            <div className="flex items-center gap-2 mb-3 sm:mb-4">
-              <Sparkles className="w-4 sm:w-5 h-4 sm:h-5 text-violet-400" />
-              <h2 className="text-base sm:text-lg font-semibold">Start from a Template</h2>
+      {/* Main Content - scrollable area */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+          {/* Title and Actions Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold">Projects</h1>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-0.5 sm:mt-1">
+                Create and manage your broadcast graphics projects
+              </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {starterProjects.map((starter) => (
-                <StarterProjectCard
-                  key={starter.slug}
-                  starter={starter}
-                  onClick={() => createFromStarter(starter)}
-                  isLoading={isCreatingFromStarter}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleLibrary}
+                className="hidden sm:flex"
+              >
+                <Library className="w-4 h-4 mr-2" />
+                Library
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleTemplates}
+                className="hidden sm:flex"
+              >
+                <BookTemplate className="w-4 h-4 mr-2" />
+                Templates
+              </Button>
+              <Button
+                onClick={createNewProject}
+                className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white border-0 w-full sm:w-auto"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Project
+              </Button>
+            </div>
+          </div>
+
+          {/* Mobile Library/Templates buttons */}
+          <div className="flex sm:hidden gap-2 mb-4">
+            <Button
+              variant="outline"
+              onClick={handleLibrary}
+              className="flex-1"
+              size="sm"
+            >
+              <Library className="w-4 h-4 mr-2" />
+              Library
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTemplates}
+              className="flex-1"
+              size="sm"
+            >
+              <BookTemplate className="w-4 h-4 mr-2" />
+              Templates
+            </Button>
+          </div>
+
+          {/* Search, Filters, and View Toggle Row */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:mb-6">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search projects..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 bg-card h-9 sm:h-10"
+              />
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+              {/* Sort By */}
+              <Select value={sortBy} onValueChange={(value: SortBy) => setSortBy(value)}>
+                <SelectTrigger className="w-[140px] h-9 sm:h-10 bg-card">
+                  <ArrowUpDown className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="updated_at">Updated</SelectItem>
+                  <SelectItem value="created_at">Created</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Sort Order Toggle */}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 sm:h-10 sm:w-10"
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+              </Button>
+
+              {/* View Toggle */}
+              <div className="flex items-center border rounded-md bg-card">
+                <Button
+                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10 rounded-r-none"
+                  onClick={() => setViewMode('list')}
+                  title="List view"
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'cards' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10 rounded-l-none"
+                  onClick={() => setViewMode('cards')}
+                  title="Card view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Projects Content */}
+          {isLoading ? (
+            viewMode === 'list' ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-40 sm:h-48 rounded-lg bg-muted animate-pulse" />
+                ))}
+              </div>
+            )
+          ) : filteredAndSortedProjects.length === 0 ? (
+            <div className="text-center py-10 sm:py-16">
+              <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                <FolderOpen className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-base sm:text-lg font-medium mb-1">No projects found</h3>
+              <p className="text-muted-foreground text-xs sm:text-sm mb-3 sm:mb-4">
+                {search
+                  ? 'Try a different search term'
+                  : 'Create your first project to get started'}
+              </p>
+              {!search && (
+                <Button
+                  onClick={createNewProject}
+                  className="bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Project
+                </Button>
+              )}
+            </div>
+          ) : viewMode === 'list' ? (
+            /* List View */
+            <div className="border rounded-lg bg-card overflow-hidden">
+              {/* Table Header */}
+              <div className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_150px_200px] gap-4 px-4 py-3 bg-muted/50 border-b text-xs sm:text-sm font-medium text-muted-foreground">
+                <div className="w-10"></div>
+                <div>Name</div>
+                <div className="hidden sm:block">Updated</div>
+                <div className="text-right">Actions</div>
+              </div>
+
+              {/* Table Body */}
+              <div className="divide-y">
+                {filteredAndSortedProjects.map((project) => (
+                  <ProjectListRow
+                    key={project.id}
+                    project={project}
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                    onPreview={() => handlePreview(project.id)}
+                    onPublish={() => handlePublish(project.id)}
+                    onControl={() => handleControl(project.id)}
+                    onDuplicate={() => duplicateProject(project.id)}
+                    onDelete={() => handleDeleteClick(project.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Card View */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {filteredAndSortedProjects.map((proj) => (
+                <ProjectCard
+                  key={proj.id}
+                  project={proj}
+                  onClick={() => navigate(`/projects/${proj.id}`)}
+                  onPreview={() => handlePreview(proj.id)}
+                  onPublish={() => handlePublish(proj.id)}
+                  onControl={() => handleControl(proj.id)}
+                  onDuplicate={() => duplicateProject(proj.id)}
+                  onDelete={() => handleDeleteClick(proj.id)}
                 />
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Projects Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-40 sm:h-48 rounded-lg bg-muted animate-pulse"
-              />
-            ))}
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="text-center py-10 sm:py-16">
-            <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3 sm:mb-4">
-              <FolderOpen className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-base sm:text-lg font-medium mb-1">No projects found</h3>
-            <p className="text-muted-foreground text-xs sm:text-sm mb-3 sm:mb-4">
-              {search
-                ? 'Try a different search term'
-                : 'Create your first project to get started'}
-            </p>
-            {!search && (
-              <Button
-                onClick={createNewProject}
-                className="bg-gradient-to-r from-violet-500 to-fuchsia-500"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Project
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {filteredProjects.map((proj) => (
-              <ProjectCard
-                key={proj.id}
-                project={proj}
-                onClick={() => navigate(`/projects/${proj.id}`)}
-                onDuplicate={() => duplicateProject(proj.id)}
-                onDelete={() => handleDeleteClick(proj.id)}
-              />
-            ))}
-          </div>
-        )}
+          )}
+        </div>
       </main>
 
       {/* New Project Dialog */}
@@ -346,18 +562,189 @@ export function ProjectList() {
         variant="destructive"
         onConfirm={deleteProject}
       />
+
+      {/* AI Settings Dialog */}
+      <AIModelSettingsDialog
+        open={showAISettingsDialog}
+        onOpenChange={setShowAISettingsDialog}
+      />
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={showShortcutsDialog}
+        onOpenChange={setShowShortcutsDialog}
+        shortcuts={shortcuts}
+        onUpdateShortcut={updateShortcut}
+        onResetAll={resetAllShortcuts}
+      />
+
+      {/* System Templates Dialog */}
+      <SystemTemplatesDialog
+        open={showTemplatesDialog}
+        onOpenChange={setShowTemplatesDialog}
+      />
     </div>
   );
 }
 
-interface ProjectCardProps {
+/* List Row Component */
+interface ProjectListRowProps {
   project: Project;
   onClick: () => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  onControl: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
-function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardProps) {
+function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onDuplicate, onDelete }: ProjectListRowProps) {
+  // Generate initials from project name for avatar
+  const initials = (project.name || 'Project')
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+
+  // Generate a consistent color based on project name
+  const colorHash = (project.name || 'P').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hue = colorHash % 360;
+  const avatarColor = `hsl(${hue}, 60%, 45%)`;
+
+  return (
+    <div
+      className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_150px_200px] gap-4 px-4 py-3 hover:bg-muted/30 cursor-pointer items-center transition-colors"
+      onClick={onClick}
+    >
+      {/* Icon/Thumbnail */}
+      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+        {project.thumbnail_url ? (
+          <img
+            src={project.thumbnail_url}
+            alt={project.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center text-white text-xs font-bold"
+            style={{ backgroundColor: avatarColor }}
+          >
+            {initials}
+          </div>
+        )}
+      </div>
+
+      {/* Name */}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium truncate text-sm">{project.name || 'Untitled Project'}</h3>
+          {project.is_live && (
+            <span className="flex items-center gap-1 bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-medium">
+              <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
+        {project.description && (
+          <p className="text-xs text-muted-foreground truncate mt-0.5">{project.description}</p>
+        )}
+        {/* Mobile: Show updated time here */}
+        <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
+          {formatRelativeTime(project.updated_at)}
+        </p>
+      </div>
+
+      {/* Updated - Desktop only */}
+      <div className="hidden sm:block text-sm text-muted-foreground">
+        {formatRelativeTime(project.updated_at)}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+        {/* Quick Actions - Desktop only */}
+        <div className="hidden sm:flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onPreview();
+            }}
+            title="Preview"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onPublish();
+            }}
+            title="Publish"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onControl();
+            }}
+            title="Control"
+          >
+            <Gamepad2 className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* More Options Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onClick}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy className="mr-2 h-4 w-4" />
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onClick={onDelete}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
+}
+
+/* Card Component */
+interface ProjectCardProps {
+  project: Project;
+  onClick: () => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  onControl: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}
+
+function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDuplicate, onDelete }: ProjectCardProps) {
   // Generate initials from project name for avatar (fallback when no thumbnail)
   const initials = (project.name || 'Project')
     .split(' ')
@@ -365,7 +752,7 @@ function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardPro
     .join('')
     .toUpperCase()
     .substring(0, 2);
-  
+
   // Generate a consistent color based on project name
   const colorHash = (project.name || 'P').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const hue = colorHash % 360;
@@ -394,7 +781,7 @@ function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardPro
             backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
           }}
         />
-        
+
         {/* Actual thumbnail image */}
         {hasThumbnail ? (
           <img
@@ -405,7 +792,7 @@ function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardPro
         ) : (
           /* Fallback: Project Avatar/Icon */
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <div 
+            <div
               className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg"
               style={{ backgroundColor: avatarColor }}
             >
@@ -424,7 +811,7 @@ function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardPro
             LIVE
           </div>
         )}
-        
+
         {/* Resolution badge (shown on hover or when no thumbnail) */}
         {hasThumbnail && (
           <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity">
@@ -449,26 +836,38 @@ function ProjectCard({ project, onClick, onDuplicate, onDelete }: ProjectCardPro
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onClick(); }}>
-                <Settings className="mr-2 h-4 w-4" />
-                Open
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPreview(); }}>
+                <Eye className="mr-2 h-4 w-4" />
+                Preview
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }}>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPublish(); }}>
+                <Send className="mr-2 h-4 w-4" />
+                Publish
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onControl(); }}>
+                <Gamepad2 className="mr-2 h-4 w-4" />
+                Control
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onClick}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDuplicate}>
                 <Copy className="mr-2 h-4 w-4" />
                 Duplicate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              >
+              <DropdownMenuItem className="text-destructive" onClick={onDelete}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </DropdownMenuItem>
@@ -497,100 +896,3 @@ function formatRelativeTime(dateStr: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
 }
-
-interface StarterProjectCardProps {
-  starter: StarterProject;
-  onClick: () => void;
-  isLoading: boolean;
-}
-
-function StarterProjectCard({ starter, onClick, isLoading }: StarterProjectCardProps) {
-  const isGlass = starter.style === 'glass';
-  
-  // Count templates across all layers
-  const templateCount = starter.layers.reduce((acc, layer) => acc + layer.templates.length, 0);
-  const layerCount = starter.layers.filter(l => l.templates.length > 0).length;
-
-  return (
-    <div
-      className={`group relative rounded-lg border bg-card hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/5 transition-all cursor-pointer overflow-hidden active:scale-[0.98] ${
-        isLoading ? 'opacity-50 pointer-events-none' : ''
-      }`}
-      onClick={onClick}
-    >
-      {/* Preview Area */}
-      <div className="h-24 sm:h-32 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: isGlass
-              ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
-              : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%)',
-          }}
-        />
-        
-        {/* Glass Blur Effect (for Glass style) */}
-        {isGlass && (
-          <div className="absolute inset-0 backdrop-blur-sm">
-            <div className="absolute top-4 left-4 w-48 h-20 rounded-lg bg-white/10 border border-white/20 shadow-lg" />
-            <div className="absolute top-8 left-8 w-32 h-6 rounded bg-white/20" />
-            <div className="absolute top-16 left-8 w-24 h-4 rounded bg-white/10" />
-            <div className="absolute bottom-4 right-4 w-20 h-8 rounded bg-violet-500/30 border border-violet-400/30" />
-          </div>
-        )}
-        
-        {/* Flat Design Elements */}
-        {!isGlass && (
-          <>
-            <div className="absolute top-4 left-4 w-48 h-20 bg-white rounded shadow-md border border-gray-200" />
-            <div className="absolute top-8 left-8 w-32 h-5 rounded bg-slate-700" />
-            <div className="absolute top-15 left-8 w-24 h-3 rounded bg-slate-400" />
-            <div className="absolute top-4 right-4 w-16 h-16 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-lg shadow-md" />
-            <div className="absolute bottom-4 left-4 w-full h-10 bg-white border-t border-gray-200" />
-          </>
-        )}
-
-        {/* Style Badge */}
-        <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium ${
-          isGlass
-            ? 'bg-violet-500/80 text-white backdrop-blur-sm'
-            : 'bg-blue-500 text-white'
-        }`}>
-          {isGlass ? 'Glass' : 'Flat'}
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="p-3 sm:p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-medium text-sm sm:text-base">{starter.name}</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-2">
-              {starter.description}
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2 sm:gap-3 mt-2 sm:mt-3 text-[10px] sm:text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Layers className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-            <span>{layerCount} layers</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span>{templateCount} templates</span>
-          </div>
-        </div>
-
-        <Button
-          className="w-full mt-2 sm:mt-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white h-8 sm:h-9 text-xs sm:text-sm"
-          size="sm"
-          disabled={isLoading}
-        >
-          {isLoading ? 'Creating...' : 'Use Template'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-

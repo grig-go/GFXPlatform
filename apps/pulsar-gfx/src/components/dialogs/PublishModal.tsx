@@ -12,8 +12,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@emergent-platform/ui';
-import { Send, Loader2, Monitor, Plus } from 'lucide-react';
+import { Send, Loader2, Monitor, Plus, MoreVertical, Square, ExternalLink, Radio } from 'lucide-react';
 import { supabase } from '@emergent-platform/supabase-client';
 import { useChannelStore } from '@/stores/channelStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -26,6 +31,7 @@ const NOVA_GFX_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || 'http://localhost:
 interface PublishModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preselectedChannelId?: string | null;
 }
 
 interface ProjectOption {
@@ -34,11 +40,10 @@ interface ProjectOption {
   slug: string;
 }
 
-export function PublishModal({ open, onOpenChange }: PublishModalProps) {
+export function PublishModal({ open, onOpenChange, preselectedChannelId }: PublishModalProps) {
   const { channels, loadChannels } = useChannelStore();
   const { currentProject, projects, loadProjects } = useProjectStore();
 
-  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [availableProjects, setAvailableProjects] = useState<ProjectOption[]>([]);
   const [playImmediately, setPlayImmediately] = useState(false);
@@ -46,6 +51,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveChannelIds, setLiveChannelIds] = useState<Set<string>>(new Set());
 
   // Load channels and projects when modal opens
   useEffect(() => {
@@ -84,40 +90,29 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     }
   }, [open, currentProject, selectedProjectId]);
 
-  // Auto-select first channel
+  // Check which channels have loaded projects (are "live")
   useEffect(() => {
-    if (channels.length > 0 && selectedChannelIds.size === 0) {
-      setSelectedChannelIds(new Set([channels[0].id]));
-    }
-  }, [channels, selectedChannelIds.size]);
-
-  // Toggle channel selection
-  const toggleChannelSelection = (channelId: string) => {
-    setSelectedChannelIds(prev => {
-      const next = new Set(prev);
-      if (next.has(channelId)) {
-        next.delete(channelId);
-      } else {
-        next.add(channelId);
+    const liveIds = new Set<string>();
+    channels.forEach(ch => {
+      if (ch.loadedProjectId) {
+        liveIds.add(ch.id);
       }
-      return next;
     });
-  };
+    setLiveChannelIds(liveIds);
+  }, [channels]);
 
   // Get the selected project
   const selectedProject = availableProjects.find(p => p.id === selectedProjectId);
 
-  // Publish to selected channels - sets loaded_project_id and sends command to player
-  const handlePublish = async () => {
-    if (selectedChannelIds.size === 0 || !selectedProjectId || !supabase) return;
+  // Publish to a single channel
+  const handlePublishToChannel = async (channelId: string) => {
+    if (!selectedProjectId || !supabase) return;
 
     setIsPublishing(true);
     setError(null);
 
     try {
-      const channelIds = Array.from(selectedChannelIds);
-
-      console.log('[PublishModal] Publishing project to channels:', channelIds, 'Project:', selectedProjectId, 'Play immediately:', playImmediately);
+      console.log('[PublishModal] Publishing project to channel:', channelId, 'Project:', selectedProjectId, 'Play immediately:', playImmediately);
 
       // Build the command - initialize loads project, play would start playback
       const command = {
@@ -126,49 +121,43 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         timestamp: new Date().toISOString(),
       };
 
-      // Update loaded_project_id and send command for each selected channel
-      const results = await Promise.all(
-        channelIds.map(async (channelId) => {
-          // Update channel with loaded project
-          const channelResult = await supabase
-            .from('pulsar_channels')
-            .update({
-              loaded_project_id: selectedProjectId,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', channelId);
-
-          if (channelResult.error) {
-            return { error: channelResult.error };
-          }
-
-          // Send command to channel state
-          const stateResult = await supabase
-            .from('pulsar_channel_state')
-            .update({
-              pending_command: command,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('channel_id', channelId);
-
-          return { error: stateResult.error };
+      // Update channel with loaded project
+      const channelResult = await supabase
+        .from('pulsar_channels')
+        .update({
+          loaded_project_id: selectedProjectId,
+          updated_at: new Date().toISOString(),
         })
-      );
+        .eq('id', channelId);
 
-      // Check for errors
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) {
-        console.error('[PublishModal] Some publish operations failed:', errors);
-        throw new Error(`Failed to publish to ${errors.length} channel(s)`);
+      if (channelResult.error) {
+        throw channelResult.error;
       }
 
-      // Open Nova GFX player window for each selected channel
-      // The player is hosted on Nova GFX (port 5173), not Pulsar GFX
-      channelIds.forEach(channelId => {
-        const debugParam = debugMode ? '?debug=1' : '';
-        const playerUrl = `${NOVA_GFX_URL}/player/${channelId}${debugParam}`;
-        window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+      // Send command to channel state
+      const stateResult = await supabase
+        .from('pulsar_channel_state')
+        .update({
+          pending_command: command,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('channel_id', channelId);
+
+      if (stateResult.error) {
+        throw stateResult.error;
+      }
+
+      // Mark channel as live locally
+      setLiveChannelIds(prev => {
+        const next = new Set(prev);
+        next.add(channelId);
+        return next;
       });
+
+      // Open Nova GFX player window
+      const debugParam = debugMode ? '?debug=1' : '';
+      const playerUrl = `${NOVA_GFX_URL}/player/${channelId}${debugParam}`;
+      window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
 
       console.log('[PublishModal] Publish successful');
       onOpenChange(false);
@@ -180,12 +169,71 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     }
   };
 
-  // Get player URL for a channel (uses Nova GFX player)
-  const getPlayerUrl = (channelId: string) => {
-    return `${NOVA_GFX_URL}/player/${channelId}`;
+  // Stop a single channel
+  const handleStopChannel = async (channelId: string) => {
+    if (!supabase) return;
+
+    setIsPublishing(true);
+    setError(null);
+
+    try {
+      console.log('[PublishModal] Stopping channel:', channelId);
+
+      const command = {
+        type: 'stop',
+        timestamp: new Date().toISOString(),
+      };
+
+      // Send stop command to channel state
+      const stateResult = await supabase
+        .from('pulsar_channel_state')
+        .update({
+          pending_command: command,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('channel_id', channelId);
+
+      if (stateResult.error) {
+        throw stateResult.error;
+      }
+
+      // Clear loaded_project_id on channel
+      const channelResult = await supabase
+        .from('pulsar_channels')
+        .update({
+          loaded_project_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', channelId);
+
+      if (channelResult.error) {
+        console.warn('[PublishModal] Failed to clear loaded_project_id:', channelResult.error);
+      }
+
+      // Remove from live channels locally
+      setLiveChannelIds(prev => {
+        const next = new Set(prev);
+        next.delete(channelId);
+        return next;
+      });
+
+      console.log('[PublishModal] Stop successful');
+    } catch (err) {
+      console.error('[PublishModal] Stop failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to stop channel');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
-  const hasSelectedChannels = selectedChannelIds.size > 0;
+  // Open player window for a channel
+  const handleOpenPlayer = (channelId: string) => {
+    const debugParam = debugMode ? '?debug=1' : '';
+    const playerUrl = `${NOVA_GFX_URL}/player/${channelId}${debugParam}`;
+    window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+  };
+
+  const hasLiveChannels = liveChannelIds.size > 0;
   const hasProject = !!selectedProjectId;
 
   return (
@@ -227,7 +275,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
             </div>
           ) : (
             <>
-              {/* Project Selection */}
+              {/* Project Selection - Moved to top */}
               <div className="space-y-3">
                 <Label>Project</Label>
                 <Select
@@ -251,44 +299,6 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
                     Slug: {selectedProject.slug}
                   </p>
                 )}
-              </div>
-
-              {/* Channel Selection */}
-              <div className="space-y-3">
-                <Label>Select Channel{channels.length > 1 ? 's' : ''}</Label>
-                <div className="space-y-2">
-                  {channels.map((channel) => (
-                    <button
-                      key={channel.id}
-                      onClick={() => toggleChannelSelection(channel.id)}
-                      disabled={isPublishing}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                        selectedChannelIds.has(channel.id)
-                          ? 'border-cyan-500 bg-cyan-500/10'
-                          : 'border-border hover:border-muted-foreground/50 hover:bg-muted/50'
-                      } ${isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedChannelIds.has(channel.id)}
-                        onChange={() => {}}
-                        disabled={isPublishing}
-                        className="h-4 w-4 rounded border-border"
-                      />
-                      <div className={`w-2.5 h-2.5 rounded-full ${
-                        channel.playerStatus === 'connected'
-                          ? 'bg-green-500'
-                          : 'bg-muted-foreground/30'
-                      }`} />
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{channel.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {channel.channelCode}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Play Options */}
@@ -320,53 +330,104 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
                 </label>
               </div>
 
-              {/* Player URL Info */}
-              {hasSelectedChannels && (
-                <div className="rounded-lg bg-muted/30 border border-border p-3">
-                  <p className="text-xs text-muted-foreground mb-1">
-                    Player URL{selectedChannelIds.size > 1 ? 's' : ''}
-                  </p>
-                  <div className="space-y-1">
-                    {Array.from(selectedChannelIds).map(channelId => {
-                      const channel = channels.find(c => c.id === channelId);
-                      return (
-                        <div key={channelId} className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{channel?.channelCode}:</span>
-                          <code className="text-xs bg-background px-2 py-0.5 rounded truncate flex-1">
-                            {getPlayerUrl(channelId)}
-                          </code>
+              {/* Channel List with Actions */}
+              <div className="space-y-3">
+                <Label>Channels</Label>
+                <div className="space-y-2">
+                  {channels.map((channel) => {
+                    const isLive = liveChannelIds.has(channel.id) || !!channel.loadedProjectId;
+                    const loadedProject = channel.loadedProjectId
+                      ? availableProjects.find(p => p.id === channel.loadedProjectId)
+                      : null;
+
+                    return (
+                      <div
+                        key={channel.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          isLive
+                            ? 'border-red-500/50 bg-red-500/5'
+                            : 'border-border hover:border-muted-foreground/50 hover:bg-muted/50'
+                        }`}
+                      >
+                        {/* Status indicator */}
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          channel.playerStatus === 'connected'
+                            ? 'bg-green-500'
+                            : 'bg-muted-foreground/30'
+                        }`} />
+
+                        {/* Channel info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm">{channel.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {channel.channelCode}
+                          </div>
+                          {/* Show loaded project */}
+                          {loadedProject && (
+                            <div className="text-xs text-cyan-400 mt-0.5 truncate">
+                              Publishing: {loadedProject.name}
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        {/* Live badge */}
+                        {isLive && (
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-red-500">
+                            <Radio className="h-3 w-3 animate-pulse" />
+                            LIVE
+                          </div>
+                        )}
+
+                        {/* Actions dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={isPublishing}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handlePublishToChannel(channel.id)}
+                              disabled={!hasProject || isPublishing}
+                            >
+                              <Send className="h-4 w-4 mr-2" />
+                              Publish to Channel
+                            </DropdownMenuItem>
+                            {isLive && (
+                              <DropdownMenuItem
+                                onClick={() => handleStopChannel(channel.id)}
+                                disabled={isPublishing}
+                                className="text-red-500 focus:text-red-500"
+                              >
+                                <Square className="h-4 w-4 mr-2" />
+                                Stop Channel
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleOpenPlayer(channel.id)}>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open Player Window
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions - Simplified */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handlePublish}
-            disabled={!hasSelectedChannels || !hasProject || isPublishing || channels.length === 0}
-            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
-          >
-            {isPublishing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Publishing...
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4 mr-2" />
-                Publish
-                {selectedChannelIds.size > 1 && ` (${selectedChannelIds.size})`}
-              </>
-            )}
+            {hasLiveChannels ? 'Close' : 'Cancel'}
           </Button>
         </div>
       </DialogContent>

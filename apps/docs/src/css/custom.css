@@ -657,3 +657,6 @@ kbd {
 .theme-doc-sidebar-container {
   animation: fadeIn 0.2s ease;
 }
+
+/* ===== AI Helper Chat Panel ===== */
+/* No content shift - chat panel overlays the sidebar */

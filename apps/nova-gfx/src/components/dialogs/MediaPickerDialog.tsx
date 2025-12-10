@@ -15,7 +15,7 @@ import {
 } from '@emergent-platform/ui';
 import {
   Search, Upload, Image as ImageIcon, Video, Music, Loader2, Check,
-  FolderOpen, UploadCloud, HardDrive, Trophy, User
+  FolderOpen, UploadCloud, HardDrive, Trophy, User, Layers, Trash2, Clock
 } from 'lucide-react';
 import {
   fetchNovaMedia,
@@ -33,6 +33,14 @@ import {
   type SportsPlayer,
   type LeagueKey,
 } from '@/services/sportsDbService';
+import {
+  fetchOrganizationTextures,
+  uploadTexture,
+  deleteTexture,
+  formatDuration,
+  type OrganizationTexture,
+} from '@/services/textureService';
+import { useAuthStore } from '@/stores/authStore';
 
 interface MediaPickerDialogProps {
   open: boolean;
@@ -49,7 +57,7 @@ export function MediaPickerDialog({
   mediaType = 'all',
   title = 'Select Media',
 }: MediaPickerDialogProps) {
-  const [activeTab, setActiveTab] = useState<'browse' | 'sports' | 'players' | 'upload'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'textures' | 'sports' | 'players' | 'upload'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
   const [assets, setAssets] = useState<NovaMediaAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,6 +68,19 @@ export function MediaPickerDialog({
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textureFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auth state for organization textures
+  const { user, organization } = useAuthStore();
+
+  // Textures tab state
+  const [textures, setTextures] = useState<OrganizationTexture[]>([]);
+  const [texturesLoading, setTexturesLoading] = useState(false);
+  const [textureSearchQuery, setTextureSearchQuery] = useState('');
+  const [textureTypeFilter, setTextureTypeFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [selectedTexture, setSelectedTexture] = useState<OrganizationTexture | null>(null);
+  const [textureUploadProgress, setTextureUploadProgress] = useState<string | null>(null);
+  const [deletingTextureId, setDeletingTextureId] = useState<string | null>(null);
 
   // Sports tab state
   const [sportsTeams, setSportsTeams] = useState<SportsTeam[]>([]);
@@ -205,6 +226,94 @@ export function MediaPickerDialog({
     }
   }, [playerTeamQuery]);
 
+  // Load organization textures
+  const loadTextures = useCallback(async () => {
+    if (!organization?.id) return;
+
+    setTexturesLoading(true);
+    try {
+      const result = await fetchOrganizationTextures(organization.id, {
+        limit: 50,
+        type: textureTypeFilter === 'all' ? undefined : textureTypeFilter,
+        search: textureSearchQuery || undefined,
+      });
+      setTextures(result.data);
+    } catch (error) {
+      console.error('Failed to load textures:', error);
+      setTextures([]);
+    } finally {
+      setTexturesLoading(false);
+    }
+  }, [organization?.id, textureTypeFilter, textureSearchQuery]);
+
+  // Load textures when tab is active
+  useEffect(() => {
+    if (open && activeTab === 'textures' && organization?.id) {
+      loadTextures();
+    }
+  }, [open, activeTab, organization?.id, loadTextures]);
+
+  // Handle texture search
+  const handleTextureSearch = useCallback(() => {
+    loadTextures();
+  }, [loadTextures]);
+
+  // Handle texture file upload
+  const handleTextureUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !organization?.id || !user?.id) return;
+
+    const file = files[0];
+
+    // Validate file type
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      setTextureUploadProgress('Only images and videos are supported');
+      setTimeout(() => setTextureUploadProgress(null), 3000);
+      return;
+    }
+
+    setTextureUploadProgress('Uploading...');
+
+    try {
+      const texture = await uploadTexture(file, organization.id, user.id, {
+        tags: [],
+      });
+
+      setTextureUploadProgress('Upload complete!');
+      setTextures((prev) => [texture, ...prev]);
+      setSelectedTexture(texture);
+
+      setTimeout(() => {
+        setTextureUploadProgress(null);
+      }, 2000);
+    } catch (error) {
+      console.error('Texture upload failed:', error);
+      setTextureUploadProgress('Upload failed. Please try again.');
+      setTimeout(() => {
+        setTextureUploadProgress(null);
+      }, 3000);
+    }
+  };
+
+  // Handle texture delete
+  const handleDeleteTexture = async (textureId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!confirm('Are you sure you want to delete this texture?')) return;
+
+    setDeletingTextureId(textureId);
+    try {
+      await deleteTexture(textureId);
+      setTextures((prev) => prev.filter((t) => t.id !== textureId));
+      if (selectedTexture?.id === textureId) {
+        setSelectedTexture(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete texture:', error);
+    } finally {
+      setDeletingTextureId(null);
+    }
+  };
+
   // Handle file upload
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -273,7 +382,20 @@ export function MediaPickerDialog({
 
   // Confirm selection
   const handleConfirm = () => {
-    if (activeTab === 'sports' && selectedTeam) {
+    if (activeTab === 'textures' && selectedTexture) {
+      // Convert OrganizationTexture to NovaMediaAsset-like object
+      onSelect(selectedTexture.fileUrl, {
+        id: selectedTexture.id,
+        name: selectedTexture.name,
+        file_name: selectedTexture.fileName,
+        file_url: selectedTexture.fileUrl,
+        thumbnail_url: selectedTexture.thumbnailUrl || selectedTexture.fileUrl,
+        media_type: selectedTexture.mediaType,
+        tags: selectedTexture.tags,
+        created_at: selectedTexture.createdAt,
+      } as NovaMediaAsset);
+      onOpenChange(false);
+    } else if (activeTab === 'sports' && selectedTeam) {
       onSelect(selectedTeam.logo);
       onOpenChange(false);
     } else if (activeTab === 'players' && selectedPlayer) {
@@ -306,7 +428,7 @@ export function MediaPickerDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'browse' | 'sports' | 'players' | 'upload')}
+          onValueChange={(v) => setActiveTab(v as 'browse' | 'textures' | 'sports' | 'players' | 'upload')}
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="px-6 py-3 border-b border-border flex items-center justify-between">
@@ -314,6 +436,10 @@ export function MediaPickerDialog({
               <TabsTrigger value="browse" className="gap-2 data-[state=active]:bg-background">
                 <FolderOpen className="w-4 h-4" />
                 Browse Nova
+              </TabsTrigger>
+              <TabsTrigger value="textures" className="gap-2 data-[state=active]:bg-background">
+                <Layers className="w-4 h-4" />
+                Textures
               </TabsTrigger>
               <TabsTrigger value="sports" className="gap-2 data-[state=active]:bg-background">
                 <Trophy className="w-4 h-4" />
@@ -339,6 +465,27 @@ export function MediaPickerDialog({
                       className={cn(
                         'px-3 py-1.5 text-xs capitalize transition-colors',
                         typeFilter === type
+                          ? 'bg-violet-500 text-white'
+                          : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                      )}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'textures' && (
+              <div className="flex items-center gap-2">
+                <div className="flex border border-border rounded-md overflow-hidden bg-muted">
+                  {['all', 'image', 'video'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setTextureTypeFilter(type as typeof textureTypeFilter)}
+                      className={cn(
+                        'px-3 py-1.5 text-xs capitalize transition-colors',
+                        textureTypeFilter === type
                           ? 'bg-violet-500 text-white'
                           : 'text-muted-foreground hover:bg-background hover:text-foreground'
                       )}
@@ -418,6 +565,132 @@ export function MediaPickerDialog({
                       {/* Name overlay on hover */}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <p className="text-white text-xs truncate">{asset.name}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="textures" className="flex-1 overflow-hidden m-0 bg-background">
+            <div className="p-4 border-b border-border">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={textureSearchQuery}
+                    onChange={(e) => setTextureSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleTextureSearch()}
+                    placeholder="Search textures..."
+                    className="pl-9 bg-muted border-border"
+                  />
+                </div>
+                <Button onClick={handleTextureSearch} disabled={texturesLoading} className="bg-violet-500 hover:bg-violet-600 text-white">
+                  {texturesLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => textureFileInputRef.current?.click()}
+                  disabled={!organization?.id || !!textureUploadProgress}
+                  className="gap-2 border-border"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  Upload
+                </Button>
+                <input
+                  ref={textureFileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  className="hidden"
+                  onChange={(e) => handleTextureUpload(e.target.files)}
+                />
+              </div>
+              {textureUploadProgress && (
+                <div className="mt-2 text-sm text-violet-500 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {textureUploadProgress}
+                </div>
+              )}
+            </div>
+
+            <ScrollArea className="flex-1 h-[calc(100%-120px)]">
+              {texturesLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                </div>
+              ) : !organization?.id ? (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                  <Layers className="w-12 h-12 mb-4" />
+                  <p>Sign in to access organization textures</p>
+                </div>
+              ) : textures.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                  <Layers className="w-12 h-12 mb-4" />
+                  <p>No textures found</p>
+                  <p className="text-sm">Upload images or videos for your organization</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 p-4">
+                  {textures.map((texture) => (
+                    <button
+                      key={texture.id}
+                      onClick={() => setSelectedTexture(texture)}
+                      className={cn(
+                        'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                        selectedTexture?.id === texture.id
+                          ? 'border-violet-500 ring-2 ring-violet-500/30'
+                          : 'border-transparent hover:border-violet-500/50'
+                      )}
+                    >
+                      <img
+                        src={texture.thumbnailUrl || texture.fileUrl}
+                        alt={texture.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+
+                      {/* Type badge */}
+                      <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-1 text-white">
+                        {texture.mediaType === 'video' ? (
+                          <Video className="w-3.5 h-3.5" />
+                        ) : (
+                          <ImageIcon className="w-3.5 h-3.5" />
+                        )}
+                        {texture.mediaType === 'video' && texture.duration && (
+                          <span className="text-[10px]">{formatDuration(texture.duration)}</span>
+                        )}
+                      </div>
+
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => handleDeleteTexture(texture.id, e)}
+                        disabled={deletingTextureId === texture.id}
+                        className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 backdrop-blur-sm rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        {deletingTextureId === texture.id ? (
+                          <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5 text-white" />
+                        )}
+                      </button>
+
+                      {/* Selection indicator */}
+                      {selectedTexture?.id === texture.id && (
+                        <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
+                          <div className="bg-violet-500 rounded-full p-1">
+                            <Check className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Name overlay on hover */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-white text-xs truncate">{texture.name}</p>
+                        <p className="text-white/60 text-[10px] flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(texture.createdAt).toLocaleDateString()}
+                        </p>
                       </div>
                     </button>
                   ))}
@@ -691,7 +964,13 @@ export function MediaPickerDialog({
         {/* Footer with selection info and confirm button */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
           <div className="text-sm text-muted-foreground">
-            {activeTab === 'sports' && selectedTeam ? (
+            {activeTab === 'textures' && selectedTexture ? (
+              <span className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-violet-500" />
+                Selected: <strong className="text-foreground">{selectedTexture.name}</strong>
+                <span className="text-xs">({selectedTexture.mediaType})</span>
+              </span>
+            ) : activeTab === 'sports' && selectedTeam ? (
               <span className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-violet-500" />
                 Selected: <strong className="text-foreground">{selectedTeam.name}</strong>
@@ -719,6 +998,7 @@ export function MediaPickerDialog({
             <Button
               onClick={handleConfirm}
               disabled={
+                activeTab === 'textures' ? !selectedTexture :
                 activeTab === 'sports' ? !selectedTeam :
                 activeTab === 'players' ? !selectedPlayer :
                 !selectedAsset

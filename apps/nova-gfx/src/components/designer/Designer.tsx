@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { TopBar } from '@/components/layout/TopBar';
@@ -288,6 +288,7 @@ function getDemoTemplates(projectIdVal: string): Template[] {
 export function Designer() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { 
     loadProject, 
     project, 
@@ -311,7 +312,21 @@ export function Designer() {
   const [showSystemTemplatesDialog, setShowSystemTemplatesDialog] = useState(false);
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const aiEnabled = useAIPreferenceStore((state) => state.aiEnabled);
+
+  // Handle ?action=publish query parameter
+  useEffect(() => {
+    const action = searchParams.get('action');
+    console.log('[Designer] Checking action param:', action, 'project:', !!project, 'isLoading:', isLoading);
+    if (action === 'publish' && project && !isLoading) {
+      console.log('[Designer] Opening PublishModal from action=publish');
+      setShowPublishModal(true);
+      // Clear the action param from URL
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, project, isLoading]);
 
   // Keyboard shortcuts with dialog callback
   const { shortcuts, updateShortcut, resetAllShortcuts } = useKeyboardShortcuts({
@@ -521,6 +536,8 @@ export function Designer() {
         onOpenAISettings={() => setShowAISettingsDialog(true)}
         onOpenSystemTemplates={() => setShowSystemTemplatesDialog(true)}
         onShowKeyboardShortcuts={() => setShowShortcutsDialog(true)}
+        openPublishModal={showPublishModal}
+        onPublishModalChange={setShowPublishModal}
       />
       
       {/* Dialogs */}

@@ -375,28 +375,25 @@ export const useAuthStore = create<AuthState>()(
                 user_id: authData.user.id,
               });
             } else {
-              // Create new organization for emergent.new users
-              const orgSlug = email.split('@')[0].replace(/[^a-z0-9]/gi, '-').toLowerCase();
-              orgName = name ? `${name}'s Workspace` : 'My Workspace';
+              // Use domain-based organization matching
+              // This will find an existing org for the email domain or create a new one
+              const { data: orgResult, error: orgError } = await supabase
+                .rpc('get_or_create_org_for_email', {
+                  user_email: email,
+                  user_name: name,
+                });
 
-              const { data: newOrg, error: orgError } = await supabase
-                .from('organizations')
-                .insert({
-                  name: orgName,
-                  slug: orgSlug,
-                  settings: {},
-                })
-                .select()
-                .single();
-
-              if (orgError) {
-                console.error('Error creating organization:', orgError);
+              if (orgError || !orgResult || orgResult.length === 0) {
+                console.error('Error finding/creating organization:', orgError);
                 set({ isLoading: false });
                 return { success: false, error: 'Failed to create organization' };
               }
 
-              organizationId = newOrg.id;
-              userRole = 'owner';
+              const orgData = orgResult[0];
+              organizationId = orgData.org_id;
+              orgName = orgData.org_name;
+              // If this is a new org, user is owner; otherwise they're a member
+              userRole = orgData.is_new ? 'owner' : 'member';
             }
 
             // Create user record
@@ -576,15 +573,12 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data, error } = await withTimeout(
-            supabase
-              .from('users')
-              .select('id, email, name, role')
-              .eq('organization_id', organization.id)
-              .order('created_at', { ascending: true }),
-            10000,
-            'Fetch organization members'
-          );
+          // Query without timeout wrapper - let Supabase handle its own timeouts
+          const { data, error } = await supabase
+            .from('users')
+            .select('id, email, name, role')
+            .eq('organization_id', organization.id)
+            .order('created_at', { ascending: true });
 
           if (error) {
             console.error('Error fetching members:', error);

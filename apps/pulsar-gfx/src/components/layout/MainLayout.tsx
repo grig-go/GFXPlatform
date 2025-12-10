@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -5,7 +6,9 @@ import { StatusBar } from './StatusBar';
 import { PreviewPanel } from '@/components/preview/PreviewPanel';
 import { PlayoutPanel } from '@/components/playout/PlayoutPanel';
 import { ContentEditor } from '@/components/content/ContentEditor';
+import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { useUIStore } from '@/stores/uiStore';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -14,6 +17,12 @@ import {
 
 export function MainLayout() {
   const { showPlayoutControls, showPreview, showContentEditor } = useUIStore();
+  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+
+  // Initialize keyboard shortcuts with Ctrl+/ handler
+  useKeyboardShortcuts({
+    onShowShortcuts: () => setShowShortcutsDialog(true),
+  });
 
   // Calculate if right panel should show
   const showRightPanel = showPreview || showContentEditor;
@@ -21,7 +30,13 @@ export function MainLayout() {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       {/* Top Header */}
-      <Header />
+      <Header onShowKeyboardShortcuts={() => setShowShortcutsDialog(true)} />
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={showShortcutsDialog}
+        onOpenChange={setShowShortcutsDialog}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden min-h-0">

@@ -28,7 +28,6 @@ import {
 import {
   Download,
   Upload,
-  RotateCcw,
   MoreHorizontal,
   Trash2,
   Copy,
@@ -43,14 +42,14 @@ import {
   getSystemTemplates,
   saveSystemTemplates,
   deleteSystemTemplate,
-  resetSystemTemplatesToDefaults,
   exportSystemTemplatesToJSON,
   importSystemTemplatesFromJSON,
   exportTemplateToJSON,
   saveProjectAsSystemTemplate,
 } from '@/services/systemTemplateService';
-import { createLocalProjectFromStarter } from '@/services/starterProjectService';
+import { createProjectFromStarter, createLocalProjectFromStarter } from '@/services/starterProjectService';
 import { useDesignerStore } from '@/stores/designerStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { StarterProject } from '@/data/starterProjects/types';
 
 interface SystemTemplatesDialogProps {
@@ -61,7 +60,6 @@ interface SystemTemplatesDialogProps {
 export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDialogProps) {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<StarterProject[]>([]);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState('');
@@ -72,6 +70,7 @@ export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDia
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { project, layers, templates: projectTemplates, elements, animations, keyframes } = useDesignerStore();
+  const { user, organization } = useAuthStore();
 
   // Load templates when dialog opens
   useEffect(() => {
@@ -148,14 +147,6 @@ export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDia
     }
   };
 
-  // Reset to defaults
-  const handleReset = () => {
-    resetSystemTemplatesToDefaults();
-    refreshTemplates();
-    setShowResetConfirm(false);
-    showNotification('success', 'Templates reset to defaults');
-  };
-
   // Delete template
   const handleDelete = (slug: string) => {
     deleteSystemTemplate(slug);
@@ -223,17 +214,22 @@ export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDia
   const handleEditTemplate = async (template: StarterProject) => {
     setIsLoading(true);
     try {
-      // Create local project from starter
-      const projectData = createLocalProjectFromStarter(template);
-      
-      // Save to localStorage (for demo)
-      localStorage.setItem(`nova-project-${projectData.project.id}`, JSON.stringify(projectData));
-      
-      // Close the dialog
-      onOpenChange(false);
-      
-      // Navigate to the new project
-      navigate(`/projects/${projectData.project.id}`);
+      // If user is logged in with an organization, save to Supabase
+      if (organization?.id) {
+        const newProject = await createProjectFromStarter(template, organization.id, user?.id);
+        if (newProject) {
+          onOpenChange(false);
+          navigate(`/projects/${newProject.id}`);
+        } else {
+          showNotification('error', 'Failed to create project');
+        }
+      } else {
+        // Fallback to localStorage for demo/offline mode
+        const projectData = createLocalProjectFromStarter(template);
+        localStorage.setItem(`nova-project-${projectData.project.id}`, JSON.stringify(projectData));
+        onOpenChange(false);
+        navigate(`/projects/${projectData.project.id}`);
+      }
     } catch (error) {
       console.error('Error creating project from template:', error);
       showNotification('error', 'Failed to open template for editing');
@@ -287,11 +283,6 @@ export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDia
             <Button variant="outline" size="sm" onClick={handleExportAll}>
               <Download className="w-4 h-4 mr-2" />
               Export All
-            </Button>
-            <div className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={() => setShowResetConfirm(true)}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Reset to Defaults
             </Button>
           </div>
 
@@ -394,38 +385,13 @@ export function SystemTemplatesDialog({ open, onOpenChange }: SystemTemplatesDia
                 <div className="text-center py-8 text-muted-foreground">
                   <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No system templates</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => setShowResetConfirm(true)}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Restore Defaults
-                  </Button>
+                  <p className="text-sm mt-2">Import templates to get started</p>
                 </div>
               )}
             </div>
           </ScrollArea>
         </DialogContent>
       </Dialog>
-
-      {/* Reset Confirmation */}
-      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset to Default Templates?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will replace all your custom templates with the built-in defaults.
-              Any templates you've created or modified will be lost.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReset}>Reset</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>

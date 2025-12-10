@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '@emergent-platform/supabase-client';
 import { usePlaylistStore } from './playlistStore';
 import { usePageStore } from './pageStore';
+import { useAuthStore } from './authStore';
 
 // Types - these will move to @emergent-platform/types
 export interface Project {
@@ -99,11 +100,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProjects: async () => {
     set({ isLoading: true, error: null });
     try {
-      // Load all projects (not just published) for now
-      const { data, error } = await supabase
+      // Get user's organization from auth store
+      const { user } = useAuthStore.getState();
+
+      // Build query - filter by organization if user is logged in
+      let query = supabase
         .from('gfx_projects')
-        .select('*')
-        .order('updated_at', { ascending: false });
+        .select('*');
+
+      // Filter by user's organization if they have one
+      if (user?.organizationId) {
+        query = query.eq('organization_id', user.organizationId);
+      }
+
+      const { data, error } = await query.order('updated_at', { ascending: false });
 
       if (error) throw error;
 

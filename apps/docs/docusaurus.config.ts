@@ -12,7 +12,7 @@ const config: Config = {
   },
 
   url: 'https://nova-gfx.emergent.solutions',
-  baseUrl: '/',
+  baseUrl: '/docs/',
 
   organizationName: 'emergent-solutions',
   projectName: 'nova-gfx',
@@ -24,12 +24,17 @@ const config: Config = {
     locales: ['en'],
   },
 
+  plugins: [
+    './plugins/ai-chat-plugin.js',
+  ],
+
   presets: [
     [
       'classic',
       {
         docs: {
           sidebarPath: './sidebars.ts',
+          routeBasePath: '/', // Serve docs at root of baseUrl (so /docs/apps/nova-gfx, not /docs/docs/apps/nova-gfx)
           editUrl: 'https://github.com/emergent-solutions/nova-gfx/tree/main/apps/docs/',
         },
         blog: {

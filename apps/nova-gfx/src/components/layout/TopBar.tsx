@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   Play, Settings, HelpCircle, Cpu, Palette,
   ChevronDown, Grid3X3, Wrench, FolderOpen, Sparkles,
@@ -26,9 +26,11 @@ interface TopBarProps {
   onOpenAISettings?: () => void;
   onOpenSystemTemplates?: () => void;
   onShowKeyboardShortcuts?: () => void;
+  openPublishModal?: boolean;
+  onPublishModalChange?: (open: boolean) => void;
 }
 
-export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, onOpenSystemTemplates, onShowKeyboardShortcuts }: TopBarProps) {
+export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, onOpenSystemTemplates, onShowKeyboardShortcuts, openPublishModal, onPublishModalChange }: TopBarProps) {
   const { aiEnabled, toggleAi } = useAIPreferenceStore();
   const {
     project,
@@ -39,6 +41,19 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
   const [copiedPublish, setCopiedPublish] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showChannelsModal, setShowChannelsModal] = useState(false);
+
+  // Sync showPublishModal with external prop
+  useEffect(() => {
+    if (openPublishModal !== undefined) {
+      setShowPublishModal(openPublishModal);
+    }
+  }, [openPublishModal]);
+
+  // Notify parent when publish modal changes
+  const handlePublishModalChange = (open: boolean) => {
+    setShowPublishModal(open);
+    onPublishModalChange?.(open);
+  };
 
   // Get the publish URL (project-specific, same as OBS URL)
   const getPublishUrl = useCallback(() => {
@@ -233,7 +248,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onClick={() => window.open('http://localhost:3001/docs/apps/nova-gfx', '_blank')}>
+            <DropdownMenuItem onClick={() => window.open(import.meta.env.DEV ? 'http://localhost:3000/docs/apps/nova-gfx' : '/docs/apps/nova-gfx', '_blank')}>
               <HelpCircle className="mr-2 h-4 w-4" />
               Documentation
               <ExternalLink className="ml-auto h-3 w-3 text-muted-foreground" />
@@ -286,6 +301,18 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
               <Send className="w-4 h-4 mr-2" />
               Send to Channel...
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                if (project?.id) {
+                  const pulsarUrl = import.meta.env.VITE_PULSAR_GFX_URL || 'http://localhost:5174';
+                  window.open(`${pulsarUrl}?project=${project.id}`, '_blank');
+                }
+              }}
+              disabled={!project?.id}
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Open in Pulsar
+            </DropdownMenuItem>
 
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -332,7 +359,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       {/* Publish to Channel Modal */}
       <PublishModal
         open={showPublishModal}
-        onOpenChange={setShowPublishModal}
+        onOpenChange={handlePublishModalChange}
       />
 
       {/* Channels Management Modal */}

@@ -1389,20 +1389,21 @@ export interface ChatMessage {
  */
 export function isDrasticChange(changes: AIChanges | undefined): boolean {
   if (!changes) return false;
-  
+
   // Deletions always require confirmation
   if (changes.type === 'delete') return true;
   if (changes.elementsToDelete && changes.elementsToDelete.length > 0) return true;
-  
-  // Many elements at once (might be a major restructure)
+
+  // Only flag as drastic if there are a huge number of elements (50+)
+  // Typical broadcast graphics (weather, scores, etc.) can have 20-40 elements
   const elementCount = changes.elements?.length || 0;
-  if (elementCount > 5) return true;
-  
+  if (elementCount > 50) return true;
+
   // Mixed operations with deletions
   if (changes.type === 'mixed' && changes.elementsToDelete && changes.elementsToDelete.length > 0) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -1410,6 +1411,9 @@ export interface ImageAttachment {
   data: string; // Base64 encoded image data (without prefix)
   mimeType: string; // e.g., 'image/png', 'image/jpeg'
 }
+
+// Callback type for streaming responses
+export type StreamCallback = (chunk: string, fullText: string) => void;
 
 export async function sendChatMessage(
   messages: ChatMessage[],
@@ -1505,14 +1509,23 @@ export async function sendChatMessage(
   }
 }
 
-// Send message to Gemini API
+// Helper: Delay function for retry backoff
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Send message to Gemini API with retry logic
 async function sendGeminiMessage(
   messages: ChatMessage[],
   context: AIContext,
   modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
   images?: ImageAttachment[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  retryCount: number = 0
 ): Promise<AIResponse> {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 2000; // 2 seconds
+
   const geminiApiKey = getGeminiApiKey();
   const useProxy = shouldUseBackendProxy('gemini');
 
@@ -1612,7 +1625,22 @@ async function sendGeminiMessage(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `Gemini API request failed: ${response.status}`);
+      const errorMessage = errorData.error?.message || `Gemini API request failed: ${response.status}`;
+
+      // Check if it's an overload/rate limit error (503 or 429)
+      if ((response.status === 503 || response.status === 429) && retryCount < MAX_RETRIES) {
+        const retryDelay = BASE_DELAY * Math.pow(2, retryCount); // Exponential backoff
+        console.log(`Gemini API overloaded (${response.status}). Retrying in ${retryDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await delay(retryDelay);
+        return sendGeminiMessage(messages, context, modelConfig, images, signal, retryCount + 1);
+      }
+
+      // For overload errors after max retries, provide a user-friendly message
+      if (response.status === 503 || response.status === 429) {
+        throw new Error('The AI model is currently overloaded. Please wait a moment and try again, or switch to a different model in Settings.');
+      }
+
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -1628,6 +1656,15 @@ async function sendGeminiMessage(
     if (fetchError.name === 'AbortError') {
       throw fetchError;
     }
+
+    // Check if it's a network error that might be retryable
+    if (fetchError.message?.includes('overloaded') && retryCount < MAX_RETRIES) {
+      const retryDelay = BASE_DELAY * Math.pow(2, retryCount);
+      console.log(`Gemini API overloaded. Retrying in ${retryDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      await delay(retryDelay);
+      return sendGeminiMessage(messages, context, modelConfig, images, signal, retryCount + 1);
+    }
+
     console.error('Gemini API call failed:', fetchError);
     throw new Error(fetchError.message || 'Failed to connect to Gemini. Please try again.');
   }
@@ -2979,3 +3016,409 @@ export const QUICK_PROMPTS = {
   createMap: 'Create a map showing New York City with a venue marker.',
   createWeatherMap: 'Create a weather map showing the current location with dark style.',
 };
+
+// Simple documentation chat - for helping users learn about Nova GFX and Pulsar GFX
+export async function sendDocsChatMessage(
+  messages: ChatMessage[],
+  systemPrompt: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const modelId = getAIModel();
+  const modelConfig = AI_MODELS[modelId];
+  const provider = modelConfig.provider;
+
+  if (provider === 'gemini') {
+    const geminiApiKey = getGeminiApiKey();
+    const useProxy = shouldUseBackendProxy('gemini');
+
+    if (!useProxy && !geminiApiKey) {
+      throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
+    }
+
+    // Build Gemini-format messages with docs system prompt
+    const geminiContents: any[] = [
+      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
+      { role: 'model', parts: [{ text: 'I understand. I am a documentation assistant for Nova GFX and Pulsar GFX. How can I help you?' }] },
+      ...messages.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+    ];
+
+    let response;
+    if (useProxy) {
+      response = await fetch('/.netlify/functions/ai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'gemini',
+          model: modelConfig.apiModel,
+          messages: geminiContents,
+          maxTokens: 2048,
+          temperature: 0.7,
+        }),
+        signal,
+      });
+    } else {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: geminiContents,
+            generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+          }),
+          signal,
+        }
+      );
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+
+  } else {
+    // Claude
+    const claudeApiKey = getClaudeApiKey();
+    const useProxy = shouldUseBackendProxy('claude');
+
+    if (!useProxy && !claudeApiKey) {
+      throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
+    }
+
+    const apiMessages = messages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    let response;
+    if (useProxy) {
+      response = await fetch('/.netlify/functions/ai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'claude',
+          model: modelConfig.apiModel,
+          systemPrompt,
+          messages: apiMessages,
+          maxTokens: 2048,
+          temperature: 0.7,
+        }),
+        signal,
+      });
+    } else {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': claudeApiKey!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: modelConfig.apiModel,
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages: apiMessages,
+        }),
+        signal,
+      });
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+  }
+}
+
+/**
+ * Send a chat message with streaming support
+ * This allows showing real-time progress as the AI generates content
+ */
+export async function sendChatMessageStreaming(
+  messages: ChatMessage[],
+  context: AIContext,
+  onChunk: StreamCallback,
+  modelId?: AIModelId,
+  images?: ImageAttachment[],
+  signal?: AbortSignal
+): Promise<AIResponse> {
+  const selectedModel = modelId || getAIModel();
+  const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
+  const provider = modelConfig.provider;
+
+  // For streaming, we need direct API access (can't stream through Edge Function easily)
+  if (provider === 'gemini') {
+    return sendGeminiMessageStreaming(messages, context, modelConfig, onChunk, images, signal);
+  } else {
+    return sendClaudeMessageStreaming(messages, context, modelConfig, onChunk, images, signal);
+  }
+}
+
+// Streaming Gemini API call
+async function sendGeminiMessageStreaming(
+  messages: ChatMessage[],
+  context: AIContext,
+  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  onChunk: StreamCallback,
+  images?: ImageAttachment[],
+  signal?: AbortSignal
+): Promise<AIResponse> {
+  const geminiApiKey = getGeminiApiKey();
+
+  if (!geminiApiKey) {
+    // Fall back to non-streaming if no direct API key
+    console.log('No Gemini API key for streaming, falling back to non-streaming');
+    return sendGeminiMessage(messages, context, modelConfig, images, signal);
+  }
+
+  const contextInfo = buildContextMessage(context);
+
+  // Build Gemini-format messages
+  const geminiContents: any[] = [
+    ...(contextInfo ? [
+      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}\n\n[Context]\n${contextInfo}\n[End Context]` }] },
+      { role: 'model', parts: [{ text: 'I understand the instructions and context. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
+    ] : [
+      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}` }] },
+      { role: 'model', parts: [{ text: 'I understand. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
+    ]),
+    ...messages.slice(0, images && images.length > 0 ? -1 : undefined).map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+  ];
+
+  // Add images if present
+  if (images && images.length > 0 && messages.length > 0) {
+    const lastMessage = messages[messages.length - 1];
+    const parts: any[] = [];
+    images.forEach((img) => {
+      parts.push({
+        inline_data: {
+          mime_type: img.mimeType,
+          data: img.data,
+        },
+      });
+    });
+    parts.push({ text: lastMessage.content });
+    geminiContents.push({ role: 'user', parts });
+  }
+
+  try {
+    // Use streamGenerateContent endpoint for streaming
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:streamGenerateContent?key=${geminiApiKey}&alt=sse`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: geminiContents,
+          generationConfig: {
+            maxOutputTokens: 8192,
+            temperature: 0.7,
+          },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
+        }),
+        signal,
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini streaming API request failed: ${response.status} - ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body for streaming');
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      // Parse SSE events
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (text) {
+              fullText += text;
+              onChunk(text, fullText);
+            }
+          } catch {
+            // Skip unparseable chunks
+          }
+        }
+      }
+    }
+
+    const changes = parseChangesFromResponse(fullText);
+    return {
+      message: fullText,
+      changes: changes || undefined,
+    };
+  } catch (fetchError: any) {
+    if (fetchError.name === 'AbortError') {
+      throw fetchError;
+    }
+    console.error('Gemini streaming API call failed:', fetchError);
+    // Fall back to non-streaming
+    return sendGeminiMessage(messages, context, modelConfig, images, signal);
+  }
+}
+
+// Streaming Claude API call
+async function sendClaudeMessageStreaming(
+  messages: ChatMessage[],
+  context: AIContext,
+  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  onChunk: StreamCallback,
+  images?: ImageAttachment[],
+  signal?: AbortSignal
+): Promise<AIResponse> {
+  const claudeApiKey = getClaudeApiKey();
+
+  if (!claudeApiKey) {
+    // Fall back to non-streaming if no direct API key
+    console.log('No Claude API key for streaming, falling back to non-streaming');
+    return sendClaudeMessage(messages, context, modelConfig, images, signal);
+  }
+
+  const contextInfo = buildContextMessage(context);
+
+  // Build Claude-format messages
+  const apiMessages: any[] = messages.map((m) => {
+    if (m.role === 'user' && images && images.length > 0 && m === messages[messages.length - 1]) {
+      return {
+        role: 'user',
+        content: [
+          ...images.map((img) => ({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mimeType,
+              data: img.data,
+            },
+          })),
+          { type: 'text', text: m.content },
+        ],
+      };
+    }
+    return {
+      role: m.role,
+      content: m.content,
+    };
+  });
+
+  // Add context as first user message if available
+  if (contextInfo && apiMessages.length > 0) {
+    const firstUserIdx = apiMessages.findIndex((m) => m.role === 'user');
+    if (firstUserIdx !== -1) {
+      const firstMsg = apiMessages[firstUserIdx];
+      if (typeof firstMsg.content === 'string') {
+        firstMsg.content = `[Context]\n${contextInfo}\n[End Context]\n\n${firstMsg.content}`;
+      }
+    }
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: modelConfig.apiModel,
+        max_tokens: 8192,
+        system: SYSTEM_PROMPT,
+        messages: apiMessages,
+        stream: true,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Claude streaming API request failed: ${response.status} - ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body for streaming');
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      // Parse SSE events from Claude
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+
+          try {
+            const parsed = JSON.parse(data);
+
+            // Handle content_block_delta events
+            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              const text = parsed.delta.text;
+              fullText += text;
+              onChunk(text, fullText);
+            }
+          } catch {
+            // Skip unparseable chunks
+          }
+        }
+      }
+    }
+
+    const changes = parseChangesFromResponse(fullText);
+    return {
+      message: fullText,
+      changes: changes || undefined,
+    };
+  } catch (fetchError: any) {
+    if (fetchError.name === 'AbortError') {
+      throw fetchError;
+    }
+    console.error('Claude streaming API call failed:', fetchError);
+    // Fall back to non-streaming
+    return sendClaudeMessage(messages, context, modelConfig, images, signal);
+  }
+}

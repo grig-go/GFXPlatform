@@ -361,6 +361,7 @@ interface DesignerActions {
   // Chat operations
   loadChatMessages: (projectId: string) => Promise<void>;
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'project_id' | 'created_at'>) => Promise<ChatMessage | null>;
+  updateChatMessageContent: (messageId: string, content: string) => void;
   markChangesApplied: (messageId: string) => void;
   clearChat: () => Promise<void>;
 
@@ -1502,7 +1503,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         setTemplates: (templates) => {
-          set({ templates });
+          set({ templates, isDirty: true });
         },
 
         addTemplate: (layerId, name) => {
@@ -1811,7 +1812,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         setElements: (elements) => {
-          set({ elements });
+          set({ elements, isDirty: true });
         },
 
         groupElements: (ids) => {
@@ -2227,7 +2228,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         setAnimations: (animations) => {
-          set({ animations });
+          set({ animations, isDirty: true });
         },
 
         // Keyframe operations
@@ -2295,7 +2296,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         setKeyframes: (keyframes) => {
-          set({ keyframes });
+          set({ keyframes, isDirty: true });
         },
 
         selectKeyframes: (ids) => {
@@ -2304,7 +2305,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         // Binding operations
         setBindings: (bindings) => {
-          set({ bindings });
+          set({ bindings, isDirty: true });
         },
 
         addBinding: (elementId, bindingKey, targetProperty, bindingType) => {
@@ -2347,6 +2348,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             const expanded = new Set<string>();
             layers.forEach((l) => expanded.add(l.id));
             state.expandedNodes = expanded;
+            state.isDirty = true;
           });
         },
 
@@ -2816,6 +2818,15 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               changesApplied: message.changesApplied 
             };
           }
+        },
+
+        updateChatMessageContent: (messageId, content) => {
+          set((state) => {
+            const index = state.chatMessages.findIndex((m) => m.id === messageId);
+            if (index !== -1) {
+              state.chatMessages[index].content = content;
+            }
+          });
         },
 
         markChangesApplied: (messageId) => {

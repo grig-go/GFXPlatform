@@ -222,6 +222,17 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   // Background opacity in styles should be handled at the element content level, not container level
   const { opacity: _styleOpacity, ...containerStylesWithoutOpacity } = (containerStyles || {}) as Record<string, unknown>;
 
+  // Extract blend mode from content if it's an image or shape with texture
+  const contentBlendMode = (() => {
+    if (element.content.type === 'image' && element.content.blendMode) {
+      return element.content.blendMode;
+    }
+    if (element.content.type === 'shape' && element.content.texture?.enabled && element.content.texture.blendMode) {
+      return element.content.texture.blendMode;
+    }
+    return undefined;
+  })();
+
   const transformStyle: React.CSSProperties = {
     position: 'absolute',
     left: animatedX,
@@ -249,6 +260,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     ),
     // Master opacity always takes precedence - applied last to ensure it's not overridden
     opacity: animatedOpacity,
+    // Apply blend mode at container level so it blends with elements behind
+    ...(contentBlendMode && contentBlendMode !== 'normal' ? { mixBlendMode: contentBlendMode as React.CSSProperties['mixBlendMode'] } : {}),
   };
 
   // Render content based on type
@@ -335,7 +348,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         const glass = shapeContent.glass;
         const gradient = shapeContent.gradient;
         const glow = shapeContent.glow;
-        
+        const texture = shapeContent.texture;
+
         // Memoize gradient calculation to prevent infinite re-renders
         const gradientValue = useMemo(() => {
           if (!gradient?.enabled || !gradient.colors || gradient.colors.length < 2) {
@@ -454,6 +468,55 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             boxShadow: `0 0 ${blur}px ${spread}px ${colorWithAlpha}`,
           };
         }, [glow?.enabled, glow?.color, glow?.blur, glow?.spread, glow?.intensity, shapeContent.fill]);
+
+        // Compute texture style for background-image
+        const textureStyle = useMemo((): React.CSSProperties => {
+          if (!texture?.enabled || !texture.url) return {};
+
+          const scale = texture.scale ?? 1;
+          const posX = texture.position?.x ?? 0;
+          const posY = texture.position?.y ?? 0;
+          const rotation = texture.rotation ?? 0;
+          const opacity = texture.opacity ?? 1;
+          const fit = texture.fit || 'cover';
+          const blendMode = texture.blendMode || 'normal';
+
+          // Calculate background-size based on fit mode
+          let backgroundSize: string;
+          let backgroundRepeat: string = 'no-repeat';
+
+          switch (fit) {
+            case 'contain':
+              backgroundSize = `${100 * scale}% auto`;
+              break;
+            case 'fill':
+              backgroundSize = `${100 * scale}% ${100 * scale}%`;
+              break;
+            case 'tile':
+              backgroundSize = `${50 * scale}%`;
+              backgroundRepeat = 'repeat';
+              break;
+            case 'cover':
+            default:
+              backgroundSize = scale === 1 ? 'cover' : `${100 * scale}%`;
+              break;
+          }
+
+          // Background position: 50% 50% is center, adjust by position offset
+          const bgPosX = 50 + posX;
+          const bgPosY = 50 + posY;
+
+          return {
+            backgroundImage: `url(${texture.url})`,
+            backgroundSize,
+            backgroundPosition: `${bgPosX}% ${bgPosY}%`,
+            backgroundRepeat,
+            opacity,
+            mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
+            // Note: rotation would need a wrapper div or CSS transform
+            ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
+          };
+        }, [texture?.enabled, texture?.url, texture?.scale, texture?.position, texture?.rotation, texture?.opacity, texture?.fit, texture?.blendMode]);
 
         // Determine background color/value
         const bgColorValue = typeof animatedBgColor === 'string'
@@ -576,6 +639,67 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             ...(element.styles || {}),
           };
           return <div style={gradientStyleFinal} />;
+        }
+
+        // If texture is enabled, render with texture background
+        if (texture?.enabled && texture.url) {
+          const textureBaseStyle: React.CSSProperties = {
+            ...baseStyle,
+            position: 'relative',
+            overflow: 'hidden',
+            backgroundColor: bgColorValue,
+            // Regular border
+            ...(shapeContent.stroke && shapeContent.strokeWidth && shapeContent.strokeWidth > 0 ? {
+              border: `${shapeContent.strokeWidth}px solid ${shapeContent.stroke}`,
+            } : {}),
+            // Apply glow effect
+            ...glowStyle,
+            // Apply element.styles
+            ...(element.styles || {}),
+          };
+
+          const textureLayerStyle: React.CSSProperties = {
+            position: 'absolute',
+            inset: 0,
+            ...textureStyle,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+          };
+
+          // If texture is a video, render video element
+          if (texture.mediaType === 'video') {
+            return (
+              <div style={textureBaseStyle}>
+                <video
+                  src={texture.url}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: (texture.fit === 'cover' ? 'cover' : texture.fit === 'contain' ? 'contain' : 'fill') as React.CSSProperties['objectFit'],
+                    objectPosition: `${50 + (texture.position?.x ?? 0)}% ${50 + (texture.position?.y ?? 0)}%`,
+                    opacity: texture.opacity ?? 1,
+                    mixBlendMode: (texture.blendMode || 'normal') as React.CSSProperties['mixBlendMode'],
+                    transform: texture.rotation ? `scale(${texture.scale ?? 1}) rotate(${texture.rotation}deg)` : `scale(${texture.scale ?? 1})`,
+                    borderRadius: 'inherit',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
+            );
+          }
+
+          // For images, use background-image approach
+          return (
+            <div style={textureBaseStyle}>
+              <div style={textureLayerStyle} />
+            </div>
+          );
         }
 
         // Default: solid color

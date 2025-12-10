@@ -326,6 +326,8 @@ export type ElementContent =
         enabled: boolean;
         amount?: number; // Blur amount in pixels (0-50)
       };
+      opacity?: number; // 0-1
+      blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion';
     }
   | {
       type: 'shape';
@@ -355,6 +357,18 @@ export type ElementContent =
         blur?: number; // Blur radius in pixels (0-100)
         spread?: number; // Spread radius in pixels (-50 to 50)
         intensity?: number; // Opacity/intensity (0-1)
+      };
+      texture?: {
+        enabled: boolean;
+        url: string; // URL of the texture image/video
+        thumbnailUrl?: string; // Thumbnail for videos
+        mediaType?: 'image' | 'video'; // Type of media
+        fit?: 'cover' | 'contain' | 'fill' | 'tile'; // How texture fits the shape
+        position?: { x: number; y: number }; // Position offset in percentage (-100 to 100)
+        scale?: number; // Scale factor (0.1 to 5)
+        rotation?: number; // Rotation in degrees
+        opacity?: number; // Texture opacity (0-1)
+        blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
       };
     }
   | { type: 'group' }

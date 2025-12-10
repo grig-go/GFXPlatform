@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Image as ImageIcon, Wand2, Sparkles, Loader2, Bot, User,
-  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal
+  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen
 } from 'lucide-react';
-import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, cn } from '@emergent-platform/ui';
-import { sendChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
+import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
+import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
@@ -16,6 +16,48 @@ interface Attachment {
   data: string; // base64 or data URL
   preview?: string;
 }
+
+// Progress phases for AI graphic creation
+type CreationPhase = 'idle' | 'acknowledging' | 'creating' | 'applying' | 'done' | 'error';
+
+interface CreationProgress {
+  phase: CreationPhase;
+  message: string;
+  elementCount?: number;
+}
+
+// Documentation context for docs mode - helps users learn about Nova GFX and Pulsar GFX
+const DOCS_CONTEXT = `You are a helpful documentation assistant for Nova GFX and Pulsar GFX - professional broadcast graphics applications.
+
+Nova GFX is a graphics designer for creating broadcast templates with:
+- Elements: Text, Image, Shape, Video, Chart, Map, Countdown, Ticker, Table, Icon, SVG, Lottie animations
+- Animation system with keyframes, easing, and animation phases (in, loop, out)
+- Template layers for organizing graphics (lower-third, fullscreen, bug, ticker, etc.)
+- AI-powered design assistance
+- Real-time preview
+- Data bindings for dynamic content
+
+Pulsar GFX is a playout controller for:
+- Managing channels and layers
+- Creating and controlling playlists
+- Live playout with keyboard shortcuts (F1-F4, Space, Arrow keys)
+- Content editing and data binding
+- Multi-channel output
+
+Key concepts:
+- Templates contain elements with animations
+- Pages are instances of templates with custom content
+- Playlists organize pages for sequential or timed playback
+- Channels connect to video outputs/players
+- Data bindings connect template fields to external data sources
+- Layers organize templates by type (lower-third, fullscreen, bug, ticker)
+
+Animation phases:
+- "in" phase: How elements animate when graphic appears
+- "loop" phase: Continuous animation while graphic is on screen
+- "out" phase: How elements animate when graphic exits
+
+Always provide helpful, accurate answers based on the documentation. If you're unsure about something, say so. Keep responses concise and practical.`
 
 // Helper to extract human-readable description from AI response (removing JSON code blocks)
 function extractDescription(content: string): { description: string; code: string | null; hasCode: boolean } {
@@ -51,23 +93,75 @@ function extractDescription(content: string): { description: string; code: strin
   return { description: content, code: null, hasCode: false };
 }
 
+// Component to render creation progress indicator
+function CreationProgressIndicator({ progress }: { progress: CreationProgress }) {
+  const phaseIcons = {
+    idle: null,
+    acknowledging: <Sparkles className="w-3.5 h-3.5 text-violet-400" />,
+    creating: <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />,
+    applying: <Wand2 className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />,
+    done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
+    error: <AlertCircle className="w-3.5 h-3.5 text-red-400" />,
+  };
+
+  const phaseColors = {
+    idle: '',
+    acknowledging: 'text-violet-300',
+    creating: 'text-blue-300',
+    applying: 'text-fuchsia-300',
+    done: 'text-emerald-300',
+    error: 'text-red-300',
+  };
+
+  return (
+    <div className={cn("flex items-center gap-2", phaseColors[progress.phase])}>
+      {phaseIcons[progress.phase]}
+      <span className="text-xs">{progress.message}</span>
+      {progress.elementCount !== undefined && progress.phase === 'done' && (
+        <span className="text-[10px] text-muted-foreground">
+          ({progress.elementCount} element{progress.elementCount !== 1 ? 's' : ''})
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Component to render AI message with optional code toggle
-function MessageContent({ 
-  content, 
-  isCodeExpanded, 
-  onToggleCode 
-}: { 
+function MessageContent({
+  content,
+  isCodeExpanded,
+  onToggleCode,
+  creationProgress
+}: {
   content: string;
   isCodeExpanded: boolean;
   onToggleCode: () => void;
+  creationProgress?: CreationProgress;
 }) {
   const { description, code, hasCode } = extractDescription(content);
-  
+
+  // If we're in a creation phase (not idle and not done), show the progress indicator instead of content
+  const isCreating = creationProgress &&
+    creationProgress.phase !== 'idle' &&
+    creationProgress.phase !== 'done' &&
+    creationProgress.phase !== 'error';
+
   return (
     <div>
-      <p className="whitespace-pre-wrap">{description || 'Done!'}</p>
-      
-      {hasCode && (
+      {isCreating ? (
+        <CreationProgressIndicator progress={creationProgress} />
+      ) : creationProgress?.phase === 'done' ? (
+        <div>
+          <CreationProgressIndicator progress={creationProgress} />
+          {description && description !== 'Done!' && (
+            <p className="whitespace-pre-wrap mt-2 text-muted-foreground text-[11px]">{description}</p>
+          )}
+        </div>
+      ) : (
+        <p className="whitespace-pre-wrap">{description || 'Done!'}</p>
+      )}
+
+      {hasCode && !isCreating && (
         <div className="mt-2">
           <button
             onClick={onToggleCode}
@@ -77,7 +171,7 @@ function MessageContent({
             {isCodeExpanded ? 'Hide' : 'Show'} code
             {isCodeExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
           </button>
-          
+
           {isCodeExpanded && code && (
             <pre className="mt-1.5 p-1.5 bg-black/30 rounded text-[9px] overflow-x-auto max-h-40 overflow-y-auto">
               <code className="text-violet-300">{code}</code>
@@ -99,6 +193,10 @@ export function ChatPanel() {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [isDocsMode, setIsDocsMode] = useState(false);
+  const [creationProgress, setCreationProgress] = useState<CreationProgress>({ phase: 'idle', message: '' });
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +227,7 @@ export function ChatPanel() {
     isChatLoading,
     loadChatMessages,
     addChatMessage,
+    updateChatMessageContent,
     markChangesApplied,
     clearChat,
   } = useDesignerStore();
@@ -268,35 +367,49 @@ export function ChatPanel() {
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
+        // Don't restart on actual errors (like "not-allowed" or "aborted")
+        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+          // These are recoverable - will auto-restart via onend
+          return;
+        }
+        shouldRestartRecognition.current = false;
         setIsListening(false);
         setInterimTranscript('');
       };
 
       recognition.onend = () => {
+        // Auto-restart if user hasn't manually stopped
+        if (shouldRestartRecognition.current) {
+          try {
+            recognition.start();
+            return; // Don't update state, we're continuing
+          } catch (err) {
+            console.error('Failed to restart speech recognition:', err);
+          }
+        }
+
         setIsListening(false);
         setInterimTranscript('');
-        // Finalize with whatever we have
-        if (interimTranscript) {
-          baseInputRef.current = baseInputRef.current + interimTranscript;
-          setInput(baseInputRef.current);
-        }
       };
 
       recognitionRef.current = recognition;
     }
 
     return () => {
+      shouldRestartRecognition.current = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
     };
-  }, [interimTranscript]);
+  }, []);
 
   // Toggle speech recognition
   const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return;
 
     if (isListening) {
+      // User is manually stopping - don't auto-restart
+      shouldRestartRecognition.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
       setInterimTranscript('');
@@ -304,13 +417,21 @@ export function ChatPanel() {
       // Save current input as base before starting
       baseInputRef.current = input;
       setInterimTranscript('');
-      
+
       // Focus the textarea so user can see text appearing
       textareaRef.current?.focus();
-      
+
+      // Enable auto-restart on silence
+      shouldRestartRecognition.current = true;
+
       // Start recognition
-      recognitionRef.current.start();
-      setIsListening(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (err) {
+        console.error('Failed to start speech recognition:', err);
+        shouldRestartRecognition.current = false;
+      }
     }
   }, [isListening, input]);
 
@@ -359,15 +480,36 @@ export function ChatPanel() {
           const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
           templateId = store.addTemplate(targetLayer.id, `${layerName} Graphic ${timestamp}`);
           console.log(`✅ Created new template: ${templateId} in layer: ${targetLayer.name}`);
-          
-          // Select the new template
-          store.selectTemplate(templateId);
+
+          // Expand the layer node in the outline panel so the new template is visible
+          const currentExpanded = store.expandedNodes;
+          if (!currentExpanded.has(targetLayer.id)) {
+            store.toggleNode(targetLayer.id);
+            console.log(`✅ Expanded layer node: ${targetLayer.id}`);
+          }
+
+          // Select the new template - use fresh state
+          const freshStore = useDesignerStore.getState();
+          freshStore.selectTemplate(templateId);
           console.log(`✅ Selected template: ${templateId}`);
-          
+
+          // Verify template was created and selected
+          const verifyTemplateStore = useDesignerStore.getState();
+          const createdTemplate = verifyTemplateStore.templates.find(t => t.id === templateId);
+          if (!createdTemplate) {
+            console.error('❌ Template was not created! ID:', templateId);
+            useDesignerStore.getState().addChatMessage({
+              role: 'assistant',
+              content: '❌ Error: Failed to create template. Please try again.',
+              error: true,
+            });
+            return;
+          }
+          console.log(`✅ Verified template exists:`, { id: createdTemplate.id, name: createdTemplate.name, enabled: createdTemplate.enabled });
+
           // Ensure template is enabled
-          const newTemplate = store.templates.find(t => t.id === templateId);
-          if (newTemplate && !newTemplate.enabled) {
-            store.setTemplates(store.templates.map(t => 
+          if (!createdTemplate.enabled) {
+            verifyTemplateStore.setTemplates(verifyTemplateStore.templates.map(t =>
               t.id === templateId ? { ...t, enabled: true } : t
             ));
             console.log(`✅ Enabled template: ${templateId}`);
@@ -582,8 +724,15 @@ export function ChatPanel() {
               };
             }
 
-            console.log(`➕ Adding element: ${el.name} (${el.element_type}) to template ${templateId}`);
-            const elementId = store.addElementFromData({
+            console.log(`➕ Adding element: ${el.name} (${el.element_type}) to template ${templateId}`, {
+              position: { x: el.position_x ?? 100, y: el.position_y ?? 100 },
+              size: { w: el.width ?? 200, h: el.height ?? 100 },
+              content: content,
+            });
+
+            // Get fresh store reference for element creation
+            const elementStore = useDesignerStore.getState();
+            const elementId = elementStore.addElementFromData({
               template_id: templateId,
               name: el.name || 'AI Element',
               element_type: el.element_type || 'shape',
@@ -600,13 +749,23 @@ export function ChatPanel() {
               content: content,
               visible: true, // Ensure elements are visible
             });
-            
+
+            // Verify element was actually added
+            const verifyElementStore = useDesignerStore.getState();
+            const addedElement = verifyElementStore.elements.find(e => e.id === elementId);
+            if (addedElement) {
+              console.log(`✅ Element verified in store: ${addedElement.name} (template: ${addedElement.template_id})`);
+            } else {
+              console.error(`❌ Element NOT found in store after adding! ID: ${elementId}`);
+              failedElements.push(`${el.name || `Element ${index + 1}`}: Element not saved to store`);
+            }
+
             // Track newly created elements for auto-grouping (only for 'create' action)
-            if (changes.type === 'create') {
+            if (changes.type === 'create' && addedElement) {
               newlyCreatedElementIds.push(elementId);
             }
-            
-            if (el.name) {
+
+            if (el.name && addedElement) {
               elementNameToId[el.name] = elementId;
             }
           }
@@ -926,16 +1085,45 @@ export function ChatPanel() {
         console.log(`✅ Auto-created ${newlyCreatedElementIds.length * 2} animations (in + out for each element)`);
       }
 
+      // Log summary before marking as applied
+      console.log(`📊 Element creation summary: ${newlyCreatedElementIds.length} created, ${failedElements.length} failed`);
+
       markChangesApplied(messageId);
-      console.log(`✅ Successfully applied ${changes.elements?.length || 0} elements to template ${templateId}`);
-      
-      // Verify elements were added
+      console.log(`✅ Marked changes as applied for message: ${messageId}`);
+
+      // Verify elements were added and show user feedback
       setTimeout(() => {
         const verifyStore = useDesignerStore.getState();
         const templateElements = verifyStore.elements.filter(e => e.template_id === templateId);
-        console.log(`🔍 Verification: Template ${templateId} now has ${templateElements.length} elements`);
+        const totalElements = verifyStore.elements.length;
+        const currentTemplate = verifyStore.templates.find(t => t.id === templateId);
+
+        console.log(`🔍 Final Verification:`);
+        console.log(`   - Template ${templateId}: ${templateElements.length} elements`);
+        console.log(`   - Template name: ${currentTemplate?.name || 'NOT FOUND'}`);
+        console.log(`   - Template enabled: ${currentTemplate?.enabled}`);
+        console.log(`   - Current template ID: ${verifyStore.currentTemplateId}`);
+        console.log(`   - Total elements in store: ${totalElements}`);
+        console.log(`   - Elements in this template:`, templateElements.map(e => ({ id: e.id, name: e.name, type: e.element_type })));
+
         if (templateElements.length === 0) {
-          console.warn('⚠️ Warning: No elements found in template after creation');
+          console.error('❌ CRITICAL: No elements found in template after creation!');
+          console.log('   - All elements:', verifyStore.elements.map(e => ({ id: e.id, name: e.name, template_id: e.template_id })));
+          // Show error message to user
+          useDesignerStore.getState().addChatMessage({
+            role: 'assistant',
+            content: '⚠️ Elements were processed but none were added to the canvas. This may be due to a parsing error. Please try again with a simpler request.',
+            error: true,
+          });
+        } else {
+          // Elements exist - make sure template is selected and visible
+          if (verifyStore.currentTemplateId !== templateId) {
+            console.log(`📌 Auto-selecting template ${templateId} (was: ${verifyStore.currentTemplateId})`);
+            verifyStore.selectTemplate(templateId);
+          }
+
+          // Show success message with element count
+          console.log(`✅ SUCCESS: Created ${templateElements.length} elements in template "${currentTemplate?.name}"`);
         }
       }, 100);
     } catch (error) {
@@ -1070,6 +1258,14 @@ export function ChatPanel() {
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
+    // Stop speech recognition when sending
+    if (isListening && recognitionRef.current) {
+      shouldRestartRecognition.current = false;
+      recognitionRef.current.stop();
+      setIsListening(false);
+      setInterimTranscript('');
+    }
+
     // Check if AI is available
     if (!isAIAvailable) {
       await addChatMessage({
@@ -1126,11 +1322,11 @@ Alternatively, configure your API key in Settings (⚙️).`,
         role: m.role,
         content: m.content,
       }));
-      
+
       // Build the user message with images
       let fullMessage = userInput;
       const imageAttachments: { data: string; mimeType: string }[] = [];
-      
+
       if (userAttachments.length > 0) {
         userAttachments.forEach((a) => {
           if ((a.type === 'image' || a.type === 'screenshot') && a.data) {
@@ -1144,7 +1340,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
             }
           }
         });
-        
+
         // Add text descriptions for context
         const attachmentDescriptions = userAttachments.map((a) => {
           if (a.type === 'screenshot') {
@@ -1157,28 +1353,110 @@ Alternatively, configure your API key in Settings (⚙️).`,
         }).join('\n');
         fullMessage = `${attachmentDescriptions}\n\n${userInput}`;
       }
-      
+
       history.push({ role: 'user', content: fullMessage });
 
-      const context = buildContext();
-      const response = await sendChatMessage(history, context, undefined, imageAttachments, abortControllerRef.current?.signal);
+      // Documentation mode - simple Q&A about Nova/Pulsar GFX
+      if (isDocsMode) {
+        const responseText = await sendDocsChatMessage(history, DOCS_CONTEXT, abortControllerRef.current?.signal);
 
-      // Determine if changes should be auto-applied
-      const shouldAutoApply = response.changes && !isDrasticChange(response.changes);
+        // Add AI response to store (no changes to apply in docs mode)
+        await addChatMessage({
+          role: 'assistant',
+          content: responseText,
+        });
+      } else {
+        // Design mode - full AI assistant with canvas manipulation
+        const context = buildContext();
 
-      // Add AI response to store (persists to DB)
-      const aiMessage = await addChatMessage({
-        role: 'assistant',
-        content: response.message,
-        changes_applied: response.changes || null,
-        changesApplied: shouldAutoApply, // Mark as applied if auto-applying
-      });
+        // Create a placeholder message for streaming
+        const streamingMessage = await addChatMessage({
+          role: 'assistant',
+          content: '...',
+          isSending: true,
+        });
 
-      // Auto-apply changes if they're not drastic
-      if (shouldAutoApply && aiMessage) {
-        applyAIChanges(response.changes!, aiMessage.id);
+        if (!streamingMessage) {
+          throw new Error('Failed to create streaming message');
+        }
+
+        setActiveMessageId(streamingMessage.id);
+
+        // Track if we've started getting JSON code block
+        let isGeneratingCode = false;
+        let preCodeText = ''; // Text before the code block (AI's introduction/questions)
+
+        // Use streaming API for real-time progress
+        const response = await sendChatMessageStreaming(
+          history,
+          context,
+          (_chunk, fullText) => {
+            // Check if we've hit a JSON code block
+            const codeBlockStart = fullText.indexOf('```json');
+
+            if (codeBlockStart !== -1) {
+              // We have JSON - extract the text before it and show progress
+              if (!isGeneratingCode) {
+                isGeneratingCode = true;
+                preCodeText = fullText.substring(0, codeBlockStart).trim();
+                setCreationProgress({ phase: 'creating', message: 'Creating graphic...' });
+              }
+
+              // Show the AI's intro text + progress indicator
+              const displayText = preCodeText
+                ? `${preCodeText}\n\n⏳ Creating graphic...`
+                : '⏳ Creating graphic...';
+              useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, displayText);
+            } else {
+              // No JSON yet - show the full text as-is (could be questions, clarifications, etc.)
+              useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, fullText + '▍');
+              setCreationProgress({ phase: 'idle', message: '' });
+            }
+          },
+          undefined,
+          imageAttachments,
+          abortControllerRef.current?.signal
+        );
+
+        // Check if there are changes to apply
+        const shouldAutoApply = response.changes && !isDrasticChange(response.changes);
+
+        if (shouldAutoApply && response.changes) {
+          // Show applying phase
+          const applyingText = preCodeText
+            ? `${preCodeText}\n\n⚡ Applying to canvas...`
+            : '⚡ Applying to canvas...';
+          setCreationProgress({ phase: 'applying', message: 'Applying to canvas...' });
+          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, applyingText);
+
+          // Apply the changes
+          markChangesApplied(streamingMessage.id);
+          applyAIChanges(response.changes!, streamingMessage.id);
+
+          // Show completion with element count
+          const elementCount = response.changes.elements?.length || 0;
+          const doneText = elementCount > 0
+            ? `✓ Created ${elementCount} element${elementCount !== 1 ? 's' : ''} on canvas.`
+            : '✓ Done!';
+
+          setCreationProgress({ phase: 'done', message: doneText, elementCount });
+
+          // Store the full response (with JSON) - MessageContent component handles display
+          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
+        } else {
+          // No changes to apply - just show the response as-is
+          // This handles cases where AI asks questions or provides info without creating elements
+          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
+          setCreationProgress({ phase: 'idle', message: '' });
+        }
+
+        setActiveMessageId(null);
       }
     } catch (error) {
+      // Reset progress state on error
+      setCreationProgress({ phase: 'error', message: 'An error occurred' });
+      setActiveMessageId(null);
+
       // Check if this was a user-initiated abort
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('Chat request was cancelled by user');
@@ -1190,12 +1468,12 @@ Alternatively, configure your API key in Settings (⚙️).`,
       } else {
         console.error('Chat error:', error);
         // Add error message to store with more details
-        const errorMessage = error instanceof Error 
-          ? error.message 
+        const errorMessage = error instanceof Error
+          ? error.message
           : typeof error === 'string'
           ? error
           : 'Unknown error occurred';
-        
+
         await addChatMessage({
           role: 'assistant',
           content: `Sorry, I encountered an error: ${errorMessage}. Please check your API key configuration and try again.`,
@@ -1205,6 +1483,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      // Reset progress after a delay so user sees the final state
+      setTimeout(() => {
+        setCreationProgress({ phase: 'idle', message: '' });
+      }, 2000);
     }
   };
 
@@ -1286,35 +1568,48 @@ Alternatively, configure your API key in Settings (⚙️).`,
   ];
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div ref={containerRef} className="h-full w-full min-w-0 flex flex-col bg-card border-r border-border overflow-hidden">
       {/* Header */}
       <div className="p-2 border-b border-border flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <div className={cn(
             "h-5 w-5 rounded-lg flex items-center justify-center",
-            AI_MODELS[getAIModel()]?.provider === 'gemini' 
-              ? "bg-gradient-to-br from-blue-500 to-cyan-400"
-              : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
+            isDocsMode
+              ? "bg-gradient-to-br from-blue-500 to-blue-600"
+              : AI_MODELS[getAIModel()]?.provider === 'gemini'
+                ? "bg-gradient-to-br from-blue-500 to-cyan-400"
+                : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
           )}>
-            <Sparkles className="w-3 h-3 text-white" />
+            {isDocsMode ? (
+              <BookOpen className="w-3 h-3 text-white" />
+            ) : (
+              <Sparkles className="w-3 h-3 text-white" />
+            )}
           </div>
           <div>
-            <h2 className="font-semibold text-xs leading-tight">AI Assistant</h2>
+            <h2 className="font-semibold text-xs leading-tight">
+              {isDocsMode ? 'Documentation Helper' : 'AI Assistant'}
+            </h2>
             <p className="text-[9px] text-muted-foreground leading-tight">
-              {AI_MODELS[getAIModel()]?.name || 'Unknown Model'}
+              {isDocsMode ? 'Ask about Nova/Pulsar GFX' : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
             </p>
           </div>
         </div>
         {chatMessages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 text-muted-foreground hover:text-foreground"
-            onClick={handleClearChat}
-            title="Clear chat history"
-          >
-            <Trash2 className="w-3 h-3" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                onClick={handleClearChat}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Clear chat history</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
@@ -1344,14 +1639,27 @@ Alternatively, configure your API key in Settings (⚙️).`,
             </div>
           ) : chatMessages.length === 0 ? (
             <div className="text-center py-4">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-400/20 flex items-center justify-center mx-auto mb-2">
-                <Wand2 className="w-5 h-5 text-violet-400" />
+              <div className={cn(
+                "h-10 w-10 rounded-xl flex items-center justify-center mx-auto mb-2",
+                isDocsMode
+                  ? "bg-gradient-to-br from-blue-500/20 to-blue-600/20"
+                  : "bg-gradient-to-br from-violet-500/20 to-fuchsia-400/20"
+              )}>
+                {isDocsMode ? (
+                  <BookOpen className="w-5 h-5 text-blue-400" />
+                ) : (
+                  <Wand2 className="w-5 h-5 text-violet-400" />
+                )}
               </div>
               <p className="text-xs text-muted-foreground mb-1.5">
-                Describe what you want to create
+                {isDocsMode
+                  ? "Ask questions about Nova GFX or Pulsar GFX"
+                  : "Describe what you want to create"}
               </p>
               <p className="text-[10px] text-muted-foreground/70">
-                "Create a sports lower third with team colors"
+                {isDocsMode
+                  ? '"How do I add animations to elements?"'
+                  : '"Create a sports lower third with team colors"'}
               </p>
             </div>
           ) : (
@@ -1410,24 +1718,19 @@ Alternatively, configure your API key in Settings (⚙️).`,
                       Error
                     </div>
                   )}
-                  {msg.changesApplied && (
+                  {msg.changesApplied && creationProgress.phase !== 'done' && (
                     <div className="flex items-center gap-1 text-emerald-400 text-[10px] mb-1.5">
                       <CheckCircle2 className="w-3 h-3" />
                       Elements created on canvas
                     </div>
                   )}
-                  {msg.isSending && (
-                    <div className="flex items-center gap-1 text-blue-400 text-[10px] mb-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Sending...
-                    </div>
-                  )}
                   {/* Render message content - hide code for non-dev users */}
                   {msg.role === 'assistant' ? (
-                    <MessageContent 
-                      content={msg.content} 
+                    <MessageContent
+                      content={msg.content}
                       isCodeExpanded={expandedCodeIds.has(msg.id)}
                       onToggleCode={() => toggleCodeExpanded(msg.id)}
+                      creationProgress={activeMessageId === msg.id ? creationProgress : undefined}
                     />
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -1450,11 +1753,11 @@ Alternatively, configure your API key in Settings (⚙️).`,
             ))
           )}
 
-          {isLoading && (
+          {isLoading && creationProgress.phase === 'idle' && (
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>Thinking...</span>
-              <button 
+              <button
                 onClick={handleCancel}
                 className="text-[10px] text-muted-foreground/60 hover:text-red-400 transition-colors ml-1.5"
               >
@@ -1488,25 +1791,27 @@ Alternatively, configure your API key in Settings (⚙️).`,
         className="flex-shrink-0 overflow-hidden flex flex-col"
         style={{ height: inputAreaHeight }}
       >
-        {/* Quick Actions */}
-      <div className="px-2 py-1.5 border-t border-border flex-shrink-0">
-        <div className="flex flex-wrap gap-0.5">
-          {quickActions.map((action) => (
-            <Button
-              key={action.label}
-              variant="ghost"
-              size="sm"
-              className="text-[10px] h-6 px-1.5"
-              onClick={() => {
-                setInput(action.prompt);
-              }}
-              disabled={isLoading}
-            >
-              {action.label}
-            </Button>
-          ))}
+        {/* Quick Actions - hide in docs mode */}
+      {!isDocsMode && (
+        <div className="px-2 py-1.5 border-t border-border flex-shrink-0">
+          <div className="flex flex-wrap gap-0.5">
+            {quickActions.map((action) => (
+              <Button
+                key={action.label}
+                variant="ghost"
+                size="sm"
+                className="text-[10px] h-6 px-1.5"
+                onClick={() => {
+                  setInput(action.prompt);
+                }}
+                disabled={isLoading}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Attachments Preview */}
       {attachments.length > 0 && (
@@ -1555,44 +1860,57 @@ Alternatively, configure your API key in Settings (⚙️).`,
       {/* Input Area */}
       <div className="p-2 border-t border-border flex-shrink-0">
         <div className="flex gap-1.5 mb-1.5">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6" 
-            title="Attach file"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-          >
-            <Paperclip className="w-3.5 h-3.5" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6" 
-            title="Upload image"
-            onClick={() => imageInputRef.current?.click()}
-            disabled={isLoading}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-          </Button>
-          
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Attach file</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Upload image</TooltipContent>
+          </Tooltip>
+
           {/* Screen Capture Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6" 
-                title="Capture canvas"
-                disabled={isLoading || isCapturing}
-              >
-                {isCapturing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Camera className="w-3.5 h-3.5" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={isLoading || isCapturing}
+                  >
+                    {isCapturing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top">Capture canvas</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => captureCanvas(true)}>
                 <Camera className="w-3.5 h-3.5 mr-1.5" />
@@ -1607,24 +1925,51 @@ Alternatively, configure your API key in Settings (⚙️).`,
 
           {/* Voice Input Button */}
           {speechSupported && (
-            <Button 
-              variant={isListening ? "default" : "ghost"}
-              size="icon" 
-              className={cn(
-                "h-6 w-6 transition-all",
-                isListening && "bg-red-500 hover:bg-red-600 text-white animate-pulse"
-              )}
-              title={isListening ? "Stop listening" : "Voice input"}
-              onClick={toggleListening}
-              disabled={isLoading}
-            >
-              {isListening ? (
-                <MicOff className="w-3.5 h-3.5" />
-              ) : (
-                <Mic className="w-3.5 h-3.5" />
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isListening ? "default" : "ghost"}
+                  size="icon"
+                  className={cn(
+                    "h-6 w-6 transition-all",
+                    isListening && "bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                  )}
+                  onClick={toggleListening}
+                  disabled={isLoading}
+                >
+                  {isListening ? (
+                    <MicOff className="w-3.5 h-3.5" />
+                  ) : (
+                    <Mic className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isListening ? "Stop listening" : "Voice input"}
+              </TooltipContent>
+            </Tooltip>
           )}
+
+          {/* Documentation Mode Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isDocsMode ? "default" : "ghost"}
+                size="icon"
+                className={cn(
+                  "h-6 w-6 transition-all",
+                  isDocsMode && "bg-blue-500 hover:bg-blue-600 text-white"
+                )}
+                onClick={() => setIsDocsMode(!isDocsMode)}
+                disabled={isLoading}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {isDocsMode ? "Switch to Design mode" : "Documentation help"}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="flex gap-1.5">
@@ -1640,7 +1985,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
             }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isListening ? "Listening... speak now" : "Describe what you want... (paste images with Ctrl+V)"}
+            placeholder={isListening ? "Listening... speak now" : isDocsMode ? "Ask about Nova GFX or Pulsar GFX..." : "Describe what you want... (paste images with Ctrl+V)"}
             className={cn(
               "min-h-[48px] max-h-[96px] bg-muted border-border resize-none text-xs transition-all",
               isListening && "border-red-500/50 bg-red-500/5"
@@ -1648,28 +1993,38 @@ Alternatively, configure your API key in Settings (⚙️).`,
             disabled={isLoading}
           />
           {isLoading ? (
-            <Button
-              onClick={handleCancel}
-              size="icon"
-              variant="destructive"
-              className="h-[48px] w-9"
-              title="Cancel request (Esc)"
-            >
-              <Square className="w-3.5 h-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleCancel}
+                  size="icon"
+                  variant="destructive"
+                  className="h-[48px] w-9"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Cancel (Esc)</TooltipContent>
+            </Tooltip>
           ) : (
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              size="icon"
-              className="h-[48px] w-9 bg-gradient-to-br from-violet-500 to-fuchsia-400 hover:from-violet-600 hover:to-fuchsia-500"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  size="icon"
+                  className="h-[48px] w-9 bg-gradient-to-br from-violet-500 to-fuchsia-400 hover:from-violet-600 hover:to-fuchsia-500"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Send message</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

@@ -2240,7 +2240,281 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
           )}
         </div>
       </PropertySection>
+
+      <TextureFillSection shapeContent={shapeContent} updateContent={updateContent} />
     </div>
+  );
+}
+
+// Texture Fill Section for Shapes
+function TextureFillSection({
+  shapeContent,
+  updateContent
+}: {
+  shapeContent: Extract<Element['content'], { type: 'shape' }>;
+  updateContent: (updates: Record<string, unknown>) => void;
+}) {
+  const [showTexturePicker, setShowTexturePicker] = useState(false);
+  const hasTexture = shapeContent.texture?.enabled ?? false;
+
+  return (
+    <PropertySection title="Texture Fill">
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hasTexture}
+            onChange={(e) => updateContent({
+              texture: {
+                enabled: e.target.checked,
+                url: shapeContent.texture?.url || '',
+                fit: shapeContent.texture?.fit || 'cover',
+                position: shapeContent.texture?.position || { x: 0, y: 0 },
+                scale: shapeContent.texture?.scale ?? 1,
+                rotation: shapeContent.texture?.rotation || 0,
+                opacity: shapeContent.texture?.opacity ?? 1,
+                blendMode: shapeContent.texture?.blendMode || 'normal',
+              },
+            })}
+            className="rounded"
+          />
+          <span>Use Texture</span>
+        </label>
+
+        {hasTexture && (
+          <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
+            {/* Texture Preview & Select */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Texture Image/Video</label>
+              <div className="flex gap-2 items-start">
+                {shapeContent.texture?.url ? (
+                  <div
+                    className="relative w-16 h-16 rounded border border-input overflow-hidden cursor-pointer group"
+                    onClick={() => setShowTexturePicker(true)}
+                  >
+                    {shapeContent.texture?.mediaType === 'video' ? (
+                      <video
+                        src={shapeContent.texture.url}
+                        className="w-full h-full object-cover"
+                        muted
+                      />
+                    ) : (
+                      <img
+                        src={shapeContent.texture.thumbnailUrl || shapeContent.texture.url}
+                        alt="Texture"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <span className="text-white text-[10px]">Change</span>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTexturePicker(true)}
+                    className="h-16 w-full text-xs"
+                  >
+                    <FolderOpen className="w-4 h-4 mr-2" />
+                    Select Texture
+                  </Button>
+                )}
+                {shapeContent.texture?.url && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => updateContent({
+                      texture: {
+                        ...shapeContent.texture!,
+                        url: '',
+                        thumbnailUrl: undefined,
+                        mediaType: undefined,
+                      },
+                    })}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Fit Mode */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Fit Mode</label>
+              <select
+                value={shapeContent.texture?.fit || 'cover'}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    fit: e.target.value as 'cover' | 'contain' | 'fill' | 'tile',
+                  },
+                })}
+                className="w-full h-8 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+              >
+                <option value="cover">Cover (fill, crop if needed)</option>
+                <option value="contain">Contain (fit inside)</option>
+                <option value="fill">Fill (stretch to fit)</option>
+                <option value="tile">Tile (repeat pattern)</option>
+              </select>
+            </div>
+
+            {/* Scale */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Scale: {((shapeContent.texture?.scale ?? 1) * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="0.1"
+                max="5"
+                step="0.1"
+                value={shapeContent.texture?.scale ?? 1}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    scale: parseFloat(e.target.value),
+                  },
+                })}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Position X/Y */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Position Offset</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">X: {shapeContent.texture?.position?.x ?? 0}%</label>
+                  <input
+                    type="range"
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={shapeContent.texture?.position?.x ?? 0}
+                    onChange={(e) => updateContent({
+                      texture: {
+                        ...shapeContent.texture!,
+                        position: {
+                          x: parseFloat(e.target.value),
+                          y: shapeContent.texture?.position?.y ?? 0,
+                        },
+                      },
+                    })}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Y: {shapeContent.texture?.position?.y ?? 0}%</label>
+                  <input
+                    type="range"
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={shapeContent.texture?.position?.y ?? 0}
+                    onChange={(e) => updateContent({
+                      texture: {
+                        ...shapeContent.texture!,
+                        position: {
+                          x: shapeContent.texture?.position?.x ?? 0,
+                          y: parseFloat(e.target.value),
+                        },
+                      },
+                    })}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Rotation */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Rotation: {shapeContent.texture?.rotation ?? 0}°
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                step="1"
+                value={shapeContent.texture?.rotation ?? 0}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    rotation: parseFloat(e.target.value),
+                  },
+                })}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Opacity */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Opacity: {Math.round((shapeContent.texture?.opacity ?? 1) * 100)}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={shapeContent.texture?.opacity ?? 1}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    opacity: parseFloat(e.target.value),
+                  },
+                })}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Blend Mode */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Blend Mode</label>
+              <select
+                value={shapeContent.texture?.blendMode || 'normal'}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    blendMode: e.target.value as 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten',
+                  },
+                })}
+                className="w-full h-8 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+              >
+                <option value="normal">Normal</option>
+                <option value="multiply">Multiply</option>
+                <option value="screen">Screen</option>
+                <option value="overlay">Overlay</option>
+                <option value="darken">Darken</option>
+                <option value="lighten">Lighten</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Texture Picker Dialog */}
+      <MediaPickerDialog
+        open={showTexturePicker}
+        onOpenChange={setShowTexturePicker}
+        onSelect={(url, asset) => {
+          updateContent({
+            texture: {
+              ...shapeContent.texture!,
+              enabled: true,
+              url: url,
+              thumbnailUrl: asset?.thumbnail_url || undefined,
+              mediaType: asset?.media_type as 'image' | 'video' || 'image',
+            },
+          });
+          setShowTexturePicker(false);
+        }}
+        mediaType="all"
+        title="Select Texture"
+      />
+    </PropertySection>
   );
 }
 
@@ -3668,6 +3942,44 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
               </div>
             )}
           </div>
+        </PropertySection>
+
+        <PropertySection title="Opacity">
+          <div className="space-y-2">
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Opacity: {Math.round((imageContent.opacity ?? 1) * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={imageContent.opacity ?? 1}
+              onChange={(e) => updateContent({ opacity: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+        </PropertySection>
+
+        <PropertySection title="Blend Mode">
+          <select
+            value={imageContent.blendMode || 'normal'}
+            onChange={(e) => updateContent({ blendMode: e.target.value })}
+            className="w-full h-8 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+          >
+            <option value="normal">Normal</option>
+            <option value="multiply">Multiply</option>
+            <option value="screen">Screen</option>
+            <option value="overlay">Overlay</option>
+            <option value="darken">Darken</option>
+            <option value="lighten">Lighten</option>
+            <option value="color-dodge">Color Dodge</option>
+            <option value="color-burn">Color Burn</option>
+            <option value="hard-light">Hard Light</option>
+            <option value="soft-light">Soft Light</option>
+            <option value="difference">Difference</option>
+            <option value="exclusion">Exclusion</option>
+          </select>
         </PropertySection>
       </div>
     );

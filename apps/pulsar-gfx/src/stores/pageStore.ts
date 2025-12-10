@@ -659,10 +659,17 @@ export const usePageStore = create<PageStore>((set, get) => ({
 
     if (error) throw error;
 
+    const updatedPages = get().pages.map((p) =>
+      p.id === pageId ? { ...p, channelId: channelId || undefined } : p
+    );
+    const selectedPage = get().selectedPage;
+
     set({
-      pages: get().pages.map((p) =>
-        p.id === pageId ? { ...p, channelId: channelId || undefined } : p
-      ),
+      pages: updatedPages,
+      // Also update selectedPage if it's the one being modified
+      selectedPage: selectedPage?.id === pageId
+        ? { ...selectedPage, channelId: channelId || undefined }
+        : selectedPage,
     });
   },
 

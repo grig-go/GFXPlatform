@@ -1,12 +1,18 @@
 [build]
-  command = "cd ../.. && pnpm install && pnpm --filter nova-gfx build"
+  command = "cd ../.. && pnpm install && pnpm --filter nova-gfx build && pnpm --filter docs build && cp -r ../docs/build dist/docs"
   publish = "dist"
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
 
-# SPA routing - redirect all routes to index.html
+# Docs - serve from /docs subfolder
+[[redirects]]
+  from = "/docs/*"
+  to = "/docs/:splat"
+  status = 200
+
+# SPA routing - redirect all other routes to index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"

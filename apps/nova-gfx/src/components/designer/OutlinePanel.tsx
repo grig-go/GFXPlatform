@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, Plus, Layers, LayoutTemplate, Folder,
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
-  PenLine, FilePlus, Save, Play, Pin, GripHorizontal,
+  PenLine, FilePlus, Save, Play, Pin, GripHorizontal, ExternalLink,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -198,6 +198,20 @@ export function OutlinePanel() {
             <DropdownMenuItem onClick={() => navigate('/projects')}>
               <FolderOpen className="mr-2 h-4 w-4" />
               Switch Project...
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                if (project?.id) {
+                  // Pulsar GFX URL - configurable via env, defaults to localhost:5174
+                  const pulsarUrl = import.meta.env.VITE_PULSAR_GFX_URL || 'http://localhost:5174';
+                  window.open(`${pulsarUrl}?project=${project.id}`, '_blank');
+                }
+              }}
+              disabled={!project?.id}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Open in Pulsar
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
