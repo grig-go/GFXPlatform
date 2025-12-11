@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, Plus, Layers, LayoutTemplate, Folder,
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
-  PenLine, FilePlus, Save, Play, Pin, GripHorizontal, ExternalLink,
+  PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -47,13 +47,12 @@ import {
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { PropertiesPanel } from './PropertiesPanel';
-import { PreviewControlPanel } from './PreviewControlPanel';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { Template, Element } from '@emergent-platform/types';
 
 export function OutlinePanel() {
-  const [activeTab, setActiveTab] = useState('layers');
+  const [activeTab, setActiveTab] = useState('elements');
   const [showNewLayerDialog, setShowNewLayerDialog] = useState(false);
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
@@ -76,7 +75,67 @@ export function OutlinePanel() {
 
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const { project, layers, addLayer, addTemplate, updateProjectSettings, isDirty, saveProject, isSaving, deleteLayer } = useDesignerStore();
+  const {
+    project, layers, addLayer, addTemplate, updateProjectSettings, isDirty, saveProject, isSaving, deleteLayer,
+    elements, selectedElementIds, groupElements, ungroupElements
+  } = useDesignerStore();
+
+  // Check if we can group (2+ elements selected from same parent)
+  const canGroup = useMemo(() => {
+    if (selectedElementIds.length < 2) return false;
+    const selectedElements = elements.filter(e => selectedElementIds.includes(e.id));
+    const parentIds = new Set(selectedElements.map(e => e.parent_element_id));
+    return parentIds.size === 1; // All must have same parent
+  }, [selectedElementIds, elements]);
+
+  // Check if selected element is a group
+  const selectedIsGroup = useMemo(() => {
+    if (selectedElementIds.length !== 1) return false;
+    const selected = elements.find(e => e.id === selectedElementIds[0]);
+    return selected?.element_type === 'group';
+  }, [selectedElementIds, elements]);
+
+  // Handle group action
+  const handleGroup = useCallback(() => {
+    if (canGroup) {
+      groupElements(selectedElementIds);
+    }
+  }, [canGroup, selectedElementIds, groupElements]);
+
+  // Handle ungroup action
+  const handleUngroup = useCallback(() => {
+    if (selectedIsGroup) {
+      ungroupElements(selectedElementIds[0]);
+    }
+  }, [selectedIsGroup, selectedElementIds, ungroupElements]);
+
+  // Keyboard shortcuts for group/ungroup (Ctrl+G / Ctrl+Shift+G)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if we're in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'g' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ctrl+Shift+G = Ungroup
+          if (selectedIsGroup) {
+            handleUngroup();
+          }
+        } else {
+          // Ctrl+G = Group
+          if (canGroup) {
+            handleGroup();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGroup, selectedIsGroup, handleGroup, handleUngroup]);
 
   // Handle drag to resize properties panel
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -237,7 +296,32 @@ export function OutlinePanel() {
         )}
         
         <div className="flex-1" />
-        
+
+        {/* Group/Ungroup button - only visible when on Elements tab and elements are selected */}
+        {activeTab === 'elements' && (canGroup || selectedIsGroup) && (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className={cn(
+                    "h-6 w-6 font-bold text-xs",
+                    canGroup && "border-violet-500/50 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 hover:border-violet-400",
+                    selectedIsGroup && "border-amber-500/50 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 hover:border-amber-400"
+                  )}
+                  onClick={canGroup ? handleGroup : handleUngroup}
+                >
+                  G
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {canGroup ? `Group (Ctrl+G)` : 'Ungroup (Ctrl+Shift+G)'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -281,36 +365,28 @@ export function OutlinePanel() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-2 mt-1.5 h-6 p-0.5 gap-0.5">
-          <TabsTrigger value="layers" className="flex-1 gap-1 text-[10px] px-2 py-0.5 h-5 rounded data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none">
-            <Layers className="w-3 h-3" />
-            Layers
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="mx-2 mt-1.5 h-6 p-0.5 gap-0.5 flex-shrink-0">
           <TabsTrigger value="elements" className="flex-1 gap-1 text-[10px] px-2 py-0.5 h-5 rounded data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none">
             <LayoutTemplate className="w-3 h-3" />
             Elements
           </TabsTrigger>
-          <TabsTrigger value="preview" className="flex-1 gap-1 text-[10px] px-2 py-0.5 h-5 rounded data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none">
-            <Play className="w-3 h-3" />
-            Preview
+          <TabsTrigger value="layers" className="flex-1 gap-1 text-[10px] px-2 py-0.5 h-5 rounded data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none">
+            <Layers className="w-3 h-3" />
+            Layers
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="layers" className="flex-1 mt-0">
+        <TabsContent value="layers" className="flex-1 mt-0 min-h-0">
           <ScrollArea className="h-full">
             <LayersTree />
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="elements" className="flex-1 mt-0">
+        <TabsContent value="elements" className="flex-1 mt-0 min-h-0">
           <ScrollArea className="h-full">
             <ElementsTree />
           </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="preview" className="flex-1 mt-0">
-          <PreviewControlPanel />
         </TabsContent>
       </Tabs>
 
@@ -549,6 +625,21 @@ function LayersTree() {
     toggleTemplateVisibility,
     toggleTemplateLock,
   } = useDesignerStore();
+
+  const confirm = useConfirm();
+
+  // Handle deleting a layer with confirmation
+  const handleDeleteLayer = useCallback(async (layerId: string, layerName: string) => {
+    const confirmed = await confirm({
+      title: 'Delete Layer',
+      description: `Are you sure you want to delete "${layerName}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (confirmed) {
+      deleteLayer(layerId);
+    }
+  }, [confirm, deleteLayer]);
 
   const sortedLayers = [...layers].sort((a, b) => b.z_index - a.z_index);
 
@@ -1143,15 +1234,22 @@ function ElementsTree() {
     selectedElementIds,
     selectElements,
     updateElement,
+    duplicateElement,
     deleteElements,
     groupElements,
     ungroupElements,
     moveElementsToTemplate,
+    reorderElement,
     expandedNodes,
     toggleNode,
     templates,
     currentTemplateId,
   } = useDesignerStore();
+
+  // Drag state for reordering
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
 
   // Build element tree (only root elements)
   const rootElements = elements
@@ -1193,8 +1291,61 @@ function ElementsTree() {
   const canGroup = selectedElementIds.length >= 2;
 
   // Check if selected element is a group
-  const selectedIsGroup = selectedElementIds.length === 1 && 
+  const selectedIsGroup = selectedElementIds.length === 1 &&
     elements.find(e => e.id === selectedElementIds[0])?.element_type === 'group';
+
+  // Handle drag start
+  const handleDragStart = useCallback((elementId: string) => {
+    setDraggedId(elementId);
+  }, []);
+
+  // Handle drag over
+  const handleDragOver = useCallback((targetId: string, position: 'before' | 'after' | 'inside') => {
+    if (draggedId && targetId !== draggedId) {
+      setDropTargetId(targetId);
+      setDropPosition(position);
+    }
+  }, [draggedId]);
+
+  // Handle drag end / drop
+  const handleDrop = useCallback(() => {
+    if (draggedId && dropTargetId && dropPosition) {
+      const draggedElement = elements.find(e => e.id === draggedId);
+      const targetElement = elements.find(e => e.id === dropTargetId);
+
+      if (draggedElement && targetElement) {
+        // Get siblings of the target element
+        const targetParentId = dropPosition === 'inside' ? dropTargetId : targetElement.parent_element_id;
+        const siblings = elements
+          .filter(e => e.parent_element_id === targetParentId && e.id !== draggedId)
+          .sort((a, b) => a.sort_order - b.sort_order);
+
+        let targetIndex = 0;
+        if (dropPosition === 'inside') {
+          // Dropping inside a group - put at the end
+          targetIndex = siblings.length;
+        } else {
+          // Find target's index among siblings
+          const targetIdx = siblings.findIndex(e => e.id === dropTargetId);
+          targetIndex = dropPosition === 'before' ? targetIdx : targetIdx + 1;
+          if (targetIndex < 0) targetIndex = 0;
+        }
+
+        reorderElement(draggedId, targetIndex, targetParentId);
+      }
+    }
+
+    setDraggedId(null);
+    setDropTargetId(null);
+    setDropPosition(null);
+  }, [draggedId, dropTargetId, dropPosition, elements, reorderElement]);
+
+  // Handle drag cancel
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+    setDropTargetId(null);
+    setDropPosition(null);
+  }, []);
 
   if (elements.length === 0) {
     return (
@@ -1208,35 +1359,7 @@ function ElementsTree() {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="p-2 space-y-0.5">
-          {/* Toolbar for group actions */}
-          {(canGroup || selectedIsGroup) && (
-            <div className="flex gap-1 mb-2 px-1">
-              {canGroup && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={handleGroup}
-                >
-                  <Group className="w-3 h-3" />
-                  Group
-                </Button>
-              )}
-              {selectedIsGroup && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => handleUngroup(selectedElementIds[0])}
-                >
-                  <Ungroup className="w-3 h-3" />
-                  Ungroup
-                </Button>
-              )}
-            </div>
-          )}
-          
-          {rootElements.map((element) => (
+          {rootElements.map((element, index) => (
             <ElementItem
               key={element.id}
               element={element}
@@ -1247,12 +1370,21 @@ function ElementsTree() {
               onClick={handleElementClick}
               onToggleVisibility={(id, visible) => updateElement(id, { visible })}
               onToggleLock={(id, locked) => updateElement(id, { locked })}
+              onDuplicate={duplicateElement}
               onDelete={(id) => deleteElements([id])}
               onUngroup={handleUngroup}
               onMoveToTemplate={moveElementsToTemplate}
               templates={templates}
               currentTemplateId={currentTemplateId}
               depth={0}
+              index={index}
+              draggedId={draggedId}
+              dropTargetId={dropTargetId}
+              dropPosition={dropPosition}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
             />
           ))}
         </div>
@@ -1315,12 +1447,21 @@ interface ElementItemProps {
   onClick: (id: string, event: React.MouseEvent) => void;
   onToggleVisibility: (id: string, visible: boolean) => void;
   onToggleLock: (id: string, locked: boolean) => void;
+  onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onUngroup: (id: string) => void;
   onMoveToTemplate: (elementIds: string[], templateId: string) => void;
   templates: Template[];
   currentTemplateId: string | null;
   depth: number;
+  index: number;
+  draggedId: string | null;
+  dropTargetId: string | null;
+  dropPosition: 'before' | 'after' | 'inside' | null;
+  onDragStart: (id: string) => void;
+  onDragOver: (id: string, position: 'before' | 'after' | 'inside') => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
 }
 
 function ElementItem({
@@ -1332,13 +1473,24 @@ function ElementItem({
   onClick,
   onToggleVisibility,
   onToggleLock,
+  onDuplicate,
   onDelete,
   onUngroup,
   onMoveToTemplate,
   templates,
   currentTemplateId,
   depth,
+  index,
+  draggedId,
+  dropTargetId,
+  dropPosition,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: ElementItemProps) {
+  const isDragging = draggedId === element.id;
+  const isDropTarget = dropTargetId === element.id;
   const { updateElement } = useDesignerStore();
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(element.name);
@@ -1346,6 +1498,8 @@ function ElementItem({
 
   const isSelected = selectedElementIds.includes(element.id);
   const isGroup = element.element_type === 'group';
+  const isShape = element.element_type === 'shape';
+  const canHaveChildren = isGroup || isShape; // Groups and shapes can have children
   const children = elements.filter((e) => e.parent_element_id === element.id);
   const hasChildren = children.length > 0;
   const isExpanded = expandedNodes.has(element.id);
@@ -1400,28 +1554,76 @@ function ElementItem({
     return icons[type] || type.charAt(0).toUpperCase();
   };
 
+  // Calculate drop position based on mouse position in element
+  const handleDragOverElement = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Determine position: top 25% = before, bottom 25% = after, middle = inside (for groups/shapes)
+    if (y < height * 0.25) {
+      onDragOver(element.id, 'before');
+    } else if (y > height * 0.75) {
+      onDragOver(element.id, 'after');
+    } else if (canHaveChildren) {
+      onDragOver(element.id, 'inside');
+    } else {
+      onDragOver(element.id, y < height / 2 ? 'before' : 'after');
+    }
+  }, [element.id, canHaveChildren, onDragOver]);
+
   return (
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
             className={cn(
-              'flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer group',
+              'flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer group relative',
               isSelected
                 ? 'bg-violet-500/20 text-violet-300'
-                : 'hover:bg-muted/50'
+                : 'hover:bg-muted/50',
+              isDragging && 'opacity-50',
+              isDropTarget && dropPosition === 'inside' && 'ring-2 ring-violet-500 bg-violet-500/10'
             )}
             style={{ paddingLeft: `${8 + depth * 16}px` }}
             onClick={(e) => onClick(element.id, e)}
+            draggable={!isRenaming}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', element.id);
+              onDragStart(element.id);
+            }}
+            onDragOver={handleDragOverElement}
+            onDragLeave={(e) => {
+              e.preventDefault();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDrop();
+            }}
+            onDragEnd={onDragEnd}
           >
-            {/* Expand/Collapse for groups */}
-            {(isGroup || hasChildren) ? (
+            {/* Drop indicator - before */}
+            {isDropTarget && dropPosition === 'before' && (
+              <div className="absolute left-0 right-0 top-0 h-0.5 bg-violet-500 -translate-y-0.5" />
+            )}
+            {/* Drop indicator - after */}
+            {isDropTarget && dropPosition === 'after' && (
+              <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-violet-500 translate-y-0.5" />
+            )}
+            {/* Expand/Collapse for groups and shapes with children */}
+            {(canHaveChildren || hasChildren) ? (
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
                   "h-5 w-5 p-0 -ml-1",
-                  isGroup && "text-violet-400 hover:text-violet-300"
+                  isGroup && "text-violet-400 hover:text-violet-300",
+                  isShape && hasChildren && "text-blue-400 hover:text-blue-300"
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1458,52 +1660,77 @@ function ElementItem({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <span 
+              <span
                 className="flex-1 text-xs truncate"
                 onDoubleClick={handleDoubleClick}
               >
                 {element.name}
-              </span>
-            )}
-            
-            {/* Children count for groups */}
-            {isGroup && hasChildren && (
-              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 rounded">
-                {children.length}
+                {/* Children count in parentheses for groups */}
+                {isGroup && hasChildren && (
+                  <span className="text-muted-foreground ml-1">({children.length})</span>
+                )}
               </span>
             )}
 
             {/* Action buttons */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleVisibility(element.id, !element.visible);
-              }}
-            >
-              {element.visible ? (
-                <Eye className="w-3 h-3" />
-              ) : (
-                <EyeOff className="w-3 h-3 text-muted-foreground" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleLock(element.id, !element.locked);
-              }}
-            >
-              {element.locked ? (
-                <Lock className="w-3 h-3 text-amber-400" />
-              ) : (
-                <Unlock className="w-3 h-3" />
-              )}
-            </Button>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility(element.id, !element.visible);
+                }}
+                title={element.visible ? 'Hide' : 'Show'}
+              >
+                {element.visible ? (
+                  <Eye className="w-3 h-3" />
+                ) : (
+                  <EyeOff className="w-3 h-3 text-muted-foreground" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLock(element.id, !element.locked);
+                }}
+                title={element.locked ? 'Unlock' : 'Lock'}
+              >
+                {element.locked ? (
+                  <Lock className="w-3 h-3 text-amber-400" />
+                ) : (
+                  <Unlock className="w-3 h-3" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicate(element.id);
+                }}
+                title="Duplicate"
+              >
+                <Copy className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(element.id);
+                }}
+                title="Delete"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -1564,7 +1791,7 @@ function ElementItem({
             </ContextMenuSub>
           )}
           <ContextMenuSeparator />
-          <ContextMenuItem>
+          <ContextMenuItem onClick={() => onDuplicate(element.id)}>
             <Copy className="mr-2 h-4 w-4" />
             Duplicate
           </ContextMenuItem>
@@ -1581,7 +1808,9 @@ function ElementItem({
       {/* Children (for groups) */}
       {isExpanded && hasChildren && (
         <div className="space-y-0.5">
-          {children.map((child) => (
+          {children
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((child, childIndex) => (
             <ElementItem
               key={child.id}
               element={child}
@@ -1592,12 +1821,21 @@ function ElementItem({
               onClick={onClick}
               onToggleVisibility={onToggleVisibility}
               onToggleLock={onToggleLock}
+              onDuplicate={onDuplicate}
               onDelete={onDelete}
               onUngroup={onUngroup}
               onMoveToTemplate={onMoveToTemplate}
               templates={templates}
               currentTemplateId={currentTemplateId}
               depth={depth + 1}
+              index={childIndex}
+              draggedId={draggedId}
+              dropTargetId={dropTargetId}
+              dropPosition={dropPosition}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </div>

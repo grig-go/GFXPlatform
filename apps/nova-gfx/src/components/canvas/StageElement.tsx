@@ -350,6 +350,11 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         const glow = shapeContent.glow;
         const texture = shapeContent.texture;
 
+        // For shapes, exclude backgroundColor from element.styles since background is controlled
+        // by content.fill, gradient, glass, or texture - not styles.backgroundColor
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { backgroundColor: _excludedBgFromStyles, background: _excludedBgGradient, ...shapeSafeStyles } = element.styles || {};
+
         // Memoize gradient calculation to prevent infinite re-renders
         const gradientValue = useMemo(() => {
           if (!gradient?.enabled || !gradient.colors || gradient.colors.length < 2) {
@@ -581,8 +586,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             border: getBorder(),
             // Apply glow effect
             ...glowStyle,
-            // Apply element.styles (shadows, etc.)
-            ...(element.styles || {}),
+            // Apply element.styles (shadows, etc.) - excluding background properties
+            ...shapeSafeStyles,
           };
 
           // For gradient + glass, inner div should be transparent with just blur
@@ -618,8 +623,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             } : {}),
             // Apply glow effect
             ...glowStyle,
-            // Apply element.styles
-            ...(element.styles || {}),
+            // Apply element.styles - excluding background properties
+            ...shapeSafeStyles,
           };
           return <div style={glassStyleFinal} />;
         }
@@ -635,8 +640,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             } : {}),
             // Apply glow effect
             ...glowStyle,
-            // Apply element.styles
-            ...(element.styles || {}),
+            // Apply element.styles - excluding background properties
+            ...shapeSafeStyles,
           };
           return <div style={gradientStyleFinal} />;
         }
@@ -654,8 +659,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             } : {}),
             // Apply glow effect
             ...glowStyle,
-            // Apply element.styles
-            ...(element.styles || {}),
+            // Apply element.styles - excluding background properties
+            ...shapeSafeStyles,
           };
 
           const textureLayerStyle: React.CSSProperties = {
@@ -712,8 +717,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           } : {}),
           // Apply glow effect
           ...glowStyle,
-          // Apply element.styles
-          ...(element.styles || {}),
+          // Apply element.styles (excluding backgroundColor/background which is controlled by content.fill)
+          ...shapeSafeStyles,
           // Animated background color takes final precedence
           ...(animatedBgColor ? {
             backgroundColor: bgColorValue,

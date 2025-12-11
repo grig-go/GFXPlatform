@@ -22,12 +22,19 @@ export async function fetchProject(projectId: string): Promise<Project | null> {
   return data;
 }
 
-export async function fetchProjects(): Promise<Project[]> {
-  const { data, error } = await supabase
+export async function fetchProjects(organizationId?: string): Promise<Project[]> {
+  let query = supabase
     .from('gfx_projects')
     .select('*')
     .eq('archived', false)
     .order('updated_at', { ascending: false });
+
+  // Filter by organization if provided
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching projects:', error);
@@ -36,10 +43,16 @@ export async function fetchProjects(): Promise<Project[]> {
   return data || [];
 }
 
-export async function createProject(project: Partial<Project>): Promise<Project | null> {
+export async function createProject(project: Partial<Project> & { organization_id: string; created_by?: string }): Promise<Project | null> {
+  // Validate organization_id is provided (required by database constraint)
+  if (!project.organization_id) {
+    console.error('Error: organization_id is required to create a project');
+    throw new Error('Organization is required to create a project');
+  }
+
   const canvasWidth = project.canvas_width || 1920;
   const canvasHeight = project.canvas_height || 1080;
-  
+
   const { data, error } = await supabase
     .from('gfx_projects')
     .insert({
@@ -50,6 +63,8 @@ export async function createProject(project: Partial<Project>): Promise<Project 
       canvas_height: canvasHeight,
       frame_rate: project.frame_rate || 30,
       background_color: project.background_color || 'transparent',
+      organization_id: project.organization_id,
+      created_by: project.created_by || null,
     })
     .select()
     .single();

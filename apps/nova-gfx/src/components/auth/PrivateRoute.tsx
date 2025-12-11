@@ -4,10 +4,10 @@ import { useAuthStore } from '@/stores/authStore';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
-  requireEmergent?: boolean;
+  requireAdmin?: boolean;
 }
 
-export function PrivateRoute({ children, requireEmergent = false }: PrivateRouteProps) {
+export function PrivateRoute({ children, requireAdmin = false }: PrivateRouteProps) {
   const location = useLocation();
   const { user, isLoading, isInitialized } = useAuthStore();
 
@@ -28,8 +28,8 @@ export function PrivateRoute({ children, requireEmergent = false }: PrivateRoute
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Requires emergent.new user but isn't one
-  if (requireEmergent && !user.isEmergentUser) {
+  // Requires admin but user isn't one
+  if (requireAdmin && !user.isAdmin) {
     return <Navigate to="/projects" replace />;
   }
 

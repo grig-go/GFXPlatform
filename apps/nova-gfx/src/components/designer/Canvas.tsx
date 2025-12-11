@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import {
   ZoomIn, ZoomOut, Maximize, Grid3X3, Ruler, Undo, Redo,
   MousePointer, RotateCw, Type, Image, Square, Circle, Hand, BarChart3, Loader2, MapPin, Video, ScrollText, Tag, FileCode, Sparkles, Table2, Minus, Timer,
@@ -10,6 +10,7 @@ import { Stage } from '@/components/canvas/Stage';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { SVGPickerDialog } from '@/components/dialogs/SVGPickerDialog';
 import { IconPickerDialog } from '@/components/dialogs/IconPickerDialog';
+import { loadFonts, SYSTEM_FONTS } from '@/lib/fonts';
 
 type DrawState = {
   isDrawing: boolean;
@@ -37,6 +38,7 @@ export function Canvas() {
   const {
     project,
     currentTemplateId,
+    elements,
     zoom,
     panX,
     panY,
@@ -61,6 +63,59 @@ export function Canvas() {
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
+
+  // Load fonts used by elements automatically
+  useEffect(() => {
+    if (elements.length === 0) return;
+
+    // Extract unique font families from all elements
+    const fontFamilies = new Set<string>();
+    const systemFontFamilies = new Set(SYSTEM_FONTS.map(f => f.family));
+
+    elements.forEach(element => {
+      // Check element.styles.fontFamily
+      const fontFamily = element.styles?.fontFamily;
+      if (fontFamily && typeof fontFamily === 'string') {
+        // Handle font family strings like "'Inter', sans-serif" - extract the first font
+        const primaryFont = fontFamily.split(',')[0].trim().replace(/['"]/g, '');
+        if (primaryFont && !systemFontFamilies.has(primaryFont)) {
+          fontFamilies.add(primaryFont);
+        }
+      }
+
+      // Check chart options for font families
+      if (element.content?.type === 'chart' && element.content.options) {
+        const chartFont = (element.content.options as Record<string, unknown>).fontFamily;
+        if (chartFont && typeof chartFont === 'string' && !systemFontFamilies.has(chartFont)) {
+          fontFamilies.add(chartFont);
+        }
+      }
+
+      // Check table content for font families
+      if (element.content?.type === 'table') {
+        const tableContent = element.content as Record<string, unknown>;
+        const headerFont = tableContent.headerFontFamily;
+        if (headerFont && typeof headerFont === 'string' && !systemFontFamilies.has(headerFont)) {
+          fontFamilies.add(headerFont);
+        }
+      }
+
+      // Check ticker config for font families
+      if (element.content?.type === 'ticker' && element.content.config) {
+        const tickerConfig = element.content.config as unknown as Record<string, unknown>;
+        const tickerFont = tickerConfig.fontFamily;
+        if (tickerFont && typeof tickerFont === 'string' && !systemFontFamilies.has(tickerFont)) {
+          fontFamilies.add(tickerFont);
+        }
+      }
+    });
+
+    if (fontFamilies.size > 0) {
+      const fontsToLoad = Array.from(fontFamilies);
+      console.log('[Canvas] Loading fonts:', fontsToLoad);
+      loadFonts(fontsToLoad);
+    }
+  }, [elements]);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(
@@ -1124,6 +1179,8 @@ export function Canvas() {
         {currentTemplateId && (
           <div
             className="absolute"
+            data-canvas-content
+            data-scale={zoom}
             style={{
               transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
               transformOrigin: '0 0',

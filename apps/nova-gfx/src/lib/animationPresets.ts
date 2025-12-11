@@ -1091,15 +1091,15 @@ export const LOOP_PRESETS: AnimationPreset[] = [
     defaultDuration: 2000,
     defaultEasing: EASINGS.easeInOut,
     keyframes: {
-      '0%': { 
+      '0%': {
         opacity: 1,
         transform: 'scale(1)'
       },
-      '50%': { 
+      '50%': {
         opacity: 0.8,
         transform: 'scale(1.1)'
       },
-      '100%': { 
+      '100%': {
         opacity: 1,
         transform: 'scale(1)'
       },

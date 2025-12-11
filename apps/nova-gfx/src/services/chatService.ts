@@ -90,10 +90,14 @@ export async function saveChatMessage(
     };
   }
 
+  // Get current user for user_id
+  const { data: { user } } = await supabase.auth.getUser();
+
   const { data, error } = await supabase
     .from('gfx_chat_messages')
     .insert({
       project_id: projectId,
+      user_id: user?.id || null,
       role: message.role,
       content: message.content,
       attachments: message.attachments || [],

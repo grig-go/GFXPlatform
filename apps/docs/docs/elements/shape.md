@@ -284,6 +284,65 @@ Use shapes as animated masks:
 2. Animate `width` from 0 to full
 3. Use as clipping mask
 
+## Fit to Content
+
+Shapes can automatically resize to fit their child elements (like text). This is useful for creating dynamic backgrounds that adjust to text length.
+
+### Enabling Fit to Content
+
+1. Select a shape element
+2. Go to the **Layout** tab in the Properties panel
+3. Enable **Fit to Children**
+4. Adjust padding for each side (top, right, bottom, left)
+
+### How It Works
+
+When enabled, the shape will:
+- Measure the actual bounds of child text elements (not the text box, but the rendered characters)
+- Resize to fit all children with the specified padding
+- Update automatically when child content changes
+
+### Configuration
+
+```typescript
+{
+  content: {
+    type: 'shape',
+    shape: 'rectangle',
+    fill: '#3B82F6',
+    fitToContent: true,
+    fitPadding: {
+      top: 16,
+      right: 24,
+      bottom: 16,
+      left: 24
+    }
+  }
+}
+```
+
+### Adding Children to Shapes
+
+To make a text element a child of a shape:
+1. Open the **Elements** tab in the Outliner
+2. Drag the text element onto the shape
+3. Drop it when you see the purple highlight indicating "inside"
+
+The shape will expand to show a chevron, and the text will be indented underneath.
+
+### Use Cases
+
+- **Dynamic lower thirds**: Background shapes that resize based on name/title length
+- **Buttons**: Auto-sizing button backgrounds
+- **Labels**: Tags that fit their content
+- **Score bugs**: Backgrounds that adapt to team names
+
+### Best Practices
+
+- Set text vertical alignment to "top" for predictable positioning
+- Use consistent padding values across similar elements
+- The shape position adjusts to keep children within the padded area
+
 ## Best Practices
 
 ### Performance

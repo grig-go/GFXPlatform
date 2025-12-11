@@ -27,6 +27,7 @@ import {
   fetchBindings,
 } from '@/services/projectService';
 import { supabase, markSupabaseSuccess, markSupabaseFailure, directRestUpdate } from '@emergent-platform/supabase-client';
+import { useAuthStore } from '@/stores/authStore';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
 
 /**
@@ -63,6 +64,57 @@ async function withTimeout<T>(
  * Direct REST API upsert - bypasses Supabase client to avoid stale connection issues.
  * Uses POST with Prefer: resolution=merge-duplicates for upsert behavior.
  */
+async function directRestDelete(
+  table: string,
+  ids: string[],
+  timeoutMs: number = 15000
+): Promise<{ success: boolean; error?: string }> {
+  if (ids.length === 0) {
+    return { success: true };
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Use PostgREST's IN filter to delete multiple records
+    const idsParam = ids.map(id => `"${id}"`).join(',');
+    const response = await fetch(`${supabaseUrl}/rest/v1/${table}?id=in.(${idsParam})`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'return=minimal',
+        'Cache-Control': 'no-cache',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[directRestDelete] ${table} failed:`, response.status, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { success: false, error: `Request timed out after ${timeoutMs}ms` };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 async function directRestUpsert(
   table: string,
   data: Record<string, unknown> | Record<string, unknown>[],
@@ -195,6 +247,16 @@ interface DesignerState {
   keyframes: Keyframe[];
   bindings: Binding[];
 
+  // Pending deletions (tracked until saved to DB)
+  pendingDeletions: {
+    elements: string[];
+    animations: string[];
+    keyframes: string[];
+    bindings: string[];
+    templates: string[];
+    layers: string[];
+  };
+
   // Selection
   selectedElementIds: string[];
   hoveredElementId: string | null;
@@ -263,11 +325,14 @@ interface DesignerActions {
   addElement: (type: ElementType, position: { x: number; y: number }, parentId?: string) => string;
   addElementFromData: (data: Partial<Element>) => string;
   updateElement: (id: string, updates: Partial<Element>) => void;
+  duplicateElement: (id: string) => string | null;
   deleteElements: (ids: string[]) => void;
   setElements: (elements: Element[]) => void;
   groupElements: (ids: string[]) => string | null;
   ungroupElements: (groupId: string) => void;
   moveElementsToTemplate: (elementIds: string[], targetTemplateId: string) => void;
+  reorderElement: (elementId: string, targetIndex: number, parentId?: string | null) => void;
+  updateFitToContentParent: (parentId: string) => void;
 
   // Z-order operations
   bringToFront: (id: string) => void;
@@ -291,6 +356,7 @@ interface DesignerActions {
   // Keyframe operations
   addKeyframe: (animationId: string, position: number, properties: Record<string, string | number | null>) => string;
   updateKeyframe: (id: string, updates: Partial<Keyframe>) => void;
+  removeKeyframeProperty: (keyframeId: string, propertyKey: string) => void;
   deleteKeyframe: (id: string) => void;
   deleteSelectedKeyframes: () => void;
   setKeyframes: (keyframes: Keyframe[]) => void;
@@ -545,6 +611,7 @@ function getDefaultStyles(type: ElementType): Record<string, string | number> {
         fontFamily: 'Inter',
         fontWeight: 600,
         color: '#FFFFFF',
+        verticalAlign: 'top',
       };
     case 'shape':
       return {
@@ -577,6 +644,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         animations: [],
         keyframes: [],
         bindings: [],
+        pendingDeletions: {
+          elements: [],
+          animations: [],
+          keyframes: [],
+          bindings: [],
+          templates: [],
+          layers: [],
+        },
         selectedElementIds: [],
         hoveredElementId: null,
         zoom: 0.5,
@@ -1112,6 +1187,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               isLoading: false,
               isDirty: false,
               error: null,
+              pendingDeletions: {
+                elements: [],
+                animations: [],
+                keyframes: [],
+                bindings: [],
+                templates: [],
+                layers: [],
+              },
             });
             
             console.log(`Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements`);
@@ -1201,6 +1284,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             const SAVE_TIMEOUT = 15000; // 15 second timeout per operation
 
             // 1. Update project metadata using direct REST API
+            // Get current user for updated_by tracking
+            const currentUserId = useAuthStore.getState().user?.id;
+
             const projectData: Record<string, unknown> = {
               name: state.project.name,
               description: state.project.description,
@@ -1210,6 +1296,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               frame_rate: state.project.frame_rate,
               thumbnail_url: thumbnailUrl,
               updated_at: new Date().toISOString(),
+              updated_by: currentUserId || null,
             };
 
             // Add optional columns if they exist (may fail on older schemas)
@@ -1384,7 +1471,59 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT);
               if (!bindingsResult.success) console.error('Error saving bindings:', bindingsResult.error);
             }
-            
+
+            // 8. Delete pending items from database
+            // Delete in reverse order of dependencies (keyframes -> animations -> elements)
+            const pendingDeletions = state.pendingDeletions;
+
+            if (pendingDeletions.keyframes.length > 0) {
+              console.log(`Deleting ${pendingDeletions.keyframes.length} keyframes from DB`);
+              const keyframesDeleteResult = await directRestDelete('gfx_keyframes', pendingDeletions.keyframes, SAVE_TIMEOUT);
+              if (!keyframesDeleteResult.success) console.error('Error deleting keyframes:', keyframesDeleteResult.error);
+            }
+
+            if (pendingDeletions.animations.length > 0) {
+              console.log(`Deleting ${pendingDeletions.animations.length} animations from DB`);
+              const animationsDeleteResult = await directRestDelete('gfx_animations', pendingDeletions.animations, SAVE_TIMEOUT);
+              if (!animationsDeleteResult.success) console.error('Error deleting animations:', animationsDeleteResult.error);
+            }
+
+            if (pendingDeletions.bindings.length > 0) {
+              console.log(`Deleting ${pendingDeletions.bindings.length} bindings from DB`);
+              const bindingsDeleteResult = await directRestDelete('gfx_bindings', pendingDeletions.bindings, SAVE_TIMEOUT);
+              if (!bindingsDeleteResult.success) console.error('Error deleting bindings:', bindingsDeleteResult.error);
+            }
+
+            if (pendingDeletions.elements.length > 0) {
+              console.log(`Deleting ${pendingDeletions.elements.length} elements from DB`);
+              const elementsDeleteResult = await directRestDelete('gfx_elements', pendingDeletions.elements, SAVE_TIMEOUT);
+              if (!elementsDeleteResult.success) console.error('Error deleting elements:', elementsDeleteResult.error);
+            }
+
+            if (pendingDeletions.templates.length > 0) {
+              console.log(`Deleting ${pendingDeletions.templates.length} templates from DB`);
+              const templatesDeleteResult = await directRestDelete('gfx_templates', pendingDeletions.templates, SAVE_TIMEOUT);
+              if (!templatesDeleteResult.success) console.error('Error deleting templates:', templatesDeleteResult.error);
+            }
+
+            if (pendingDeletions.layers.length > 0) {
+              console.log(`Deleting ${pendingDeletions.layers.length} layers from DB`);
+              const layersDeleteResult = await directRestDelete('gfx_layers', pendingDeletions.layers, SAVE_TIMEOUT);
+              if (!layersDeleteResult.success) console.error('Error deleting layers:', layersDeleteResult.error);
+            }
+
+            // Clear pending deletions after successful save
+            set((state) => {
+              state.pendingDeletions = {
+                elements: [],
+                animations: [],
+                keyframes: [],
+                bindings: [],
+                templates: [],
+                layers: [],
+              };
+            });
+
             // Also save to localStorage as backup (for Supabase projects too)
             const localData = {
               project: state.project,
@@ -1444,11 +1583,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         updateProjectSettings: async (updates) => {
           const state = get();
           if (!state.project) return;
-          
+
           // Update local state immediately
           const updatedProject = { ...state.project, ...updates };
           set({ project: updatedProject, isDirty: true });
-          
+
+          // Get current user for updated_by tracking
+          const currentUserId = useAuthStore.getState().user?.id;
+
           // Persist to Supabase
           try {
             const { error } = await supabase
@@ -1463,6 +1605,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 background_color: updatedProject.background_color,
                 settings: updatedProject.settings,
                 updated_at: new Date().toISOString(),
+                updated_by: currentUserId || null,
               })
               .eq('id', state.project.id);
             
@@ -1792,19 +1935,88 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         updateElement: (id, updates) => {
-          set((state) => {
-            const index = state.elements.findIndex((e) => e.id === id);
+          const state = get();
+          const element = state.elements.find((e) => e.id === id);
+
+          set((draft) => {
+            const index = draft.elements.findIndex((e) => e.id === id);
             if (index !== -1) {
-              state.elements[index] = { ...state.elements[index], ...updates };
-              state.isDirty = true;
+              draft.elements[index] = { ...draft.elements[index], ...updates };
+              draft.isDirty = true;
             }
           });
+
+          // If this element has a parent with fitToContent, update the parent's size
+          // Check if position, size, content, or styles changed (content/styles affect text measurement)
+          if (element?.parent_element_id &&
+              (updates.position_x !== undefined || updates.position_y !== undefined ||
+               updates.width !== undefined || updates.height !== undefined ||
+               updates.content !== undefined || updates.styles !== undefined)) {
+            const parent = state.elements.find(e => e.id === element.parent_element_id);
+            if (parent?.element_type === 'shape') {
+              const content = parent.content as { type: 'shape'; fitToContent?: boolean };
+              if (content?.fitToContent) {
+                // Defer to next tick to allow the state update to complete
+                setTimeout(() => get().updateFitToContentParent(parent.id), 0);
+              }
+            }
+          }
+        },
+
+        duplicateElement: (id) => {
+          const state = get();
+          const element = state.elements.find((e) => e.id === id);
+          if (!element) return null;
+
+          const newId = crypto.randomUUID();
+
+          // Calculate new z_index (one above the original)
+          const templateElements = state.elements.filter(e => e.template_id === element.template_id);
+          const maxZIndex = Math.max(...templateElements.map(e => e.z_index ?? 0));
+
+          // Create duplicated element with offset position
+          const duplicatedElement: Element = {
+            ...element,
+            id: newId,
+            element_id: `el-${Date.now()}`,
+            name: `${element.name} Copy`,
+            position_x: element.position_x + 20,
+            position_y: element.position_y + 20,
+            z_index: maxZIndex + 10,
+            sort_order: state.elements.length,
+          };
+
+          set((state) => {
+            state.elements.push(duplicatedElement);
+            state.selectedElementIds = [newId];
+            state.isDirty = true;
+          });
+
+          get().pushHistory(`Duplicate: ${element.name}`);
+          return newId;
         },
 
         deleteElements: (ids) => {
           set((state) => {
+            // Track animation IDs that will be deleted (for cascading keyframe deletion)
+            const animationIdsToDelete = state.animations
+              .filter((a) => ids.includes(a.element_id))
+              .map((a) => a.id);
+
+            // Track keyframe IDs that will be deleted
+            const keyframeIdsToDelete = state.keyframes
+              .filter((k) => animationIdsToDelete.includes(k.animation_id))
+              .map((k) => k.id);
+
+            // Add to pending deletions (for DB sync on save)
+            state.pendingDeletions.elements.push(...ids);
+            state.pendingDeletions.animations.push(...animationIdsToDelete);
+            state.pendingDeletions.keyframes.push(...keyframeIdsToDelete);
+
+            // Remove from local state
             state.elements = state.elements.filter((e) => !ids.includes(e.id));
             state.animations = state.animations.filter((a) => !ids.includes(a.element_id));
+            state.keyframes = state.keyframes.filter((k) => !animationIdsToDelete.includes(k.animation_id));
             state.selectedElementIds = state.selectedElementIds.filter((id) => !ids.includes(id));
             state.isDirty = true;
           });
@@ -1817,12 +2029,21 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         groupElements: (ids) => {
           if (ids.length < 2) return null;
-          
+
           const state = get();
           const elementsToGroup = state.elements.filter((e) => ids.includes(e.id));
-          
+
           if (elementsToGroup.length < 2) return null;
-          
+
+          // Check if all elements share the same parent (required for grouping)
+          // This allows grouping elements inside a group, or grouping groups together
+          const parentIds = new Set(elementsToGroup.map(e => e.parent_element_id));
+          if (parentIds.size > 1) {
+            console.warn('Cannot group elements from different parents');
+            return null;
+          }
+          const sharedParentId = elementsToGroup[0].parent_element_id;
+
           // Calculate bounding box of all elements
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           elementsToGroup.forEach((el) => {
@@ -1831,19 +2052,23 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             maxX = Math.max(maxX, el.position_x + (el.width || 0));
             maxY = Math.max(maxY, el.position_y + (el.height || 0));
           });
-          
+
           // Group z_index should be the max of all grouped elements
           const maxZIndex = Math.max(...elementsToGroup.map(e => e.z_index ?? 0));
-          
-          // Create group element
+
+          // Count existing groups to name the new one
+          const existingGroups = state.elements.filter(e => e.element_type === 'group');
+          const groupNumber = existingGroups.length + 1;
+
+          // Create group element - inherits parent from grouped elements (supports nested groups)
           const groupId = crypto.randomUUID();
           const groupElement: Element = {
             id: groupId,
             template_id: state.currentTemplateId!,
-            name: `Group (${elementsToGroup.length})`,
+            name: `Group ${groupNumber}`,
             element_id: `group-${Date.now()}`,
             element_type: 'group',
-            parent_element_id: null,
+            parent_element_id: sharedParentId, // Inherit parent for nested group support
             sort_order: Math.min(...elementsToGroup.map((e) => e.sort_order)),
             z_index: maxZIndex,
             position_x: minX,
@@ -1877,14 +2102,42 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               }
               return el;
             });
-            
+
             // Add group element to the array
             updatedElements.push(groupElement);
             state.elements = updatedElements;
-            
+
+            // Update animation keyframes to use relative positions
+            // Find all animations for the grouped elements
+            const elementAnimations = state.animations.filter(a => ids.includes(a.element_id));
+            const animationIds = new Set(elementAnimations.map(a => a.id));
+
+            // Update keyframes for these animations
+            state.keyframes = state.keyframes.map((kf) => {
+              if (!animationIds.has(kf.animation_id)) return kf;
+
+              // Find which element this animation belongs to
+              const anim = elementAnimations.find(a => a.id === kf.animation_id);
+              if (!anim) return kf;
+
+              const originalElement = elementsToGroup.find(e => e.id === anim.element_id);
+              if (!originalElement) return kf;
+
+              // Adjust position keyframes to be relative
+              const updatedProperties = { ...kf.properties };
+              if ('position_x' in updatedProperties && updatedProperties.position_x !== null) {
+                updatedProperties.position_x = Number(updatedProperties.position_x) - minX;
+              }
+              if ('position_y' in updatedProperties && updatedProperties.position_y !== null) {
+                updatedProperties.position_y = Number(updatedProperties.position_y) - minY;
+              }
+
+              return { ...kf, properties: updatedProperties };
+            });
+
             state.selectedElementIds = [groupId];
             state.isDirty = true;
-            
+
             // Auto-expand the group to show children
             state.expandedNodes.add(groupId);
           });
@@ -1896,11 +2149,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         ungroupElements: (groupId) => {
           const state = get();
           const group = state.elements.find((e) => e.id === groupId);
-          
+
           if (!group || group.element_type !== 'group') return;
-          
+
           const children = state.elements.filter((e) => e.parent_element_id === groupId);
-          
+          const childIds = children.map(c => c.id);
+
           set((state) => {
             // Update children to remove parent reference and adjust positions
             state.elements = state.elements.map((el) => {
@@ -1915,15 +2169,34 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               }
               return el;
             });
-            
+
+            // Update animation keyframes to use absolute positions again
+            const childAnimations = state.animations.filter(a => childIds.includes(a.element_id));
+            const animationIds = new Set(childAnimations.map(a => a.id));
+
+            state.keyframes = state.keyframes.map((kf) => {
+              if (!animationIds.has(kf.animation_id)) return kf;
+
+              // Adjust position keyframes back to absolute
+              const updatedProperties = { ...kf.properties };
+              if ('position_x' in updatedProperties && updatedProperties.position_x !== null) {
+                updatedProperties.position_x = Number(updatedProperties.position_x) + group.position_x;
+              }
+              if ('position_y' in updatedProperties && updatedProperties.position_y !== null) {
+                updatedProperties.position_y = Number(updatedProperties.position_y) + group.position_y;
+              }
+
+              return { ...kf, properties: updatedProperties };
+            });
+
             // Remove the group element
             state.elements = state.elements.filter((e) => e.id !== groupId);
-            
+
             // Select the former children
-            state.selectedElementIds = children.map((c) => c.id);
+            state.selectedElementIds = childIds;
             state.isDirty = true;
           });
-          
+
           get().pushHistory('Ungroup elements');
         },
 
@@ -1974,6 +2247,245 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           // Switch to target template to see the moved elements
           get().selectTemplate(targetTemplateId);
+        },
+
+        reorderElement: (elementId, targetIndex, parentId = null) => {
+          const state = get();
+          const element = state.elements.find(e => e.id === elementId);
+          if (!element) return;
+
+          // Get siblings (elements with the same parent)
+          const currentParentId = element.parent_element_id;
+          const targetParentId = parentId === undefined ? currentParentId : parentId;
+
+          set((draft) => {
+            // Get siblings at the target parent level
+            const siblings = draft.elements
+              .filter(e =>
+                e.template_id === element.template_id &&
+                e.parent_element_id === targetParentId &&
+                e.id !== elementId
+              )
+              .sort((a, b) => a.sort_order - b.sort_order);
+
+            // Find the element to update
+            const elIdx = draft.elements.findIndex(e => e.id === elementId);
+            if (elIdx === -1) return;
+
+            // Update parent if moving to different parent
+            if (targetParentId !== currentParentId) {
+              const movedElement = draft.elements[elIdx];
+              const oldParent = currentParentId ? draft.elements.find(e => e.id === currentParentId) : null;
+              const newParent = targetParentId ? draft.elements.find(e => e.id === targetParentId) : null;
+
+              // Convert positions when moving between parents
+              // First, convert to absolute coordinates
+              let absoluteX = movedElement.position_x;
+              let absoluteY = movedElement.position_y;
+              if (oldParent) {
+                absoluteX += oldParent.position_x;
+                absoluteY += oldParent.position_y;
+              }
+
+              // Then, convert to new parent's relative coordinates
+              if (newParent) {
+                movedElement.position_x = absoluteX - newParent.position_x;
+                movedElement.position_y = absoluteY - newParent.position_y;
+              } else {
+                // Moving to root level - use absolute coordinates
+                movedElement.position_x = absoluteX;
+                movedElement.position_y = absoluteY;
+              }
+
+              draft.elements[elIdx].parent_element_id = targetParentId;
+            }
+
+            // Assign new sort_order values
+            // Insert at targetIndex, shift others
+            let sortOrder = 0;
+            for (let i = 0; i < siblings.length; i++) {
+              if (i === targetIndex) {
+                // This is where the moved element goes
+                draft.elements[elIdx].sort_order = sortOrder;
+                sortOrder++;
+              }
+              // Update sibling sort_order
+              const sibIdx = draft.elements.findIndex(e => e.id === siblings[i].id);
+              if (sibIdx !== -1) {
+                draft.elements[sibIdx].sort_order = sortOrder;
+                sortOrder++;
+              }
+            }
+
+            // If targetIndex is at or beyond the end, place element last
+            if (targetIndex >= siblings.length) {
+              draft.elements[elIdx].sort_order = sortOrder;
+            }
+
+            draft.isDirty = true;
+          });
+
+          get().pushHistory('Reorder element');
+
+          // If moved into a shape with fitToContent, trigger resize
+          if (targetParentId) {
+            const newParent = state.elements.find(e => e.id === targetParentId);
+            if (newParent?.element_type === 'shape') {
+              const content = newParent.content as { type: 'shape'; fitToContent?: boolean };
+              if (content?.fitToContent) {
+                setTimeout(() => get().updateFitToContentParent(targetParentId), 0);
+              }
+            }
+          }
+        },
+
+        updateFitToContentParent: (parentId) => {
+          const state = get();
+          const parent = state.elements.find(e => e.id === parentId);
+          if (!parent || parent.element_type !== 'shape') return;
+
+          const content = parent.content as { type: 'shape'; fitToContent?: boolean; fitPadding?: { top?: number; right?: number; bottom?: number; left?: number } };
+          if (!content.fitToContent) return;
+
+          // Get all children of this parent
+          const children = state.elements.filter(e => e.parent_element_id === parentId);
+          if (children.length === 0) return;
+
+          // Get padding values (default to 16 if not specified)
+          const padding = content.fitPadding ?? {};
+          const paddingTop = padding.top ?? 16;
+          const paddingRight = padding.right ?? 16;
+          const paddingBottom = padding.bottom ?? 16;
+          const paddingLeft = padding.left ?? 16;
+
+          // Import the text measurement utility dynamically
+          import('../lib/textMeasurement').then(({ measureTextBounds, measureMultilineTextBounds }) => {
+            // Measure all children - use async measurement for text elements
+            const measureChildren = async () => {
+              const childBounds: Array<{ x: number; y: number; width: number; height: number; elementId: string }> = [];
+
+              for (const child of children) {
+                if (child.element_type === 'text') {
+                  // Get text content and styles
+                  const textContent = child.content as { type: 'text'; text?: string };
+                  const text = textContent.text || '';
+                  const styles = (child.styles || {}) as Record<string, any>;
+
+                  // Extract font properties
+                  const fontSize = styles.fontSize || '16px';
+                  const fontFamily = styles.fontFamily || 'Inter';
+                  const fontWeight = styles.fontWeight || 400;
+                  const fontStyle = styles.fontStyle || 'normal';
+
+                  // Check if text should wrap (has constrained width)
+                  const hasWrapping = child.width && child.width > 0;
+
+                  try {
+                    let textBounds;
+                    if (hasWrapping && child.width) {
+                      // Measure multiline text with wrapping
+                      const lineHeight = parseFloat(String(styles.lineHeight || '1.2'));
+                      textBounds = await measureMultilineTextBounds(
+                        text,
+                        fontSize,
+                        fontFamily,
+                        child.width,
+                        fontWeight,
+                        fontStyle,
+                        lineHeight
+                      );
+                    } else {
+                      // Measure single line text
+                      textBounds = await measureTextBounds(
+                        text,
+                        fontSize,
+                        fontFamily,
+                        fontWeight,
+                        fontStyle
+                      );
+                    }
+
+                    childBounds.push({
+                      x: child.position_x,
+                      y: child.position_y,
+                      width: textBounds.width,
+                      height: textBounds.height,
+                      elementId: child.id,
+                    });
+                  } catch {
+                    // Fallback to element bounds
+                    childBounds.push({
+                      x: child.position_x,
+                      y: child.position_y,
+                      width: child.width ?? 100,
+                      height: child.height ?? 40,
+                      elementId: child.id,
+                    });
+                  }
+                } else {
+                  // For non-text elements, use element bounds
+                  childBounds.push({
+                    x: child.position_x,
+                    y: child.position_y,
+                    width: child.width ?? 100,
+                    height: child.height ?? 40,
+                    elementId: child.id,
+                  });
+                }
+              }
+
+              return childBounds;
+            };
+
+            measureChildren().then((childBounds) => {
+              if (childBounds.length === 0) return;
+
+              // Calculate bounding box of all children using measured bounds
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+              for (const bounds of childBounds) {
+                const childRight = bounds.x + bounds.width;
+                const childBottom = bounds.y + bounds.height;
+
+                minX = Math.min(minX, bounds.x);
+                minY = Math.min(minY, bounds.y);
+                maxX = Math.max(maxX, childRight);
+                maxY = Math.max(maxY, childBottom);
+              }
+
+              // Calculate new parent dimensions to fit all children + padding
+              const contentWidth = maxX - minX;
+              const contentHeight = maxY - minY;
+              const newWidth = contentWidth + paddingLeft + paddingRight;
+              const newHeight = contentHeight + paddingTop + paddingBottom;
+
+              // Calculate position offset - parent moves so children fit within padding
+              const offsetX = minX - paddingLeft;
+              const offsetY = minY - paddingTop;
+
+              set((draft) => {
+                const parentIdx = draft.elements.findIndex(e => e.id === parentId);
+                if (parentIdx === -1) return;
+
+                // Update parent size and position
+                draft.elements[parentIdx].width = newWidth;
+                draft.elements[parentIdx].height = newHeight;
+                draft.elements[parentIdx].position_x = parent.position_x + offsetX;
+                draft.elements[parentIdx].position_y = parent.position_y + offsetY;
+
+                // Adjust children positions to be relative to new parent position
+                for (const child of children) {
+                  const childIdx = draft.elements.findIndex(e => e.id === child.id);
+                  if (childIdx !== -1) {
+                    draft.elements[childIdx].position_x = child.position_x - minX + paddingLeft;
+                    draft.elements[childIdx].position_y = child.position_y - minY + paddingTop;
+                  }
+                }
+
+                draft.isDirty = true;
+              });
+            });
+          });
         },
 
         // Z-order operations
@@ -2272,6 +2784,30 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
           });
           console.log('[Store] Updated keyframe:', id, updates);
+        },
+
+        removeKeyframeProperty: (keyframeId, propertyKey) => {
+          set((state) => {
+            const index = state.keyframes.findIndex((kf) => kf.id === keyframeId);
+            if (index !== -1) {
+              const kf = state.keyframes[index];
+              const newProperties = { ...kf.properties };
+              delete newProperties[propertyKey];
+
+              // If no properties left, delete the entire keyframe
+              if (Object.keys(newProperties).length === 0) {
+                state.keyframes = state.keyframes.filter((k) => k.id !== keyframeId);
+                state.selectedKeyframeIds = state.selectedKeyframeIds.filter((id) => id !== keyframeId);
+              } else {
+                state.keyframes[index] = {
+                  ...kf,
+                  properties: newProperties,
+                };
+              }
+              state.isDirty = true;
+            }
+          });
+          console.log('[Store] Removed property from keyframe:', keyframeId, propertyKey);
         },
 
         deleteKeyframe: (id) => {

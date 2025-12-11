@@ -370,6 +370,14 @@ export type ElementContent =
         opacity?: number; // Texture opacity (0-1)
         blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
       };
+      // Auto-size to fit children (text elements, etc.)
+      fitToContent?: boolean;
+      fitPadding?: {
+        top?: number;
+        right?: number;
+        bottom?: number;
+        left?: number;
+      };
     }
   | { type: 'group' }
   | { type: 'video'; src: string; loop?: boolean; muted?: boolean; autoplay?: boolean; poster?: string; videoType?: 'file' | 'youtube' | 'vimeo' | 'stream' }
@@ -882,6 +890,12 @@ export interface ValidationHint {
 }
 
 // AI Changes type (imported by ChatMessage)
+export interface DynamicElements {
+  data: Record<string, unknown>[];
+  elements: Partial<Element>[];
+  animations?: Partial<Animation>[];
+}
+
 export interface AIChanges {
   type: 'create' | 'update' | 'delete' | 'mixed';
   layerType?: LayerType;
@@ -892,4 +906,7 @@ export interface AIChanges {
   css?: string;
   elementsToDelete?: string[];
   validationHints?: ValidationHint[];
+  dynamic_elements?: DynamicElements;
+  /** Warning message if response was truncated and repaired */
+  _truncationWarning?: string;
 }

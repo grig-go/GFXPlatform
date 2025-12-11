@@ -121,9 +121,10 @@ export function ProjectList() {
       );
 
       // Build query - filter by organization if user is logged in
+      // Join with users table to get creator and updater info
       let query = supabase
         .from('gfx_projects')
-        .select('*')
+        .select('*, creator:users!created_by(id, email, name), updater:users!updated_by(id, email, name)')
         .eq('archived', false);
 
       // Filter by user's organization if they have one
@@ -502,9 +503,10 @@ export function ProjectList() {
             /* List View */
             <div className="border rounded-lg bg-card overflow-hidden">
               {/* Table Header */}
-              <div className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_150px_200px] gap-4 px-4 py-3 bg-muted/50 border-b text-xs sm:text-sm font-medium text-muted-foreground">
+              <div className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_120px_150px_200px] gap-4 px-4 py-3 bg-muted/50 border-b text-xs sm:text-sm font-medium text-muted-foreground">
                 <div className="w-10"></div>
                 <div>Name</div>
+                <div className="hidden sm:block">Updated by</div>
                 <div className="hidden sm:block">Updated</div>
                 <div className="text-right">Actions</div>
               </div>
@@ -612,9 +614,22 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
   const hue = colorHash % 360;
   const avatarColor = `hsl(${hue}, 60%, 45%)`;
 
+  // Get updater display name (fall back to creator if no updater)
+  const updaterName = (() => {
+    const updater = (project as any).updater;
+    const creator = (project as any).creator;
+    const user = updater || creator;
+    if (!user) return '—';
+    if (user.name) {
+      return user.name;
+    }
+    // Fall back to email username
+    return user.email?.split('@')[0] || '—';
+  })();
+
   return (
     <div
-      className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_150px_200px] gap-4 px-4 py-3 hover:bg-muted/30 cursor-pointer items-center transition-colors"
+      className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_1fr_120px_150px_200px] gap-4 px-4 py-3 hover:bg-muted/30 cursor-pointer items-center transition-colors"
       onClick={onClick}
     >
       {/* Icon/Thumbnail */}
@@ -653,6 +668,11 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
         <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
           {formatRelativeTime(project.updated_at)}
         </p>
+      </div>
+
+      {/* Updated by - Desktop only */}
+      <div className="hidden sm:block text-sm text-muted-foreground truncate">
+        {updaterName}
       </div>
 
       {/* Updated - Desktop only */}
@@ -759,6 +779,19 @@ function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDupl
   const avatarColor = `hsl(${hue}, 60%, 45%)`;
 
   const hasThumbnail = !!project.thumbnail_url;
+
+  // Get updater display name (fall back to creator if no updater)
+  const updaterName = (() => {
+    const updater = (project as any).updater;
+    const creator = (project as any).creator;
+    const user = updater || creator;
+    if (!user) return null;
+    if (user.name) {
+      return user.name;
+    }
+    // Fall back to email username
+    return user.email?.split('@')[0] || null;
+  })();
 
   return (
     <div
@@ -874,9 +907,10 @@ function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDupl
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 sm:mt-2">
-          Updated {formatRelativeTime(project.updated_at)}
-        </p>
+        <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground mt-1.5 sm:mt-2">
+          <span>Updated {formatRelativeTime(project.updated_at)}</span>
+          {updaterName && <span className="truncate ml-2">by {updaterName}</span>}
+        </div>
       </div>
     </div>
   );

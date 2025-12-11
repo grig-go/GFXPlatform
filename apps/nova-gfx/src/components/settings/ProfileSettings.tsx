@@ -91,14 +91,13 @@ export function ProfileSettings() {
         <div className="space-y-2">
           <Label>Role</Label>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 text-xs rounded-full bg-violet-500/20 text-violet-400 capitalize">
+            <span className={`px-2 py-1 text-xs rounded-full capitalize ${
+              user?.isAdmin
+                ? 'bg-amber-500/20 text-amber-400'
+                : 'bg-violet-500/20 text-violet-400'
+            }`}>
               {user?.role || 'member'}
             </span>
-            {user?.isEmergentUser && (
-              <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">
-                Admin
-              </span>
-            )}
           </div>
         </div>
 

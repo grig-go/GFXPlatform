@@ -32,6 +32,7 @@ export interface AppUser {
   organizationName: string | null;
   role: 'owner' | 'admin' | 'member' | 'viewer';
   isEmergentUser: boolean;
+  isAdmin: boolean; // true if role is 'owner' or 'admin'
 }
 
 export interface Organization {
@@ -94,6 +95,11 @@ export const isEmergentEmail = (email: string): boolean => {
   return email.toLowerCase().endsWith('@emergent.new');
 };
 
+// Helper to check if role has admin privileges
+export const hasAdminRole = (role: string): boolean => {
+  return role === 'owner' || role === 'admin';
+};
+
 // Allowed email domains for signup (without invitation)
 const ALLOWED_DOMAINS = ['emergent.new'];
 
@@ -144,6 +150,7 @@ async function fetchAndSetUserData(
         organizationName: org?.name || null,
         role: userData.role,
         isEmergentUser: isEmergentEmail(userData.email),
+        isAdmin: hasAdminRole(userData.role),
       },
       organization: org ? {
         id: org.id,
@@ -270,6 +277,7 @@ export const useAuthStore = create<AuthState>()(
                   organizationName: org?.name || null,
                   role: userData.role,
                   isEmergentUser: isEmergentEmail(userData.email),
+                  isAdmin: hasAdminRole(userData.role),
                 },
                 organization: org ? {
                   id: org.id,
@@ -422,6 +430,7 @@ export const useAuthStore = create<AuthState>()(
                 organizationName: orgName,
                 role: userRole as AppUser['role'],
                 isEmergentUser: isEmergentEmail(email),
+                isAdmin: hasAdminRole(userRole),
               },
               organization: {
                 id: organizationId,
@@ -455,7 +464,7 @@ export const useAuthStore = create<AuthState>()(
       // Admin actions
       sendInvitation: async (email, role = 'member') => {
         const { user, organization } = get();
-        if (!supabase || !user?.isEmergentUser || !organization) {
+        if (!supabase || !user?.isAdmin || !organization) {
           return { success: false, error: 'Not authorized to send invitations' };
         }
 
@@ -486,7 +495,7 @@ export const useAuthStore = create<AuthState>()(
 
       getInvitations: async () => {
         const { user, organization } = get();
-        if (!supabase || !user?.isEmergentUser || !organization) {
+        if (!supabase || !user?.isAdmin || !organization) {
           return [];
         }
 
@@ -519,7 +528,7 @@ export const useAuthStore = create<AuthState>()(
 
       revokeInvitation: async (invitationId) => {
         const { user } = get();
-        if (!supabase || !user?.isEmergentUser) {
+        if (!supabase || !user?.isAdmin) {
           return { success: false, error: 'Not authorized' };
         }
 
@@ -541,7 +550,7 @@ export const useAuthStore = create<AuthState>()(
 
       resendInvitation: async (invitationId) => {
         const { user } = get();
-        if (!supabase || !user?.isEmergentUser) {
+        if (!supabase || !user?.isAdmin) {
           return { success: false, error: 'Not authorized' };
         }
 
@@ -593,6 +602,7 @@ export const useAuthStore = create<AuthState>()(
             organizationName: organization.name,
             role: u.role,
             isEmergentUser: isEmergentEmail(u.email),
+            isAdmin: hasAdminRole(u.role),
           }));
         } catch (err) {
           console.error('Error fetching members:', err);
@@ -602,7 +612,7 @@ export const useAuthStore = create<AuthState>()(
 
       updateMemberRole: async (userId, role) => {
         const { user } = get();
-        if (!supabase || !user?.isEmergentUser) {
+        if (!supabase || !user?.isAdmin) {
           return { success: false, error: 'Not authorized' };
         }
 
@@ -624,7 +634,7 @@ export const useAuthStore = create<AuthState>()(
 
       removeMember: async (userId) => {
         const { user } = get();
-        if (!supabase || !user?.isEmergentUser) {
+        if (!supabase || !user?.isAdmin) {
           return { success: false, error: 'Not authorized' };
         }
 
@@ -653,14 +663,19 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'emergent-auth', // Shared key between Nova and Pulsar for SSO
       partialize: (state) => ({
-        // Only persist user basic info for fast hydration
+        // Persist user info including organization for project creation
         // Full data will be refreshed on initialize()
         user: state.user ? {
           id: state.user.id,
           email: state.user.email,
           name: state.user.name,
+          organizationId: state.user.organizationId,
+          organizationName: state.user.organizationName,
+          role: state.user.role,
           isEmergentUser: state.user.isEmergentUser,
+          isAdmin: state.user.isAdmin,
         } : null,
+        organization: state.organization,
       }),
     }
   )

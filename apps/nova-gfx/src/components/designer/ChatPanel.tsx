@@ -18,12 +18,24 @@ interface Attachment {
 }
 
 // Progress phases for AI graphic creation
-type CreationPhase = 'idle' | 'acknowledging' | 'creating' | 'applying' | 'done' | 'error';
+type CreationPhase =
+  | 'idle'
+  | 'thinking'      // AI is processing/thinking
+  | 'designing'     // AI is designing the graphic structure
+  | 'generating'    // AI is generating elements
+  | 'parsing'       // Parsing the JSON response
+  | 'applying'      // Applying elements to canvas
+  | 'animating'     // Adding animations
+  | 'done'
+  | 'error';
 
 interface CreationProgress {
   phase: CreationPhase;
   message: string;
   elementCount?: number;
+  currentElement?: string;  // Name of element being processed
+  totalElements?: number;   // Total elements to create
+  processedElements?: number; // Elements processed so far
 }
 
 // Documentation context for docs mode - helps users learn about Nova GFX and Pulsar GFX
@@ -93,34 +105,209 @@ function extractDescription(content: string): { description: string; code: strin
   return { description: content, code: null, hasCode: false };
 }
 
+/**
+ * Expand dynamic_elements template into explicit elements
+ * This allows AI to use a more efficient template format with data arrays
+ * and we expand it into individual elements before processing
+ */
+function expandDynamicElements(changes: AIChanges): AIChanges {
+  const dynamicElements = changes.dynamic_elements;
+  if (!dynamicElements || !dynamicElements.data || !dynamicElements.elements) {
+    return changes;
+  }
+
+  console.log('🔄 Expanding dynamic_elements template:', {
+    dataRows: dynamicElements.data.length,
+    templateElements: dynamicElements.elements.length,
+  });
+
+  const expandedElements: any[] = [...(changes.elements || [])];
+  const expandedAnimations: any[] = [...(changes.animations || [])];
+
+  // Simple helper to evaluate expressions - supports basic math only
+  const evalExpression = (expr: string, rowData: Record<string, any>, rowIndex: number): any => {
+    try {
+      let processed = expr;
+      // Replace data variables
+      Object.keys(rowData).forEach((key) => {
+        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+        const val = rowData[key];
+        // For strings, quote them; for numbers, use as-is
+        processed = processed.replace(regex, typeof val === 'string' ? `"${val}"` : String(val));
+      });
+      // Replace @index
+      processed = processed.replace(/\{\{@index\}\}/g, String(rowIndex));
+
+      // Check for unsupported syntax before eval
+      if (processed.includes('(') && !processed.match(/^\s*[\d\s+\-*/().]+\s*$/)) {
+        // Contains function calls or complex syntax - try to extract first number
+        const numMatch = processed.match(/(\d+)/);
+        if (numMatch) {
+          console.warn('Complex expression simplified to number:', expr, '→', numMatch[1]);
+          return parseInt(numMatch[1], 10);
+        }
+        return null;
+      }
+
+      // Evaluate safely - only basic math at this point
+      // eslint-disable-next-line no-new-func
+      return new Function('return ' + processed)();
+    } catch (e) {
+      console.warn('Failed to evaluate expression:', expr, e);
+      // Try to extract any number from the expression as fallback
+      const numMatch = expr.match(/(\d+)/);
+      return numMatch ? parseInt(numMatch[1], 10) : null;
+    }
+  };
+
+  // Helper function to replace template variables (simple and robust)
+  const replaceVariables = (obj: any, rowData: Record<string, any>, rowIndex: number): any => {
+    if (typeof obj === 'string') {
+      // Handle expression() syntax
+      if (obj.startsWith('expression(') && obj.endsWith(')')) {
+        const expr = obj.slice(11, -1);
+        const result = evalExpression(expr, rowData, rowIndex);
+        return result !== null ? result : obj;
+      }
+      // Simple variable replacement
+      let result = obj;
+      Object.keys(rowData).forEach((key) => {
+        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+        result = result.replace(regex, String(rowData[key]));
+      });
+      result = result.replace(/\{\{@index\}\}/g, String(rowIndex));
+      return result;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(item => replaceVariables(item, rowData, rowIndex));
+    }
+    if (obj && typeof obj === 'object') {
+      const newObj: Record<string, any> = {};
+      Object.keys(obj).forEach((key) => {
+        newObj[key] = replaceVariables(obj[key], rowData, rowIndex);
+      });
+      return newObj;
+    }
+    return obj;
+  };
+
+  // Process each data row - FLAT expansion (no groups)
+  dynamicElements.data.forEach((rowData: Record<string, any>, rowIndex: number) => {
+    // Process each element template
+    dynamicElements.elements.forEach((elementTemplate: any) => {
+      // Deep clone and expand the template
+      const element = JSON.parse(JSON.stringify(elementTemplate));
+      const expandedElement = replaceVariables(element, rowData, rowIndex);
+
+      // Add row index for debugging
+      expandedElement._rowIndex = rowIndex;
+
+      // Validate numeric properties - skip element if position/size isn't valid
+      if (typeof expandedElement.position_x !== 'number' ||
+          typeof expandedElement.position_y !== 'number') {
+        console.warn('Skipping element with invalid position:', expandedElement.name, {
+          position_x: expandedElement.position_x,
+          position_y: expandedElement.position_y,
+        });
+        return;
+      }
+
+      expandedElements.push(expandedElement);
+    });
+  });
+
+  // Process dynamic animations if any
+  if (dynamicElements.animations) {
+    dynamicElements.data.forEach((rowData: Record<string, any>, rowIndex: number) => {
+      dynamicElements.animations.forEach((animTemplate: any) => {
+        // Skip pattern-based animations for now (they match by name pattern)
+        if (animTemplate.element_name_pattern) {
+          return;
+        }
+
+        const anim = JSON.parse(JSON.stringify(animTemplate));
+        const expandedAnim = replaceVariables(anim, rowData, rowIndex);
+        expandedAnimations.push(expandedAnim);
+      });
+    });
+  }
+
+  console.log('✅ Expanded dynamic_elements:', {
+    originalElements: changes.elements?.length || 0,
+    expandedElements: expandedElements.length,
+    originalAnimations: changes.animations?.length || 0,
+    expandedAnimations: expandedAnimations.length,
+  });
+
+  return {
+    ...changes,
+    elements: expandedElements,
+    animations: expandedAnimations,
+  };
+}
+
 // Component to render creation progress indicator
 function CreationProgressIndicator({ progress }: { progress: CreationProgress }) {
-  const phaseIcons = {
+  const phaseIcons: Record<CreationPhase, React.ReactNode> = {
     idle: null,
-    acknowledging: <Sparkles className="w-3.5 h-3.5 text-violet-400" />,
-    creating: <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />,
+    thinking: <Sparkles className="w-3.5 h-3.5 text-violet-400 animate-pulse" />,
+    designing: <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />,
+    generating: <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />,
+    parsing: <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />,
     applying: <Wand2 className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />,
+    animating: <Sparkles className="w-3.5 h-3.5 text-pink-400 animate-bounce" />,
     done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
     error: <AlertCircle className="w-3.5 h-3.5 text-red-400" />,
   };
 
-  const phaseColors = {
+  const phaseColors: Record<CreationPhase, string> = {
     idle: '',
-    acknowledging: 'text-violet-300',
-    creating: 'text-blue-300',
+    thinking: 'text-violet-300',
+    designing: 'text-cyan-300',
+    generating: 'text-blue-300',
+    parsing: 'text-amber-300',
     applying: 'text-fuchsia-300',
+    animating: 'text-pink-300',
     done: 'text-emerald-300',
     error: 'text-red-300',
   };
 
+  // Calculate progress percentage for applying phase
+  const showProgressBar = progress.totalElements && progress.processedElements !== undefined;
+  const progressPercent = showProgressBar
+    ? Math.round((progress.processedElements! / progress.totalElements!) * 100)
+    : 0;
+
   return (
-    <div className={cn("flex items-center gap-2", phaseColors[progress.phase])}>
-      {phaseIcons[progress.phase]}
-      <span className="text-xs">{progress.message}</span>
-      {progress.elementCount !== undefined && progress.phase === 'done' && (
-        <span className="text-[10px] text-muted-foreground">
-          ({progress.elementCount} element{progress.elementCount !== 1 ? 's' : ''})
-        </span>
+    <div className="space-y-1">
+      <div className={cn("flex items-center gap-2", phaseColors[progress.phase])}>
+        {phaseIcons[progress.phase]}
+        <span className="text-xs">{progress.message}</span>
+        {progress.elementCount !== undefined && progress.phase === 'done' && (
+          <span className="text-[10px] text-muted-foreground">
+            ({progress.elementCount} element{progress.elementCount !== 1 ? 's' : ''})
+          </span>
+        )}
+      </div>
+      {/* Progress bar for applying phase */}
+      {showProgressBar && progress.phase === 'applying' && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-fuchsia-500 to-violet-500 transition-all duration-200"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            {progress.processedElements}/{progress.totalElements}
+          </span>
+        </div>
+      )}
+      {/* Current element name */}
+      {progress.currentElement && (
+        <p className="text-[10px] text-muted-foreground truncate">
+          → {progress.currentElement}
+        </p>
       )}
     </div>
   );
@@ -438,7 +625,16 @@ export function ChatPanel() {
   // Apply AI changes to the canvas
   const applyAIChanges = useCallback((changes: AIChanges, messageId: string) => {
     try {
-      console.log('🎨 Applying AI changes:', { type: changes.type, layerType: changes.layerType, elementCount: changes.elements?.length || 0 });
+      // Check for truncation warning and log it
+      if (changes._truncationWarning) {
+        console.warn('⚠️ AI Response Truncation:', changes._truncationWarning);
+        // TODO: Could show a toast here if desired
+      }
+
+      // Expand dynamic_elements template if present (for standings, leaderboards, etc.)
+      const expandedChanges = expandDynamicElements(changes);
+
+      console.log('🎨 Applying AI changes:', { type: expandedChanges.type, layerType: expandedChanges.layerType, elementCount: expandedChanges.elements?.length || 0 });
       const store = useDesignerStore.getState();
       
       // Determine the target template based on AI's layer_type detection
@@ -446,11 +642,11 @@ export function ChatPanel() {
       let targetLayer = store.layers.find(l => l.id === store.templates.find(t => t.id === templateId)?.layer_id);
       
       // For CREATE actions, always create a NEW template in the appropriate layer
-      if (changes.type === 'create') {
+      if (expandedChanges.type === 'create') {
         // If AI specified a layer type, use that layer
-        if (changes.layerType) {
-          targetLayer = store.layers.find(l => l.layer_type === changes.layerType);
-          console.log(`🔍 Looking for layer type "${changes.layerType}":`, targetLayer ? `Found: ${targetLayer.name}` : 'Not found');
+        if (expandedChanges.layerType) {
+          targetLayer = store.layers.find(l => l.layer_type === expandedChanges.layerType);
+          console.log(`🔍 Looking for layer type "${expandedChanges.layerType}":`, targetLayer ? `Found: ${targetLayer.name}` : 'Not found');
         }
         
         // If no layer specified, try to infer from context or use current layer
@@ -528,10 +724,10 @@ export function ChatPanel() {
         // The layerType from AI is just a hint - user's current selection takes precedence
         if (templateId) {
           // User has a template selected - use it regardless of AI's layerType guess
-          console.log(`[AI] Using currently selected template: ${templateId} for ${changes.action} action`);
-        } else if (changes.layerType) {
+          console.log(`[AI] Using currently selected template: ${templateId} for ${expandedChanges.action} action`);
+        } else if (expandedChanges.layerType) {
           // No template selected, try to find one in the suggested layer
-          targetLayer = store.layers.find(l => l.layer_type === changes.layerType);
+          targetLayer = store.layers.find(l => l.layer_type === expandedChanges.layerType);
           if (targetLayer) {
             const existingTemplate = store.templates.find(t => t.layer_id === targetLayer!.id);
             if (existingTemplate) {
@@ -539,7 +735,7 @@ export function ChatPanel() {
               store.selectTemplate(templateId);
             } else {
               // Template doesn't exist in this layer - give user a hint
-              const layerName = changes.layerType.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase());
+              const layerName = expandedChanges.layerType.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase());
               useDesignerStore.getState().addChatMessage({
                 role: 'assistant',
                 content: `⚠️ No template found in the ${layerName} layer. Please select a template in that layer first, or I can create a new one.`,
@@ -551,9 +747,9 @@ export function ChatPanel() {
         } else {
           // Check if user is trying to edit elements that aren't in the current template
           const currentTemplate = store.templates.find(t => t.id === templateId);
-          if (currentTemplate && changes.elements) {
+          if (currentTemplate && expandedChanges.elements) {
             // If AI detected elements in a different layer, warn user
-            const elementNames = changes.elements.map((e: any) => e.name || e.id).filter(Boolean);
+            const elementNames = expandedChanges.elements.map((e: any) => e.name || e.id).filter(Boolean);
             if (elementNames.length > 0) {
               const foundElements = store.elements.filter(e => 
                 elementNames.some((name: string) => 
@@ -603,10 +799,10 @@ export function ChatPanel() {
       const failedElements: string[] = [];
       // Track validation hints
       const validationHints: Array<{ type: string; field: string; message: string; suggestion?: string }> =
-        (changes as any).validationHints || [];
+        (expandedChanges as any).validationHints || [];
 
-      if ((changes.type === 'create' || changes.type === 'update') && changes.elements) {
-        changes.elements.forEach((el: any, index: number) => {
+      if ((expandedChanges.type === 'create' || expandedChanges.type === 'update') && expandedChanges.elements) {
+        expandedChanges.elements.forEach((el: any, index: number) => {
           try {
             // Skip null/undefined elements
             if (!el || typeof el !== 'object') {
@@ -616,9 +812,9 @@ export function ChatPanel() {
             }
           // Variable to track if we found an element to update
           let existingElement: typeof store.elements[0] | undefined = undefined;
-          
+
           // Check if this is an UPDATE to an existing element
-          if (changes.type === 'update') {
+          if (expandedChanges.type === 'update') {
             console.log('🔍 Looking for element to update:', { id: el.id, name: el.name });
             console.log('📋 Available elements:', store.elements.map(e => ({ id: e.id, name: e.name })));
             
@@ -693,10 +889,10 @@ export function ChatPanel() {
           }
           
           // CREATE a new element (if not updating, or if update didn't find element)
-          if (changes.type === 'create' || (changes.type === 'update' && !existingElement)) {
+          if (expandedChanges.type === 'create' || (expandedChanges.type === 'update' && !existingElement)) {
             // Process content based on element type
             let content: any = el.content;
-            
+
             // Handle text elements - ensure proper content structure
             if (el.element_type === 'text') {
               const textContent = content?.text || content?.content || el.name || 'Text';
@@ -712,14 +908,45 @@ export function ChatPanel() {
                 src: content?.src || content?.url || '',
               };
             }
-            // Default shape content
+            // Handle shape elements - sync fill and backgroundColor
+            else if (el.element_type === 'shape' || content?.type === 'shape') {
+              // Ensure content has proper structure
+              if (!content || !content.type) {
+                content = { type: 'shape', shape: 'rectangle' };
+              }
+
+              // Only set default fill if there's no gradient - gradients take precedence
+              if (!content.gradient?.enabled) {
+                // Determine the correct fill color:
+                // 1. Use content.fill if it's a valid color (not transparent)
+                // 2. Fall back to styles.backgroundColor if valid
+                // 3. Default to blue
+                let fillColor = '#3B82F6'; // Default
+                if (content.fill && content.fill !== 'transparent') {
+                  fillColor = content.fill;
+                } else if (el.styles?.backgroundColor && el.styles.backgroundColor !== 'transparent') {
+                  fillColor = el.styles.backgroundColor;
+                }
+                content.fill = fillColor;
+              }
+
+              // Sync styles.backgroundColor with content.fill to avoid conflicts
+              // Remove transparent backgroundColor for shapes since they use content.fill
+              if (el.styles) {
+                if (el.styles.backgroundColor === 'transparent' || !el.styles.backgroundColor) {
+                  delete el.styles.backgroundColor;
+                }
+              }
+
+            }
+            // Default content for other elements
             else if (!content || !content.type) {
-              const bgColor = typeof el.styles?.backgroundColor === 'string' 
-                ? el.styles.backgroundColor 
+              const bgColor = typeof el.styles?.backgroundColor === 'string' && el.styles.backgroundColor !== 'transparent'
+                ? el.styles.backgroundColor
                 : '#3B82F6';
-              content = { 
-                type: 'shape', 
-                shape: 'rectangle', 
+              content = {
+                type: 'shape',
+                shape: 'rectangle',
                 fill: bgColor,
               };
             }
@@ -761,7 +988,7 @@ export function ChatPanel() {
             }
 
             // Track newly created elements for auto-grouping (only for 'create' action)
-            if (changes.type === 'create' && addedElement) {
+            if (expandedChanges.type === 'create' && addedElement) {
               newlyCreatedElementIds.push(elementId);
             }
 
@@ -806,7 +1033,7 @@ export function ChatPanel() {
       }
 
       // Automatically group newly created elements if there are 2 or more
-      if (changes.type === 'create' && newlyCreatedElementIds.length >= 2) {
+      if (expandedChanges.type === 'create' && newlyCreatedElementIds.length >= 2) {
         // Use a small delay to ensure all elements are fully added to the store
         // and React has processed the state updates
         setTimeout(() => {
@@ -823,14 +1050,14 @@ export function ChatPanel() {
       }
 
       // Now create animations if provided
-      console.log('🎬 Processing animations:', changes.animations);
-      if (changes.animations && Array.isArray(changes.animations) && changes.animations.length > 0) {
-        console.log(`✅ Found ${changes.animations.length} animation(s) to process`);
+      console.log('🎬 Processing animations:', expandedChanges.animations);
+      if (expandedChanges.animations && Array.isArray(expandedChanges.animations) && expandedChanges.animations.length > 0) {
+        console.log(`✅ Found ${expandedChanges.animations.length} animation(s) to process`);
         const currentStore = useDesignerStore.getState();
         const newAnimations = [...currentStore.animations];
         const newKeyframes = [...currentStore.keyframes];
 
-        changes.animations.forEach((animData: any) => {
+        expandedChanges.animations.forEach((animData: any) => {
           // Skip invalid animation data
           if (!animData || typeof animData !== 'object') {
             console.warn('Invalid animation data, skipping');
@@ -999,10 +1226,54 @@ export function ChatPanel() {
           }
         });
 
+        // Fix incomplete animations (truncation issue) - animations with only 1 keyframe at position 0
+        // These leave elements in their "start" state (often off-screen or invisible)
+        newAnimations.forEach(anim => {
+          const animKfs = newKeyframes.filter(kf => kf.animation_id === anim.id);
+
+          // If animation has only 1 keyframe at position 0, add a keyframe at position 100
+          if (animKfs.length === 1 && animKfs[0].position === 0) {
+            const startKf = animKfs[0];
+            console.log(`⚠️ Fixing incomplete animation ${anim.id} - adding end keyframe`);
+
+            // Find the element to get its base position
+            const element = currentStore.elements.find(e => e.id === anim.element_id);
+
+            // Create end keyframe with "visible" state
+            const endProperties: Record<string, any> = {};
+
+            // For each property in start keyframe, set to visible/default state
+            Object.keys(startKf.properties).forEach(prop => {
+              const startVal = startKf.properties[prop];
+              if (prop === 'opacity') {
+                endProperties.opacity = 1; // Make visible
+              } else if (prop === 'position_x') {
+                // Use element's actual position_x as end state
+                endProperties.position_x = element?.position_x ?? 100;
+              } else if (prop === 'position_y') {
+                // Use element's actual position_y as end state
+                endProperties.position_y = element?.position_y ?? 100;
+              } else if (prop === 'scale_x' || prop === 'scale_y') {
+                endProperties[prop] = 1; // Full scale
+              } else {
+                // For other properties, keep the start value (no animation)
+                endProperties[prop] = startVal;
+              }
+            });
+
+            newKeyframes.push({
+              id: crypto.randomUUID(),
+              animation_id: anim.id,
+              position: 100,
+              properties: endProperties,
+            });
+          }
+        });
+
         currentStore.setAnimations(newAnimations);
         currentStore.setKeyframes(newKeyframes);
         console.log(`✅ Created ${newAnimations.length} animation(s) with ${newKeyframes.length} keyframe(s)`);
-      } else if (changes.type === 'create' && newlyCreatedElementIds.length > 0) {
+      } else if (expandedChanges.type === 'create' && newlyCreatedElementIds.length > 0) {
         // AUTO-GENERATE DEFAULT ANIMATIONS if AI didn't provide them
         console.warn('⚠️ No animations provided in AI response. Auto-generating default animations for all elements.');
 
@@ -1385,6 +1656,11 @@ Alternatively, configure your API key in Settings (⚙️).`,
         // Track if we've started getting JSON code block
         let isGeneratingCode = false;
         let preCodeText = ''; // Text before the code block (AI's introduction/questions)
+        let hasShownThinking = false;
+        let lastElementCount = 0;
+
+        // Show initial thinking state
+        setCreationProgress({ phase: 'thinking', message: 'Thinking...' });
 
         // Use streaming API for real-time progress
         const response = await sendChatMessageStreaming(
@@ -1399,18 +1675,48 @@ Alternatively, configure your API key in Settings (⚙️).`,
               if (!isGeneratingCode) {
                 isGeneratingCode = true;
                 preCodeText = fullText.substring(0, codeBlockStart).trim();
-                setCreationProgress({ phase: 'creating', message: 'Creating graphic...' });
+                setCreationProgress({ phase: 'designing', message: 'Designing graphic layout...' });
+              }
+
+              // Extract JSON portion to count elements being generated
+              const jsonStart = codeBlockStart + 7; // After ```json
+              const jsonPortion = fullText.substring(jsonStart);
+
+              // Count element objects in the JSON so far
+              const elementMatches = jsonPortion.match(/"element_type"\s*:/g);
+              const currentElementCount = elementMatches ? elementMatches.length : 0;
+
+              // Update progress with element count
+              if (currentElementCount > lastElementCount) {
+                lastElementCount = currentElementCount;
+                setCreationProgress({
+                  phase: 'generating',
+                  message: `Generating elements...`,
+                  processedElements: currentElementCount,
+                });
+              } else if (currentElementCount > 0) {
+                // Keep showing generating phase
+                setCreationProgress({
+                  phase: 'generating',
+                  message: `Generating ${currentElementCount} element${currentElementCount !== 1 ? 's' : ''}...`,
+                  processedElements: currentElementCount,
+                });
               }
 
               // Show the AI's intro text + progress indicator
               const displayText = preCodeText
-                ? `${preCodeText}\n\n⏳ Creating graphic...`
-                : '⏳ Creating graphic...';
+                ? `${preCodeText}\n\n⏳ Generating graphic...`
+                : '⏳ Generating graphic...';
               useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, displayText);
             } else {
               // No JSON yet - show the full text as-is (could be questions, clarifications, etc.)
               useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, fullText + '▍');
-              setCreationProgress({ phase: 'idle', message: '' });
+
+              // If we have text, AI is responding (not just thinking)
+              if (fullText.length > 10 && !hasShownThinking) {
+                hasShownThinking = true;
+                setCreationProgress({ phase: 'idle', message: '' });
+              }
             }
           },
           undefined,
@@ -1418,39 +1724,46 @@ Alternatively, configure your API key in Settings (⚙️).`,
           abortControllerRef.current?.signal
         );
 
-        // Check if there are changes to apply
+        // Show the response to user immediately
+        useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
+        setCreationProgress({ phase: 'idle', message: '' });
+        setActiveMessageId(null);
+
+        // Check if there are changes to apply - do this asynchronously
         const shouldAutoApply = response.changes && !isDrasticChange(response.changes);
+        console.log('📋 AI response check:', { hasChanges: !!response.changes, shouldAutoApply, elementCount: response.changes?.elements?.length || 0 });
 
         if (shouldAutoApply && response.changes) {
-          // Show applying phase
-          const applyingText = preCodeText
-            ? `${preCodeText}\n\n⚡ Applying to canvas...`
-            : '⚡ Applying to canvas...';
-          setCreationProgress({ phase: 'applying', message: 'Applying to canvas...' });
-          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, applyingText);
+          const totalElements = response.changes.elements?.length || 0;
+          console.log('🚀 Auto-applying changes:', { totalElements, type: response.changes.type, layerType: response.changes.layerType });
 
-          // Apply the changes
-          markChangesApplied(streamingMessage.id);
-          applyAIChanges(response.changes!, streamingMessage.id);
+          // Apply changes asynchronously so user sees response immediately
+          requestAnimationFrame(() => {
+            setCreationProgress({
+              phase: 'applying',
+              message: `Applying ${totalElements} element${totalElements !== 1 ? 's' : ''}...`,
+              totalElements,
+              processedElements: totalElements,
+            });
 
-          // Show completion with element count
-          const elementCount = response.changes.elements?.length || 0;
-          const doneText = elementCount > 0
-            ? `✓ Created ${elementCount} element${elementCount !== 1 ? 's' : ''} on canvas.`
-            : '✓ Done!';
+            // Apply the changes
+            console.log('⚡ Calling applyAIChanges...');
+            markChangesApplied(streamingMessage.id);
+            applyAIChanges(response.changes!, streamingMessage.id);
+            console.log('✅ applyAIChanges completed');
 
-          setCreationProgress({ phase: 'done', message: doneText, elementCount });
+            // Show completion briefly
+            const doneText = totalElements > 0
+              ? `✓ Created ${totalElements} element${totalElements !== 1 ? 's' : ''}`
+              : '✓ Done!';
+            setCreationProgress({ phase: 'done', message: doneText, elementCount: totalElements });
 
-          // Store the full response (with JSON) - MessageContent component handles display
-          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
-        } else {
-          // No changes to apply - just show the response as-is
-          // This handles cases where AI asks questions or provides info without creating elements
-          useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
-          setCreationProgress({ phase: 'idle', message: '' });
+            // Clear progress after a moment
+            setTimeout(() => {
+              setCreationProgress({ phase: 'idle', message: '' });
+            }, 1500);
+          });
         }
-
-        setActiveMessageId(null);
       }
     } catch (error) {
       // Reset progress state on error
@@ -1564,6 +1877,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
     { label: 'Score Bug', prompt: QUICK_PROMPTS.createScoreBug },
     { label: 'Chart', prompt: QUICK_PROMPTS.createBarChart },
     { label: 'Map', prompt: QUICK_PROMPTS.createMap },
+    { label: 'Standings', prompt: QUICK_PROMPTS.createStandings },
     { label: 'Improve', prompt: QUICK_PROMPTS.improveDesign },
   ];
 

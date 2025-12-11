@@ -82,7 +82,7 @@ export function UserMenu() {
           Settings
         </DropdownMenuItem>
 
-        {user.isEmergentUser && (
+        {user.isAdmin && (
           <DropdownMenuItem onClick={() => navigate('/settings/admin')}>
             <Shield className="w-4 h-4 mr-2" />
             Admin Panel

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronFirst, ChevronLast,
   Plus, ZoomIn, ZoomOut, Repeat, Maximize2, Trash2, Diamond,
-  GripHorizontal, Move, MonitorPlay,
+  GripHorizontal, Move, MonitorPlay, X,
 } from 'lucide-react';
 import {
   Timeline as AnimationTimeline,
@@ -112,6 +112,7 @@ export function Timeline() {
     selectKeyframes,
     deleteSelectedKeyframes,
     deleteKeyframe,
+    removeKeyframeProperty,
     templates,
     layers,
     selectTemplate,
@@ -250,17 +251,28 @@ export function Timeline() {
 
   const fitToContent = useCallback(() => {
     if (!timelineRef.current || !timelineContainerRef.current) return;
-    
-    const contentDuration = Math.max(
-      1000,
-      ...currentAnimations.map((a) => a.delay + a.duration)
-    );
-    
-    const containerWidth = timelineContainerRef.current.clientWidth - 210; // Account for outline
-    const targetZoom = containerWidth / (contentDuration * 0.15); // pixels per ms
-    
+
+    // Use maxDuration which includes phase duration + buffer
+    // Add 500ms padding to show a bit extra
+    const targetDuration = maxDuration + 500;
+
+    // Get the actual timeline content width (subtract the row labels area ~210px)
+    const containerWidth = timelineContainerRef.current.clientWidth - 210;
+
+    // Calculate zoom to fit the entire duration in the visible area
+    // The timeline uses zoom as a multiplier, where 1 zoom = 100px per second (0.1px per ms)
+    // So: containerWidth = targetDuration * 0.1 * zoom
+    // Therefore: zoom = containerWidth / (targetDuration * 0.1)
+    const targetZoom = containerWidth / (targetDuration * 0.1);
+
+    // Clamp zoom between 0.5 and 5
     setZoom(Math.max(0.5, Math.min(5, targetZoom)));
-  }, [currentAnimations]);
+
+    // Also scroll to the beginning
+    if (timelineRef.current) {
+      timelineRef.current.setTime(0);
+    }
+  }, [maxDuration]);
 
   // Build timeline model from store data (only for current template)
   const buildTimelineModel = useCallback((): TimelineModel => {
@@ -1696,6 +1708,21 @@ export function Timeline() {
             const firstKf = selectedKfs[0];
             const anim = firstKf ? animations.find(a => a.id === firstKf.animation_id) : null;
 
+            // Get unique property names being animated
+            const propNames = new Set<string>();
+            selectedKfs.forEach(kf => {
+              Object.keys(kf.properties).forEach(key => propNames.add(key));
+            });
+            const propList = Array.from(propNames);
+
+            // Format property name for display (camelCase to readable)
+            const formatPropName = (name: string) => {
+              return name
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .trim();
+            };
+
             return (
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1.5 text-amber-400">
@@ -1708,12 +1735,59 @@ export function Timeline() {
                     <span className="font-mono text-foreground">{firstKf.position}%</span>
                     <span className="text-muted-foreground">•</span>
                     <span className="text-violet-400">{totalProps} prop{totalProps !== 1 ? 's' : ''}</span>
+                    {propList.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground">:</span>
+                        <div className="flex items-center gap-1 flex-wrap max-w-[300px]">
+                          {propList.slice(0, 5).map((propKey) => (
+                            <span
+                              key={propKey}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group/prop"
+                            >
+                              <span className="text-[10px]">{formatPropName(propKey)}</span>
+                              <button
+                                className="opacity-0 group-hover/prop:opacity-100 hover:text-red-400 transition-opacity ml-0.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeKeyframeProperty(firstKf.id, propKey);
+                                }}
+                                title={`Remove ${formatPropName(propKey)}`}
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {propList.length > 5 && (
+                            <span className="text-emerald-400/60 text-[10px]">+{propList.length - 5}</span>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
                 {selectedKfs.length > 1 && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <span className="text-violet-400">{totalProps} total props</span>
+                    {propList.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground">:</span>
+                        <div className="flex items-center gap-1 flex-wrap max-w-[300px]">
+                          {propList.slice(0, 5).map((propKey) => (
+                            <span
+                              key={propKey}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px]"
+                              title={`Property: ${formatPropName(propKey)}`}
+                            >
+                              {formatPropName(propKey)}
+                            </span>
+                          ))}
+                          {propList.length > 5 && (
+                            <span className="text-emerald-400/60 text-[10px]">+{propList.length - 5}</span>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

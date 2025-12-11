@@ -72,7 +72,7 @@ export function SettingsPage() {
               <Building2 className="w-4 h-4" />
               Organization
             </TabsTrigger>
-            {user?.isEmergentUser && (
+            {user?.isAdmin && (
               <TabsTrigger value="admin" className="gap-2">
                 <Shield className="w-4 h-4" />
                 Admin
@@ -88,7 +88,7 @@ export function SettingsPage() {
             <OrganizationSettings />
           </TabsContent>
 
-          {user?.isEmergentUser && (
+          {user?.isAdmin && (
             <TabsContent value="admin">
               <AdminPanel />
             </TabsContent>

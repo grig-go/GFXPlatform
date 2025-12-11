@@ -21,8 +21,10 @@ function AnimatedWeatherIconRenderer({ animatedIcon, size, color }: {
   size: number;
   color: string;
 }) {
+  // Use key to force re-render when color changes (canvas-based component)
   return (
     <ReactAnimatedWeather
+      key={`${animatedIcon}-${color}`}
       icon={animatedIcon}
       color={color}
       size={size}

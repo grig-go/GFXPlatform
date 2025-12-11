@@ -18,6 +18,7 @@ import {
 } from '@emergent-platform/ui';
 import { createProject } from '@/services/projectService';
 import { useDesignerStore } from '@/stores/designerStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Loader2, Monitor, Smartphone, Film } from 'lucide-react';
 
 // Resolution presets
@@ -47,6 +48,7 @@ interface NewProjectDialogProps {
 export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) {
   const navigate = useNavigate();
   const loadProject = useDesignerStore((s) => s.loadProject);
+  const { user } = useAuthStore();
   
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState('Untitled Project');
@@ -69,9 +71,15 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   // Handle create
   const handleCreate = async () => {
     if (!name.trim()) return;
-    
+
+    // Ensure user has an organization
+    if (!user?.organizationId) {
+      console.error('Cannot create project: user has no organization');
+      return;
+    }
+
     setIsCreating(true);
-    
+
     try {
       const newProject = await createProject({
         name: name.trim(),
@@ -80,8 +88,10 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         canvas_height: height,
         frame_rate: parseInt(frameRate),
         background_color: backgroundColor,
+        organization_id: user.organizationId,
+        created_by: user.id,
       });
-      
+
       if (newProject) {
         // Close dialog first
         onOpenChange(false);

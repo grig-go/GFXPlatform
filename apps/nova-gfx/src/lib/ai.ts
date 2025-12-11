@@ -1,5 +1,21 @@
 import { supabase } from '@emergent-platform/supabase-client';
 import type { AIContext, AIResponse, AIChanges } from '@emergent-platform/types';
+import {
+  buildDynamicSystemPrompt,
+  buildContextMessage as buildDynamicContextMessage,
+} from './ai-prompts';
+import { resolveLogoPlaceholders } from './ai-prompts/tools/sports-logos';
+import { resolvePexelsPlaceholders } from './ai-prompts/tools/pexels-images';
+
+/**
+ * Resolve all image placeholders in AI response text
+ * Handles: {{LOGO:LEAGUE:TEAM}}, {{PEXELS:query}}
+ */
+function resolveImagePlaceholders(text: string): string {
+  let resolved = resolveLogoPlaceholders(text);
+  resolved = resolvePexelsPlaceholders(resolved);
+  return resolved;
+}
 
 // AI Providers
 export type AIProvider = 'gemini' | 'claude';
@@ -152,8 +168,10 @@ export function isAIAvailableInCurrentEnv(): { available: boolean; reason?: stri
   };
 }
 
-// System prompt - lean version focused on editing existing elements
-const SYSTEM_PROMPT = `You are Nova, an AI assistant for broadcast graphics design.
+// DEPRECATED: Legacy static system prompt - kept for reference
+// Now using dynamic prompts from ./ai-prompts/ that are built based on user intent
+// @ts-ignore - Intentionally keeping for reference/rollback
+const _LEGACY_SYSTEM_PROMPT = `You are Nova, an AI assistant for broadcast graphics design.
 
 ## QUICK REFERENCE
 - **ALWAYS check context FIRST** for existing elements in the current template
@@ -1394,10 +1412,10 @@ export function isDrasticChange(changes: AIChanges | undefined): boolean {
   if (changes.type === 'delete') return true;
   if (changes.elementsToDelete && changes.elementsToDelete.length > 0) return true;
 
-  // Only flag as drastic if there are a huge number of elements (50+)
-  // Typical broadcast graphics (weather, scores, etc.) can have 20-40 elements
+  // Only flag as drastic if there are a huge number of elements (100+)
+  // Broadcast graphics like standings, leaderboards can easily have 60-80 elements
   const elementCount = changes.elements?.length || 0;
-  if (elementCount > 50) return true;
+  if (elementCount > 100) return true;
 
   // Mixed operations with deletions
   if (changes.type === 'mixed' && changes.elementsToDelete && changes.elementsToDelete.length > 0) {
@@ -1422,7 +1440,13 @@ export async function sendChatMessage(
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
-  const contextInfo = buildContextMessage(context);
+  // Get the user's latest message to detect intent
+  const lastUserMessage = messages[messages.length - 1]?.content || '';
+
+  // Build dynamic system prompt based on user intent
+  const dynamicSystemPrompt = buildDynamicSystemPrompt(lastUserMessage, context);
+  const contextInfo = buildDynamicContextMessage(context);
+
   const selectedModel = modelId || getAIModel();
   const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
   const provider = modelConfig.provider;
@@ -1457,7 +1481,7 @@ export async function sendChatMessage(
               role: m.role,
               content: m.content,
             })),
-            systemPrompt: SYSTEM_PROMPT,
+            systemPrompt: dynamicSystemPrompt,
             model: selectedModel,
             provider: provider,
           },
@@ -1472,7 +1496,8 @@ export async function sendChatMessage(
 
         if (error) throw error;
 
-        const responseText = data.message || '';
+        // Resolve image placeholders in the response (logos, Pexels images)
+        const responseText = resolveImagePlaceholders(data.message || '');
         const changes = parseChangesFromResponse(responseText);
 
         return {
@@ -1502,11 +1527,19 @@ export async function sendChatMessage(
   }
 
   // Direct API call (supports images)
+  let response: AIResponse;
   if (provider === 'gemini') {
-    return await sendGeminiMessage(messages, context, modelConfig, images, signal);
+    response = await sendGeminiMessage(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, images, signal);
   } else {
-    return await sendClaudeMessage(messages, context, modelConfig, images, signal);
+    response = await sendClaudeMessage(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, images, signal);
   }
+
+  // Resolve any image placeholders in the response (logos, Pexels images)
+  if (response.message) {
+    response.message = resolveImagePlaceholders(response.message);
+  }
+
+  return response;
 }
 
 // Helper: Delay function for retry backoff
@@ -1519,6 +1552,8 @@ async function sendGeminiMessage(
   messages: ChatMessage[],
   context: AIContext,
   modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  systemPrompt: string,
+  contextInfo: string,
   images?: ImageAttachment[],
   signal?: AbortSignal,
   retryCount: number = 0
@@ -1534,16 +1569,14 @@ async function sendGeminiMessage(
     throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
   }
 
-  const contextInfo = buildContextMessage(context);
-
   // Build Gemini-format messages (convert assistant to model role)
   const geminiContents: any[] = [
     // Add system instruction as first user message with model acknowledgment
     ...(contextInfo ? [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}\n\n[Context]\n${contextInfo}\n[End Context]` }] },
+      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}\n\n[Context]\n${contextInfo}\n[End Context]` }] },
       { role: 'model', parts: [{ text: 'I understand the instructions and context. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
     ] : [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}` }] },
+      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
       { role: 'model', parts: [{ text: 'I understand. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
     ]),
     // Add conversation history (except last message if we have images)
@@ -1591,7 +1624,7 @@ async function sendGeminiMessage(
           provider: 'gemini',
           model: modelConfig.apiModel,
           messages: geminiContents,
-          maxTokens: 8192,
+          maxTokens: 16384,
           temperature: 0.7,
         }),
         signal,
@@ -1608,7 +1641,7 @@ async function sendGeminiMessage(
           body: JSON.stringify({
             contents: geminiContents,
             generationConfig: {
-              maxOutputTokens: 8192,
+              maxOutputTokens: 16384,
               temperature: 0.7,
             },
             safetySettings: [
@@ -1632,7 +1665,7 @@ async function sendGeminiMessage(
         const retryDelay = BASE_DELAY * Math.pow(2, retryCount); // Exponential backoff
         console.log(`Gemini API overloaded (${response.status}). Retrying in ${retryDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
         await delay(retryDelay);
-        return sendGeminiMessage(messages, context, modelConfig, images, signal, retryCount + 1);
+        return sendGeminiMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal, retryCount + 1);
       }
 
       // For overload errors after max retries, provide a user-friendly message
@@ -1644,7 +1677,9 @@ async function sendGeminiMessage(
     }
 
     const data = await response.json();
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Resolve image placeholders before parsing changes
+    const responseText = resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
     return {
@@ -1662,7 +1697,7 @@ async function sendGeminiMessage(
       const retryDelay = BASE_DELAY * Math.pow(2, retryCount);
       console.log(`Gemini API overloaded. Retrying in ${retryDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       await delay(retryDelay);
-      return sendGeminiMessage(messages, context, modelConfig, images, signal, retryCount + 1);
+      return sendGeminiMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal, retryCount + 1);
     }
 
     console.error('Gemini API call failed:', fetchError);
@@ -1673,8 +1708,10 @@ async function sendGeminiMessage(
 // Send message to Claude API
 async function sendClaudeMessage(
   messages: ChatMessage[],
-  context: AIContext,
+  _context: AIContext, // Context is now passed via contextInfo parameter
   modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  systemPrompt: string,
+  contextInfo: string,
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
@@ -1685,8 +1722,6 @@ async function sendClaudeMessage(
   if (!useProxy && !claudeApiKey) {
     throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
   }
-
-  const contextInfo = buildContextMessage(context);
 
   // Build Claude-format messages
   const apiMessages: any[] = [
@@ -1747,8 +1782,8 @@ async function sendClaudeMessage(
           provider: 'claude',
           model: modelConfig.apiModel,
           messages: apiMessages,
-          systemPrompt: SYSTEM_PROMPT,
-          maxTokens: 8192,
+          systemPrompt: systemPrompt,
+          maxTokens: 16384,
         }),
         signal,
       });
@@ -1764,8 +1799,8 @@ async function sendClaudeMessage(
         },
         body: JSON.stringify({
           model: modelConfig.apiModel,
-          max_tokens: 8192,
-          system: SYSTEM_PROMPT,
+          max_tokens: 16384,
+          system: systemPrompt,
           messages: apiMessages,
         }),
         signal,
@@ -1779,7 +1814,9 @@ async function sendClaudeMessage(
 
     const data = await response.json();
     const textContent = data.content?.find((c: any) => c.type === 'text');
-    const responseText = textContent?.text || '';
+    const rawText = textContent?.text || '';
+    // Resolve image placeholders before parsing changes
+    const responseText = resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
     return {
@@ -1796,7 +1833,9 @@ async function sendClaudeMessage(
   }
 }
 
-function buildContextMessage(context: AIContext): string {
+// DEPRECATED: Legacy context builder - now using buildContextMessage from ./ai-prompts/
+// @ts-ignore - Intentionally keeping for reference/rollback
+function _legacyBuildContextMessage(context: AIContext): string {
   const parts: string[] = [];
 
   if (context.project) {
@@ -2498,6 +2537,8 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           animations: normalizedAnimations,
           elementsToDelete: [],
           validationHints: hints.length > 0 ? hints : undefined,
+          // Preserve dynamic_elements for template expansion
+          ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
         };
       }
     }
@@ -2508,41 +2549,145 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
 
   // Look for JSON code blocks (complete or incomplete)
   let jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-  
+
   // If no complete block, try to match incomplete (truncated response)
   if (!jsonMatch) {
     jsonMatch = response.match(/```json\s*([\s\S]*)$/);
   }
-  
+
   // Also try to find raw JSON object without code blocks
   if (!jsonMatch) {
     const rawJsonMatch = response.match(/\{\s*"action"\s*:\s*"(?:create|update|delete)"[\s\S]*\}/);
     if (rawJsonMatch) {
       jsonMatch = [rawJsonMatch[0], rawJsonMatch[0]];
+      console.log('✅ Found raw JSON with action');
     }
   }
-  
-  if (!jsonMatch) return null;
+
+  if (!jsonMatch) {
+    console.log('❌ No JSON found in response. Response preview:', response.substring(0, 200));
+    return null;
+  }
+
+  console.log('✅ JSON match found, length:', jsonMatch[1]?.length || 0);
 
   let jsonStr = jsonMatch[1].trim();
-  
-  // Try to fix common truncation issues
-  const openBraces = (jsonStr.match(/{/g) || []).length;
-  const closeBraces = (jsonStr.match(/}/g) || []).length;
-  const openBrackets = (jsonStr.match(/\[/g) || []).length;
-  const closeBrackets = (jsonStr.match(/]/g) || []).length;
-  
-  // Add missing closing characters if truncated
-  if (openBraces > closeBraces || openBrackets > closeBrackets) {
-    jsonStr = jsonStr.replace(/,\s*"[^"]*":\s*("[^"]*)?$/m, '');
-    jsonStr = jsonStr.replace(/,\s*{\s*"[^"]*":\s*("[^"]*)?$/m, '');
-    jsonStr = jsonStr.replace(/,\s*\[\s*{\s*"[^"]*":\s*("[^"]*)?$/m, '');
-    
-    for (let i = 0; i < openBrackets - closeBrackets; i++) {
-      jsonStr += ']';
+  const originalJson = jsonStr; // Keep original for fallback
+
+  // Check if JSON is truncated (unbalanced brackets)
+  const countChar = (str: string, char: string) => (str.match(new RegExp('\\' + char, 'g')) || []).length;
+  const openBraces = countChar(jsonStr, '{');
+  const closeBraces = countChar(jsonStr, '}');
+  const openBrackets = countChar(jsonStr, '[');
+  const closeBrackets = countChar(jsonStr, ']');
+  const isTruncated = openBraces > closeBraces || openBrackets > closeBrackets;
+  let wasRepaired = false;
+
+  // First, try parsing as-is (handles valid JSON)
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.action && parsed.elements) {
+      // Valid JSON, process it below
+      jsonStr = JSON.stringify(parsed); // Normalize
     }
-    for (let i = 0; i < openBraces - closeBraces; i++) {
-      jsonStr += '}';
+  } catch (e) {
+    // JSON is invalid, attempt repair if truncated
+    if (isTruncated) {
+      wasRepaired = true;
+      console.log('🔧 Detected truncated JSON, attempting repair...', {
+        openBraces, closeBraces, openBrackets, closeBrackets,
+        length: jsonStr.length
+      });
+
+      // Strategy: Find the last complete element object in the elements array
+      // An element object ends with "}" and is followed by "," or "]" or end of array
+
+      // First, try to find where the elements array starts
+      const elementsStart = jsonStr.indexOf('"elements"');
+      if (elementsStart > -1) {
+        // Find the opening bracket of elements array
+        const arrayStart = jsonStr.indexOf('[', elementsStart);
+        if (arrayStart > -1) {
+          // Find all complete element objects (look for closing braces that are part of element objects)
+          // We'll work backwards to find the last valid cut point
+
+          // Find positions of all "}," and "}\n" patterns (potential element ends)
+          const cutPoints: number[] = [];
+          let searchPos = arrayStart;
+          while (searchPos < jsonStr.length) {
+            const commaEnd = jsonStr.indexOf('},', searchPos);
+            const newlineEnd = jsonStr.indexOf('}\n', searchPos);
+
+            if (commaEnd === -1 && newlineEnd === -1) break;
+
+            const nextPoint = commaEnd === -1 ? newlineEnd :
+                             newlineEnd === -1 ? commaEnd :
+                             Math.min(commaEnd, newlineEnd);
+
+            if (nextPoint > arrayStart) {
+              cutPoints.push(nextPoint);
+            }
+            searchPos = nextPoint + 1;
+          }
+
+          // Try cut points from latest to earliest (we want to keep as much as possible)
+          for (let i = cutPoints.length - 1; i >= 0; i--) {
+            const cutPoint = cutPoints[i];
+            let testJson = jsonStr.slice(0, cutPoint + 1);
+
+            // Clean up trailing comma
+            testJson = testJson.replace(/,\s*$/, '');
+
+            // Balance brackets
+            const testOpenBrackets = countChar(testJson, '[');
+            const testCloseBrackets = countChar(testJson, ']');
+            const testOpenBraces = countChar(testJson, '{');
+            const testCloseBraces = countChar(testJson, '}');
+
+            for (let j = 0; j < testOpenBrackets - testCloseBrackets; j++) testJson += ']';
+            for (let j = 0; j < testOpenBraces - testCloseBraces; j++) testJson += '}';
+
+            try {
+              const testParsed = JSON.parse(testJson);
+              if (testParsed.action && testParsed.elements && testParsed.elements.length > 0) {
+                console.log(`🔧 Repaired JSON by cutting at position ${cutPoint}, kept ${testParsed.elements.length} elements`);
+                jsonStr = testJson;
+                break;
+              }
+            } catch {
+              // This cut point didn't work, try the next one
+              continue;
+            }
+          }
+        }
+      }
+
+      // If we still can't parse, try simple bracket balancing as last resort
+      try {
+        JSON.parse(jsonStr);
+      } catch {
+        // Simple repair: just balance brackets
+        let repairedJson = originalJson;
+        // Remove incomplete trailing properties
+        repairedJson = repairedJson.replace(/,\s*"[^"]*"\s*:\s*("[^"]*)?$/, '');
+        repairedJson = repairedJson.replace(/,\s*$/, '');
+
+        const finalOpenBrackets = countChar(repairedJson, '[');
+        const finalCloseBrackets = countChar(repairedJson, ']');
+        const finalOpenBraces = countChar(repairedJson, '{');
+        const finalCloseBraces = countChar(repairedJson, '}');
+
+        for (let i = 0; i < finalOpenBrackets - finalCloseBrackets; i++) repairedJson += ']';
+        for (let i = 0; i < finalOpenBraces - finalCloseBraces; i++) repairedJson += '}';
+
+        try {
+          JSON.parse(repairedJson);
+          jsonStr = repairedJson;
+          console.log('🔧 Repaired JSON with simple bracket balancing');
+        } catch {
+          console.warn('🔧 Could not repair truncated JSON');
+        }
+      }
     }
   }
 
@@ -2590,9 +2735,13 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           })),
           animations: updateAnimations,
           elementsToDelete: parsed.elementsToDelete || [],
+          // Preserve dynamic_elements for template expansion
+          ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
+          // Add truncation warning if response was repaired
+          ...(wasRepaired && { _truncationWarning: 'Response was truncated and repaired. Some elements or animations may be incomplete.' }),
         };
       }
-      
+
       // For CREATE operations, flatten nested elements (for groups with child elements)
       const flattenElements = (elements: any[], parentX = 0, parentY = 0): any[] => {
         const result: any[] = [];
@@ -2604,6 +2753,9 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           // If element has nested elements (group), flatten them
           if (el.elements && Array.isArray(el.elements)) {
             // Add the group container itself
+            // Note: Group containers don't set backgroundColor in styles - they use content.fill
+            const groupStyles = { ...el.styles };
+            delete groupStyles.backgroundColor; // Remove to avoid conflicts with content.fill
             result.push({
               name: el.name || 'Group',
               element_type: 'shape',
@@ -2615,8 +2767,8 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               opacity: el.opacity ?? 1,
               scale_x: el.scale_x ?? 1,
               scale_y: el.scale_y ?? 1,
-              styles: { ...el.styles, backgroundColor: 'transparent' },
-              content: { type: 'shape', shape: 'rectangle', fill: 'transparent' },
+              styles: groupStyles,
+              content: { type: 'shape', shape: 'rectangle', fill: 'transparent', opacity: 0 },
               _layerType: layerType,
               _zIndex: layerDefaults.z_index + result.length,
             });
@@ -2625,11 +2777,22 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
             const children = flattenElements(el.elements, absX, absY);
             result.push(...children);
           } else {
+            // Sanitize styles for shape elements - remove transparent backgroundColor
+            // since shapes use content.fill for their fill color
+            const elementType = el.element_type || 'shape';
+            let elementStyles = el.styles || {};
+            if (elementType === 'shape' || el.content?.type === 'shape') {
+              elementStyles = { ...elementStyles };
+              if (elementStyles.backgroundColor === 'transparent') {
+                delete elementStyles.backgroundColor;
+              }
+            }
+
             result.push({
               // IMPORTANT: Preserve ID for update operations
               ...(el.id && { id: el.id }),
               name: el.name || 'Untitled',
-              element_type: el.element_type || 'shape',
+              element_type: elementType,
               position_x: absX || layerDefaults.position.x,
               position_y: absY || layerDefaults.position.y,
               width: el.width ?? 200,
@@ -2638,7 +2801,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               opacity: el.opacity ?? 1,
               scale_x: el.scale_x ?? 1,
               scale_y: el.scale_y ?? 1,
-              styles: el.styles || {},
+              styles: elementStyles,
               content: el.content || { type: 'shape', shape: 'rectangle', fill: '#3B82F6' },
               _layerType: layerType,
               _zIndex: layerDefaults.z_index + result.length,
@@ -2675,16 +2838,21 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
         return normalized ? [normalized] : [];
       });
       
+      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${processedAnimations.length}, layerType=${layerType}`);
       return {
         type: parsed.action as 'create' | 'update' | 'delete',
         layerType: layerType,
         elements: flatElements,
         animations: processedAnimations,
         elementsToDelete: parsed.elementsToDelete || [],
+        // Preserve dynamic_elements for template expansion in ChatPanel
+        ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
+        // Add truncation warning if response was repaired
+        ...(wasRepaired && { _truncationWarning: 'Response was truncated and repaired. Some elements or animations may be incomplete.' }),
       };
     }
   } catch (e) {
-    console.warn('Failed to parse AI JSON response:', e);
+    console.warn('❌ Failed to parse AI JSON response:', e);
     // Try to extract partial data if possible
     try {
       // Look for any valid JSON structure
@@ -3015,6 +3183,25 @@ export const QUICK_PROMPTS = {
   createLeaderboard: 'Create a horizontal bar chart leaderboard with player rankings.',
   createMap: 'Create a map showing New York City with a venue marker.',
   createWeatherMap: 'Create a weather map showing the current location with dark style.',
+  createStandings: `Create a fullscreen NBA Eastern Conference standings graphic. Layout:
+Title "NBA STANDINGS" at top center with "EASTERN CONFERENCE" subtitle below
+Header row with labels: TEAM, W, L, GB
+8 team rows below the header
+Create explicit elements for each of the 8 teams:
+Boston Celtics - 35 wins, 12 losses, GB: -
+Milwaukee Bucks - 32 wins, 15 losses, GB: 3.0
+Cleveland Cavaliers - 31 wins, 17 losses, GB: 4.5
+New York Knicks - 29 wins, 19 losses, GB: 6.5
+Miami Heat - 27 wins, 21 losses, GB: 8.5
+Philadelphia 76ers - 26 wins, 21 losses, GB: 9.0
+Indiana Pacers - 25 wins, 23 losses, GB: 10.5
+Chicago Bulls - 23 wins, 25 losses, GB: 12.5
+Each team row should have:
+Row background shape (alternating dark colors)
+Rank number on left
+Team name
+Wins, Losses, and GB text aligned to the right
+Style: Dark professional sports broadcast look with blue accents. Top 3 teams should have gold/silver/bronze accent on the rank.`,
 };
 
 // Simple documentation chat - for helping users learn about Nova GFX and Pulsar GFX
@@ -3054,7 +3241,7 @@ export async function sendDocsChatMessage(
           provider: 'gemini',
           model: modelConfig.apiModel,
           messages: geminiContents,
-          maxTokens: 2048,
+          maxTokens: 16384,
           temperature: 0.7,
         }),
         signal,
@@ -3067,7 +3254,7 @@ export async function sendDocsChatMessage(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: geminiContents,
-            generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+            generationConfig: { maxOutputTokens: 16384, temperature: 0.7 },
           }),
           signal,
         }
@@ -3106,7 +3293,7 @@ export async function sendDocsChatMessage(
           model: modelConfig.apiModel,
           systemPrompt,
           messages: apiMessages,
-          maxTokens: 2048,
+          maxTokens: 16384,
           temperature: 0.7,
         }),
         signal,
@@ -3121,7 +3308,7 @@ export async function sendDocsChatMessage(
         },
         body: JSON.stringify({
           model: modelConfig.apiModel,
-          max_tokens: 2048,
+          max_tokens: 16384,
           system: systemPrompt,
           messages: apiMessages,
         }),
@@ -3151,16 +3338,31 @@ export async function sendChatMessageStreaming(
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
+  // Get the user's latest message to detect intent
+  const lastUserMessage = messages[messages.length - 1]?.content || '';
+
+  // Build dynamic system prompt based on user intent
+  const dynamicSystemPrompt = buildDynamicSystemPrompt(lastUserMessage, context);
+  const contextInfo = buildDynamicContextMessage(context);
+
   const selectedModel = modelId || getAIModel();
   const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
   const provider = modelConfig.provider;
 
   // For streaming, we need direct API access (can't stream through Edge Function easily)
+  let response: AIResponse;
   if (provider === 'gemini') {
-    return sendGeminiMessageStreaming(messages, context, modelConfig, onChunk, images, signal);
+    response = await sendGeminiMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
   } else {
-    return sendClaudeMessageStreaming(messages, context, modelConfig, onChunk, images, signal);
+    response = await sendClaudeMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
   }
+
+  // Resolve any image placeholders in the response (logos, Pexels images)
+  if (response.message) {
+    response.message = resolveImagePlaceholders(response.message);
+  }
+
+  return response;
 }
 
 // Streaming Gemini API call
@@ -3168,6 +3370,8 @@ async function sendGeminiMessageStreaming(
   messages: ChatMessage[],
   context: AIContext,
   modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  systemPrompt: string,
+  contextInfo: string,
   onChunk: StreamCallback,
   images?: ImageAttachment[],
   signal?: AbortSignal
@@ -3177,18 +3381,16 @@ async function sendGeminiMessageStreaming(
   if (!geminiApiKey) {
     // Fall back to non-streaming if no direct API key
     console.log('No Gemini API key for streaming, falling back to non-streaming');
-    return sendGeminiMessage(messages, context, modelConfig, images, signal);
+    return sendGeminiMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal);
   }
-
-  const contextInfo = buildContextMessage(context);
 
   // Build Gemini-format messages
   const geminiContents: any[] = [
     ...(contextInfo ? [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}\n\n[Context]\n${contextInfo}\n[End Context]` }] },
+      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}\n\n[Context]\n${contextInfo}\n[End Context]` }] },
       { role: 'model', parts: [{ text: 'I understand the instructions and context. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
     ] : [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${SYSTEM_PROMPT}` }] },
+      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
       { role: 'model', parts: [{ text: 'I understand. I will help you create broadcast graphics and respond with structured JSON when creating elements.' }] },
     ]),
     ...messages.slice(0, images && images.length > 0 ? -1 : undefined).map((m) => ({
@@ -3225,7 +3427,7 @@ async function sendGeminiMessageStreaming(
         body: JSON.stringify({
           contents: geminiContents,
           generationConfig: {
-            maxOutputTokens: 8192,
+            maxOutputTokens: 16384,
             temperature: 0.7,
           },
           safetySettings: [
@@ -3279,9 +3481,11 @@ async function sendGeminiMessageStreaming(
       }
     }
 
-    const changes = parseChangesFromResponse(fullText);
+    // Resolve image placeholders before parsing changes
+    const resolvedText = resolveImagePlaceholders(fullText);
+    const changes = parseChangesFromResponse(resolvedText);
     return {
-      message: fullText,
+      message: resolvedText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
@@ -3290,7 +3494,7 @@ async function sendGeminiMessageStreaming(
     }
     console.error('Gemini streaming API call failed:', fetchError);
     // Fall back to non-streaming
-    return sendGeminiMessage(messages, context, modelConfig, images, signal);
+    return sendGeminiMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal);
   }
 }
 
@@ -3299,6 +3503,8 @@ async function sendClaudeMessageStreaming(
   messages: ChatMessage[],
   context: AIContext,
   modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  systemPrompt: string,
+  contextInfo: string,
   onChunk: StreamCallback,
   images?: ImageAttachment[],
   signal?: AbortSignal
@@ -3308,10 +3514,8 @@ async function sendClaudeMessageStreaming(
   if (!claudeApiKey) {
     // Fall back to non-streaming if no direct API key
     console.log('No Claude API key for streaming, falling back to non-streaming');
-    return sendClaudeMessage(messages, context, modelConfig, images, signal);
+    return sendClaudeMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal);
   }
-
-  const contextInfo = buildContextMessage(context);
 
   // Build Claude-format messages
   const apiMessages: any[] = messages.map((m) => {
@@ -3359,8 +3563,8 @@ async function sendClaudeMessageStreaming(
       },
       body: JSON.stringify({
         model: modelConfig.apiModel,
-        max_tokens: 8192,
-        system: SYSTEM_PROMPT,
+        max_tokens: 16384,
+        system: systemPrompt,
         messages: apiMessages,
         stream: true,
       }),
@@ -3408,9 +3612,11 @@ async function sendClaudeMessageStreaming(
       }
     }
 
-    const changes = parseChangesFromResponse(fullText);
+    // Resolve image placeholders before parsing changes
+    const resolvedText = resolveImagePlaceholders(fullText);
+    const changes = parseChangesFromResponse(resolvedText);
     return {
-      message: fullText,
+      message: resolvedText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
@@ -3419,6 +3625,6 @@ async function sendClaudeMessageStreaming(
     }
     console.error('Claude streaming API call failed:', fetchError);
     // Fall back to non-streaming
-    return sendClaudeMessage(messages, context, modelConfig, images, signal);
+    return sendClaudeMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal);
   }
 }

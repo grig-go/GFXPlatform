@@ -452,7 +452,7 @@ export const flatProject: StarterProject = {
                   },
                   content: {
                     type: 'image',
-                    src: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1200&h=400&fit=crop',
+                    src: '',  // User will add their image
                     fit: 'cover',
                   },
                 },

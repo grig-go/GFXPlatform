@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Type, Image, Square, Move, RotateCcw,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Eye, EyeOff, Lock, Unlock, Trash2, Copy, Diamond, BarChart3, Group,
+  Diamond, BarChart3, Group,
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
   FolderOpen, Timer,
 } from 'lucide-react';
@@ -384,39 +384,6 @@ export function PropertiesPanel() {
           </div>
         )}
         
-        <div className="flex items-center gap-0.5 mt-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => updateElement(selectedElement.id, { visible: !selectedElement.visible })}
-            title={selectedElement.visible ? 'Hide' : 'Show'}
-          >
-            {selectedElement.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => updateElement(selectedElement.id, { locked: !selectedElement.locked })}
-            title={selectedElement.locked ? 'Unlock' : 'Lock'}
-          >
-            {selectedElement.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-          </Button>
-          <div className="flex-1" />
-          <Button variant="ghost" size="icon" className="h-6 w-6" title="Duplicate">
-            <Copy className="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-destructive hover:text-destructive"
-            onClick={() => deleteElements([selectedElement.id])}
-            title="Delete"
-          >
-            <Trash2 className="w-3 h-3" />
-          </Button>
-        </div>
       </div>
 
       {/* Tabs */}
@@ -3079,13 +3046,14 @@ function ChartStyleEditor({ element }: { element: Element }) {
 }
 
 function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
-  const { 
-    updateElement, 
-    bringToFront, 
-    sendToBack, 
-    bringForward, 
-    sendBackward, 
-    setZIndex 
+  const {
+    updateElement,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    setZIndex,
+    updateFitToContentParent,
   } = useDesignerStore();
 
   return (
@@ -3199,6 +3167,129 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
           </KeyframableProperty>
         </div>
       </div>
+
+      {/* Fit to Content - only for shapes */}
+      {element.element_type === 'shape' && element.content.type === 'shape' && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Auto-Size
+          </div>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={(element.content as { fitToContent?: boolean }).fitToContent || false}
+              onChange={(e) => {
+                updateElement(element.id, {
+                  content: {
+                    ...element.content,
+                    fitToContent: e.target.checked,
+                  } as Element['content'],
+                });
+                // Trigger resize calculation when enabled
+                if (e.target.checked) {
+                  setTimeout(() => updateFitToContentParent(element.id), 0);
+                }
+              }}
+              className="rounded"
+            />
+            <span>Fit to Children</span>
+          </label>
+
+          {(element.content as { fitToContent?: boolean }).fitToContent && (
+            <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
+              <div className="text-xs text-muted-foreground mb-2">
+                Padding (px)
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Top</label>
+                  <Input
+                    type="number"
+                    value={(element.content as { fitPadding?: { top?: number } }).fitPadding?.top ?? 16}
+                    onChange={(e) => {
+                      updateElement(element.id, {
+                        content: {
+                          ...element.content,
+                          fitPadding: {
+                            ...(element.content as { fitPadding?: Record<string, number> }).fitPadding,
+                            top: parseFloat(e.target.value) || 0,
+                          },
+                        } as Element['content'],
+                      });
+                      setTimeout(() => updateFitToContentParent(element.id), 0);
+                    }}
+                    min="0"
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Right</label>
+                  <Input
+                    type="number"
+                    value={(element.content as { fitPadding?: { right?: number } }).fitPadding?.right ?? 16}
+                    onChange={(e) => {
+                      updateElement(element.id, {
+                        content: {
+                          ...element.content,
+                          fitPadding: {
+                            ...(element.content as { fitPadding?: Record<string, number> }).fitPadding,
+                            right: parseFloat(e.target.value) || 0,
+                          },
+                        } as Element['content'],
+                      });
+                      setTimeout(() => updateFitToContentParent(element.id), 0);
+                    }}
+                    min="0"
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Bottom</label>
+                  <Input
+                    type="number"
+                    value={(element.content as { fitPadding?: { bottom?: number } }).fitPadding?.bottom ?? 16}
+                    onChange={(e) => {
+                      updateElement(element.id, {
+                        content: {
+                          ...element.content,
+                          fitPadding: {
+                            ...(element.content as { fitPadding?: Record<string, number> }).fitPadding,
+                            bottom: parseFloat(e.target.value) || 0,
+                          },
+                        } as Element['content'],
+                      });
+                      setTimeout(() => updateFitToContentParent(element.id), 0);
+                    }}
+                    min="0"
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Left</label>
+                  <Input
+                    type="number"
+                    value={(element.content as { fitPadding?: { left?: number } }).fitPadding?.left ?? 16}
+                    onChange={(e) => {
+                      updateElement(element.id, {
+                        content: {
+                          ...element.content,
+                          fitPadding: {
+                            ...(element.content as { fitPadding?: Record<string, number> }).fitPadding,
+                            left: parseFloat(e.target.value) || 0,
+                          },
+                        } as Element['content'],
+                      });
+                      setTimeout(() => updateFitToContentParent(element.id), 0);
+                    }}
+                    min="0"
+                    className="h-7 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <Separator />
 

@@ -64,9 +64,13 @@ Text elements display formatted text with rich styling options.
 - `justify` - Stretch to fill width
 
 **Vertical:**
-- `top` - Align to top
+- `top` - Align to top (default for new text elements)
 - `middle` - Center vertically
 - `bottom` - Align to bottom
+
+:::tip
+New text elements default to `top` vertical alignment for better compatibility with the [Fit to Content](/docs/elements/shape#fit-to-content) feature on shapes.
+:::
 
 ### Text Effects
 

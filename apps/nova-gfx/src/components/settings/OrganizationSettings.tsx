@@ -82,14 +82,13 @@ export function OrganizationSettings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 text-xs rounded-full bg-muted capitalize">
+                  <span className={`px-2 py-1 text-xs rounded-full capitalize ${
+                    member.isAdmin
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-muted'
+                  }`}>
                     {member.role}
                   </span>
-                  {member.isEmergentUser && (
-                    <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">
-                      Admin
-                    </span>
-                  )}
                 </div>
               </div>
             ))}
@@ -97,7 +96,7 @@ export function OrganizationSettings() {
         )}
       </div>
 
-      {!user?.isEmergentUser && (
+      {!user?.isAdmin && (
         <p className="text-sm text-muted-foreground">
           Contact an admin to manage organization settings.
         </p>
