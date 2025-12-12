@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronFirst, ChevronLast,
   Plus, ZoomIn, ZoomOut, Repeat, Maximize2, Trash2, Diamond,
-  GripHorizontal, Move, MonitorPlay, X,
+  GripHorizontal, Move, MonitorPlay, X, Layers,
 } from 'lucide-react';
 import {
   Timeline as AnimationTimeline,
@@ -1793,11 +1793,100 @@ export function Timeline() {
               </div>
             );
           })()}
-          {selectedElementIds.length > 0 && selectedKeyframeIds.length === 0 && (
-            <span>
-              {selectedElementIds.length} element{selectedElementIds.length > 1 ? 's' : ''} selected
-            </span>
-          )}
+          {selectedElementIds.length > 0 && selectedKeyframeIds.length === 0 && (() => {
+            // Get animations for selected elements
+            const selectedAnims = currentAnimations.filter(a =>
+              selectedElementIds.includes(a.element_id)
+            );
+
+            // Get all keyframes for these animations
+            const selectedKfs = keyframes.filter(kf =>
+              selectedAnims.some(a => a.id === kf.animation_id)
+            );
+
+            // Collect all animated properties
+            const animatedProps = new Set<string>();
+            selectedKfs.forEach(kf => {
+              Object.keys(kf.properties).forEach(key => animatedProps.add(key));
+            });
+            const propList = Array.from(animatedProps);
+
+            // Format property name for display
+            const formatPropName = (name: string) => {
+              return name
+                .replace(/_/g, ' ')
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .trim();
+            };
+
+            // Calculate total duration for selected elements
+            const maxDur = selectedAnims.length > 0
+              ? Math.max(...selectedAnims.map(a => a.delay + a.duration))
+              : 0;
+
+            return (
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5 text-blue-400">
+                  <Layers className="w-3 h-3" />
+                  {selectedElementIds.length} element{selectedElementIds.length > 1 ? 's' : ''}
+                </span>
+                {selectedAnims.length > 0 ? (
+                  <>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <Diamond className="w-2.5 h-2.5 fill-amber-400" />
+                      {selectedKfs.length} keyframe{selectedKfs.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="font-mono text-foreground">{maxDur}ms</span>
+                    {propList.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-violet-400">{propList.length} prop{propList.length !== 1 ? 's' : ''}</span>
+                        <span className="text-muted-foreground">:</span>
+                        <div className="flex items-center gap-1 flex-wrap max-w-[350px]">
+                          {propList.slice(0, 6).map((propKey) => {
+                            // Find all keyframes that have this property
+                            const kfsWithProp = selectedKfs.filter(kf =>
+                              Object.keys(kf.properties).includes(propKey)
+                            );
+                            return (
+                              <span
+                                key={propKey}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] group/prop"
+                                title={`Animated: ${formatPropName(propKey)} (${kfsWithProp.length} keyframe${kfsWithProp.length !== 1 ? 's' : ''})`}
+                              >
+                                <span>{formatPropName(propKey)}</span>
+                                <button
+                                  className="opacity-0 group-hover/prop:opacity-100 hover:text-red-400 transition-opacity ml-0.5"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Remove property from ALL keyframes that have it
+                                    kfsWithProp.forEach(kf => {
+                                      removeKeyframeProperty(kf.id, propKey);
+                                    });
+                                  }}
+                                  title={`Remove ${formatPropName(propKey)} from all ${kfsWithProp.length} keyframe${kfsWithProp.length !== 1 ? 's' : ''}`}
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                          {propList.length > 6 && (
+                            <span className="text-emerald-400/60 text-[10px]">+{propList.length - 6}</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-muted-foreground/60 italic">No animations</span>
+                )}
+              </div>
+            );
+          })()}
           {selectedKeyframeIds.length === 0 && selectedElementIds.length === 0 && (
             <span className="opacity-60">Click a keyframe to select • Drag to move</span>
           )}

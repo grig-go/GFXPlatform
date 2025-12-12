@@ -350,10 +350,20 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         const glow = shapeContent.glow;
         const texture = shapeContent.texture;
 
-        // For shapes, exclude backgroundColor from element.styles since background is controlled
-        // by content.fill, gradient, glass, or texture - not styles.backgroundColor
+        // For shapes, exclude properties from element.styles that are controlled by content properties:
+        // - backgroundColor/background -> content.fill, gradient, glass, or texture
+        // - borderRadius -> content.cornerRadius
+        // - borderColor/borderWidth -> content.stroke/strokeWidth
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { backgroundColor: _excludedBgFromStyles, background: _excludedBgGradient, ...shapeSafeStyles } = element.styles || {};
+        const {
+          backgroundColor: _excludedBgFromStyles,
+          background: _excludedBgGradient,
+          borderRadius: _excludedBorderRadius,
+          borderColor: _excludedBorderColor,
+          borderWidth: _excludedBorderWidth,
+          border: _excludedBorder,
+          ...shapeSafeStyles
+        } = element.styles || {};
 
         // Memoize gradient calculation to prevent infinite re-renders
         const gradientValue = useMemo(() => {

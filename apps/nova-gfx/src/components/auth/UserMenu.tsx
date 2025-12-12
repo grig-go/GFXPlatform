@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -5,6 +6,7 @@ import {
   LogOut,
   Building2,
   Shield,
+  HelpCircle,
 } from 'lucide-react';
 import {
   Button,
@@ -16,10 +18,12 @@ import {
   DropdownMenuLabel,
 } from '@emergent-platform/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
 
 export function UserMenu() {
   const navigate = useNavigate();
   const { user, organization, signOut } = useAuthStore();
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
 
   if (!user) {
     return (
@@ -91,11 +95,23 @@ export function UserMenu() {
 
         <DropdownMenuSeparator />
 
+        <DropdownMenuItem onClick={() => setShowSupportDialog(true)}>
+          <HelpCircle className="w-4 h-4 mr-2" />
+          Help & Support
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
+
+      <SupportRequestDialog
+        open={showSupportDialog}
+        onOpenChange={setShowSupportDialog}
+      />
     </DropdownMenu>
   );
 }

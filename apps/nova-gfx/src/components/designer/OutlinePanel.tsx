@@ -49,7 +49,7 @@ import { useDesignerStore } from '@/stores/designerStore';
 import { PropertiesPanel } from './PropertiesPanel';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { useConfirm } from '@/hooks/useConfirm';
-import type { Template, Element } from '@emergent-platform/types';
+import type { Template, Element, Layer } from '@emergent-platform/types';
 
 export function OutlinePanel() {
   const [activeTab, setActiveTab] = useState('elements');
@@ -1244,7 +1244,29 @@ function ElementsTree() {
     toggleNode,
     templates,
     currentTemplateId,
+    layers,
+    addTemplate,
   } = useDesignerStore();
+
+  // Get layers that have no templates (empty layers)
+  const emptyLayers = layers.filter(layer =>
+    !templates.some(t => t.layer_id === layer.id)
+  );
+
+  // Handle moving elements to an empty layer (creates a template first)
+  const handleMoveToEmptyLayer = useCallback(async (elementIds: string[], layerId: string) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+
+    // Create a new template in that layer
+    const templateName = `${layer.name} Graphic`;
+    const newTemplateId = addTemplate(layerId, templateName);
+
+    // Move elements to the new template
+    if (newTemplateId) {
+      moveElementsToTemplate(elementIds, newTemplateId);
+    }
+  }, [layers, addTemplate, moveElementsToTemplate]);
 
   // Drag state for reordering
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -1374,7 +1396,9 @@ function ElementsTree() {
               onDelete={(id) => deleteElements([id])}
               onUngroup={handleUngroup}
               onMoveToTemplate={moveElementsToTemplate}
+              onMoveToEmptyLayer={handleMoveToEmptyLayer}
               templates={templates}
+              layers={layers}
               currentTemplateId={currentTemplateId}
               depth={0}
               index={index}
@@ -1403,23 +1427,45 @@ function ElementsTree() {
           </ContextMenuItem>
         )}
         {(canGroup || selectedIsGroup) && <ContextMenuSeparator />}
-        {selectedElementIds.length > 0 && templates.filter(t => t.id !== currentTemplateId).length > 0 && (
+        {selectedElementIds.length > 0 && (templates.filter(t => t.id !== currentTemplateId).length > 0 || emptyLayers.length > 0) && (
           <ContextMenuSub>
             <ContextMenuSubTrigger>
               <ArrowRightLeft className="mr-2 h-4 w-4" />
               Move to Template
             </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {templates
-                .filter(t => t.id !== currentTemplateId)
-                .map(template => (
-                  <ContextMenuItem
-                    key={template.id}
-                    onClick={() => moveElementsToTemplate(selectedElementIds, template.id)}
-                  >
-                    {template.name}
-                  </ContextMenuItem>
-                ))}
+            <ContextMenuSubContent className="max-h-[300px] overflow-y-auto">
+              {/* Group templates by layer */}
+              {layers.map(layer => {
+                const layerTemplates = templates.filter(t => t.layer_id === layer.id && t.id !== currentTemplateId);
+                const isEmptyLayer = !templates.some(t => t.layer_id === layer.id);
+
+                if (layerTemplates.length === 0 && !isEmptyLayer) return null;
+
+                return (
+                  <div key={layer.id}>
+                    <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                      {layer.name}
+                    </div>
+                    {layerTemplates.map(template => (
+                      <ContextMenuItem
+                        key={template.id}
+                        onClick={() => moveElementsToTemplate(selectedElementIds, template.id)}
+                        className="pl-4"
+                      >
+                        {template.name}
+                      </ContextMenuItem>
+                    ))}
+                    {isEmptyLayer && (
+                      <ContextMenuItem
+                        onClick={() => handleMoveToEmptyLayer(selectedElementIds, layer.id)}
+                        className="pl-4 text-muted-foreground italic"
+                      >
+                        + Create new template
+                      </ContextMenuItem>
+                    )}
+                  </div>
+                );
+              })}
             </ContextMenuSubContent>
           </ContextMenuSub>
         )}
@@ -1451,7 +1497,9 @@ interface ElementItemProps {
   onDelete: (id: string) => void;
   onUngroup: (id: string) => void;
   onMoveToTemplate: (elementIds: string[], templateId: string) => void;
+  onMoveToEmptyLayer: (elementIds: string[], layerId: string) => void;
   templates: Template[];
+  layers: Layer[];
   currentTemplateId: string | null;
   depth: number;
   index: number;
@@ -1477,7 +1525,9 @@ function ElementItem({
   onDelete,
   onUngroup,
   onMoveToTemplate,
+  onMoveToEmptyLayer,
   templates,
+  layers,
   currentTemplateId,
   depth,
   index,
@@ -1770,23 +1820,45 @@ function ElementItem({
             )}
           </ContextMenuItem>
           {/* Move to Template submenu */}
-          {templates.filter(t => t.id !== currentTemplateId).length > 0 && (
+          {(templates.filter(t => t.id !== currentTemplateId).length > 0 || layers.some(l => !templates.some(t => t.layer_id === l.id))) && (
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <ArrowRightLeft className="mr-2 h-4 w-4" />
                 Move to Template
               </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                {templates
-                  .filter(t => t.id !== currentTemplateId)
-                  .map(template => (
-                    <ContextMenuItem
-                      key={template.id}
-                      onClick={() => onMoveToTemplate([element.id], template.id)}
-                    >
-                      {template.name}
-                    </ContextMenuItem>
-                  ))}
+              <ContextMenuSubContent className="max-h-[300px] overflow-y-auto">
+                {/* Group templates by layer */}
+                {layers.map(layer => {
+                  const layerTemplates = templates.filter(t => t.layer_id === layer.id && t.id !== currentTemplateId);
+                  const isEmptyLayer = !templates.some(t => t.layer_id === layer.id);
+
+                  if (layerTemplates.length === 0 && !isEmptyLayer) return null;
+
+                  return (
+                    <div key={layer.id}>
+                      <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                        {layer.name}
+                      </div>
+                      {layerTemplates.map(template => (
+                        <ContextMenuItem
+                          key={template.id}
+                          onClick={() => onMoveToTemplate([element.id], template.id)}
+                          className="pl-4"
+                        >
+                          {template.name}
+                        </ContextMenuItem>
+                      ))}
+                      {isEmptyLayer && (
+                        <ContextMenuItem
+                          onClick={() => onMoveToEmptyLayer([element.id], layer.id)}
+                          className="pl-4 text-muted-foreground italic"
+                        >
+                          + Create new template
+                        </ContextMenuItem>
+                      )}
+                    </div>
+                  );
+                })}
               </ContextMenuSubContent>
             </ContextMenuSub>
           )}
@@ -1825,7 +1897,9 @@ function ElementItem({
               onDelete={onDelete}
               onUngroup={onUngroup}
               onMoveToTemplate={onMoveToTemplate}
+              onMoveToEmptyLayer={onMoveToEmptyLayer}
               templates={templates}
+              layers={layers}
               currentTemplateId={currentTemplateId}
               depth={depth + 1}
               index={childIndex}

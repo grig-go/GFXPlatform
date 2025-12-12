@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Image as ImageIcon, Wand2, Sparkles, Loader2, Bot, User,
-  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen
+  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen, Zap
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
 import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
@@ -381,6 +381,10 @@ export function ChatPanel() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isDocsMode, setIsDocsMode] = useState(false);
+  const [showQuickPrompts, setShowQuickPrompts] = useState(() => {
+    const saved = localStorage.getItem('nova-chat-show-quick-prompts');
+    return saved !== null ? saved === 'true' : true; // Default to showing
+  });
   const [creationProgress, setCreationProgress] = useState<CreationProgress>({ phase: 'idle', message: '' });
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
@@ -2105,8 +2109,8 @@ Alternatively, configure your API key in Settings (⚙️).`,
         className="flex-shrink-0 overflow-hidden flex flex-col"
         style={{ height: inputAreaHeight }}
       >
-        {/* Quick Actions - hide in docs mode */}
-      {!isDocsMode && (
+        {/* Quick Actions - hide in docs mode or when toggled off */}
+      {!isDocsMode && showQuickPrompts && (
         <div className="px-2 py-1.5 border-t border-border flex-shrink-0">
           <div className="flex flex-wrap gap-0.5">
             {quickActions.map((action) => (
@@ -2260,6 +2264,32 @@ Alternatively, configure your API key in Settings (⚙️).`,
               </TooltipTrigger>
               <TooltipContent side="top">
                 {isListening ? "Stop listening" : "Voice input"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Quick Prompts Toggle - only show when not in docs mode */}
+          {!isDocsMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={showQuickPrompts ? "default" : "ghost"}
+                  size="icon"
+                  className={cn(
+                    "h-6 w-6 transition-all",
+                    showQuickPrompts && "bg-amber-500 hover:bg-amber-600 text-white"
+                  )}
+                  onClick={() => {
+                    const newValue = !showQuickPrompts;
+                    setShowQuickPrompts(newValue);
+                    localStorage.setItem('nova-chat-show-quick-prompts', String(newValue));
+                  }}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {showQuickPrompts ? "Hide quick prompts" : "Show quick prompts"}
               </TooltipContent>
             </Tooltip>
           )}

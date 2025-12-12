@@ -1036,106 +1036,94 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
         )}
       </KeyframableProperty>
 
-      {/* Fill / Background */}
-      {element.content.type === 'shape' && (
+      {/* Fill / Background - shapes handle this in ShapeStyleEditor */}
+
+      {/* Background Color - hide for shapes (they use content.fill) */}
+      {element.content.type !== 'shape' && (
         <KeyframableProperty
-          title="Fill"
-          propertyKey="fill"
+          title="Background"
+          propertyKey="backgroundColor"
           elementId={element.id}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
-          currentValue={(element.content as { fill?: string }).fill || '#3B82F6'}
-          onChange={(color) => {
-            updateElement(element.id, {
-              content: { ...element.content, fill: color as string } as typeof element.content,
-            });
-          }}
+          currentValue={getStyle('backgroundColor', 'transparent')}
+          onChange={(color) => updateStyle('backgroundColor', color as string)}
         >
           {(displayValue, onChange) => (
             <ColorInput
-              value={(displayValue as string) ?? (element.content as { fill?: string }).fill ?? '#3B82F6'}
+              value={(displayValue as string) ?? getStyle('backgroundColor', 'transparent')}
               onChange={(c) => onChange(c)}
             />
           )}
         </KeyframableProperty>
       )}
 
-      {/* Background Color */}
-      <KeyframableProperty
-        title="Background"
-        propertyKey="backgroundColor"
-        elementId={element.id}
-        selectedKeyframe={selectedKeyframe}
-        currentAnimation={currentAnimation}
-        currentValue={getStyle('backgroundColor', 'transparent')}
-        onChange={(color) => updateStyle('backgroundColor', color as string)}
-      >
-        {(displayValue, onChange) => (
-          <ColorInput
-            value={(displayValue as string) ?? getStyle('backgroundColor', 'transparent')}
-            onChange={(c) => onChange(c)}
-          />
-        )}
-      </KeyframableProperty>
+      {/* Border - hide for shapes (they use content.stroke/strokeWidth) */}
+      {element.content.type !== 'shape' && (
+        <PropertySection title="Border">
+          <div className="grid grid-cols-2 gap-2">
+            <ColorInput
+              value={getStyle('borderColor', '#ffffff')}
+              onChange={(color) => updateStyle('borderColor', color)}
+            />
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="0"
+                value={parseInt(getStyle('borderWidth', '0')) || 0}
+                onChange={(e) => updateStyle('borderWidth', `${e.target.value}px`)}
+                className="h-8 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">px</span>
+            </div>
+          </div>
+        </PropertySection>
+      )}
 
-      {/* Border */}
-      <PropertySection title="Border">
-        <div className="grid grid-cols-2 gap-2">
-          <ColorInput
-            value={getStyle('borderColor', '#ffffff')}
-            onChange={(color) => updateStyle('borderColor', color)}
-          />
+      {/* Border Radius - hide for shapes (they use content.cornerRadius) */}
+      {element.content.type !== 'shape' && (
+        <PropertySection title="Corner Radius">
           <div className="flex items-center gap-1">
             <Input
               type="number"
               min="0"
-              value={parseInt(getStyle('borderWidth', '0')) || 0}
-              onChange={(e) => updateStyle('borderWidth', `${e.target.value}px`)}
+              value={parseInt(getStyle('borderRadius', '0')) || 0}
+              onChange={(e) => updateStyle('borderRadius', `${e.target.value}px`)}
               className="h-8 text-xs"
             />
             <span className="text-xs text-muted-foreground">px</span>
           </div>
-        </div>
-      </PropertySection>
+        </PropertySection>
+      )}
 
-      {/* Border Radius */}
-      <PropertySection title="Corner Radius">
-        <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            min="0"
-            value={parseInt(getStyle('borderRadius', '0')) || 0}
-            onChange={(e) => updateStyle('borderRadius', `${e.target.value}px`)}
-            className="h-8 text-xs"
+      {/* Shadow - hide for shapes (they use Glow Effect in ShapeStyleEditor) */}
+      {element.content.type !== 'shape' && (
+        <PropertySection title="Shadow">
+          <ShadowEditor
+            value={getStyle('boxShadow', '')}
+            onChange={(shadow) => updateStyle('boxShadow', shadow)}
           />
-          <span className="text-xs text-muted-foreground">px</span>
-        </div>
-      </PropertySection>
+        </PropertySection>
+      )}
 
-      {/* Shadow */}
-      <PropertySection title="Shadow">
-        <ShadowEditor
-          value={getStyle('boxShadow', '')}
-          onChange={(shadow) => updateStyle('boxShadow', shadow)}
-        />
-      </PropertySection>
-
-      {/* Blur */}
-      <PropertySection title="Blur">
-        <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            min="0"
-            value={parseInt(getStyle('filter', '').replace('blur(', '').replace('px)', '')) || 0}
-            onChange={(e) => {
-              const val = parseInt(e.target.value) || 0;
-              updateStyle('filter', val > 0 ? `blur(${val}px)` : '');
-            }}
-            className="h-8 text-xs"
-          />
-          <span className="text-xs text-muted-foreground">px</span>
-        </div>
-      </PropertySection>
+      {/* Blur - hide for shapes */}
+      {element.content.type !== 'shape' && (
+        <PropertySection title="Blur">
+          <div className="flex items-center gap-1">
+            <Input
+              type="number"
+              min="0"
+              value={parseInt(getStyle('filter', '').replace('blur(', '').replace('px)', '')) || 0}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 0;
+                updateStyle('filter', val > 0 ? `blur(${val}px)` : '');
+              }}
+              className="h-8 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">px</span>
+          </div>
+        </PropertySection>
+      )}
 
       {/* Chart Styling Options */}
       {element.content.type === 'chart' && (
@@ -1744,13 +1732,25 @@ function TickerItemRowEditor({
   );
 }
 
-// Chart Style Editor - handles all styling options for charts
+// Shape Style Editor - handles all styling options for shapes
 function ShapeStyleEditor({ element, updateContent }: { element: Element; updateContent: (updates: Record<string, unknown>) => void }) {
+  const { updateElement } = useDesignerStore();
   const shapeContent = element.content.type === 'shape' ? element.content : null;
 
   if (!shapeContent) return null;
 
   const hasGradient = shapeContent.gradient?.enabled ?? false;
+
+  // Style helpers for shadow
+  const getStyle = (key: string, defaultValue: string = '') => {
+    return (element.styles[key] as string) || defaultValue;
+  };
+
+  const updateStyle = (key: string, value: string | number) => {
+    updateElement(element.id, {
+      styles: { ...element.styles, [key]: value },
+    });
+  };
 
   return (
     <div className="space-y-3">
@@ -1766,18 +1766,6 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
           <option value="trapezoid">Trapezoid</option>
         </select>
       </PropertySection>
-
-      {(shapeContent.shape === 'rectangle' || shapeContent.shape === 'trapezoid') && (
-        <PropertySection title="Corner Radius">
-          <Input
-            type="number"
-            value={shapeContent.cornerRadius || 0}
-            onChange={(e) => updateContent({ cornerRadius: parseFloat(e.target.value) || 0 })}
-            min="0"
-            className="h-8 text-xs"
-          />
-        </PropertySection>
-      )}
 
       <PropertySection title="Fill">
         <div className="space-y-2">
@@ -1924,6 +1912,9 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
               </div>
             </div>
           )}
+
+          {/* Texture Fill - inside Fill section */}
+          <TextureFillSection shapeContent={shapeContent} updateContent={updateContent} />
 
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input
@@ -2086,26 +2077,41 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
         </div>
       </PropertySection>
 
-      <PropertySection title="Stroke">
-        <div className="space-y-2">
-          <input
-            type="color"
-            value={shapeContent.stroke || '#000000'}
-            onChange={(e) => updateContent({ stroke: e.target.value })}
-            className="h-8 w-full cursor-pointer rounded border border-input"
-          />
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Stroke Width</label>
-            <Input
-              type="number"
-              value={shapeContent.strokeWidth || 0}
-              onChange={(e) => updateContent({ strokeWidth: parseFloat(e.target.value) || 0 })}
-              min="0"
-              className="h-8 text-xs"
+      {/* Border - hide when glass is enabled since glass has its own border controls */}
+      {!shapeContent.glass?.enabled && (
+        <PropertySection title="Border">
+          <div className="space-y-2">
+            <input
+              type="color"
+              value={shapeContent.stroke || '#000000'}
+              onChange={(e) => updateContent({ stroke: e.target.value })}
+              className="h-8 w-full cursor-pointer rounded border border-input"
             />
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Border Width</label>
+              <Input
+                type="number"
+                value={shapeContent.strokeWidth || 0}
+                onChange={(e) => updateContent({ strokeWidth: parseFloat(e.target.value) || 0 })}
+                min="0"
+                className="h-8 text-xs"
+              />
+            </div>
           </div>
-        </div>
-      </PropertySection>
+        </PropertySection>
+      )}
+
+      {(shapeContent.shape === 'rectangle' || shapeContent.shape === 'trapezoid') && (
+        <PropertySection title="Corner Radius">
+          <Input
+            type="number"
+            value={shapeContent.cornerRadius || 0}
+            onChange={(e) => updateContent({ cornerRadius: parseFloat(e.target.value) || 0 })}
+            min="0"
+            className="h-8 text-xs"
+          />
+        </PropertySection>
+      )}
 
       <PropertySection title="Glow Effect">
         <div className="space-y-2">
@@ -2208,7 +2214,13 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
         </div>
       </PropertySection>
 
-      <TextureFillSection shapeContent={shapeContent} updateContent={updateContent} />
+      {/* Shadow - at the end for shapes */}
+      <PropertySection title="Shadow">
+        <ShadowEditor
+          value={getStyle('boxShadow', '')}
+          onChange={(shadow) => updateStyle('boxShadow', shadow)}
+        />
+      </PropertySection>
     </div>
   );
 }
@@ -2225,28 +2237,27 @@ function TextureFillSection({
   const hasTexture = shapeContent.texture?.enabled ?? false;
 
   return (
-    <PropertySection title="Texture Fill">
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hasTexture}
-            onChange={(e) => updateContent({
-              texture: {
-                enabled: e.target.checked,
-                url: shapeContent.texture?.url || '',
-                fit: shapeContent.texture?.fit || 'cover',
-                position: shapeContent.texture?.position || { x: 0, y: 0 },
-                scale: shapeContent.texture?.scale ?? 1,
-                rotation: shapeContent.texture?.rotation || 0,
-                opacity: shapeContent.texture?.opacity ?? 1,
-                blendMode: shapeContent.texture?.blendMode || 'normal',
-              },
-            })}
-            className="rounded"
-          />
-          <span>Use Texture</span>
-        </label>
+    <>
+      <label className="flex items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={hasTexture}
+          onChange={(e) => updateContent({
+            texture: {
+              enabled: e.target.checked,
+              url: shapeContent.texture?.url || '',
+              fit: shapeContent.texture?.fit || 'cover',
+              position: shapeContent.texture?.position || { x: 0, y: 0 },
+              scale: shapeContent.texture?.scale ?? 1,
+              rotation: shapeContent.texture?.rotation || 0,
+              opacity: shapeContent.texture?.opacity ?? 1,
+              blendMode: shapeContent.texture?.blendMode || 'normal',
+            },
+          })}
+          className="rounded"
+        />
+        <span>Use Texture</span>
+      </label>
 
         {hasTexture && (
           <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
@@ -2460,7 +2471,6 @@ function TextureFillSection({
             </div>
           </div>
         )}
-      </div>
 
       {/* Texture Picker Dialog */}
       <MediaPickerDialog
@@ -2481,7 +2491,7 @@ function TextureFillSection({
         mediaType="all"
         title="Select Texture"
       />
-    </PropertySection>
+    </>
   );
 }
 
