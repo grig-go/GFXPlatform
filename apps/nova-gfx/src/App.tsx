@@ -12,7 +12,25 @@ import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { SettingsPage } from '@/components/settings';
 import { PrivateRoute } from '@/components/auth';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore, applyTheme } from '@/stores/themeStore';
 import { ConfirmProvider } from '@/hooks/useConfirm';
+
+// Apply initial theme from localStorage before React renders to prevent flash
+const storedTheme = localStorage.getItem('nova-theme-preference');
+if (storedTheme) {
+  try {
+    const parsed = JSON.parse(storedTheme);
+    const theme = parsed.state?.theme || 'dark';
+    const resolved = theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : theme;
+    document.documentElement.classList.add(resolved);
+  } catch {
+    document.documentElement.classList.add('dark');
+  }
+} else {
+  document.documentElement.classList.add('dark');
+}
 
 // Routes that don't require auth initialization
 const PUBLIC_ROUTES = ['/preview', '/play', '/player'];
@@ -43,9 +61,9 @@ function AppContent() {
   // Show loading while auth initializes (only for non-public routes)
   if (!authReady && !isPublicRoute) {
     return (
-      <div className="dark absolute inset-0 flex items-center justify-center bg-background">
+      <div className="absolute inset-0 flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="h-8 w-8 rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center mx-auto mb-4 animate-pulse">
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center mx-auto mb-4 animate-pulse shadow-sm">
             <span className="text-white text-xs font-bold">N</span>
           </div>
           <p className="text-muted-foreground text-sm">Initializing...</p>
@@ -55,7 +73,7 @@ function AppContent() {
   }
 
   return (
-    <div className="dark absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden">
       {/* Global confirm dialog */}
       <ConfirmProvider />
       <Routes>

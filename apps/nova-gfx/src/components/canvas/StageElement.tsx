@@ -165,9 +165,15 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
   // Build transform style with animated properties
   // Handle animated opacity
-  const animatedOpacity = animatedProps.opacity !== undefined 
-    ? Number(animatedProps.opacity) 
+  const animatedOpacity = animatedProps.opacity !== undefined
+    ? Number(animatedProps.opacity)
     : element.opacity;
+
+  // Check if this is a glass-enabled shape element
+  // Glass effect uses backdrop-filter which doesn't work with opacity: 0
+  // For glass elements, we apply opacity to the backgroundColor instead of the container
+  const isGlassElement = element.content.type === 'shape' &&
+    (element.content as { glass?: { enabled?: boolean } }).glass?.enabled;
   
   // Handle animated position
   const animatedX = animatedProps.position_x !== undefined 
@@ -259,7 +265,10 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       )
     ),
     // Master opacity always takes precedence - applied last to ensure it's not overridden
-    opacity: animatedOpacity,
+    // EXCEPTION: For glass elements, we don't apply opacity at container level
+    // because backdrop-filter doesn't work with opacity: 0. Instead, opacity is
+    // applied to the backgroundColor alpha within the shape rendering.
+    opacity: isGlassElement ? 1 : animatedOpacity,
     // Apply blend mode at container level so it blends with elements behind
     ...(contentBlendMode && contentBlendMode !== 'normal' ? { mixBlendMode: contentBlendMode as React.CSSProperties['mixBlendMode'] } : {}),
   };
@@ -423,37 +432,61 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
         // Memoize glass styles to prevent re-renders
         // Glass effect uses the fill color as base with applied opacity
+        // IMPORTANT: For glass elements, we incorporate animatedOpacity into the styles
+        // instead of applying it at container level (which would break backdrop-filter)
         const glassStyles: React.CSSProperties = useMemo(() => {
           if (!glass?.enabled) return {};
 
+          // CRITICAL: When opacity is 0 or very close to 0, completely disable glass effect
+          // backdrop-filter still creates a visible layer even with blur(0px)
+          if (animatedOpacity < 0.01) {
+            return {
+              backgroundColor: 'transparent',
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+              border: 'none',
+            };
+          }
+
           const fillColor = shapeContent.fill || '#000000';
           const glassOpacity = glass.opacity !== undefined ? glass.opacity : 0.6;
+          // Multiply glass opacity by animated opacity for fade in/out effect
+          const effectiveOpacity = glassOpacity * animatedOpacity;
 
           // Determine border: respect 0 as "no border"
+          // Also apply animated opacity to border
           const getBorder = () => {
             if (glass.borderWidth === 0) {
               return 'none';
             }
+            // Apply animated opacity to border color
+            const borderOpacity = animatedOpacity;
             if (glass.borderWidth !== undefined && glass.borderWidth > 0 && glass.borderColor) {
-              return `${glass.borderWidth}px solid ${glass.borderColor}`;
+              // If borderColor already has alpha, multiply it
+              const baseColor = glass.borderColor;
+              if (baseColor.startsWith('rgba')) {
+                return `${glass.borderWidth}px solid ${baseColor.replace(/[\d.]+\)$/, `${borderOpacity})`)}`;
+              }
+              return `${glass.borderWidth}px solid ${baseColor}`;
             }
             if (glass.borderWidth !== undefined && glass.borderWidth > 0) {
-              return `${glass.borderWidth}px solid rgba(255, 255, 255, 0.1)`;
+              return `${glass.borderWidth}px solid rgba(255, 255, 255, ${0.1 * borderOpacity})`;
             }
-            return '1px solid rgba(255, 255, 255, 0.1)';
+            return `1px solid rgba(255, 255, 255, ${0.1 * borderOpacity})`;
           };
 
+          // Scale blur based on animated opacity for smooth fade effect
+          const baseBlur = glass.blur !== undefined ? glass.blur : 16;
+          const effectiveBlur = baseBlur * animatedOpacity;
+          const saturationPart = glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : '';
+
           return {
-            backgroundColor: colorToRgba(fillColor, glassOpacity),
-            backdropFilter: glass.blur !== undefined
-              ? `blur(${glass.blur}px)${glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : ''}`
-              : 'blur(16px)',
-            WebkitBackdropFilter: glass.blur !== undefined
-              ? `blur(${glass.blur}px)${glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : ''}`
-              : 'blur(16px)',
+            backgroundColor: colorToRgba(fillColor, effectiveOpacity),
+            backdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
+            WebkitBackdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
             border: getBorder(),
           };
-        }, [glass?.enabled, glass?.opacity, glass?.blur, glass?.saturation, glass?.borderWidth, glass?.borderColor, shapeContent.fill]);
+        }, [glass?.enabled, glass?.opacity, glass?.blur, glass?.saturation, glass?.borderWidth, glass?.borderColor, shapeContent.fill, animatedOpacity]);
 
         // Compute glow box-shadow style
         const glowStyle = useMemo((): React.CSSProperties => {
@@ -570,13 +603,24 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         // If both glass and gradient are enabled, use wrapper div approach
         // The gradient shows as the base, with glass blur effect on top (but transparent so gradient shows through)
         if (glass?.enabled && gradientValue) {
+          // CRITICAL: When opacity is 0 or very close to 0, don't render glass effect at all
+          if (animatedOpacity < 0.01) {
+            return <div style={{ ...baseStyle, background: 'transparent' }} />;
+          }
+
           // Determine border: glass border takes priority, then stroke if > 0, then default glass border
+          // Apply animated opacity to border
           const getBorder = () => {
+            const borderOpacity = animatedOpacity;
             if (glass.borderWidth !== undefined && glass.borderWidth > 0 && glass.borderColor) {
-              return `${glass.borderWidth}px solid ${glass.borderColor}`;
+              const baseColor = glass.borderColor;
+              if (baseColor.startsWith('rgba')) {
+                return `${glass.borderWidth}px solid ${baseColor.replace(/[\d.]+\)$/, `${borderOpacity})`)}`;
+              }
+              return `${glass.borderWidth}px solid ${baseColor}`;
             }
             if (glass.borderWidth !== undefined && glass.borderWidth > 0) {
-              return `${glass.borderWidth}px solid rgba(255, 255, 255, 0.1)`;
+              return `${glass.borderWidth}px solid rgba(255, 255, 255, ${0.1 * borderOpacity})`;
             }
             if (glass.borderWidth === 0) {
               return 'none';
@@ -584,7 +628,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             if (shapeContent.stroke && shapeContent.strokeWidth && shapeContent.strokeWidth > 0) {
               return `${shapeContent.strokeWidth}px solid ${shapeContent.stroke}`;
             }
-            return '1px solid rgba(255, 255, 255, 0.1)';
+            return `1px solid rgba(255, 255, 255, ${0.1 * borderOpacity})`;
           };
 
           const outerStyle: React.CSSProperties = {
@@ -601,17 +645,19 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           };
 
           // For gradient + glass, inner div should be transparent with just blur
+          // Apply animated opacity to glass effect
           const glassOpacity = glass.opacity !== undefined ? glass.opacity : 0.3;
+          const effectiveGlassOpacity = glassOpacity * animatedOpacity;
+          const baseBlur = glass.blur !== undefined ? glass.blur : 16;
+          const effectiveBlur = baseBlur * animatedOpacity;
+          const saturationPart = glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : '';
+
           const innerStyle: React.CSSProperties = {
             position: 'absolute',
             inset: 0,
-            backgroundColor: `rgba(255, 255, 255, ${glassOpacity * 0.1})`, // Very subtle white overlay
-            backdropFilter: glass.blur !== undefined
-              ? `blur(${glass.blur}px)${glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : ''}`
-              : 'blur(16px)',
-            WebkitBackdropFilter: glass.blur !== undefined
-              ? `blur(${glass.blur}px)${glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : ''}`
-              : 'blur(16px)',
+            backgroundColor: `rgba(255, 255, 255, ${effectiveGlassOpacity * 0.1})`, // Very subtle white overlay
+            backdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
+            WebkitBackdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
             borderRadius: 'inherit',
           };
 
@@ -624,6 +670,12 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         
         // If only glass is enabled
         if (glass?.enabled) {
+          // CRITICAL: When opacity is 0 or very close to 0, render fully transparent
+          // glassStyles already returns transparent values, but we also hide glow/borders
+          if (animatedOpacity < 0.01) {
+            return <div style={{ ...baseStyle, backgroundColor: 'transparent' }} />;
+          }
+
           const glassStyleFinal: React.CSSProperties = {
             ...baseStyle,
             ...glassStyles,
@@ -880,6 +932,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             config={element.content}
             className="w-full h-full"
             isPlaying={isPlaying}
+            style={element.styles as React.CSSProperties}
           />
         );
 

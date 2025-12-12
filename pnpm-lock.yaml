@@ -17,6 +17,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.1)
+      fontfaceobserver:
+        specifier: ^2.3.0
+        version: 2.3.0
     devDependencies:
       turbo:
         specifier: ^2.3.0

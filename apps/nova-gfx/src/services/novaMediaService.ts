@@ -143,6 +143,8 @@ export async function uploadToNovaMedia(
     description?: string;
     tags?: string[];
     mediaType?: 'image' | 'video' | 'audio';
+    aiModelUsed?: string;
+    createdBy?: string;
   } = {}
 ): Promise<NovaMediaAsset> {
   const formData = new FormData();
@@ -151,7 +153,10 @@ export async function uploadToNovaMedia(
   formData.append('description', options.description || '');
   formData.append('tags', JSON.stringify(options.tags || []));
   formData.append('media_type', options.mediaType || getMediaType(file));
-  formData.append('created_by', 'nova-gfx');
+  formData.append('created_by', options.createdBy || 'nova-gfx');
+  if (options.aiModelUsed) {
+    formData.append('ai_model_used', options.aiModelUsed);
+  }
 
   try {
     const response = await fetch(MEDIA_LIBRARY_URL, {

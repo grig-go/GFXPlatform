@@ -488,6 +488,122 @@ export async function deleteTexture(textureId: string): Promise<void> {
 }
 
 /**
+ * Upload an AI-generated image as a texture
+ * Similar to uploadTexture but accepts a Blob instead of a File
+ */
+export async function uploadAIGeneratedTexture(
+  imageBlob: Blob,
+  organizationId: string,
+  userId: string,
+  options: {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aiModelUsed?: string;
+  } = {}
+): Promise<OrganizationTexture> {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const filename = `${timestamp}-${random}-ai-generated.png`;
+  const storagePath = `${organizationId}/${filename}`;
+  const thumbnailPath = `${organizationId}/thumbnails/${filename}.jpg`;
+
+  // Create a File from the Blob for dimension extraction
+  const file = new File([imageBlob], filename, { type: 'image/png' });
+
+  // Get image dimensions
+  let width: number | null = null;
+  let height: number | null = null;
+
+  try {
+    const dims = await getImageDimensions(file);
+    width = dims.width;
+    height = dims.height;
+  } catch (err) {
+    console.warn('Failed to get AI image dimensions:', err);
+  }
+
+  // Generate thumbnail
+  let thumbnailUrl: string | null = null;
+  try {
+    const thumbnailBlob = await generateImageThumbnail(file);
+
+    const { error: thumbError } = await supabase.storage
+      .from(TEXTURES_BUCKET)
+      .upload(thumbnailPath, thumbnailBlob, {
+        cacheControl: '31536000',
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (!thumbError) {
+      const { data: thumbUrlData } = supabase.storage
+        .from(TEXTURES_BUCKET)
+        .getPublicUrl(thumbnailPath);
+      thumbnailUrl = thumbUrlData.publicUrl;
+    } else {
+      console.warn('Failed to upload AI thumbnail:', thumbError);
+    }
+  } catch (err) {
+    console.warn('Failed to generate AI thumbnail:', err);
+  }
+
+  // Upload original image
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from(TEXTURES_BUCKET)
+    .upload(storagePath, imageBlob, {
+      cacheControl: '31536000',
+      contentType: 'image/png',
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(`Failed to upload AI texture: ${uploadError.message}`);
+  }
+
+  // Get public URL
+  const { data: urlData } = supabase.storage
+    .from(TEXTURES_BUCKET)
+    .getPublicUrl(uploadData.path);
+
+  const fileUrl = urlData.publicUrl;
+
+  // Insert database record
+  const textureName = options.name || `AI Generated - ${new Date().toLocaleString()}`;
+
+  const insertData: Record<string, unknown> = {
+    organization_id: organizationId,
+    name: textureName,
+    file_name: filename,
+    file_url: fileUrl,
+    thumbnail_url: thumbnailUrl,
+    storage_path: storagePath,
+    media_type: 'image',
+    size: imageBlob.size,
+    width,
+    height,
+    duration: null,
+    uploaded_by: userId,
+    tags: [...(options.tags || []), 'ai-generated'],
+  };
+
+  const { data: textureData, error: dbError } = await supabase
+    .from('organization_textures')
+    .insert(insertData)
+    .select()
+    .single();
+
+  if (dbError) {
+    // Try to clean up uploaded files on database error
+    await supabase.storage.from(TEXTURES_BUCKET).remove([storagePath, thumbnailPath]);
+    throw new Error(`Failed to save AI texture record: ${dbError.message}`);
+  }
+
+  console.log('✅ AI-generated texture saved:', fileUrl);
+  return mapRowToTexture(textureData);
+}
+
+/**
  * Format duration for display (e.g., "1:23" or "10:05")
  */
 export function formatDuration(seconds: number): string {

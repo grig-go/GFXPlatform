@@ -1693,7 +1693,7 @@ export function Timeline() {
         {/* Right side: Timeline Canvas */}
         <div
           ref={timelineContainerRef}
-          className="flex-1 bg-neutral-900"
+          className="flex-1 bg-neutral-100 dark:bg-neutral-900"
           style={{ minHeight: 150 }}
         />
       </div>

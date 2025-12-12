@@ -86,6 +86,9 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
 \`\`\`
 
 #### Media Texture (Image or Video Background):
+
+**IMPORTANT**: When the user wants a pattern, texture, or background image, use the \`{{GENERATE:query}}\` placeholder to generate an AI image:
+
 \`\`\`json
 {
   "content": {
@@ -93,7 +96,30 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
     "shape": "rectangle",
     "texture": {
       "enabled": true,
-      "url": "https://example.com/texture.jpg",
+      "url": "{{GENERATE:red white gray geometric pattern professional}}",
+      "mediaType": "image",
+      "fit": "cover",
+      "opacity": 1
+    }
+  }
+}
+\`\`\`
+
+**Pattern/Texture Examples**:
+- \`"url": "{{GENERATE:red white gray geometric pattern}}"\`
+- \`"url": "{{GENERATE:dark blue abstract texture broadcast}}"\`
+- \`"url": "{{GENERATE:golden gradient luxury background}}"\`
+- \`"url": "{{GENERATE:sports arena dramatic lighting}}"\`
+
+**Full texture properties**:
+\`\`\`json
+{
+  "content": {
+    "type": "shape",
+    "shape": "rectangle",
+    "texture": {
+      "enabled": true,
+      "url": "{{GENERATE:your pattern description here}}",
       "mediaType": "image",    // "image" | "video"
       "fit": "cover",          // "cover" | "contain" | "fill" | "tile"
       "position": { "x": 0, "y": 0 },  // Offset -100 to 100
@@ -105,6 +131,8 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
   }
 }
 \`\`\`
+
+**NEVER use SVG patterns or inline HTML for backgrounds** - always use \`{{GENERATE:query}}\` or \`{{PEXELS:query}}\` placeholders.
 
 **Video Texture Example**:
 \`\`\`json
@@ -123,6 +151,26 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
   }
 }
 \`\`\`
+
+#### ⚠️ IMPORTANT: Texture vs Gradient - Choose ONE!
+**Never combine \`texture\` and \`gradient\` on the same shape - they conflict!**
+
+- Use **texture** for image backgrounds (with \`{{GENERATE:query}}\`)
+- Use **gradient** for color-only backgrounds
+- To darken a texture, use \`texture.opacity\` (e.g., 0.5) or add a SEPARATE overlay shape on top
+
+**Wrong (will conflict):**
+\`\`\`json
+{"texture":{"enabled":true,"url":"..."},"gradient":{"enabled":true,"colors":[...]}}
+\`\`\`
+
+**Correct (texture with opacity for darkening):**
+\`\`\`json
+{"texture":{"enabled":true,"url":"{{GENERATE:query}}","fit":"cover","opacity":0.4}}
+\`\`\`
+
+**Correct (separate overlay element for darkening):**
+Create TWO elements: Background (texture) + Dark Overlay (gradient/fill with rgba)
 
 #### Combined Effects (Gradient + Glass):
 \`\`\`json

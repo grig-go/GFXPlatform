@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Image as ImageIcon, Link, AlertCircle } from 'lucide-react';
 import { Button, Input } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -54,6 +54,12 @@ interface ImageElementProps {
     };
     opacity?: number;
     blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion';
+    removeBackground?: {
+      enabled: boolean;
+      color?: string;
+      threshold?: number;
+      feather?: number;
+    };
   };
   width: number | null;
   height: number | null;
@@ -79,18 +85,162 @@ export function ImageElement({
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState(content.src || '');
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [processedSrc, setProcessedSrc] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const updateElement = useDesignerStore((state) => state.updateElement);
 
   const elementWidth = width || 400;
   const elementHeight = height || 300;
 
+  // Parse hex color to RGB values
+  const hexToRgb = useCallback((hex: string): { r: number; g: number; b: number } => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+        }
+      : { r: 255, g: 255, b: 255 }; // Default to white
+  }, []);
+
+  // Process image to remove specified background color
+  const processBackgroundRemoval = useCallback(async (imageSrc: string) => {
+    if (!content.removeBackground?.enabled) {
+      setProcessedSrc(null);
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = imageSrc;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      ctx.drawImage(img, 0, 0);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Get the target color to remove (default white)
+      const targetColor = hexToRgb(content.removeBackground?.color || '#FFFFFF');
+      const threshold = content.removeBackground?.threshold ?? 240;
+      const feather = content.removeBackground?.feather ?? 0;
+
+      // Calculate tolerance based on threshold (255 - threshold gives us the tolerance range)
+      const colorTolerance = 255 - threshold;
+
+      // Check if a pixel matches the target color within tolerance
+      const matchesTargetColor = (r: number, g: number, b: number): boolean => {
+        const diffR = Math.abs(r - targetColor.r);
+        const diffG = Math.abs(g - targetColor.g);
+        const diffB = Math.abs(b - targetColor.b);
+        return diffR <= colorTolerance && diffG <= colorTolerance && diffB <= colorTolerance;
+      };
+
+      if (feather > 0) {
+        // With feathering: two-pass approach for smooth edges
+        const width = canvas.width;
+        const height = canvas.height;
+        const isTarget: boolean[] = new Array(width * height);
+
+        // First pass: identify matching pixels
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            isTarget[y * width + x] = matchesTargetColor(r, g, b);
+          }
+        }
+
+        // Second pass: apply transparency with feathering
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = y * width + x;
+            const i = idx * 4;
+
+            if (isTarget[idx]) {
+              let minDist = feather + 1;
+
+              for (let dy = -feather; dy <= feather; dy++) {
+                for (let dx = -feather; dx <= feather; dx++) {
+                  const nx = x + dx;
+                  const ny = y + dy;
+
+                  if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                    const nidx = ny * width + nx;
+                    if (!isTarget[nidx]) {
+                      const dist = Math.sqrt(dx * dx + dy * dy);
+                      minDist = Math.min(minDist, dist);
+                    }
+                  }
+                }
+              }
+
+              if (minDist <= feather) {
+                data[i + 3] = Math.floor(255 * (1 - minDist / feather) * 0.3);
+              } else {
+                data[i + 3] = 0;
+              }
+            }
+          }
+        }
+      } else {
+        // Simple removal without feathering
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          if (matchesTargetColor(r, g, b)) {
+            data[i + 3] = 0;
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      setProcessedSrc(canvas.toDataURL('image/png'));
+    } catch (err) {
+      console.error('Failed to remove background:', err);
+      setProcessedSrc(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [content.removeBackground?.enabled, content.removeBackground?.color, content.removeBackground?.threshold, content.removeBackground?.feather, hexToRgb]);
+
   // Reset error state when src changes
   useEffect(() => {
     setHasError(false);
     setIsLoading(true);
     setUrlInput(content.src || '');
+    setProcessedSrc(null);
   }, [content.src]);
+
+  // Process background removal when settings change
+  useEffect(() => {
+    if (content.src && !isPlaceholderUrl(content.src)) {
+      processBackgroundRemoval(content.src);
+    }
+  }, [content.src, processBackgroundRemoval]);
 
   // Determine if we should show placeholder
   const showPlaceholder = !content.src || hasError || isPlaceholderUrl(content.src || '');
@@ -251,20 +401,28 @@ export function ImageElement({
     );
   }
 
+  // Determine which source to use (processed or original)
+  const displaySrc = content.removeBackground?.enabled && processedSrc ? processedSrc : content.src;
+
   // Render actual image
   return (
     <div
       className="relative overflow-hidden"
       style={{ width: elementWidth, height: elementHeight }}
     >
-      {isLoading && (
+      {(isLoading || isProcessing) && (
         <div className="absolute inset-0 bg-neutral-800 flex items-center justify-center z-10">
           <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          {isProcessing && (
+            <span className="absolute bottom-2 text-[10px] text-neutral-400">
+              Removing background...
+            </span>
+          )}
         </div>
       )}
 
       <img
-        src={content.src}
+        src={displaySrc}
         alt={elementName}
         style={{
           ...imageStyle,

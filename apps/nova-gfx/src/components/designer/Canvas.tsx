@@ -1,12 +1,13 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import {
-  ZoomIn, ZoomOut, Maximize, Grid3X3, Ruler, Undo, Redo,
+  ZoomIn, ZoomOut, Maximize, Grid3X3, Ruler, Undo, Redo, Trash2,
   MousePointer, RotateCw, Type, Image, Square, Circle, Hand, BarChart3, Loader2, MapPin, Video, ScrollText, Tag, FileCode, Sparkles, Table2, Minus, Timer,
 } from 'lucide-react';
 import { Button, Separator, cn } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { uploadMedia, type UploadProgress } from '@/services/storageService';
 import { Stage } from '@/components/canvas/Stage';
+import { CanvasRulers } from '@/components/canvas/CanvasRulers';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { SVGPickerDialog } from '@/components/dialogs/SVGPickerDialog';
 import { IconPickerDialog } from '@/components/dialogs/IconPickerDialog';
@@ -34,6 +35,7 @@ export function Canvas() {
   const [svgPickerElementId, setSvgPickerElementId] = useState<string | null>(null);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconPickerPosition, setIconPickerPosition] = useState({ x: 100, y: 100 });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   const {
     project,
@@ -48,9 +50,16 @@ export function Canvas() {
     tool,
     setTool,
     showGrid,
+    showGuides,
     showSafeArea,
     toggleGrid,
+    toggleGuides,
     toggleSafeArea,
+    guides,
+    addGuide,
+    moveGuide,
+    removeGuide,
+    clearGuides,
     addElement,
     deselectAll,
     saveProject,
@@ -190,6 +199,25 @@ export function Canvas() {
       });
     }
   }, [project, fitToScreen]);
+
+  // Track container size with ResizeObserver for rulers
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect();
+      setContainerSize({ width: rect.width, height: rect.height });
+    };
+
+    // Initial size
+    updateSize();
+
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1080,10 +1108,31 @@ export function Canvas() {
             size="icon"
             className="h-8 w-8"
             onClick={toggleGrid}
-            title="Toggle Grid"
+            title="Toggle Grid & Rulers"
           >
             <Grid3X3 className="w-4 h-4" />
           </Button>
+          <Button
+            variant={showGuides ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-8 w-8"
+            onClick={toggleGuides}
+            title="Toggle Guides"
+          >
+            <Ruler className="w-4 h-4" />
+          </Button>
+          {guides.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+              onClick={clearGuides}
+              title={`Clear All Guides (${guides.length})`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+          <Separator orientation="vertical" className="h-6 mx-1" />
           <Button
             variant={showSafeArea ? 'secondary' : 'ghost'}
             size="icon"
@@ -1144,7 +1193,8 @@ export function Canvas() {
       {/* Canvas Area */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden relative bg-neutral-950/50"
+        data-canvas-area
+        className="flex-1 overflow-hidden relative bg-neutral-200/50 dark:bg-neutral-950/50"
         style={{
           cursor: getCursor(),
           backgroundImage: `
@@ -1167,7 +1217,7 @@ export function Canvas() {
         {!currentTemplateId && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-violet-500/10 to-fuchsia-400/10 flex items-center justify-center mx-auto mb-4">
+              <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-violet-600/10 via-purple-600/10 to-violet-700/10 flex items-center justify-center mx-auto mb-4">
                 <Ruler className="w-8 h-8 text-muted-foreground/50" />
               </div>
               <p className="text-muted-foreground">Select a template from the outline panel to edit</p>
@@ -1207,6 +1257,21 @@ export function Canvas() {
               />
             )}
           </div>
+        )}
+
+        {/* Viewport-fixed rulers */}
+        {currentTemplateId && showGrid && containerSize.width > 0 && (
+          <CanvasRulers
+            containerWidth={containerSize.width}
+            containerHeight={containerSize.height}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            guides={showGuides ? guides : []}
+            onAddGuide={addGuide}
+            onMoveGuide={moveGuide}
+            onRemoveGuide={removeGuide}
+          />
         )}
 
         {/* Tool hint */}

@@ -132,7 +132,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center shadow-sm">
               <span className="text-white text-sm font-bold">N</span>
             </div>
             New Project

@@ -77,7 +77,7 @@ export function DesignSystemDialog({ open, onOpenChange }: DesignSystemDialogPro
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center shadow-sm">
               <Palette className="w-4 h-4 text-white" />
             </div>
             Design Guidelines

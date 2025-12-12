@@ -14,8 +14,8 @@ import {
   cn,
 } from '@emergent-platform/ui';
 import {
-  Search, Upload, Image as ImageIcon, Video, Music, Loader2, Check,
-  FolderOpen, UploadCloud, HardDrive, Trophy, User, Layers, Trash2, Clock
+  Search, Image as ImageIcon, Video, Music, Loader2, Check,
+  FolderOpen, UploadCloud, Trophy, Layers, Trash2, Clock, Sparkles, Eraser
 } from 'lucide-react';
 import {
   fetchNovaMedia,
@@ -23,14 +23,12 @@ import {
   uploadToNovaMedia,
   type NovaMediaAsset,
 } from '@/services/novaMediaService';
+import { AIImageGeneratorDialog, type AISaveMode } from './AIImageGeneratorDialog';
 import {
   searchTeams,
   getTeamsByLeague,
   getLeagueCategories,
-  searchPlayers,
-  getPlayersByTeam,
   type SportsTeam,
-  type SportsPlayer,
   type LeagueKey,
 } from '@/services/sportsDbService';
 import {
@@ -41,6 +39,7 @@ import {
   type OrganizationTexture,
 } from '@/services/textureService';
 import { useAuthStore } from '@/stores/authStore';
+import { removeWhiteBackground } from '@/lib/imageUtils';
 
 interface MediaPickerDialogProps {
   open: boolean;
@@ -57,7 +56,7 @@ export function MediaPickerDialog({
   mediaType = 'all',
   title = 'Select Media',
 }: MediaPickerDialogProps) {
-  const [activeTab, setActiveTab] = useState<'browse' | 'textures' | 'sports' | 'players' | 'upload'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'textures' | 'sports'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
   const [assets, setAssets] = useState<NovaMediaAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +65,6 @@ export function MediaPickerDialog({
     mediaType === 'all' ? 'all' : mediaType
   );
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textureFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,12 +88,14 @@ export function MediaPickerDialog({
   const [selectedTeam, setSelectedTeam] = useState<SportsTeam | null>(null);
   const leagueCategories = getLeagueCategories();
 
-  // Players tab state
-  const [players, setPlayers] = useState<SportsPlayer[]>([]);
-  const [playersLoading, setPlayersLoading] = useState(false);
-  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
-  const [playerTeamQuery, setPlayerTeamQuery] = useState('');
-  const [selectedPlayer, setSelectedPlayer] = useState<SportsPlayer | null>(null);
+  // AI Image Generator state
+  const [aiGeneratorOpen, setAiGeneratorOpen] = useState(false);
+  const [aiGeneratorSaveMode, setAiGeneratorSaveMode] = useState<AISaveMode>('media-library');
+  const [aiEditImageUrl, setAiEditImageUrl] = useState<string | undefined>(undefined);
+
+  // Background removal state
+  const [removeBackground, setRemoveBackground] = useState(false);
+  const [isProcessingBackground, setIsProcessingBackground] = useState(false);
 
   // Load initial media
   const loadMedia = useCallback(async () => {
@@ -187,44 +187,6 @@ export function MediaPickerDialog({
       loadSportsTeams(selectedLeague);
     }
   }, [selectedLeague, activeTab, loadSportsTeams]);
-
-  // Handle player search by name
-  const handlePlayerSearch = useCallback(async () => {
-    if (!playerSearchQuery.trim()) {
-      setPlayers([]);
-      return;
-    }
-
-    setPlayersLoading(true);
-    try {
-      const results = await searchPlayers(playerSearchQuery);
-      setPlayers(results);
-    } catch (error) {
-      console.error('Player search failed:', error);
-      setPlayers([]);
-    } finally {
-      setPlayersLoading(false);
-    }
-  }, [playerSearchQuery]);
-
-  // Handle player search by team
-  const handlePlayerTeamSearch = useCallback(async () => {
-    if (!playerTeamQuery.trim()) {
-      setPlayers([]);
-      return;
-    }
-
-    setPlayersLoading(true);
-    try {
-      const results = await getPlayersByTeam(playerTeamQuery);
-      setPlayers(results);
-    } catch (error) {
-      console.error('Player team search failed:', error);
-      setPlayers([]);
-    } finally {
-      setPlayersLoading(false);
-    }
-  }, [playerTeamQuery]);
 
   // Load organization textures
   const loadTextures = useCallback(async () => {
@@ -343,52 +305,35 @@ export function MediaPickerDialog({
     }
   };
 
-  // Handle local file selection (without uploading to Nova)
-  const handleLocalFile = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    
-    // Create a data URL for local files
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      onSelect(dataUrl);
-      onOpenChange(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Handle drag and drop
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileUpload(e.dataTransfer.files);
-    }
-  };
-
   // Confirm selection
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    // Helper to process background removal if enabled
+    const processUrl = async (url: string, isImage: boolean): Promise<string> => {
+      if (removeBackground && isImage) {
+        setIsProcessingBackground(true);
+        try {
+          const processedUrl = await removeWhiteBackground(url);
+          return processedUrl;
+        } catch (err) {
+          console.error('Failed to remove background:', err);
+          return url; // Fall back to original if processing fails
+        } finally {
+          setIsProcessingBackground(false);
+        }
+      }
+      return url;
+    };
+
     if (activeTab === 'textures' && selectedTexture) {
+      const isImage = selectedTexture.mediaType === 'image';
+      const finalUrl = await processUrl(selectedTexture.fileUrl, isImage);
+
       // Convert OrganizationTexture to NovaMediaAsset-like object
-      onSelect(selectedTexture.fileUrl, {
+      onSelect(finalUrl, {
         id: selectedTexture.id,
         name: selectedTexture.name,
         file_name: selectedTexture.fileName,
-        file_url: selectedTexture.fileUrl,
+        file_url: finalUrl,
         thumbnail_url: selectedTexture.thumbnailUrl || selectedTexture.fileUrl,
         media_type: selectedTexture.mediaType,
         tags: selectedTexture.tags,
@@ -396,13 +341,13 @@ export function MediaPickerDialog({
       } as NovaMediaAsset);
       onOpenChange(false);
     } else if (activeTab === 'sports' && selectedTeam) {
-      onSelect(selectedTeam.logo);
-      onOpenChange(false);
-    } else if (activeTab === 'players' && selectedPlayer) {
-      onSelect(selectedPlayer.headshot);
+      const finalUrl = await processUrl(selectedTeam.logo, true);
+      onSelect(finalUrl);
       onOpenChange(false);
     } else if (selectedAsset) {
-      onSelect(selectedAsset.file_url, selectedAsset);
+      const isImage = selectedAsset.media_type === 'image';
+      const finalUrl = await processUrl(selectedAsset.file_url, isImage);
+      onSelect(finalUrl, { ...selectedAsset, file_url: finalUrl });
       onOpenChange(false);
     }
   };
@@ -420,7 +365,8 @@ export function MediaPickerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open && !aiGeneratorOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 bg-card border-border">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle className="text-foreground">{title}</DialogTitle>
@@ -428,14 +374,14 @@ export function MediaPickerDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'browse' | 'textures' | 'sports' | 'players' | 'upload')}
+          onValueChange={(v) => setActiveTab(v as 'browse' | 'textures' | 'sports')}
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="px-6 py-3 border-b border-border flex items-center justify-between">
             <TabsList className="bg-muted">
               <TabsTrigger value="browse" className="gap-2 data-[state=active]:bg-background">
                 <FolderOpen className="w-4 h-4" />
-                Browse Nova
+                Media Library
               </TabsTrigger>
               <TabsTrigger value="textures" className="gap-2 data-[state=active]:bg-background">
                 <Layers className="w-4 h-4" />
@@ -444,14 +390,6 @@ export function MediaPickerDialog({
               <TabsTrigger value="sports" className="gap-2 data-[state=active]:bg-background">
                 <Trophy className="w-4 h-4" />
                 Teams
-              </TabsTrigger>
-              <TabsTrigger value="players" className="gap-2 data-[state=active]:bg-background">
-                <User className="w-4 h-4" />
-                Players
-              </TabsTrigger>
-              <TabsTrigger value="upload" className="gap-2 data-[state=active]:bg-background">
-                <Upload className="w-4 h-4" />
-                Upload
               </TabsTrigger>
             </TabsList>
 
@@ -514,7 +452,41 @@ export function MediaPickerDialog({
                 <Button onClick={handleSearch} disabled={isLoading} className="bg-violet-500 hover:bg-violet-600 text-white">
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!!uploadProgress}
+                  className="gap-2 border-border"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  Upload
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setAiEditImageUrl(undefined); // Clear to ensure generation mode
+                    setAiGeneratorSaveMode('media-library');
+                    setAiGeneratorOpen(true);
+                  }}
+                  className="gap-2 border-border"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  AI Gen
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*,audio/*"
+                  className="hidden"
+                  onChange={(e) => handleFileUpload(e.target.files)}
+                />
               </div>
+              {uploadProgress && (
+                <div className="mt-2 text-sm text-violet-500 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {uploadProgress}
+                </div>
+              )}
             </div>
 
             <ScrollArea className="flex-1 h-[calc(100%-120px)]">
@@ -598,6 +570,19 @@ export function MediaPickerDialog({
                   <UploadCloud className="w-4 h-4" />
                   Upload
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setAiEditImageUrl(undefined); // Clear to ensure generation mode
+                    setAiGeneratorSaveMode('texture');
+                    setAiGeneratorOpen(true);
+                  }}
+                  disabled={!organization?.id}
+                  className="gap-2 border-border"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  AI Gen
+                </Button>
                 <input
                   ref={textureFileInputRef}
                   type="file"
@@ -633,11 +618,14 @@ export function MediaPickerDialog({
               ) : (
                 <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 p-4">
                   {textures.map((texture) => (
-                    <button
+                    <div
                       key={texture.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedTexture(texture)}
+                      onKeyDown={(e) => e.key === 'Enter' && setSelectedTexture(texture)}
                       className={cn(
-                        'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                        'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group cursor-pointer',
                         selectedTexture?.id === texture.id
                           ? 'border-violet-500 ring-2 ring-violet-500/30'
                           : 'border-transparent hover:border-violet-500/50'
@@ -677,7 +665,7 @@ export function MediaPickerDialog({
 
                       {/* Selection indicator */}
                       {selectedTexture?.id === texture.id && (
-                        <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center pointer-events-none">
                           <div className="bg-violet-500 rounded-full p-1">
                             <Check className="w-4 h-4 text-white" />
                           </div>
@@ -685,14 +673,14 @@ export function MediaPickerDialog({
                       )}
 
                       {/* Name overlay on hover */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <p className="text-white text-xs truncate">{texture.name}</p>
                         <p className="text-white/60 text-[10px] flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {new Date(texture.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -806,211 +794,161 @@ export function MediaPickerDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="players" className="flex-1 overflow-hidden m-0 bg-background">
-            <div className="flex flex-col h-full">
-              {/* Search bars */}
-              <div className="p-4 border-b border-border space-y-3">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      value={playerSearchQuery}
-                      onChange={(e) => setPlayerSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handlePlayerSearch()}
-                      placeholder="Search player by name (e.g., LeBron James)"
-                      className="pl-9 bg-muted border-border"
-                    />
-                  </div>
-                  <Button onClick={handlePlayerSearch} disabled={playersLoading} className="bg-violet-500 hover:bg-violet-600 text-white">
-                    {playersLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Trophy className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      value={playerTeamQuery}
-                      onChange={(e) => setPlayerTeamQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handlePlayerTeamSearch()}
-                      placeholder="Or browse by team name (e.g., Los Angeles Lakers)"
-                      className="pl-9 bg-muted border-border"
-                    />
-                  </div>
-                  <Button onClick={handlePlayerTeamSearch} disabled={playersLoading} variant="outline" className="border-border">
-                    Browse Team
-                  </Button>
-                </div>
-              </div>
-
-              {/* Players grid */}
-              <ScrollArea className="flex-1">
-                {playersLoading ? (
-                  <div className="flex items-center justify-center h-64">
-                    <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
-                  </div>
-                ) : players.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                    <User className="w-12 h-12 mb-4" />
-                    <p>Search for player headshots</p>
-                    <p className="text-sm">NFL, NBA, MLB, NHL, Soccer and more</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 p-4">
-                    {players.map((player) => (
-                      <button
-                        key={player.id}
-                        onClick={() => setSelectedPlayer(player)}
-                        className={cn(
-                          'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group bg-gradient-to-b from-gray-100 to-gray-200',
-                          selectedPlayer?.id === player.id
-                            ? 'border-violet-500 ring-2 ring-violet-500/30'
-                            : 'border-transparent hover:border-violet-500/50'
-                        )}
-                      >
-                        <img
-                          src={player.headshot}
-                          alt={player.name}
-                          className="w-full h-full object-contain object-bottom"
-                          loading="lazy"
-                        />
-
-                        {/* Selection indicator */}
-                        {selectedPlayer?.id === player.id && (
-                          <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
-                            <div className="bg-violet-500 rounded-full p-1">
-                              <Check className="w-4 h-4 text-white" />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Info overlay */}
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2">
-                          <p className="text-white text-xs font-medium truncate">{player.name}</p>
-                          <p className="text-white/70 text-[10px] truncate">
-                            {player.team} {player.number && `#${player.number}`}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="upload" className="flex-1 overflow-hidden m-0 p-6 bg-background">
-            <div
-              className={cn(
-                'h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors',
-                dragActive ? 'border-violet-500 bg-violet-500/10' : 'border-muted-foreground/30'
-              )}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {uploadProgress ? (
-                <div className="text-center">
-                  <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-violet-500" />
-                  <p className="text-lg font-medium text-foreground">{uploadProgress}</p>
-                </div>
-              ) : (
-                <>
-                  <UploadCloud className="w-16 h-16 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2 text-foreground">
-                    Drag & drop or click to upload
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Supports images, videos, and audio files
-                  </p>
-
-                  <div className="flex gap-4">
-                    <Button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="gap-2 bg-violet-500 hover:bg-violet-600 text-white"
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      Upload to Nova Library
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = 'image/*,video/*,audio/*';
-                        input.onchange = (e) => handleLocalFile((e.target as HTMLInputElement).files);
-                        input.click();
-                      }}
-                      className="gap-2 border-border"
-                    >
-                      <HardDrive className="w-4 h-4" />
-                      Use Local File
-                    </Button>
-                  </div>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,video/*,audio/*"
-                    className="hidden"
-                    onChange={(e) => handleFileUpload(e.target.files)}
-                  />
-                </>
-              )}
-            </div>
-          </TabsContent>
         </Tabs>
 
         {/* Footer with selection info and confirm button */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-card">
-          <div className="text-sm text-muted-foreground">
-            {activeTab === 'textures' && selectedTexture ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-violet-500" />
-                Selected: <strong className="text-foreground">{selectedTexture.name}</strong>
-                <span className="text-xs">({selectedTexture.mediaType})</span>
-              </span>
-            ) : activeTab === 'sports' && selectedTeam ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-violet-500" />
-                Selected: <strong className="text-foreground">{selectedTeam.name}</strong>
-                <span className="text-xs">({selectedTeam.league})</span>
-              </span>
-            ) : activeTab === 'players' && selectedPlayer ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-violet-500" />
-                Selected: <strong className="text-foreground">{selectedPlayer.name}</strong>
-                <span className="text-xs">({selectedPlayer.team})</span>
-              </span>
-            ) : selectedAsset ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-violet-500" />
-                Selected: <strong className="text-foreground">{selectedAsset.name}</strong>
-              </span>
-            ) : (
-              'Select media or upload a new file'
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              {activeTab === 'textures' && selectedTexture ? (
+                <span className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-violet-500" />
+                  Selected: <strong className="text-foreground">{selectedTexture.name}</strong>
+                  <span className="text-xs">({selectedTexture.mediaType})</span>
+                </span>
+              ) : activeTab === 'sports' && selectedTeam ? (
+                <span className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-violet-500" />
+                  Selected: <strong className="text-foreground">{selectedTeam.name}</strong>
+                  <span className="text-xs">({selectedTeam.league})</span>
+                </span>
+              ) : selectedAsset ? (
+                <span className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-violet-500" />
+                  Selected: <strong className="text-foreground">{selectedAsset.name}</strong>
+                </span>
+              ) : (
+                'Select media or upload a new file'
+              )}
+            </div>
+
+            {/* Remove Background Option - show when an image is selected */}
+            {((activeTab === 'textures' && selectedTexture?.mediaType === 'image') ||
+              (activeTab === 'sports' && selectedTeam) ||
+              (activeTab === 'browse' && selectedAsset?.media_type === 'image')) && (
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none group">
+                <div
+                  className={cn(
+                    'w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
+                    removeBackground
+                      ? 'bg-violet-500 border-violet-500'
+                      : 'border-muted-foreground/50 hover:border-violet-400'
+                  )}
+                  onClick={() => setRemoveBackground(!removeBackground)}
+                >
+                  {removeBackground && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="flex items-center gap-1.5 text-muted-foreground group-hover:text-foreground transition-colors">
+                  <Eraser className="w-3.5 h-3.5" />
+                  Remove white background
+                </span>
+              </label>
             )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="border-border">
               Cancel
             </Button>
+            {/* AI Edit button - only show when an image is selected */}
+            {((activeTab === 'textures' && selectedTexture?.mediaType === 'image') ||
+              (activeTab === 'browse' && selectedAsset?.media_type === 'image')) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const imageUrl = activeTab === 'textures'
+                    ? selectedTexture?.fileUrl
+                    : selectedAsset?.file_url;
+                  if (imageUrl) {
+                    setAiEditImageUrl(imageUrl);
+                    setAiGeneratorSaveMode(activeTab === 'textures' ? 'texture' : 'media-library');
+                    setAiGeneratorOpen(true);
+                  }
+                }}
+                className="gap-2 border-violet-500/50 text-violet-400 hover:bg-violet-500/10"
+              >
+                <Sparkles className="w-4 h-4" />
+                AI Edit
+              </Button>
+            )}
             <Button
               onClick={handleConfirm}
               disabled={
-                activeTab === 'textures' ? !selectedTexture :
+                isProcessingBackground ||
+                (activeTab === 'textures' ? !selectedTexture :
                 activeTab === 'sports' ? !selectedTeam :
-                activeTab === 'players' ? !selectedPlayer :
-                !selectedAsset
+                !selectedAsset)
               }
               className="bg-violet-500 hover:bg-violet-600 text-white disabled:opacity-50"
             >
-              Insert Media
+              {isProcessingBackground ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Insert Media'
+              )}
             </Button>
           </div>
         </div>
+
       </DialogContent>
     </Dialog>
+
+    {/* AI Image Generator Dialog - rendered outside to avoid nesting issues */}
+    <AIImageGeneratorDialog
+      open={aiGeneratorOpen}
+      onOpenChange={(isOpen) => {
+        setAiGeneratorOpen(isOpen);
+        // Clear the edit image URL when closing
+        if (!isOpen) {
+          setAiEditImageUrl(undefined);
+        }
+      }}
+      existingImageUrl={aiEditImageUrl}
+      onSelect={(url, asset) => {
+        // Close the AI generator
+        setAiGeneratorOpen(false);
+
+        // If we got an asset, add it to the appropriate list and select it
+        if (asset) {
+          if (aiGeneratorSaveMode === 'texture') {
+            // Convert asset to OrganizationTexture-like object and add to textures list
+            const textureAsset: OrganizationTexture = {
+              id: asset.id,
+              organizationId: organization?.id || '',
+              name: asset.name,
+              fileName: asset.file_name,
+              fileUrl: asset.file_url,
+              thumbnailUrl: asset.thumbnail_url,
+              storagePath: '',
+              mediaType: 'image',
+              size: null,
+              width: null,
+              height: null,
+              duration: null,
+              uploadedBy: user?.id || null,
+              tags: asset.tags,
+              createdAt: asset.created_at,
+              updatedAt: asset.created_at,
+            };
+            setTextures((prev) => [textureAsset, ...prev]);
+            setSelectedTexture(textureAsset);
+          } else {
+            setAssets((prev) => [asset, ...prev]);
+            setSelectedAsset(asset);
+          }
+        }
+
+        // Pass selection to parent
+        onSelect(url, asset);
+        onOpenChange(false);
+      }}
+      saveMode={aiGeneratorSaveMode}
+      organizationId={organization?.id}
+      userId={user?.id}
+    />
+    </>
   );
 }
 

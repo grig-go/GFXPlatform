@@ -328,6 +328,16 @@ export type ElementContent =
       };
       opacity?: number; // 0-1
       blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion';
+      /** Remove white/light background from the image */
+      removeBackground?: {
+        enabled: boolean;
+        /** The color to remove (hex format). Default #FFFFFF (white). */
+        color?: string;
+        /** Brightness threshold (0-255). Pixels above this are considered matching the color. Default 240. */
+        threshold?: number;
+        /** Edge feathering amount in pixels for smoother edges. Default 0 (no feather). */
+        feather?: number;
+      };
     }
   | {
       type: 'shape';

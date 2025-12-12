@@ -105,30 +105,38 @@ normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, har
 "src": "{{LOGO:MLB:Yankees}}"
 \`\`\`
 
-**For Stock Images** - Use Pexels with the \`{{PEXELS:query}}\` placeholder:
+**For Custom/Background Images** - Use AI-generated images with the \`{{GENERATE:query}}\` placeholder:
 \`\`\`json
-"src": "{{PEXELS:basketball}}"
-"src": "{{PEXELS:football stadium}}"
-"src": "{{PEXELS:soccer player}}"
-"src": "{{PEXELS:sports arena}}"
-"src": "{{PEXELS:city skyline night}}"
+"src": "{{GENERATE:basketball stadium dramatic lighting}}"
+"src": "{{GENERATE:football field night game}}"
+"src": "{{GENERATE:soccer player action shot}}"
+"src": "{{GENERATE:sports arena crowd cheering}}"
+"src": "{{GENERATE:city skyline night neon lights}}"
 \`\`\`
 
-The system will resolve this to a real Pexels image URL. Use descriptive search terms.
+The system will generate a unique, high-quality image using AI and store it in the organization's textures library.
+Use descriptive queries for best results. Images are generated at 1280x720 (16:9) resolution.
 
 **Common queries by use case**:
-- Sports backgrounds: \`{{PEXELS:basketball court}}\`, \`{{PEXELS:football field}}\`, \`{{PEXELS:baseball stadium}}\`
-- Action shots: \`{{PEXELS:basketball player}}\`, \`{{PEXELS:soccer action}}\`
-- Venues: \`{{PEXELS:sports arena crowd}}\`, \`{{PEXELS:stadium lights}}\`
-- Abstract/textures: \`{{PEXELS:dark texture}}\`, \`{{PEXELS:blue gradient}}\`
+- Sports backgrounds: \`{{GENERATE:basketball court professional broadcast}}\`, \`{{GENERATE:football field stadium lights}}\`, \`{{GENERATE:baseball stadium night game}}\`
+- Action shots: \`{{GENERATE:basketball player dunking dynamic}}\`, \`{{GENERATE:soccer action dramatic}}\`
+- Venues: \`{{GENERATE:sports arena crowd cheering}}\`, \`{{GENERATE:stadium lights dramatic atmosphere}}\`
+- Abstract/textures: \`{{GENERATE:dark abstract texture broadcast}}\`, \`{{GENERATE:blue gradient professional background}}\`
+- Weather: \`{{GENERATE:storm clouds dramatic}}\`, \`{{GENERATE:sunny weather clear sky}}\`
 
-**For Player Headshots** - Ask the user to provide the image URL (Pexels won't have specific players):
+**For Player Headshots** - Ask the user to provide the image URL (AI cannot generate specific real people):
 \`\`\`json
 "content": {
   "type": "image",
   "src": "",  // User will add their image
   "fit": "cover"
 }
+\`\`\`
+
+**Legacy Stock Images** - The \`{{PEXELS:query}}\` placeholder is also supported for curated stock photos:
+\`\`\`json
+"src": "{{PEXELS:basketball}}"
+"src": "{{PEXELS:stadium}}"
 \`\`\`
 
 **NEVER use**:

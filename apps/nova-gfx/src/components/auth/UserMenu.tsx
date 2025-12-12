@@ -7,6 +7,9 @@ import {
   Building2,
   Shield,
   HelpCircle,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import {
   Button,
@@ -16,14 +19,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from '@emergent-platform/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore, type Theme } from '@/stores/themeStore';
 import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
+
+const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
 
 export function UserMenu() {
   const navigate = useNavigate();
   const { user, organization, signOut } = useAuthStore();
+  const { theme, setTheme } = useThemeStore();
   const [showSupportDialog, setShowSupportDialog] = useState(false);
+
+  const handleThemeChange = (newTheme: Theme) => {
+    if (user?.id) {
+      setTheme(newTheme, user.id);
+    }
+  };
+
+  const currentThemeOption = themeOptions.find(t => t.value === theme) || themeOptions[1];
+  const CurrentThemeIcon = currentThemeOption.icon;
 
   if (!user) {
     return (
@@ -85,6 +109,32 @@ export function UserMenu() {
           <Settings className="w-4 h-4 mr-2" />
           Settings
         </DropdownMenuItem>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <CurrentThemeIcon className="w-4 h-4 mr-2" />
+            Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent>
+              {themeOptions.map((option) => {
+                const Icon = option.icon;
+                const isSelected = theme === option.value;
+                return (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onClick={() => handleThemeChange(option.value)}
+                    className={isSelected ? 'bg-accent' : ''}
+                  >
+                    <Icon className="w-4 h-4 mr-2" />
+                    {option.label}
+                    {isSelected && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
 
         {user.isAdmin && (
           <DropdownMenuItem onClick={() => navigate('/settings/admin')}>

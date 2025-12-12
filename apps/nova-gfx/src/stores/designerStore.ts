@@ -269,6 +269,7 @@ interface DesignerState {
   showGrid: boolean;
   showGuides: boolean;
   showSafeArea: boolean;
+  guides: Array<{ id: string; orientation: 'horizontal' | 'vertical'; position: number }>;
 
   // Timeline state
   currentPhase: AnimationPhase;
@@ -400,6 +401,10 @@ interface DesignerActions {
   toggleGrid: () => void;
   toggleGuides: () => void;
   toggleSafeArea: () => void;
+  addGuide: (guide: { id: string; orientation: 'horizontal' | 'vertical'; position: number }) => void;
+  moveGuide: (id: string, newPosition: number) => void;
+  removeGuide: (id: string) => void;
+  clearGuides: () => void;
 
   // Timeline controls
   setPhase: (phase: AnimationPhase) => void;
@@ -661,6 +666,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         showGrid: false,
         showGuides: true,
         showSafeArea: true,
+        guides: [],
         currentPhase: 'in',
         playheadPosition: 0,
         isPlaying: false,
@@ -1782,35 +1788,47 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           const state = get();
           const projectId = state.project?.id;
           const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-          const isValidUUID = projectId && UUID_REGEX.test(projectId);
+          const isValidProjectUUID = projectId && UUID_REGEX.test(projectId);
+          const isValidTemplateUUID = templateId && UUID_REGEX.test(templateId);
 
-          // Archive in database immediately (for real projects)
-          if (isValidUUID && projectId !== 'demo') {
+          console.log('[deleteTemplate] Starting deletion:', { templateId, projectId, isValidProjectUUID, isValidTemplateUUID });
+
+          // Archive in database immediately (for real projects with valid template UUID)
+          if (isValidProjectUUID && isValidTemplateUUID && projectId !== 'demo') {
             try {
-              const { error } = await supabase
-                .from('gfx_templates')
-                .update({ archived: true, updated_at: new Date().toISOString() })
-                .eq('id', templateId);
+              // Use directRestUpdate for consistency with other save operations
+              const result = await directRestUpdate(
+                'gfx_templates',
+                { archived: true, updated_at: new Date().toISOString() },
+                { column: 'id', value: templateId },
+                10000 // 10 second timeout
+              );
 
-              if (error) {
-                console.error('Failed to archive template in database:', error);
+              if (!result.success) {
+                console.error('Failed to archive template in database:', result.error);
               } else {
                 console.log('✅ Template archived in database:', templateId);
               }
             } catch (err) {
               console.error('Error archiving template:', err);
             }
+          } else {
+            console.log('[deleteTemplate] Skipping database archive - demo project or invalid UUID');
           }
 
           set((draft) => {
             // Delete template from local state
+            const templateBefore = draft.templates.length;
             draft.templates = draft.templates.filter((t) => t.id !== templateId);
+            console.log(`[deleteTemplate] Templates: ${templateBefore} -> ${draft.templates.length}`);
 
             // Delete all elements in template
             const elementIds = draft.elements
               .filter((e) => e.template_id === templateId)
               .map((e) => e.id);
+            const elementsBefore = draft.elements.length;
             draft.elements = draft.elements.filter((e) => e.template_id !== templateId);
+            console.log(`[deleteTemplate] Elements: ${elementsBefore} -> ${draft.elements.length} (removed ${elementIds.length})`);
 
             // Delete animations for those elements
             const animationIds = draft.animations
@@ -3102,6 +3120,33 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         toggleSafeArea: () => {
           set((state) => {
             state.showSafeArea = !state.showSafeArea;
+          });
+        },
+
+        addGuide: (guide) => {
+          set((state) => {
+            state.guides.push(guide);
+          });
+        },
+
+        moveGuide: (id, newPosition) => {
+          set((state) => {
+            const guide = state.guides.find(g => g.id === id);
+            if (guide) {
+              guide.position = newPosition;
+            }
+          });
+        },
+
+        removeGuide: (id) => {
+          set((state) => {
+            state.guides = state.guides.filter(g => g.id !== id);
+          });
+        },
+
+        clearGuides: () => {
+          set((state) => {
+            state.guides = [];
           });
         },
 

@@ -495,7 +495,7 @@ export function Designer() {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="h-8 w-8 rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center mx-auto mb-4 animate-pulse">
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center mx-auto mb-4 animate-pulse shadow-sm">
             <span className="text-white text-xs font-bold">N</span>
           </div>
           <p className="text-muted-foreground">

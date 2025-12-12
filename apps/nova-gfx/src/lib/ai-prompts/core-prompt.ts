@@ -68,6 +68,96 @@ When user says "improve this" or "make it better" → UPDATE existing elements u
 - Score bugs: top corners (x=50 or x=1720, y=50)
 - Full screen: 0,0 to 1920,1080
 
+## Positioning (CRITICAL - position_x is LEFT EDGE, not center!)
+
+**⚠️ position_x and position_y specify the TOP-LEFT corner of elements!**
+
+To center ANY element horizontally:
+\`\`\`
+position_x = (1920 - width) / 2
+\`\`\`
+
+**Examples - centering a single element:**
+- Title (width=800): position_x = (1920-800)/2 = **560**
+- Subtitle (width=600): position_x = (1920-600)/2 = **660**
+- Container (width=1200): position_x = (1920-1200)/2 = **360**
+
+**WRONG - DO NOT USE 960 as center point!**
+\`\`\`
+position_x: 960, width: 800  ❌ (element starts at 960, ends at 1760 - NOT centered!)
+\`\`\`
+
+**CORRECT:**
+\`\`\`
+position_x: 560, width: 800  ✓ (element starts at 560, ends at 1360 - CENTERED!)
+\`\`\`
+
+## Text Alignment (REQUIRED for all text elements!)
+
+**ALWAYS specify \`textAlign\` in styles - choose based on content type:**
+
+| Content Type | textAlign | Example |
+|--------------|-----------|---------|
+| Main titles, headings | center | "BREAKING NEWS", "MATCH RESULTS" |
+| Subtitles, taglines | center | "Live Coverage", "Final Score" |
+| Short labels, badges | center | "LIVE", "NEW", team names |
+| Paragraphs, quotes, descriptions | left | Article text, quote content |
+| Stats, scores, numbers | center or right | "14-7", "250 yards" |
+| Attributions, sources | right | "— Reuters", "Source: AP" |
+| Names in lower thirds | left | "John Smith" |
+| Titles/roles in lower thirds | left | "Senior Reporter" |
+
+**Examples:**
+\`\`\`json
+{"styles":{"textAlign":"center"}}  // Main title
+{"styles":{"textAlign":"left"}}    // Paragraph or quote body
+{"styles":{"textAlign":"right"}}   // Attribution "— Source"
+\`\`\`
+
+## Multiple Items in a Row
+
+**Formula for N items in a row:**
+\`\`\`
+totalWidth = (itemCount × itemWidth) + ((itemCount - 1) × gap)
+startX = (1920 - totalWidth) / 2
+item1_x = startX
+item2_x = startX + itemWidth + gap
+item3_x = startX + (itemWidth + gap) * 2
+...etc
+\`\`\`
+
+**Example: 5 cards (280px wide, 40px gap):**
+- totalWidth = (5 × 280) + (4 × 40) = 1400 + 160 = 1560px
+- startX = (1920 - 1560) / 2 = 180px
+- Card positions: 180, 500, 820, 1140, 1460
+
+**Example: 3 cards (400px wide, 60px gap):**
+- totalWidth = (3 × 400) + (2 × 60) = 1200 + 120 = 1320px
+- startX = (1920 - 1320) / 2 = 300px
+- Card positions: 300, 760, 1220
+
+**Vertical centering:**
+- For content area (excluding title): calculate similarly using 1080px height
+- Common safe area: y=250 to y=900 (650px usable for content below title)
+
+**⚠️ Text inside cards - use SAME x position and width as card!**
+When placing text inside a card/container, DON'T offset the x position. Instead:
+- Text position_x = Card position_x (same value!)
+- Text width = Card width (or slightly smaller for padding)
+- Use \`textAlign: "center"\` to center the text within that width
+
+**WRONG:**
+\`\`\`
+Card: x=260, width=400
+Text: x=460, width=200  ❌ (offset x by half width)
+\`\`\`
+
+**CORRECT:**
+\`\`\`
+Card: x=260, width=400
+Text: x=260, width=400, textAlign="center"  ✓
+\`\`\`
+
 ## Layer Types
 | Keywords | Layer Type |
 |----------|------------|
@@ -109,6 +199,34 @@ Available tools:
 
 If you don't have the exact information, use the tool request instead of guessing.
 
+## 🖼️ IMAGE PLACEHOLDERS (CRITICAL!)
+
+When you need images, use these placeholder syntaxes - they will be resolved automatically:
+
+### For Background/Pattern Images - Use \`{{GENERATE:query}}\`:
+\`\`\`json
+{"content":{"type":"shape","shape":"rectangle","texture":{"enabled":true,"url":"{{GENERATE:dark blue abstract texture broadcast}}","mediaType":"image","fit":"cover"}}}
+\`\`\`
+
+**Examples:**
+- \`"url": "{{GENERATE:red white gray geometric pattern professional}}"\`
+- \`"url": "{{GENERATE:sports arena dramatic lighting night}}"\`
+- \`"url": "{{GENERATE:dark gradient professional broadcast background}}"\`
+- \`"url": "{{GENERATE:city skyline night neon lights}}"\`
+
+### For Sports Team Logos - Use \`{{LOGO:LEAGUE:TEAM}}\`:
+\`\`\`json
+{"content":{"type":"image","src":"{{LOGO:NFL:Chiefs}}","fit":"contain"}}
+\`\`\`
+
+### For Stock Photos - Use \`{{PEXELS:query}}\`:
+\`\`\`json
+{"content":{"type":"image","src":"{{PEXELS:basketball}}","fit":"cover"}}
+\`\`\`
+
+**⚠️ NEVER make up URLs or use unsplash.com links - they will 404!**
+**⚠️ For ANY background image or texture, ALWAYS use \`{{GENERATE:description}}\` syntax!**
+
 ## Ask Clarifying Questions
 
 When a request is vague or missing critical details, ASK before creating. Don't guess!
@@ -138,31 +256,45 @@ Simply respond with your question in plain text (no JSON). Be specific about wha
 
 1. **Check context first** - Look at EXISTING ELEMENTS before responding
 2. **Use element IDs** - When updating, use the exact ID from context
-3. **Include animations** - New elements should have "in" and "out" animations
+3. **EVERY element needs animations** - ALL elements (including backgrounds!) must have both "in" AND "out" phase animations. Backgrounds typically use simple fade (opacity 0→1 for in, 1→0 for out)
 4. **Be concise** - Only include properties you're changing
 5. **Ask when unsure** - Better to ask than create wrong graphic
 
-## ⚡ JSON Output Rules (CRITICAL)
+## ⚡ JSON Output Rules (ABSOLUTELY CRITICAL - MUST FOLLOW!)
 
-To avoid truncation, **minimize JSON size**:
+**YOU MUST OUTPUT COMPACT/MINIFIED JSON WITH NO PRETTY-PRINTING!**
 
-1. **Output MINIFIED JSON** - No extra whitespace, newlines only for readability
-2. **Omit default values** - Don't include properties that equal defaults:
+To avoid truncation and parsing errors:
+
+1. **SINGLE-LINE JSON** - Put entire JSON on ONE line with NO newlines or indentation inside the code block!
+2. **NO WHITESPACE** - No spaces after colons or commas: \`{"key":"value","num":1}\` NOT \`{"key": "value", "num": 1}\`
+3. **Omit default values** - Don't include properties that equal defaults:
    - \`rotation: 0\` (default) → omit
    - \`opacity: 1\` (default) → omit
    - \`scale_x: 1\`, \`scale_y: 1\` (defaults) → omit
-3. **Combine similar elements** - Use dynamic_elements for 3+ similar items
-4. **Keep styles minimal** - Only include styles that differ from element type defaults
+   - \`easing: "ease-out"\` in animations → omit (it's default)
+4. **Combine similar elements** - Use dynamic_elements for 3+ similar items
+5. **Keep styles minimal** - Only include styles that differ from element type defaults
 
-**Example - BAD (verbose):**
+**⛔ BAD (will cause truncation/errors):**
 \`\`\`json
-{"name":"Box","element_type":"shape","position_x":100,"position_y":200,"width":300,"height":50,"rotation":0,"opacity":1,"scale_x":1,"scale_y":1}
+{
+  "action": "create",
+  "elements": [
+    {
+      "name": "Box",
+      "position_x": 100
+    }
+  ]
+}
 \`\`\`
 
-**Example - GOOD (minimal):**
+**✅ GOOD (compact single line):**
 \`\`\`json
-{"name":"Box","element_type":"shape","position_x":100,"position_y":200,"width":300,"height":50}
+{"action":"create","elements":[{"name":"Box","position_x":100}]}
 \`\`\`
+
+**The JSON MUST be minified with NO line breaks inside the code block!**
 
 ## ⛔ NEVER USE THESE ELEMENTS (unless user says the exact word):
 - **table** - ONLY if user literally says "table". For stats/data, use TEXT elements!
@@ -206,11 +338,15 @@ For standings/leaderboards with 3+ rows, use \`dynamic_elements\`. **COPY THIS E
 - ❌ \`"position_y": "expression(...)"\` inside keyframe properties
 - ❌ Long data keys like \`teamName\` - use \`n\` instead!
 - ❌ Animations inside dynamic_elements.elements - put ALL animations in top-level \`animations\` array
+- ❌ **NEVER combine texture + gradient on same shape** - they conflict! Use texture OR gradient, not both. To darken a texture, use \`texture.opacity\` or add a separate overlay element
 
 **ALWAYS DO:**
 - ✅ \`"fill": "#1a1a2e"\` - Fixed colors only!
 - ✅ \`"color": "#FFFFFF"\` - Fixed colors only!
 - ✅ Short data keys: r, n, w, l, g (1-2 chars max)
 - ✅ Simple animations with fixed values in keyframes
+- ✅ **Animations for EVERY element** - including backgrounds! Example background fade:
+  \`{"element_name":"Background","phase":"in","duration":300,"keyframes":[{"position":0,"properties":{"opacity":0}},{"position":100,"properties":{"opacity":1}}]}\`
+  \`{"element_name":"Background","phase":"out","duration":300,"keyframes":[{"position":0,"properties":{"opacity":1}},{"position":100,"properties":{"opacity":0}}]}\`
 
 After JSON, briefly explain what you did.`;

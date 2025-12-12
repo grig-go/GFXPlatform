@@ -157,7 +157,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
         </svg>
 
         {/* App Icon */}
-        <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-[8px] sm:rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center flex-shrink-0">
+        <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md sm:rounded-lg bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center flex-shrink-0 shadow-sm">
           <span className="text-white text-[11px] sm:text-xs font-bold sm:text-[15px]">N</span>
         </div>
         <span className="text-sm sm:text-[18px] font-medium whitespace-nowrap">

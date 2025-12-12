@@ -4,7 +4,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Diamond, BarChart3, Group,
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
-  FolderOpen, Timer,
+  FolderOpen, Timer, Eraser, Trash2,
 } from 'lucide-react';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
@@ -975,7 +975,144 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               <span className="text-xs text-muted-foreground">×</span>
             </div>
           </PropertySection>
+        </>
+      )}
 
+      {/* Countdown/Clock Styles - Same font options as text */}
+      {element.content.type === 'countdown' && (
+        <>
+          {/* Font Size */}
+          <KeyframableProperty
+            title="Font Size"
+            propertyKey="fontSize"
+            elementId={element.id}
+            selectedKeyframe={selectedKeyframe}
+            currentAnimation={currentAnimation}
+            currentValue={parseInt(getStyle('fontSize', '32')) || 32}
+            onChange={(value) => updateStyle('fontSize', `${value}px`)}
+          >
+            {(displayValue, onChange) => (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min="1"
+                  value={displayValue ?? (parseInt(getStyle('fontSize', '32')) || 32)}
+                  onChange={(e) => onChange(parseInt(e.target.value) || 32)}
+                  className="h-6 text-[10px]"
+                />
+                <span className="text-xs text-muted-foreground">px</span>
+              </div>
+            )}
+          </KeyframableProperty>
+
+          {/* Font Family */}
+          <PropertySection title="Font Family">
+            <FontFamilyPicker
+              value={getStyle('fontFamily', 'Inter')}
+              onChange={(fontFamily) => updateStyle('fontFamily', fontFamily)}
+            />
+          </PropertySection>
+
+          {/* Font Weight */}
+          <PropertySection title="Font Weight">
+            <select
+              value={getStyle('fontWeight', '400')}
+              onChange={(e) => updateStyle('fontWeight', e.target.value)}
+              className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+            >
+              <option value="100">Thin (100)</option>
+              <option value="200">Extra Light (200)</option>
+              <option value="300">Light (300)</option>
+              <option value="400">Regular (400)</option>
+              <option value="500">Medium (500)</option>
+              <option value="600">Semibold (600)</option>
+              <option value="700">Bold (700)</option>
+              <option value="800">Extrabold (800)</option>
+              <option value="900">Black (900)</option>
+            </select>
+          </PropertySection>
+
+          {/* Text Align */}
+          <PropertySection title="Text Align">
+            <div className="flex gap-1">
+              {(['left', 'center', 'right'] as const).map((align) => (
+                <Button
+                  key={align}
+                  variant={getStyle('textAlign', 'center') === align ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => updateStyle('textAlign', align)}
+                  title={align.charAt(0).toUpperCase() + align.slice(1)}
+                >
+                  {align === 'left' && <AlignLeft className="w-3 h-3" />}
+                  {align === 'center' && <AlignCenter className="w-3 h-3" />}
+                  {align === 'right' && <AlignRight className="w-3 h-3" />}
+                </Button>
+              ))}
+            </div>
+          </PropertySection>
+
+          {/* Text Color */}
+          <KeyframableProperty
+            title="Text Color"
+            propertyKey="color"
+            elementId={element.id}
+            selectedKeyframe={selectedKeyframe}
+            currentAnimation={currentAnimation}
+            currentValue={getStyle('color', '#ffffff')}
+            onChange={(color) => updateStyle('color', color as string)}
+          >
+            {(displayValue, onChange) => (
+              <ColorInput
+                value={(displayValue as string) ?? getStyle('color', '#ffffff')}
+                onChange={(c) => onChange(c)}
+              />
+            )}
+          </KeyframableProperty>
+
+          {/* Vertical Align */}
+          <PropertySection title="Vertical Align">
+            <div className="flex gap-1">
+              {(['top', 'middle', 'bottom'] as const).map((valign) => (
+                <Button
+                  key={valign}
+                  variant={getStyle('verticalAlign', 'middle') === valign ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-6 flex-1 text-[10px]"
+                  onClick={() => updateStyle('verticalAlign', valign)}
+                >
+                  {valign.charAt(0).toUpperCase() + valign.slice(1)}
+                </Button>
+              ))}
+            </div>
+          </PropertySection>
+
+          {/* Line Height */}
+          <PropertySection title="Line Height">
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                step="0.1"
+                min="0.5"
+                max="5"
+                value={parseFloat(getStyle('lineHeight', '1.2')) || 1.2}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value) || 1.2;
+                  updateStyle('lineHeight', value.toString());
+                }}
+                className="h-8 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">×</span>
+            </div>
+          </PropertySection>
+
+          <Separator className="my-4" />
+        </>
+      )}
+
+      {/* 8. Letter Spacing - Less commonly used (for text elements) */}
+      {element.content.type === 'text' && (
+        <>
           {/* 8. Letter Spacing - Less commonly used */}
           <PropertySection title="Letter Spacing">
             <div className="flex items-center gap-1">
@@ -1170,6 +1307,21 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
             element={element}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
+          />
+        </>
+      )}
+
+      {/* Image Styling Options */}
+      {element.content.type === 'image' && (
+        <>
+          <Separator className="my-2" />
+          <ImageStyleEditor
+            element={element}
+            updateContent={(updates) => {
+              updateElement(element.id, {
+                content: { ...element.content, ...updates } as Element['content'],
+              });
+            }}
           />
         </>
       )}
@@ -3055,6 +3207,156 @@ function ChartStyleEditor({ element }: { element: Element }) {
   );
 }
 
+// Image Style Editor - handles remove background and other image-specific styling
+function ImageStyleEditor({ element, updateContent }: { element: Element; updateContent: (updates: Record<string, unknown>) => void }) {
+  const imageContent = element.content.type === 'image' ? element.content : null;
+
+  if (!imageContent) return null;
+
+  const removeColor = imageContent.removeBackground?.color || '#FFFFFF';
+
+  return (
+    <div className="space-y-2">
+      <PropertySection title="Remove Background Color">
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={imageContent.removeBackground?.enabled || false}
+              onChange={(e) => updateContent({
+                removeBackground: {
+                  enabled: e.target.checked,
+                  color: imageContent.removeBackground?.color ?? '#FFFFFF',
+                  threshold: imageContent.removeBackground?.threshold ?? 240,
+                  feather: imageContent.removeBackground?.feather ?? 0,
+                },
+              })}
+              className="rounded"
+            />
+            <Eraser className="w-3.5 h-3.5 text-muted-foreground" />
+            <span>Remove background color</span>
+          </label>
+
+          {imageContent.removeBackground?.enabled && (
+            <div className="space-y-3 pl-4 border-l-2 border-violet-500/30">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Color to Remove
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={removeColor}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        color: e.target.value,
+                      },
+                    })}
+                    className="w-8 h-8 rounded border border-border cursor-pointer"
+                  />
+                  <Input
+                    type="text"
+                    value={removeColor}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        color: e.target.value,
+                      },
+                    })}
+                    className="flex-1 h-8 text-xs uppercase"
+                    placeholder="#FFFFFF"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Select the background color to make transparent.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Tolerance: {imageContent.removeBackground?.threshold || 240}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="200"
+                    max="255"
+                    step="1"
+                    value={imageContent.removeBackground?.threshold || 240}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        threshold: parseInt(e.target.value) || 240,
+                      },
+                    })}
+                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                  <Input
+                    type="number"
+                    value={imageContent.removeBackground?.threshold || 240}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        threshold: parseInt(e.target.value) || 240,
+                      },
+                    })}
+                    min="200"
+                    max="255"
+                    className="w-16 h-8 text-xs"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Higher = exact color match only. Lower = more similar colors removed.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Feather: {imageContent.removeBackground?.feather || 0}px
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="1"
+                    value={imageContent.removeBackground?.feather || 0}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        feather: parseInt(e.target.value) || 0,
+                      },
+                    })}
+                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                  <Input
+                    type="number"
+                    value={imageContent.removeBackground?.feather || 0}
+                    onChange={(e) => updateContent({
+                      removeBackground: {
+                        ...imageContent.removeBackground!,
+                        feather: parseInt(e.target.value) || 0,
+                      },
+                    })}
+                    min="0"
+                    max="10"
+                    className="w-16 h-8 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">px</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Softens the edges between removed and kept areas.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </PropertySection>
+    </div>
+  );
+}
+
 function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const {
     updateElement,
@@ -4681,7 +4983,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
       <div className="space-y-4">
         {/* Preview */}
         <PropertySection title="Preview">
-          <div className="flex justify-center p-2 bg-neutral-900 rounded">
+          <div className="flex justify-center p-2 bg-neutral-100 dark:bg-neutral-900 rounded">
             <TopicBadgePreview
               topic={badgeContent.defaultTopic as TickerTopic || 'news'}
               showIcon={badgeContent.showIcon ?? true}

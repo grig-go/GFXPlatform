@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
 import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
+import { resolveGeneratePlaceholders, hasGeneratePlaceholders } from '@/lib/ai-prompts/tools/ai-image-generator';
+import { useAuthStore } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
@@ -24,6 +26,7 @@ type CreationPhase =
   | 'designing'     // AI is designing the graphic structure
   | 'generating'    // AI is generating elements
   | 'parsing'       // Parsing the JSON response
+  | 'images'        // Generating AI images for placeholders
   | 'applying'      // Applying elements to canvas
   | 'animating'     // Adding animations
   | 'done'
@@ -254,6 +257,7 @@ function CreationProgressIndicator({ progress }: { progress: CreationProgress })
     designing: <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />,
     generating: <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />,
     parsing: <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />,
+    images: <ImageIcon className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />,
     applying: <Wand2 className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />,
     animating: <Sparkles className="w-3.5 h-3.5 text-pink-400 animate-bounce" />,
     done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
@@ -266,6 +270,7 @@ function CreationProgressIndicator({ progress }: { progress: CreationProgress })
     designing: 'text-cyan-300',
     generating: 'text-blue-300',
     parsing: 'text-amber-300',
+    images: 'text-emerald-300',
     applying: 'text-fuchsia-300',
     animating: 'text-pink-300',
     done: 'text-emerald-300',
@@ -360,8 +365,8 @@ function MessageContent({
           </button>
 
           {isCodeExpanded && code && (
-            <pre className="mt-1.5 p-1.5 bg-black/30 rounded text-[9px] overflow-x-auto max-h-40 overflow-y-auto">
-              <code className="text-violet-300">{code}</code>
+            <pre className="mt-1.5 p-1.5 bg-muted dark:bg-black/30 rounded text-[9px] overflow-x-auto max-h-40 overflow-y-auto">
+              <code className="text-violet-700 dark:text-violet-300">{code}</code>
             </pre>
           )}
         </div>
@@ -627,7 +632,7 @@ export function ChatPanel() {
   }, [isListening, input]);
 
   // Apply AI changes to the canvas
-  const applyAIChanges = useCallback((changes: AIChanges, messageId: string) => {
+  const applyAIChanges = useCallback(async (changes: AIChanges, messageId: string) => {
     try {
       // Check for truncation warning and log it
       if (changes._truncationWarning) {
@@ -637,6 +642,73 @@ export function ChatPanel() {
 
       // Expand dynamic_elements template if present (for standings, leaderboards, etc.)
       const expandedChanges = expandDynamicElements(changes);
+
+      // Resolve {{GENERATE:query}} placeholders in element content BEFORE applying
+      if (expandedChanges.elements?.length) {
+        const authState = useAuthStore.getState();
+        const organizationId = authState.user?.organizationId;
+        const userId = authState.user?.id;
+
+        if (organizationId && userId) {
+          // Find all GENERATE placeholders in element content
+          const contentStrings: string[] = [];
+          for (const el of expandedChanges.elements) {
+            const contentStr = JSON.stringify(el.content || {});
+            console.log(`🔍 Checking element "${el.name}" for GENERATE placeholders:`, contentStr.substring(0, 150));
+            if (hasGeneratePlaceholders(contentStr)) {
+              console.log(`✅ Element "${el.name}" HAS GENERATE placeholder`);
+              contentStrings.push(contentStr);
+            }
+          }
+
+          if (contentStrings.length > 0) {
+            console.log(`🖼️ [ChatPanel] Found ${contentStrings.length} element(s) with GENERATE placeholders - will show progress`);
+
+            // Resolve placeholders in all element content
+            let imageIndex = 0;
+            for (let i = 0; i < expandedChanges.elements.length; i++) {
+              const el = expandedChanges.elements[i];
+              const contentStr = JSON.stringify(el.content || {});
+              if (hasGeneratePlaceholders(contentStr)) {
+                imageIndex++;
+                // Show which element's image is being generated
+                const elementLabel = el.name?.toLowerCase().includes('background')
+                  ? 'background image'
+                  : `image for "${el.name}"`;
+                console.log(`🖼️ Setting progress: Generating ${elementLabel}... (${imageIndex}/${contentStrings.length})`);
+                setCreationProgress({
+                  phase: 'images',
+                  message: `Generating ${elementLabel}...`,
+                  currentElement: contentStrings.length > 1 ? `(${imageIndex}/${contentStrings.length})` : undefined
+                });
+                // Small delay to allow React to render the progress update
+                await new Promise(resolve => setTimeout(resolve, 50));
+                console.log(`🖼️ Resolving images for element: ${el.name}`);
+                console.log(`🖼️ Content string to resolve:`, contentStr);
+                const resolvedContent = await resolveGeneratePlaceholders(contentStr, organizationId, userId);
+                console.log(`🖼️ Resolved content:`, resolvedContent.substring(0, 200));
+                try {
+                  const parsedContent = JSON.parse(resolvedContent);
+
+                  // Ensure texture.enabled is true for shapes with texture URL
+                  // This allows users to modify the texture in the properties panel
+                  if (parsedContent.type === 'shape' && parsedContent.texture?.url) {
+                    parsedContent.texture.enabled = true;
+                    console.log(`✅ Enabled texture for shape: ${el.name}`);
+                  }
+
+                  expandedChanges.elements[i].content = parsedContent;
+                  console.log(`✅ Resolved images for: ${el.name}`);
+                } catch (parseError) {
+                  console.error(`❌ Failed to parse resolved content for ${el.name}:`, parseError);
+                }
+              }
+            }
+          }
+        } else {
+          console.warn('⚠️ Cannot generate images: no organization or user ID available');
+        }
+      }
 
       console.log('🎨 Applying AI changes:', { type: expandedChanges.type, layerType: expandedChanges.layerType, elementCount: expandedChanges.elements?.length || 0 });
       const store = useDesignerStore.getState();
@@ -1725,7 +1797,16 @@ Alternatively, configure your API key in Settings (⚙️).`,
           },
           undefined,
           imageAttachments,
-          abortControllerRef.current?.signal
+          abortControllerRef.current?.signal,
+          // Image generation progress callback
+          (message, current, total) => {
+            console.log(`🖼️ [ImageProgress] ${message} (${current}/${total})`);
+            setCreationProgress({
+              phase: 'images',
+              message,
+              currentElement: total > 1 ? `(${current}/${total})` : undefined,
+            });
+          }
         );
 
         // Show the response to user immediately
@@ -1742,7 +1823,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
           console.log('🚀 Auto-applying changes:', { totalElements, type: response.changes.type, layerType: response.changes.layerType });
 
           // Apply changes asynchronously so user sees response immediately
-          requestAnimationFrame(() => {
+          requestAnimationFrame(async () => {
             setCreationProgress({
               phase: 'applying',
               message: `Applying ${totalElements} element${totalElements !== 1 ? 's' : ''}...`,
@@ -1750,10 +1831,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
               processedElements: totalElements,
             });
 
-            // Apply the changes
+            // Apply the changes (async because it may need to generate images)
             console.log('⚡ Calling applyAIChanges...');
             markChangesApplied(streamingMessage.id);
-            applyAIChanges(response.changes!, streamingMessage.id);
+            await applyAIChanges(response.changes!, streamingMessage.id);
             console.log('✅ applyAIChanges completed');
 
             // Show completion briefly
@@ -2004,9 +2085,9 @@ Alternatively, configure your API key in Settings (⚙️).`,
                   className={cn(
                     'flex-1 rounded-lg p-2 text-xs',
                     msg.role === 'user'
-                      ? 'bg-violet-500/20 text-violet-100'
+                      ? 'bg-violet-500/20 text-violet-900 dark:text-violet-100'
                       : msg.error
-                      ? 'bg-red-500/10 text-red-300 border border-red-500/20'
+                      ? 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
                       : 'bg-muted text-foreground'
                   )}
                 >
@@ -2014,7 +2095,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-1.5">
                       {msg.attachments.map((att) => (
-                        <div key={att.id} className="flex items-center gap-1 text-[10px] bg-black/20 rounded px-1.5 py-0.5">
+                        <div key={att.id} className="flex items-center gap-1 text-[10px] bg-violet-500/10 dark:bg-black/20 rounded px-1.5 py-0.5">
                           {att.type === 'image' || att.type === 'screenshot' ? (
                             att.preview ? (
                               <img src={att.preview} alt="" className="w-6 h-6 object-cover rounded" />
@@ -2058,7 +2139,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
                       size="sm"
                       variant="outline"
                       className="mt-1.5 h-6 text-[10px]"
-                      onClick={() => applyAIChanges(msg.changes_applied!, msg.id)}
+                      onClick={async () => await applyAIChanges(msg.changes_applied!, msg.id)}
                     >
                       Apply Changes
                     </Button>
@@ -2081,6 +2162,23 @@ Alternatively, configure your API key in Settings (⚙️).`,
               >
                 (Cancel)
               </button>
+            </div>
+          )}
+
+          {/* Global progress indicator for image generation and applying phases */}
+          {(creationProgress.phase === 'images' || creationProgress.phase === 'applying') && (
+            <div className="flex items-center gap-2 text-xs py-2 px-3 bg-muted/50 rounded-lg border border-border">
+              {creationProgress.phase === 'images' ? (
+                <ImageIcon className="w-4 h-4 text-emerald-400 animate-pulse" />
+              ) : (
+                <Wand2 className="w-4 h-4 text-fuchsia-400 animate-pulse" />
+              )}
+              <span className="text-muted-foreground">
+                {creationProgress.message}
+                {creationProgress.currentElement && (
+                  <span className="ml-1 text-muted-foreground/70">{creationProgress.currentElement}</span>
+                )}
+              </span>
             </div>
           )}
         </div>

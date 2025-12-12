@@ -211,24 +211,31 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {
+  console.log('[deleteProject] Starting deletion:', projectId);
+
   // Delete from Supabase (archive)
-  const { error } = await supabase
+  const { error, data } = await supabase
     .from('gfx_projects')
-    .update({ archived: true })
-    .eq('id', projectId);
+    .update({ archived: true, updated_at: new Date().toISOString() })
+    .eq('id', projectId)
+    .select();
 
   if (error) {
-    console.error('Error deleting project from Supabase:', error);
+    console.error('[deleteProject] Error deleting project from Supabase:', error);
+    return false;
   }
+
+  console.log('[deleteProject] ✅ Project archived in database:', data);
 
   // Also delete from localStorage if it exists
   try {
     localStorage.removeItem(`nova-project-${projectId}`);
+    console.log('[deleteProject] ✅ Removed from localStorage');
   } catch (err) {
-    console.error('Error deleting project from localStorage:', err);
+    console.error('[deleteProject] Error deleting project from localStorage:', err);
   }
 
-  return !error;
+  return true;
 }
 
 export async function duplicateProject(projectId: string): Promise<Project | null> {
@@ -574,15 +581,20 @@ export async function updateTemplate(templateId: string, updates: Partial<Templa
 }
 
 export async function deleteTemplate(templateId: string): Promise<boolean> {
-  const { error } = await supabase
+  console.log('[deleteTemplate service] Starting deletion:', templateId);
+
+  const { error, data } = await supabase
     .from('gfx_templates')
-    .update({ archived: true })
-    .eq('id', templateId);
+    .update({ archived: true, updated_at: new Date().toISOString() })
+    .eq('id', templateId)
+    .select();
 
   if (error) {
-    console.error('Error deleting template:', error);
+    console.error('[deleteTemplate service] Error deleting template:', error);
     return false;
   }
+
+  console.log('[deleteTemplate service] ✅ Template archived:', data);
   return true;
 }
 

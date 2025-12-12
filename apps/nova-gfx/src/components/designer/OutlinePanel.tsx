@@ -641,6 +641,19 @@ function LayersTree() {
     }
   }, [confirm, deleteLayer]);
 
+  // Handle deleting a template with confirmation
+  const handleDeleteTemplate = useCallback(async (templateId: string, templateName: string) => {
+    const confirmed = await confirm({
+      title: 'Delete Template',
+      description: `Are you sure you want to delete "${templateName}"? This will also delete all elements in the template. This action cannot be undone.`,
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (confirmed) {
+      deleteTemplate(templateId);
+    }
+  }, [confirm, deleteTemplate]);
+
   const sortedLayers = [...layers].sort((a, b) => b.z_index - a.z_index);
 
   // Find template ID of selected element(s) for highlighting
@@ -953,7 +966,7 @@ function LayersTree() {
                       onPlayIn={() => playIn(template.id, layer.id)}
                       onPlayOut={() => playOut(layer.id)}
                       onDuplicate={() => duplicateTemplate(template.id)}
-                      onDelete={() => deleteTemplate(template.id)}
+                      onDelete={() => handleDeleteTemplate(template.id, template.name)}
                       onToggleVisibility={() => toggleTemplateVisibility(template.id)}
                       onToggleLock={() => toggleTemplateLock(template.id)}
                     />

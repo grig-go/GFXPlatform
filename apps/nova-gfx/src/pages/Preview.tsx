@@ -1640,6 +1640,7 @@ function PreviewElement({
             config={element.content}
             className="w-full h-full"
             isPlaying={isPlaying}
+            style={element.styles as React.CSSProperties}
           />
         );
 

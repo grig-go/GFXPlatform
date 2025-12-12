@@ -6,30 +6,88 @@ import {
 } from './ai-prompts';
 import { resolveLogoPlaceholders } from './ai-prompts/tools/sports-logos';
 import { resolvePexelsPlaceholders } from './ai-prompts/tools/pexels-images';
+import { resolveGeneratePlaceholders, hasGeneratePlaceholders, getFallbackPlaceholderUrl, extractGeneratePlaceholders } from './ai-prompts/tools/ai-image-generator';
+import { useAuthStore } from '@/stores/authStore';
+
+/**
+ * Callback for image generation progress updates
+ */
+export type ImageProgressCallback = (message: string, current: number, total: number) => void;
 
 /**
  * Resolve all image placeholders in AI response text
- * Handles: {{LOGO:LEAGUE:TEAM}}, {{PEXELS:query}}
+ * Handles: {{LOGO:LEAGUE:TEAM}}, {{PEXELS:query}}, {{GENERATE:query}}
+ *
+ * GENERATE placeholders are async because they may need to generate images via AI
+ * and upload them to Supabase storage.
  */
-function resolveImagePlaceholders(text: string): string {
+async function resolveImagePlaceholders(
+  text: string,
+  onProgress?: ImageProgressCallback
+): Promise<string> {
+  // First resolve synchronous placeholders
   let resolved = resolveLogoPlaceholders(text);
   resolved = resolvePexelsPlaceholders(resolved);
+
+  // Then resolve AI-generated images (async)
+  const hasGenerate = hasGeneratePlaceholders(resolved);
+  if (hasGenerate) {
+    console.log('🖼️ Found GENERATE placeholders in text');
+    const authState = useAuthStore.getState();
+    const organizationId = authState.user?.organizationId;
+    const userId = authState.user?.id;
+    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8) });
+
+    if (organizationId && userId) {
+      console.log('🖼️ Resolving GENERATE placeholders...');
+
+      // Extract placeholders to get count and show progress
+      const placeholders = extractGeneratePlaceholders(resolved);
+      const total = placeholders.length;
+
+      if (onProgress && total > 0) {
+        // Report initial progress
+        onProgress('Generating AI images...', 0, total);
+      }
+
+      // Resolve each placeholder individually to report progress
+      for (let i = 0; i < placeholders.length; i++) {
+        const placeholder = placeholders[i];
+        const placeholderStr = `{{GENERATE:${placeholder}}}`;
+
+        // Report progress for this image
+        if (onProgress) {
+          const shortName = placeholder.length > 30 ? placeholder.substring(0, 30) + '...' : placeholder;
+          onProgress(`Generating: ${shortName}`, i + 1, total);
+        }
+
+        // Resolve just this one placeholder
+        const singleResolved = await resolveGeneratePlaceholders(placeholderStr, organizationId, userId);
+        resolved = resolved.replace(placeholderStr, singleResolved);
+      }
+    } else {
+      console.warn('⚠️ Cannot generate images: no organization or user ID available');
+      // Replace GENERATE placeholders with fallback
+      const fallbackUrl = getFallbackPlaceholderUrl();
+      resolved = resolved.replace(/\{\{GENERATE:[^}]+\}\}/g, fallbackUrl);
+    }
+  }
+
   return resolved;
 }
 
 // AI Providers
 export type AIProvider = 'gemini' | 'claude';
 
-// Available AI models with provider info
+// Available AI models for chat/text generation
 export const AI_MODELS = {
-  // Gemini 3.0 Models (Latest - Preview, requires special access)
+  // Gemini 3.0 Models (Latest)
   'gemini-3.0-pro': {
     id: 'gemini-3.0-pro',
     name: 'Gemini 3.0 Pro',
-    description: 'Most intelligent model (Coming Soon)',
+    description: 'Most intelligent Gemini model, advanced reasoning',
     provider: 'gemini' as AIProvider,
     apiModel: 'gemini-3-pro-preview',
-    disabled: true,
   },
   // Gemini 2.5 Models
   'gemini-2.5-pro': {
@@ -52,21 +110,6 @@ export const AI_MODELS = {
     description: 'Cost-optimized, ultra-fast for simple tasks',
     provider: 'gemini' as AIProvider,
     apiModel: 'gemini-2.5-flash-lite',
-  },
-  // Gemini 2.0 Models
-  'gemini-2.0-flash': {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
-    description: 'Fast and reliable, great for most tasks',
-    provider: 'gemini' as AIProvider,
-    apiModel: 'gemini-2.0-flash',
-  },
-  'gemini-2.0-flash-lite': {
-    id: 'gemini-2.0-flash-lite',
-    name: 'Gemini 2.0 Flash Lite',
-    description: 'Lightweight and fast for simple tasks',
-    provider: 'gemini' as AIProvider,
-    apiModel: 'gemini-2.0-flash-lite',
   },
   // Claude Models
   'sonnet-fast': {
@@ -94,8 +137,83 @@ export const AI_MODELS = {
 
 export type AIModelId = keyof typeof AI_MODELS;
 
-// Default model is Gemini 2.0 Flash (fast and capable)
-export const DEFAULT_AI_MODEL: AIModelId = 'gemini-2.0-flash';
+// Default model is Gemini 2.5 Flash (fast and capable)
+export const DEFAULT_AI_MODEL: AIModelId = 'gemini-2.5-flash';
+
+// ============================================================================
+// IMAGE GENERATION MODELS
+// Uses same Gemini API key for all models
+// ============================================================================
+export const AI_IMAGE_MODELS = {
+  // Gemini native image generation (uses generateContent endpoint)
+  'gemini-3.0-pro-image': {
+    id: 'gemini-3.0-pro-image',
+    name: 'Gemini 3.0 Pro',
+    description: 'Latest Gemini model with highest quality image generation',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'gemini-3.0-pro-preview-image-generation',
+    apiEndpoint: 'generateContent' as const,
+  },
+  'gemini-2.5-flash-image': {
+    id: 'gemini-2.5-flash-image',
+    name: 'Gemini 2.5 Flash Image',
+    description: 'Fast image generation with text capabilities',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'gemini-2.5-flash-preview-04-17',
+    apiEndpoint: 'generateContent' as const,
+  },
+  // Imagen models (uses generateImages endpoint via Gemini API)
+  'imagen-4-ultra': {
+    id: 'imagen-4-ultra',
+    name: 'Imagen 4 Ultra',
+    description: 'Highest quality, photorealistic images',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'imagen-4.0-ultra-generate-001',
+    apiEndpoint: 'generateImages' as const,
+  },
+  'imagen-4': {
+    id: 'imagen-4',
+    name: 'Imagen 4',
+    description: 'High quality images, balanced speed',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'imagen-4.0-generate-001',
+    apiEndpoint: 'generateImages' as const,
+  },
+  'imagen-4-fast': {
+    id: 'imagen-4-fast',
+    name: 'Imagen 4 Fast',
+    description: 'Fastest generation, good quality',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'imagen-4.0-fast-generate-001',
+    apiEndpoint: 'generateImages' as const,
+  },
+  'imagen-3': {
+    id: 'imagen-3',
+    name: 'Imagen 3',
+    description: 'Reliable image generation ($0.03/image)',
+    provider: 'gemini' as AIProvider,
+    apiModel: 'imagen-3.0-generate-002',
+    apiEndpoint: 'generateImages' as const,
+  },
+} as const;
+
+export type AIImageModelId = keyof typeof AI_IMAGE_MODELS;
+
+// Default image model
+export const DEFAULT_AI_IMAGE_MODEL: AIImageModelId = 'gemini-2.5-flash-image';
+
+// Get/set image model preference from localStorage
+export function getAIImageModel(): AIImageModelId {
+  const stored = localStorage.getItem('nova-ai-image-model');
+  if (stored && stored in AI_IMAGE_MODELS) {
+    return stored as AIImageModelId;
+  }
+  return DEFAULT_AI_IMAGE_MODEL;
+}
+
+export function setAIImageModel(modelId: AIImageModelId): void {
+  localStorage.setItem('nova-ai-image-model', modelId);
+}
 
 // Get/set model preference from localStorage
 export function getAIModel(): AIModelId {
@@ -1496,8 +1614,8 @@ export async function sendChatMessage(
 
         if (error) throw error;
 
-        // Resolve image placeholders in the response (logos, Pexels images)
-        const responseText = resolveImagePlaceholders(data.message || '');
+        // Resolve image placeholders in the response (logos, Pexels images, AI-generated)
+        const responseText = await resolveImagePlaceholders(data.message || '');
         const changes = parseChangesFromResponse(responseText);
 
         return {
@@ -1534,9 +1652,9 @@ export async function sendChatMessage(
     response = await sendClaudeMessage(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, images, signal);
   }
 
-  // Resolve any image placeholders in the response (logos, Pexels images)
+  // Resolve any image placeholders in the response (logos, Pexels images, AI-generated)
   if (response.message) {
-    response.message = resolveImagePlaceholders(response.message);
+    response.message = await resolveImagePlaceholders(response.message);
   }
 
   return response;
@@ -1678,8 +1796,8 @@ async function sendGeminiMessage(
 
     const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    // Resolve image placeholders before parsing changes
-    const responseText = resolveImagePlaceholders(rawText);
+    // Resolve image placeholders before parsing changes (includes AI-generated images)
+    const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
     return {
@@ -1815,8 +1933,8 @@ async function sendClaudeMessage(
     const data = await response.json();
     const textContent = data.content?.find((c: any) => c.type === 'text');
     const rawText = textContent?.text || '';
-    // Resolve image placeholders before parsing changes
-    const responseText = resolveImagePlaceholders(rawText);
+    // Resolve image placeholders before parsing changes (includes AI-generated images)
+    const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
     return {
@@ -3336,7 +3454,8 @@ export async function sendChatMessageStreaming(
   onChunk: StreamCallback,
   modelId?: AIModelId,
   images?: ImageAttachment[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onImageProgress?: ImageProgressCallback
 ): Promise<AIResponse> {
   // Get the user's latest message to detect intent
   const lastUserMessage = messages[messages.length - 1]?.content || '';
@@ -3357,9 +3476,15 @@ export async function sendChatMessageStreaming(
     response = await sendClaudeMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
   }
 
-  // Resolve any image placeholders in the response (logos, Pexels images)
+  // Resolve any image placeholders in the response (logos, Pexels images, AI-generated)
+  // This is done here so the progress callback can be passed through
   if (response.message) {
-    response.message = resolveImagePlaceholders(response.message);
+    response.message = await resolveImagePlaceholders(response.message, onImageProgress);
+    // Re-parse changes after image placeholders are resolved
+    const resolvedChanges = parseChangesFromResponse(response.message);
+    if (resolvedChanges) {
+      response.changes = resolvedChanges;
+    }
   }
 
   return response;
@@ -3481,11 +3606,10 @@ async function sendGeminiMessageStreaming(
       }
     }
 
-    // Resolve image placeholders before parsing changes
-    const resolvedText = resolveImagePlaceholders(fullText);
-    const changes = parseChangesFromResponse(resolvedText);
+    // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
+    const changes = parseChangesFromResponse(fullText);
     return {
-      message: resolvedText,
+      message: fullText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
@@ -3612,11 +3736,10 @@ async function sendClaudeMessageStreaming(
       }
     }
 
-    // Resolve image placeholders before parsing changes
-    const resolvedText = resolveImagePlaceholders(fullText);
-    const changes = parseChangesFromResponse(resolvedText);
+    // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
+    const changes = parseChangesFromResponse(fullText);
     return {
-      message: resolvedText,
+      message: fullText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {

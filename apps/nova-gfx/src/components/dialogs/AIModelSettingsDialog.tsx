@@ -11,7 +11,18 @@ import {
   Label,
   cn,
 } from '@emergent-platform/ui';
-import { AI_MODELS, getAIModel, setAIModel, type AIModelId, DEFAULT_AI_MODEL } from '@/lib/ai';
+import {
+  AI_MODELS,
+  AI_IMAGE_MODELS,
+  getAIModel,
+  setAIModel,
+  getAIImageModel,
+  setAIImageModel,
+  type AIModelId,
+  type AIImageModelId,
+  DEFAULT_AI_MODEL,
+  DEFAULT_AI_IMAGE_MODEL,
+} from '@/lib/ai';
 import {
   Sparkles,
   Check,
@@ -21,6 +32,7 @@ import {
   ExternalLink,
   AlertCircle,
   Key,
+  Image,
 } from 'lucide-react';
 
 interface AIModelSettingsDialogProps {
@@ -31,6 +43,7 @@ interface AIModelSettingsDialogProps {
 export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDialogProps) {
   // Local state
   const [aiModel, setAiModel] = useState<AIModelId>(getAIModel());
+  const [aiImageModel, setAiImageModel] = useState<AIImageModelId>(getAIImageModel());
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [claudeApiKey, setClaudeApiKey] = useState('');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -42,6 +55,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
   useEffect(() => {
     if (open) {
       setAiModel(getAIModel());
+      setAiImageModel(getAIImageModel());
       // Load API keys from localStorage (user preferences)
       setGeminiApiKey(localStorage.getItem('nova-gemini-api-key') || '');
       setClaudeApiKey(localStorage.getItem('nova-claude-api-key') || '');
@@ -52,16 +66,18 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
   // Track changes
   useEffect(() => {
     const originalModel = getAIModel();
+    const originalImageModel = getAIImageModel();
     const originalGeminiKey = localStorage.getItem('nova-gemini-api-key') || '';
     const originalClaudeKey = localStorage.getItem('nova-claude-api-key') || '';
-    
+
     const changed =
       aiModel !== originalModel ||
+      aiImageModel !== originalImageModel ||
       geminiApiKey !== originalGeminiKey ||
       claudeApiKey !== originalClaudeKey;
-    
+
     setHasChanges(changed);
-  }, [aiModel, geminiApiKey, claudeApiKey]);
+  }, [aiModel, aiImageModel, geminiApiKey, claudeApiKey]);
 
   // Check if API keys are configured (from env or user input)
   const hasGeminiKey = Boolean(import.meta.env.VITE_GEMINI_API_KEY || geminiApiKey);
@@ -74,22 +90,23 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      // Save AI model preference
+      // Save AI model preferences
       setAIModel(aiModel);
-      
+      setAIImageModel(aiImageModel);
+
       // Save API keys to localStorage (these override env variables)
       if (geminiApiKey) {
         localStorage.setItem('nova-gemini-api-key', geminiApiKey);
       } else {
         localStorage.removeItem('nova-gemini-api-key');
       }
-      
+
       if (claudeApiKey) {
         localStorage.setItem('nova-claude-api-key', claudeApiKey);
       } else {
         localStorage.removeItem('nova-claude-api-key');
       }
-      
+
       setHasChanges(false);
       onOpenChange(false);
     } catch (error) {
@@ -97,11 +114,12 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
     } finally {
       setIsSaving(false);
     }
-  }, [aiModel, geminiApiKey, claudeApiKey, onOpenChange]);
+  }, [aiModel, aiImageModel, geminiApiKey, claudeApiKey, onOpenChange]);
 
   // Reset to defaults
   const resetToDefaults = useCallback(() => {
     setAiModel(DEFAULT_AI_MODEL);
+    setAiImageModel(DEFAULT_AI_IMAGE_MODEL);
     setGeminiApiKey('');
     setClaudeApiKey('');
   }, []);
@@ -163,6 +181,11 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                                 Coming Soon
                               </span>
                             )}
+                            {id === 'gemini-3.0-pro' && (
+                              <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                                Latest
+                              </span>
+                            )}
                             {id === 'gemini-2.5-pro' && (
                               <span className="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
                                 Most Capable
@@ -171,11 +194,6 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                             {id === 'gemini-2.5-flash' && (
                               <span className="text-xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded">
                                 Recommended
-                              </span>
-                            )}
-                            {id === 'gemini-2.0-flash' && (
-                              <span className="text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
-                                Default
                               </span>
                             )}
                           </div>
@@ -241,6 +259,135 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                       </div>
                       {aiModel === id && (
                         <Check className="w-4 h-4 text-violet-500" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+            </div>
+          </div>
+
+          {/* Image Generation Models */}
+          <div className="space-y-3 pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <Image className="w-4 h-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Image Generation Model</Label>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Select the model for AI image generation. All models use the same Gemini API key.
+            </p>
+
+            {/* Gemini Native Image Generation */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-medium text-emerald-400 uppercase tracking-wide flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Gemini Image Generation
+                {!hasGeminiKey && (
+                  <span className="text-amber-400 text-[10px] flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    No API key
+                  </span>
+                )}
+              </div>
+              {Object.entries(AI_IMAGE_MODELS)
+                .filter(([, m]) => m.apiEndpoint === 'generateContent')
+                .map(([id, model]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={!hasGeminiKey}
+                    className={cn(
+                      'w-full p-3 rounded-lg border text-left transition-colors',
+                      aiImageModel === id
+                        ? 'border-emerald-500 bg-emerald-500/10'
+                        : 'border-border hover:border-emerald-500/50 hover:bg-muted/50',
+                      !hasGeminiKey && 'opacity-50 cursor-not-allowed'
+                    )}
+                    onClick={() => setAiImageModel(id as AIImageModelId)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium flex items-center gap-2">
+                          {model.name}
+                          {id === 'gemini-3.0-pro-image' && (
+                            <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                              Latest
+                            </span>
+                          )}
+                          {id === 'gemini-2.5-flash-image' && (
+                            <span className="text-xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded">
+                              Recommended
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {model.description}
+                        </p>
+                      </div>
+                      {aiImageModel === id && (
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+            </div>
+
+            {/* Google Imagen Models */}
+            <div className="space-y-1.5 mt-4">
+              <div className="text-xs font-medium text-orange-400 uppercase tracking-wide flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                Google Imagen
+                {!hasGeminiKey && (
+                  <span className="text-amber-400 text-[10px] flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    No API key
+                  </span>
+                )}
+                <span className="text-orange-300 text-[10px]">
+                  Requires billing enabled
+                </span>
+              </div>
+              {Object.entries(AI_IMAGE_MODELS)
+                .filter(([, m]) => m.apiEndpoint === 'generateImages')
+                .map(([id, model]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={!hasGeminiKey}
+                    className={cn(
+                      'w-full p-3 rounded-lg border text-left transition-colors',
+                      aiImageModel === id
+                        ? 'border-orange-500 bg-orange-500/10'
+                        : 'border-border hover:border-orange-500/50 hover:bg-muted/50',
+                      !hasGeminiKey && 'opacity-50 cursor-not-allowed'
+                    )}
+                    onClick={() => setAiImageModel(id as AIImageModelId)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium flex items-center gap-2">
+                          {model.name}
+                          {id === 'imagen-4-ultra' && (
+                            <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                              Highest Quality
+                            </span>
+                          )}
+                          {id === 'imagen-4' && (
+                            <span className="text-xs bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                              Balanced
+                            </span>
+                          )}
+                          {id === 'imagen-4-fast' && (
+                            <span className="text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
+                              Fastest
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {model.description}
+                        </p>
+                      </div>
+                      {aiImageModel === id && (
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
                       )}
                     </div>
                   </button>

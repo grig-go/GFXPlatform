@@ -39,7 +39,7 @@ export function LoginPage() {
 
           {/* Nova GFX with Icon */}
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-[12px] bg-gradient-to-br from-violet-500 to-fuchsia-400 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 flex items-center justify-center shadow-sm">
               <span className="text-white text-lg font-bold">N</span>
             </div>
             <span className="text-2xl font-medium">Nova GFX</span>
