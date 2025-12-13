@@ -1,0 +1,42 @@
+/* React Flow dark mode customization */
+
+/* Edge colors for dark mode */
+.dark .react-flow__edge-path {
+  stroke: rgb(71 85 105 / 0.5);
+}
+
+.dark .react-flow__edge.animated path {
+  stroke: rgb(59 130 246 / 0.6);
+}
+
+.dark .react-flow__edge.selected .react-flow__edge-path {
+  stroke: rgb(96 165 250);
+}
+
+/* Connection line color for dark mode */
+.dark .react-flow__connectionline {
+  stroke: rgb(148 163 184);
+}
+
+/* Controls styling for dark mode */
+.dark .react-flow__controls-button {
+  background: rgb(30 41 59);
+  border-color: rgb(51 65 85);
+  color: rgb(203 213 225);
+}
+
+.dark .react-flow__controls-button:hover {
+  background: rgb(51 65 85);
+}
+
+/* Panel styling for dark mode */
+.dark .react-flow__panel {
+  color: rgb(203 213 225);
+}
+
+/* Attribution (if shown) */
+.dark .react-flow__attribution {
+  background: rgb(30 41 59);
+  border-color: rgb(51 65 85);
+  color: rgb(148 163 184);
+}
