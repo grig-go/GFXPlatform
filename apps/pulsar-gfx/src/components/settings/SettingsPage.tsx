@@ -4,6 +4,7 @@ import {
   User,
   Building2,
   Shield,
+  Ticket,
   ArrowLeft,
 } from 'lucide-react';
 import {
@@ -17,8 +18,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { ProfileSettings } from './ProfileSettings';
 import { OrganizationSettings } from './OrganizationSettings';
 import { AdminPanel } from './AdminPanel';
+import { SupportTicketsPanel } from './SupportTicketsPanel';
 
-type SettingsTab = 'profile' | 'organization' | 'admin';
+type SettingsTab = 'profile' | 'organization' | 'admin' | 'tickets';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -27,6 +29,7 @@ export function SettingsPage() {
 
   // Determine initial tab from URL
   const getInitialTab = (): SettingsTab => {
+    if (location.pathname.includes('/tickets')) return 'tickets';
     if (location.pathname.includes('/admin')) return 'admin';
     if (location.pathname.includes('/organization')) return 'organization';
     return 'profile';
@@ -78,6 +81,12 @@ export function SettingsPage() {
                 Admin
               </TabsTrigger>
             )}
+            {user?.isEmergentUser && (
+              <TabsTrigger value="tickets" className="gap-2">
+                <Ticket className="w-4 h-4" />
+                Tickets
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="profile">
@@ -91,6 +100,12 @@ export function SettingsPage() {
           {user?.isEmergentUser && (
             <TabsContent value="admin">
               <AdminPanel />
+            </TabsContent>
+          )}
+
+          {user?.isEmergentUser && (
+            <TabsContent value="tickets">
+              <SupportTicketsPanel />
             </TabsContent>
           )}
         </Tabs>

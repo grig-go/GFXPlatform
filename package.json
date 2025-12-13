@@ -9,6 +9,8 @@
     "dev:pulsar": "turbo dev --filter=pulsar-gfx --filter=docs",
     "dev:player": "turbo dev --filter=nova-player",
     "dev:nexus": "turbo dev --filter=nexus",
+    "dev:pulsar-vs": "turbo dev --filter=pulsar-vs",
+    "dev:pulsar-hub": "turbo dev --filter=pulsar-hub",
     "dev:docs": "turbo dev --filter=docs",
     "build": "turbo build",
     "build:nova": "turbo build --filter=nova-gfx",

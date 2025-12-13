@@ -18,6 +18,7 @@ import { useDesignerStore } from '@/stores/designerStore';
 import { useAIPreferenceStore } from '@/stores/aiPreferenceStore';
 import { PublishModal } from '@/components/dialogs/PublishModal';
 import { ChannelsModal } from '@/components/dialogs/ChannelsModal';
+import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
 import { UserMenu } from '@/components/auth';
 
 interface TopBarProps {
@@ -41,6 +42,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
   const [copiedPublish, setCopiedPublish] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showChannelsModal, setShowChannelsModal] = useState(false);
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
 
   // Sync showPublishModal with external prop
   useEffect(() => {
@@ -259,7 +261,10 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
               <span className="ml-auto text-xs text-muted-foreground">Ctrl+/</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Contact Support</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowSupportDialog(true)}>
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Contact Support
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -366,6 +371,12 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       <ChannelsModal
         open={showChannelsModal}
         onOpenChange={setShowChannelsModal}
+      />
+
+      {/* Support Request Dialog */}
+      <SupportRequestDialog
+        open={showSupportDialog}
+        onOpenChange={setShowSupportDialog}
       />
     </div>
   );

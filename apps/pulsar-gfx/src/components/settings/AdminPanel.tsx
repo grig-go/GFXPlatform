@@ -97,9 +97,16 @@ export function AdminPanel() {
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
+    // Optimistically update the UI immediately
+    setMembers(prev => prev.map(m =>
+      m.id === userId ? { ...m, role: newRole as AppUser['role'] } : m
+    ));
+
     const result = await updateMemberRole(userId, newRole);
-    if (result.success) {
+    if (!result.success) {
+      // Revert on failure
       loadData();
+      setMessage({ type: 'error', text: result.error || 'Failed to update role' });
     }
   };
 
@@ -305,37 +312,31 @@ export function AdminPanel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {member.isEmergentUser ? (
-                    <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">
-                      Admin
-                    </span>
-                  ) : (
-                    <>
-                      <Select
-                        value={member.role}
-                        onValueChange={(value) => handleRoleChange(member.id, value)}
-                      >
-                        <SelectTrigger className="w-[100px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {member.id !== user?.id && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveMember(member.id)}
-                          className="text-destructive hover:text-destructive"
-                          title="Remove member"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </>
+                  <Select
+                    value={member.role}
+                    onValueChange={(value) => handleRoleChange(member.id, value)}
+                    disabled={member.id === user?.id} // Can't change own role
+                  >
+                    <SelectTrigger className="w-[100px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {member.id !== user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveMember(member.id)}
+                      className="text-destructive hover:text-destructive"
+                      title="Remove member"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   )}
                 </div>
               </div>

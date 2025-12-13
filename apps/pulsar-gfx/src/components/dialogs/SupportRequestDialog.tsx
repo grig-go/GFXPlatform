@@ -10,17 +10,12 @@ import {
   Input,
   Label,
   Textarea,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   cn,
 } from '@emergent-platform/ui';
 import { Bug, Lightbulb, HelpCircle, MoreHorizontal, Send, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@emergent-platform/supabase-client';
 import { useAuthStore } from '@/stores/authStore';
-import { useDesignerStore } from '@/stores/designerStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 type TicketType = 'bug' | 'feature' | 'question' | 'other';
 
@@ -59,7 +54,7 @@ export function SupportRequestDialog({
   defaultType = 'bug',
 }: SupportRequestDialogProps) {
   const { user } = useAuthStore();
-  const { project } = useDesignerStore();
+  const { currentProject } = useProjectStore();
 
   const [type, setType] = useState<TicketType>(defaultType);
   const [title, setTitle] = useState('');
@@ -99,7 +94,7 @@ export function SupportRequestDialog({
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         url: window.location.href,
-        app: 'Nova GFX',
+        app: 'Pulsar GFX',
       };
 
       const { data: insertedTicket, error: submitError } = await supabase
@@ -112,8 +107,8 @@ export function SupportRequestDialog({
           user_email: user?.email || 'anonymous',
           user_name: user?.name || null,
           organization_id: user?.organizationId || null,
-          project_id: project?.id || null,
-          project_name: project?.name || null,
+          project_id: currentProject?.id || null,
+          project_name: currentProject?.name || null,
           user_agent: navigator.userAgent,
           browser_info: browserInfo,
         })
@@ -133,8 +128,8 @@ export function SupportRequestDialog({
             ticketDescription: description.trim(),
             userEmail: user?.email || 'anonymous',
             userName: user?.name,
-            projectName: project?.name,
-            app: 'Nova GFX',
+            projectName: currentProject?.name,
+            app: 'Pulsar GFX',
           },
         });
       } catch (emailErr) {
@@ -180,7 +175,7 @@ export function SupportRequestDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-violet-400" />
+            <HelpCircle className="w-5 h-5 text-cyan-400" />
             Contact Support
           </DialogTitle>
           <DialogDescription>
@@ -203,7 +198,7 @@ export function SupportRequestDialog({
                     className={cn(
                       'flex flex-col items-center gap-1 p-3 rounded-lg border transition-all',
                       type === ticketType
-                        ? 'border-violet-500 bg-violet-500/10'
+                        ? 'border-cyan-500 bg-cyan-500/10'
                         : 'border-border hover:border-muted-foreground/50 hover:bg-muted/50'
                     )}
                   >
@@ -260,7 +255,7 @@ export function SupportRequestDialog({
           </div>
 
           {/* Context info (read-only) */}
-          {(user || project) && (
+          {(user || currentProject) && (
             <div className="rounded-lg bg-muted/30 p-3 space-y-1">
               <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-2">
                 Context (automatically included)
@@ -270,9 +265,9 @@ export function SupportRequestDialog({
                   User: {user.email}
                 </p>
               )}
-              {project && (
+              {currentProject && (
                 <p className="text-xs text-muted-foreground">
-                  Project: {project.name}
+                  Project: {currentProject.name}
                 </p>
               )}
             </div>

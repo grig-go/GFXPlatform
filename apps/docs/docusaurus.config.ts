@@ -3,8 +3,8 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'Nova GFX',
-  tagline: 'Professional broadcast graphics made simple',
+  title: 'Emergent Docs',
+  tagline: 'Documentation for Emergent Platform',
   favicon: 'img/favicon.ico',
 
   future: {
@@ -60,10 +60,10 @@ const config: Config = {
       respectPrefersColorScheme: false,
     },
     navbar: {
-      title: 'Nova GFX',
+      title: 'Docs',
       logo: {
-        alt: 'Emergent Nova GFX',
-        src: 'img/navbar-logo.svg',
+        alt: 'Emergent Docs',
+        src: 'img/navbar-logo-docs.svg',
         style: {height: '28px', width: 'auto'},
       },
       items: [

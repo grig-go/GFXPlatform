@@ -38,6 +38,7 @@ import { useUIPreferencesStore } from '@/stores/uiPreferencesStore';
 import { ChannelsModal } from '@/components/dialogs/ChannelsModal';
 import { ProjectsModal } from '@/components/dialogs/ProjectsModal';
 import { PlaylistsModal } from '@/components/dialogs/PlaylistsModal';
+import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
 
 interface HeaderProps {
   onShowKeyboardShortcuts?: () => void;
@@ -66,6 +67,7 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const [showChannelsModal, setShowChannelsModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showPlaylistsModal, setShowPlaylistsModal] = useState(false);
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [hasRestoredProject, setHasRestoredProject] = useState(false);
 
   // Restore last project on initial load
@@ -276,7 +278,10 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
               <ExternalLink className="ml-auto h-3 w-3 text-muted-foreground" />
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Contact Support</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowSupportDialog(true)}>
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Contact Support
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -353,6 +358,9 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
 
       {/* Projects Modal */}
       <ProjectsModal open={showProjectsModal} onOpenChange={setShowProjectsModal} />
+
+      {/* Support Request Dialog */}
+      <SupportRequestDialog open={showSupportDialog} onOpenChange={setShowSupportDialog} />
     </div>
   );
 }
