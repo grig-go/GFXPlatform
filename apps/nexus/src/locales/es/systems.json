@@ -1,0 +1,56 @@
+{
+  "title": "Sistemas",
+  "names": {
+    "lighting": "Iluminación",
+    "ledDisplays": "Pantallas LED",
+    "audio": "Audio",
+    "broadcastControl": "Control de transmisión",
+    "showPlayback": "Reproducción de espectáculos",
+    "graphics": "Gráficos",
+    "signage": "Señalización",
+    "environmental": "Ambiental",
+    "networkSecurity": "Red y seguridad"
+  },
+  "systems": {
+    "lighting": "Iluminación",
+    "audio": "Audio",
+    "ledDisplays": "Pantallas LED",
+    "signage": "Señalización",
+    "showPlayback": "Reproducción de espectáculos",
+    "paging": "Megafonía",
+    "cctv": "CCTV",
+    "queueSensors": "Sensores de cola",
+    "environmental": "Ambiental",
+    "conveyorStatus": "Estado de cintas",
+    "hvac": "HVAC",
+    "digitalMenus": "Menús digitales"
+  },
+  "subtitles": {
+    "lighting": "Control de iluminación de la sede",
+    "ledDisplays": "Pantallas de gran formato",
+    "audio": "Sistema de sonido",
+    "broadcastControl": "Transmisión en vivo",
+    "showPlayback": "Reproducción de medios",
+    "graphics": "Gráficos en tiempo real",
+    "signage": "Señalización digital",
+    "environmental": "HVAC y clima",
+    "networkSecurity": "Infraestructura de TI"
+  },
+  "integrations": {
+    "pixeraDisguise": "Pixera + Disguise",
+    "unreal": "Unreal",
+    "hvacEnergy": "HVAC + Energía"
+  },
+  "status": {
+    "operational": "Operativo",
+    "degraded": "Degradado",
+    "critical": "Crítico",
+    "maintenance": "Mantenimiento"
+  },
+  "metrics": {
+    "uptime": "Tiempo de actividad",
+    "latency": "Latencia",
+    "throughput": "Rendimiento",
+    "errorRate": "Tasa de error"
+  }
+}

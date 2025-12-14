@@ -1,0 +1,57 @@
+{
+  "title": "Registros y alertas",
+  "tabs": {
+    "all": "Todos",
+    "logs": "Registros",
+    "alerts": "Alertas"
+  },
+  "columns": {
+    "timestamp": "Marca de tiempo",
+    "system": "Sistema",
+    "type": "Tipo",
+    "status": "Estado",
+    "message": "Mensaje",
+    "source": "Fuente",
+    "level": "Nivel"
+  },
+  "types": {
+    "error": "Error",
+    "warning": "Advertencia",
+    "insight": "Información",
+    "diagnostic": "Diagnóstico",
+    "info": "Info",
+    "debug": "Depuración"
+  },
+  "statuses": {
+    "active": "Activo",
+    "resolved": "Resuelto",
+    "predictive": "Predictivo",
+    "advisory": "Aviso",
+    "queued": "En cola",
+    "scheduled": "Programado"
+  },
+  "filters": {
+    "allSystems": "Todos los sistemas",
+    "allTypes": "Todos los tipos",
+    "allStatuses": "Todos los estados",
+    "allLevels": "Todos los niveles",
+    "dateRange": "Rango de fechas"
+  },
+  "actions": {
+    "acknowledge": "Reconocer",
+    "resolve": "Resolver",
+    "ignore": "Ignorar",
+    "escalate": "Escalar",
+    "viewDetails": "Ver detalles"
+  },
+  "empty": {
+    "title": "Sin registros",
+    "message": "Ninguna entrada de registro coincide con sus filtros"
+  },
+  "timeline": {
+    "monthly": "Mensual",
+    "weekly": "Semanal",
+    "daily": "Diario",
+    "hourly": "Por hora"
+  }
+}

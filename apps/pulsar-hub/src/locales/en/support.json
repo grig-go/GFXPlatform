@@ -1,0 +1,46 @@
+{
+  "title": "Contact Support",
+  "description": "Report a bug, request a feature, or ask a question. We're here to help!",
+  "ticketTypes": {
+    "bug": "Bug Report",
+    "feature": "Feature Request",
+    "question": "Question",
+    "other": "Other"
+  },
+  "fields": {
+    "type": "Type",
+    "title": "Title",
+    "titleRequired": "Title *",
+    "description": "Description",
+    "descriptionRequired": "Description *"
+  },
+  "placeholders": {
+    "bug": {
+      "title": "Brief description of the issue",
+      "description": "Please describe:\n1. What happened\n2. What you expected\n3. Steps to reproduce"
+    },
+    "feature": {
+      "title": "Feature name or summary",
+      "description": "Please describe:\n1. What feature you'd like\n2. Why it would be useful\n3. Any specific requirements"
+    },
+    "question": {
+      "title": "Your question in brief",
+      "description": "Please provide context and details about your question..."
+    },
+    "other": {
+      "title": "Subject",
+      "description": "Please describe your inquiry..."
+    }
+  },
+  "validation": {
+    "fillRequired": "Please fill in all required fields"
+  },
+  "toast": {
+    "submitFailed": "Failed to submit your request. Please try again."
+  },
+  "success": {
+    "title": "Thank You!",
+    "message": "Your {{type}} has been submitted successfully. We'll review it and get back to you soon."
+  },
+  "charCount": "{{count}}/2000"
+}

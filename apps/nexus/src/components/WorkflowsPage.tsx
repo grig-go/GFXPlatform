@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Plus, Play, Sparkles } from "lucide-react";
 import { WorkflowListPanel } from "./WorkflowListPanel";
@@ -22,6 +23,7 @@ interface WorkflowsPageProps {
 }
 
 export function WorkflowsPage({ onNavigateToMain, onNavigateToZone, onNavigateToDevices, onNavigateToTimeline, onNavigateToLogsAlerts, initialWorkflowId }: WorkflowsPageProps = {}) {
+  const { t } = useTranslation(['workflows']);
   // Manage workflows state
   const [workflows, setWorkflows] = useState<Workflow[]>(sampleWorkflows);
   
@@ -159,16 +161,16 @@ export function WorkflowsPage({ onNavigateToMain, onNavigateToZone, onNavigateTo
           <div className="flex items-center gap-2">
             <Button size="sm" className="gap-2" onClick={() => setShowCreateWorkflowModal(true)}>
               <Plus className="w-4 h-4" />
-              New Workflow
+              {t('page.newWorkflow')}
             </Button>
-            
+
             {selectedWorkflow && (
               <>
                 <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
-                
+
                 <Button variant="outline" size="sm" className="gap-2">
                   <Play className="w-4 h-4" />
-                  Run
+                  {t('actions.run')}
                 </Button>
               </>
             )}
@@ -182,7 +184,7 @@ export function WorkflowsPage({ onNavigateToMain, onNavigateToZone, onNavigateTo
               onClick={() => setShowAIAssist(true)}
             >
               <Sparkles className="w-4 h-4" />
-              AI Assist
+              {t('page.aiAssist')}
             </Button>
           </div>
         </div>

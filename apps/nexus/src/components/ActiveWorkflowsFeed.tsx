@@ -2,7 +2,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Play, Clock } from "lucide-react";
 import { sampleWorkflows } from "../data/sampleWorkflows";
-import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 // Helper function to format runtime
 function formatRuntime(workflow: any): string {
@@ -79,18 +79,20 @@ interface ActiveWorkflowsFeedProps {
 }
 
 export function ActiveWorkflowsFeed({ onNavigateToWorkflows }: ActiveWorkflowsFeedProps) {
+  const { t } = useTranslation('dashboard');
+
   return (
     <div>
-      <h2 className="text-slate-900 dark:text-slate-100 mb-4">Active Workflows</h2>
+      <h2 className="text-slate-900 dark:text-slate-100 mb-4">{t('activeWorkflows.title')}</h2>
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-100 dark:bg-slate-800/50">
               <tr>
-                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">Name</th>
-                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">Linked Systems</th>
-                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">Status</th>
-                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">Runtime</th>
+                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">{t('activeWorkflows.columns.name')}</th>
+                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">{t('activeWorkflows.columns.linkedSystems')}</th>
+                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">{t('activeWorkflows.columns.status')}</th>
+                <th className="text-left text-slate-700 dark:text-slate-300 px-4 py-3">{t('activeWorkflows.columns.runtime')}</th>
               </tr>
             </thead>
             <tbody>

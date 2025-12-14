@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Play } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ActionNodeData {
   title: string;
@@ -9,9 +10,10 @@ interface ActionNodeData {
 }
 
 export const ActionNode = memo(({ data }: NodeProps<ActionNodeData>) => {
+  const { t } = useTranslation(['workflows']);
   const [actionValue, setActionValue] = useState(data.params?.value || data.title);
   const [intensity, setIntensity] = useState(data.params?.intensity || 50);
-  
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 min-w-[240px] max-w-[300px]">
       {/* Input handle */}
@@ -20,13 +22,13 @@ export const ActionNode = memo(({ data }: NodeProps<ActionNodeData>) => {
         position={Position.Top}
         className="w-3 h-3 !bg-green-500 border-2 border-white dark:border-slate-800"
       />
-      
+
       {/* Header */}
       <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
         <Play className="w-4 h-4 text-green-500" />
-        <span className="text-xs text-slate-500 dark:text-slate-400">Action</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t('nodes.action')}</span>
       </div>
-      
+
       {/* Content */}
       <div className="p-4 space-y-3">
         <input
@@ -34,11 +36,11 @@ export const ActionNode = memo(({ data }: NodeProps<ActionNodeData>) => {
           value={actionValue}
           onChange={(e) => setActionValue(e.target.value)}
           className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 dark:text-slate-100"
-          placeholder="Action name..."
+          placeholder={t('nodes.actionPlaceholder')}
         />
-        
+
         <div className="space-y-1">
-          <label className="text-xs text-slate-500 dark:text-slate-400">Intensity</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400">{t('nodes.intensity')}</label>
           <div className="flex items-center gap-3">
             <input
               type="range"

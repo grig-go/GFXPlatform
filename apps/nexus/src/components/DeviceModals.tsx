@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
+import { useTranslation } from 'react-i18next';
 
 interface Device {
   id: string;
@@ -294,6 +295,7 @@ function getMetricColor(value: number, threshold: { warning: number; critical: n
 }
 
 export function DeviceModals({ device, systemName, modalType, onClose }: DeviceModalsProps) {
+  const { t } = useTranslation(['devices', 'common']);
   const [restartConfirm, setRestartConfirm] = useState(false);
 
   if (!device || !modalType) return null;
@@ -310,14 +312,14 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5" />
-              Edit Device Settings
+              {t('devices:modals.edit.title')}
             </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-slate-700 dark:text-slate-300 text-sm">Device Name</label>
+                <label className="text-slate-700 dark:text-slate-300 text-sm">{t('devices:modals.edit.deviceName')}</label>
                 <input
                   type="text"
                   defaultValue={device.name}
@@ -325,7 +327,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
                 />
               </div>
               <div>
-                <label className="text-slate-700 dark:text-slate-300 text-sm">Device Type</label>
+                <label className="text-slate-700 dark:text-slate-300 text-sm">{t('devices:modals.edit.deviceType')}</label>
                 <input
                   type="text"
                   defaultValue={device.type}
@@ -333,7 +335,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
                 />
               </div>
               <div>
-                <label className="text-slate-700 dark:text-slate-300 text-sm">Location</label>
+                <label className="text-slate-700 dark:text-slate-300 text-sm">{t('devices:modals.edit.location')}</label>
                 <input
                   type="text"
                   defaultValue={device.location}
@@ -341,7 +343,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
                 />
               </div>
               <div>
-                <label className="text-slate-700 dark:text-slate-300 text-sm">IP Address</label>
+                <label className="text-slate-700 dark:text-slate-300 text-sm">{t('devices:modals.edit.ipAddress')}</label>
                 <input
                   type="text"
                   defaultValue={health.connectivity.ipAddress}
@@ -352,7 +354,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
 
             {device.specs && (
               <div>
-                <label className="text-slate-700 dark:text-slate-300 text-sm">Specifications</label>
+                <label className="text-slate-700 dark:text-slate-300 text-sm">{t('devices:modals.edit.specifications')}</label>
                 <input
                   type="text"
                   defaultValue={device.specs}
@@ -364,20 +366,20 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
             <div className="flex items-center gap-2 mt-4">
               <input type="checkbox" id="auto-restart" className="rounded" />
               <label htmlFor="auto-restart" className="text-slate-700 dark:text-slate-300 text-sm">
-                Enable auto-restart on failure
+                {t('devices:modals.edit.autoRestart')}
               </label>
             </div>
 
             <div className="flex items-center gap-2">
               <input type="checkbox" id="monitoring" className="rounded" defaultChecked />
               <label htmlFor="monitoring" className="text-slate-700 dark:text-slate-300 text-sm">
-                Enable health monitoring
+                {t('devices:modals.edit.healthMonitoring')}
               </label>
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white">Save Changes</Button>
+              <Button variant="outline" onClick={onClose}>{t('common:buttons.cancel')}</Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">{t('common:buttons.save')}</Button>
             </div>
           </div>
         </DialogContent>
@@ -389,20 +391,20 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RotateCw className="w-5 h-5" />
-              Restart Device
+              {t('devices:modals.restart.title')}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-slate-900 dark:text-slate-100">
-                    Are you sure you want to restart this device?
+                    {t('devices:modals.restart.confirmMessage')}
                   </p>
                   <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-                    This will cause a temporary interruption in service.
+                    {t('devices:modals.restart.warning')}
                   </p>
                 </div>
               </div>
@@ -410,43 +412,43 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
 
             <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Device:</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('devices:modals.restart.device')}:</span>
                 <span className="text-slate-900 dark:text-slate-100">{device.name}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Type:</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('devices:modals.restart.type')}:</span>
                 <span className="text-slate-900 dark:text-slate-100">{device.type}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Current Status:</span>
-                <span className="text-slate-900 dark:text-slate-100 capitalize">{device.status}</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('devices:modals.restart.currentStatus')}:</span>
+                <span className="text-slate-900 dark:text-slate-100 capitalize">{t(`common:status.${device.status}`)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Est. Downtime:</span>
-                <span className="text-slate-900 dark:text-slate-100">~30 seconds</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('devices:modals.restart.estDowntime')}:</span>
+                <span className="text-slate-900 dark:text-slate-100">~30 {t('common:time.seconds')}</span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                id="confirm-restart" 
+              <input
+                type="checkbox"
+                id="confirm-restart"
                 className="rounded"
                 checked={restartConfirm}
                 onChange={(e) => setRestartConfirm(e.target.checked)}
               />
               <label htmlFor="confirm-restart" className="text-slate-700 dark:text-slate-300 text-sm">
-                I understand this will interrupt service
+                {t('devices:modals.restart.confirmCheckbox')}
               </label>
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button 
+              <Button variant="outline" onClick={onClose}>{t('common:buttons.cancel')}</Button>
+              <Button
                 className="bg-yellow-600 hover:bg-yellow-700 text-white"
                 disabled={!restartConfirm}
               >
-                Restart Device
+                {t('devices:modals.restart.restartButton')}
               </Button>
             </div>
           </div>
@@ -459,20 +461,20 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
-              Device Logs - {device.name}
+              {t('devices:modals.logs.title')} - {device.name}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-slate-400" />
                 <span className="text-slate-600 dark:text-slate-400 text-sm">
-                  Last 24 hours
+                  {t('devices:modals.logs.last24Hours')}
                 </span>
               </div>
               <Button variant="outline" size="sm">
-                Export Logs
+                {t('devices:modals.logs.export')}
               </Button>
             </div>
 
@@ -504,7 +506,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button variant="outline" onClick={onClose}>Close</Button>
+              <Button variant="outline" onClick={onClose}>{t('common:buttons.close')}</Button>
             </div>
           </div>
         </DialogContent>
@@ -516,7 +518,7 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Gauge className="w-5 h-5" />
-              System Health - {device.name}
+              {t('devices:modals.health.title')} - {device.name}
             </DialogTitle>
           </DialogHeader>
           
@@ -1079,9 +1081,9 @@ export function DeviceModals({ device, systemName, modalType, onClose }: DeviceM
             )}
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button variant="outline" onClick={onClose}>Close</Button>
+              <Button variant="outline" onClick={onClose}>{t('common:buttons.close')}</Button>
               <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                Export Health Report
+                {t('devices:modals.health.exportReport')}
               </Button>
             </div>
           </div>

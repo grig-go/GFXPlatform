@@ -1,0 +1,29 @@
+{
+  "title": "Configuration du tableau de bord",
+  "description": "Configurez les applications visibles et leur ordre d'affichage. Glissez pour réorganiser.",
+  "stats": {
+    "enabled": "activées",
+    "hidden": "masquées",
+    "total": "total"
+  },
+  "loading": "Chargement de la configuration du tableau de bord...",
+  "status": {
+    "visibleOnHome": "Visible sur l'accueil",
+    "hiddenFromHome": "Masqué de l'accueil"
+  },
+  "buttons": {
+    "resetToDefaults": "Réinitialiser par défaut",
+    "saveConfiguration": "Enregistrer la configuration"
+  },
+  "toast": {
+    "loadFailed": "Échec du chargement de la configuration",
+    "loadFailedDesc": "Utilisation des paramètres par défaut",
+    "savedLocally": "Configuration enregistrée localement !",
+    "savedLocallyDesc": "Enregistrements backend introuvables. Configuration enregistrée dans le navigateur.",
+    "saved": "Configuration du tableau de bord enregistrée !",
+    "savedDesc": "Vos modifications ont été appliquées avec succès.",
+    "backendFailed": "Échec de l'enregistrement sur le backend",
+    "backendFailedDesc": "Configuration enregistrée localement à la place.",
+    "reset": "Configuration réinitialisée par défaut"
+  }
+}

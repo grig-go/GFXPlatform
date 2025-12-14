@@ -1,23 +1,16 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Monitor, Video, Sliders, Zap, LucideIcon } from "lucide-react";
 import { AppCard } from "@/components/AppCard";
 import { useDashboardConfig, DEFAULT_DASHBOARDS, DashboardConfig } from "@/components/DashboardConfigDialog";
 import { cn } from "@/lib/utils";
 
-// App URLs - these could come from env vars or database
+// App URLs from environment variables
 const APP_URLS: Record<string, string> = {
   "pulsar-gfx": import.meta.env.VITE_PULSAR_GFX_URL || "http://localhost:3001",
   "pulsar-vs": import.meta.env.VITE_PULSAR_VS_URL || "http://localhost:3004",
   "pulsar-mcr": import.meta.env.VITE_PULSAR_MCR_URL || "http://localhost:3006",
   "nexus": import.meta.env.VITE_NEXUS_URL || "http://localhost:3002",
-};
-
-// App descriptions
-const APP_DESCRIPTIONS: Record<string, string> = {
-  "pulsar-gfx": "AI-powered graphics content creation system for broadcast and live production.",
-  "pulsar-vs": "AI-powered virtual environment and LED screen content creation and management.",
-  "pulsar-mcr": "Advanced content scheduling, management, and automation for broadcast workflows.",
-  "nexus": "Operations management and venue monitoring dashboard with real-time system status.",
 };
 
 // Icon mapping
@@ -37,6 +30,7 @@ const COLOR_MAP: Record<string, { bgColor: string; iconColor: string }> = {
 };
 
 export function HomePage() {
+  const { t } = useTranslation('home');
   const storedConfig = useDashboardConfig();
   const [dashboards, setDashboards] = useState<DashboardConfig[]>(DEFAULT_DASHBOARDS);
 
@@ -83,6 +77,11 @@ export function HomePage() {
     return "grid-cols-1 md:grid-cols-2 max-w-4xl";
   };
 
+  // Get app description from translations
+  const getAppDescription = (appId: string): string => {
+    return t(`appDescriptions.${appId}`, { defaultValue: '' });
+  };
+
   return (
     <div className="min-h-[calc(100vh-60px)] bg-slate-50 dark:bg-slate-950">
       <div className="max-w-6xl mx-auto px-6 py-12">
@@ -94,10 +93,10 @@ export function HomePage() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
-            Pulsar Hub
+            {t('title')}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
-            AI-powered graphics and production control suite. Launch applications and monitor system status.
+            {t('subtitle')}
           </p>
         </div>
 
@@ -110,7 +109,7 @@ export function HomePage() {
                 key={dashboard.id}
                 id={dashboard.id}
                 label={dashboard.label}
-                description={APP_DESCRIPTIONS[dashboard.id] || ""}
+                description={getAppDescription(dashboard.id)}
                 icon={ICON_MAP[dashboard.id] || Monitor}
                 iconBgColor={colors.bgColor}
                 iconColor={colors.iconColor}
@@ -128,10 +127,10 @@ export function HomePage() {
               <Monitor className="w-8 h-8 text-slate-400" />
             </div>
             <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              No apps visible
+              {t('emptyState.title')}
             </h2>
             <p className="text-slate-500 dark:text-slate-400">
-              Use Tools → Configure Dashboard to enable apps.
+              {t('emptyState.message')}
             </p>
           </div>
         )}
@@ -147,9 +146,9 @@ export function HomePage() {
             rel="noopener noreferrer"
             className="hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
-            Emergent Solutions
+            {t('footer.company')}
           </a>
-          {" "}• Pulsar Suite
+          {" "}• {t('footer.product')}
         </p>
       </div>
     </div>

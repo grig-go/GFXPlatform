@@ -60,7 +60,8 @@ export function Canvas() {
     moveGuide,
     removeGuide,
     clearGuides,
-    addElement,
+    addElement: storeAddElement,
+    selectedElementIds,
     deselectAll,
     saveProject,
     isDirty,
@@ -69,6 +70,27 @@ export function Canvas() {
     history,
     historyIndex,
   } = useDesignerStore();
+
+  // Wrapper for addElement that automatically parents to selected group
+  const addElement = useCallback((type: Parameters<typeof storeAddElement>[0], position: Parameters<typeof storeAddElement>[1]) => {
+    // Check if the currently selected element is a group
+    let parentId: string | undefined;
+    let adjustedPosition = position;
+
+    if (selectedElementIds.length === 1) {
+      const selectedElement = elements.find(el => el.id === selectedElementIds[0]);
+      if (selectedElement?.element_type === 'group') {
+        parentId = selectedElement.id;
+        // Convert canvas position to group-relative position
+        // New element's position should be relative to the group's top-left corner
+        adjustedPosition = {
+          x: position.x - selectedElement.position_x,
+          y: position.y - selectedElement.position_y,
+        };
+      }
+    }
+    return storeAddElement(type, adjustedPosition, parentId);
+  }, [storeAddElement, selectedElementIds, elements]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;

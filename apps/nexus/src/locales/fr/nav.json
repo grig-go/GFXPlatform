@@ -1,0 +1,56 @@
+{
+  "menus": {
+    "venues": "Sites",
+    "apps": "Applications",
+    "tools": "Outils",
+    "settings": "Paramètres",
+    "help": "Aide"
+  },
+  "venuesList": {
+    "terminalA": "Terminal A (EWR)",
+    "terminalB": "Terminal B (EWR)",
+    "terminalC": "Terminal C (EWR)",
+    "parking": "Parking Longue Durée (EWR)"
+  },
+  "tools": {
+    "utilities": "Utilitaires",
+    "logAnalyzer": "Analyseur de logs",
+    "aiAssistant": "Assistant IA",
+    "networkPing": "Ping Réseau"
+  },
+  "settings": {
+    "preferences": "Préférences",
+    "lightMode": "Mode Clair",
+    "darkMode": "Mode Sombre",
+    "language": "Langue",
+    "engineerMode": "Mode Ingénieur",
+    "operatorMode": "Mode Opérateur",
+    "accountSettings": "Paramètres du compte",
+    "usersAndGroups": "Utilisateurs et Groupes",
+    "dashboardPreferences": "Préférences du tableau de bord",
+    "aiConnections": "Connexions IA",
+    "signOut": "Déconnexion"
+  },
+  "help": {
+    "support": "Support",
+    "documentation": "Documentation",
+    "contactSupport": "Contacter le support",
+    "whatsNew": "Nouveautés",
+    "statusPage": "Page de statut"
+  },
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "systemsMap": "Carte des systèmes",
+    "zones": "Zones",
+    "devices": "Appareils",
+    "workflows": "Workflows",
+    "timeline": "Chronologie",
+    "logsAlerts": "Logs & Alertes",
+    "aiInsights": "Analyses IA"
+  },
+  "search": {
+    "placeholder": "Rechercher systèmes, appareils ou workflows...",
+    "noResults": "Aucun résultat"
+  },
+  "noAppsAvailable": "Aucune application disponible"
+}

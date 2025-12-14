@@ -1,0 +1,28 @@
+{
+  "menus": {
+    "apps": "Aplicaciones",
+    "tools": "Herramientas",
+    "settings": "Configuración",
+    "help": "Ayuda"
+  },
+  "tools": {
+    "configureDashboard": "Configurar Panel",
+    "systemLogs": "Registros del Sistema",
+    "aiAssistant": "Asistente IA"
+  },
+  "settings": {
+    "preferences": "Preferencias",
+    "darkMode": "Modo Oscuro",
+    "lightMode": "Modo Claro",
+    "language": "Idioma",
+    "advancedSettings": "Configuración Avanzada",
+    "accountSettings": "Configuración de Cuenta",
+    "signOut": "Cerrar Sesión"
+  },
+  "help": {
+    "documentation": "Documentación",
+    "contactSupport": "Contactar Soporte"
+  },
+  "utilities": "Utilidades",
+  "noAppsAvailable": "No hay aplicaciones disponibles"
+}

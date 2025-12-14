@@ -1,0 +1,139 @@
+{
+  "title": "Appareils",
+  "page": {
+    "title": "Tous les appareils",
+    "deviceCount": "{{filtered}} sur {{total}} appareils",
+    "viewTable": "Tableau",
+    "viewCards": "Cartes",
+    "addDevice": "Ajouter un appareil",
+    "searchPlaceholder": "Rechercher par nom, type, zone, emplacement ou IP...",
+    "clearFilters": "Effacer les filtres",
+    "clearAll": "Tout effacer ({{count}})",
+    "perPage": "par page",
+    "showingRange": "Affichage {{start}}–{{end}} sur {{total}}",
+    "noDevicesFound": "Aucun appareil trouvé correspondant à vos filtres"
+  },
+  "types": {
+    "ledPanel": "Panneau LED",
+    "speaker": "Haut-parleur",
+    "amplifier": "Amplificateur",
+    "camera": "Caméra",
+    "sensor": "Capteur",
+    "controller": "Contrôleur",
+    "display": "Écran",
+    "server": "Serveur",
+    "switch": "Switch",
+    "router": "Routeur"
+  },
+  "status": {
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "warning": "Avertissement",
+    "maintenance": "Maintenance"
+  },
+  "columns": {
+    "name": "Nom",
+    "type": "Type",
+    "zone": "Zone",
+    "system": "Système",
+    "status": "Statut",
+    "lastSeen": "Dernière vue",
+    "ipAddress": "Adresse IP",
+    "firmware": "Firmware",
+    "location": "Emplacement",
+    "uptime": "Temps de fonctionnement",
+    "actions": "Actions"
+  },
+  "filters": {
+    "allTypes": "Tous les types",
+    "allZones": "Toutes les zones",
+    "allSystems": "Tous les systèmes",
+    "allStatuses": "Tous les statuts"
+  },
+  "actions": {
+    "restart": "Redémarrer",
+    "configure": "Configurer",
+    "viewLogs": "Voir les logs",
+    "diagnostics": "Diagnostics",
+    "edit": "Modifier",
+    "logs": "Logs",
+    "health": "Santé du système"
+  },
+  "details": {
+    "title": "Détails de l'appareil",
+    "properties": "Propriétés",
+    "history": "Historique",
+    "configuration": "Configuration"
+  },
+  "stats": {
+    "total": "Total des appareils",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "warnings": "Avertissements"
+  },
+  "addDevice": {
+    "title": "Ajouter un nouvel appareil",
+    "description": "Entrez les détails de l'appareil pour l'ajouter au système",
+    "deviceName": "Nom de l'appareil",
+    "deviceNamePlaceholder": "ex. Panneau LED 1",
+    "deviceType": "Type d'appareil",
+    "selectType": "Sélectionner le type",
+    "selectZone": "Sélectionner la zone",
+    "selectSystem": "Sélectionner le système",
+    "selectStatus": "Sélectionner le statut",
+    "locationPlaceholder": "ex. Porte A10",
+    "ipPlaceholder": "ex. 10.20.1.10",
+    "specs": "Spécifications (Optionnel)",
+    "specsPlaceholder": "ex. 55\" 4K ou 3000-6500K",
+    "initialStatus": "Statut initial"
+  },
+  "card": {
+    "health": "Santé",
+    "performance24h": "Performance 24h",
+    "uptime": "Temps de fonctionnement",
+    "signal": "Signal",
+    "excellent": "Excellent",
+    "good": "Bon",
+    "fair": "Moyen",
+    "poor": "Faible",
+    "system": "Système",
+    "load": "Charge",
+    "location": "Emplacement",
+    "ipAddress": "Adresse IP",
+    "specs": "Spécifications",
+    "restart": "Redémarrer",
+    "viewLogs": "Voir les logs"
+  },
+  "modals": {
+    "edit": {
+      "title": "Modifier les paramètres de l'appareil",
+      "deviceName": "Nom de l'appareil",
+      "deviceType": "Type d'appareil",
+      "location": "Emplacement",
+      "ipAddress": "Adresse IP",
+      "specifications": "Spécifications",
+      "autoRestart": "Activer le redémarrage automatique en cas d'échec",
+      "healthMonitoring": "Activer la surveillance de l'état"
+    },
+    "restart": {
+      "title": "Redémarrer l'appareil",
+      "confirmMessage": "Êtes-vous sûr de vouloir redémarrer cet appareil ?",
+      "warning": "Cela entraînera une interruption temporaire du service.",
+      "device": "Appareil",
+      "type": "Type",
+      "currentStatus": "Statut actuel",
+      "estDowntime": "Temps d'arrêt estimé",
+      "confirmCheckbox": "Je comprends que cela interrompra le service",
+      "restartButton": "Redémarrer l'appareil"
+    },
+    "logs": {
+      "title": "Logs de l'appareil",
+      "last24Hours": "Dernières 24 heures",
+      "export": "Exporter les logs"
+    },
+    "health": {
+      "title": "Santé du système",
+      "exportReport": "Exporter le rapport de santé"
+    }
+  }
+}

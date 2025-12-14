@@ -143,54 +143,33 @@ export const DEFAULT_AI_MODEL: AIModelId = 'gemini-2.5-flash';
 // ============================================================================
 // IMAGE GENERATION MODELS
 // Uses same Gemini API key for all models
+// Reference: https://ai.google.dev/gemini-api/docs/image-generation
 // ============================================================================
 export const AI_IMAGE_MODELS = {
   // Gemini native image generation (uses generateContent endpoint)
-  'gemini-3.0-pro-image': {
-    id: 'gemini-3.0-pro-image',
-    name: 'Gemini 3.0 Pro',
-    description: 'Latest Gemini model with highest quality image generation',
+  // "Nano Banana Pro" - Gemini 3 Pro Image model for professional asset production
+  'gemini-3-pro-image': {
+    id: 'gemini-3-pro-image',
+    name: 'Gemini 3 Pro Image (Nano Banana Pro)',
+    description: 'Professional asset production, up to 4K, advanced reasoning',
     provider: 'gemini' as AIProvider,
-    apiModel: 'gemini-3.0-pro-preview-image-generation',
+    apiModel: 'gemini-3-pro-image-preview',
     apiEndpoint: 'generateContent' as const,
   },
+  // "Nano Banana" - Gemini 2.5 Flash Image model optimized for speed
   'gemini-2.5-flash-image': {
     id: 'gemini-2.5-flash-image',
-    name: 'Gemini 2.5 Flash Image',
-    description: 'Fast image generation with text capabilities',
+    name: 'Gemini 2.5 Flash Image (Nano Banana)',
+    description: 'Fast image generation, 1024px, optimized for speed',
     provider: 'gemini' as AIProvider,
-    apiModel: 'gemini-2.5-flash-preview-04-17',
+    apiModel: 'gemini-2.5-flash-image',
     apiEndpoint: 'generateContent' as const,
   },
-  // Imagen models (uses generateImages endpoint via Gemini API)
-  'imagen-4-ultra': {
-    id: 'imagen-4-ultra',
-    name: 'Imagen 4 Ultra',
-    description: 'Highest quality, photorealistic images',
-    provider: 'gemini' as AIProvider,
-    apiModel: 'imagen-4.0-ultra-generate-001',
-    apiEndpoint: 'generateImages' as const,
-  },
-  'imagen-4': {
-    id: 'imagen-4',
-    name: 'Imagen 4',
-    description: 'High quality images, balanced speed',
-    provider: 'gemini' as AIProvider,
-    apiModel: 'imagen-4.0-generate-001',
-    apiEndpoint: 'generateImages' as const,
-  },
-  'imagen-4-fast': {
-    id: 'imagen-4-fast',
-    name: 'Imagen 4 Fast',
-    description: 'Fastest generation, good quality',
-    provider: 'gemini' as AIProvider,
-    apiModel: 'imagen-4.0-fast-generate-001',
-    apiEndpoint: 'generateImages' as const,
-  },
+  // Imagen 3 model (uses predict endpoint)
   'imagen-3': {
     id: 'imagen-3',
     name: 'Imagen 3',
-    description: 'Reliable image generation ($0.03/image)',
+    description: 'High quality image generation ($0.03/image)',
     provider: 'gemini' as AIProvider,
     apiModel: 'imagen-3.0-generate-002',
     apiEndpoint: 'generateImages' as const,
@@ -3542,6 +3521,7 @@ async function sendGeminiMessageStreaming(
 
   try {
     // Use streamGenerateContent endpoint for streaming
+    console.log('🔄 [Gemini Streaming] Starting stream with model:', modelConfig.apiModel);
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:streamGenerateContent?key=${geminiApiKey}&alt=sse`,
       {
@@ -3599,8 +3579,9 @@ async function sendGeminiMessageStreaming(
               fullText += text;
               onChunk(text, fullText);
             }
-          } catch {
-            // Skip unparseable chunks
+          } catch (parseError) {
+            // Log the problematic data for debugging
+            console.debug('[Gemini Streaming] Skipped chunk:', data.substring(0, 100));
           }
         }
       }
@@ -3616,7 +3597,8 @@ async function sendGeminiMessageStreaming(
     if (fetchError.name === 'AbortError') {
       throw fetchError;
     }
-    console.error('Gemini streaming API call failed:', fetchError);
+    console.error('❌ [Gemini Streaming] API call failed:', fetchError);
+    console.log('⚠️ [Gemini Streaming] Falling back to non-streaming mode');
     // Fall back to non-streaming
     return sendGeminiMessage(messages, context, modelConfig, systemPrompt, contextInfo, images, signal);
   }

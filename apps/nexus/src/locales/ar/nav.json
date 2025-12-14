@@ -1,0 +1,56 @@
+{
+  "menus": {
+    "venues": "المواقع",
+    "apps": "التطبيقات",
+    "tools": "الأدوات",
+    "settings": "الإعدادات",
+    "help": "المساعدة"
+  },
+  "venuesList": {
+    "terminalA": "صالة A (EWR)",
+    "terminalB": "صالة B (EWR)",
+    "terminalC": "صالة C (EWR)",
+    "parking": "موقف طويل المدى (EWR)"
+  },
+  "tools": {
+    "utilities": "الأدوات المساعدة",
+    "logAnalyzer": "محلل السجلات",
+    "aiAssistant": "مساعد الذكاء الاصطناعي",
+    "networkPing": "فحص الشبكة"
+  },
+  "settings": {
+    "preferences": "التفضيلات",
+    "lightMode": "الوضع الفاتح",
+    "darkMode": "الوضع الداكن",
+    "language": "اللغة",
+    "engineerMode": "وضع المهندس",
+    "operatorMode": "وضع المشغل",
+    "accountSettings": "إعدادات الحساب",
+    "usersAndGroups": "المستخدمون والمجموعات",
+    "dashboardPreferences": "تفضيلات لوحة القيادة",
+    "aiConnections": "اتصالات الذكاء الاصطناعي",
+    "signOut": "تسجيل الخروج"
+  },
+  "help": {
+    "support": "الدعم",
+    "documentation": "الوثائق",
+    "contactSupport": "اتصل بالدعم",
+    "whatsNew": "ما الجديد",
+    "statusPage": "صفحة الحالة"
+  },
+  "navigation": {
+    "dashboard": "لوحة القيادة",
+    "systemsMap": "خريطة الأنظمة",
+    "zones": "المناطق",
+    "devices": "الأجهزة",
+    "workflows": "سير العمل",
+    "timeline": "الجدول الزمني",
+    "logsAlerts": "السجلات والتنبيهات",
+    "aiInsights": "تحليلات الذكاء الاصطناعي"
+  },
+  "search": {
+    "placeholder": "البحث في الأنظمة والأجهزة وسير العمل...",
+    "noResults": "لا توجد نتائج"
+  },
+  "noAppsAvailable": "لا توجد تطبيقات متاحة"
+}

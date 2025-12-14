@@ -1,0 +1,87 @@
+{
+  "title": "Flujos de trabajo",
+  "page": {
+    "newWorkflow": "Nuevo flujo",
+    "aiAssist": "Asistente IA"
+  },
+  "tabs": {
+    "allWorkflows": "Todos los flujos",
+    "activeOnly": "Solo activos"
+  },
+  "create": {
+    "title": "Crear nuevo flujo de trabajo",
+    "name": "Nombre del flujo",
+    "namePlaceholder": "Ingrese el nombre del flujo",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Describa qué hace este flujo",
+    "type": "Tipo de flujo",
+    "icon": "Icono",
+    "button": "Crear flujo"
+  },
+  "types": {
+    "scheduled": "Programado",
+    "scheduledDesc": "Ejecutar en horarios específicos",
+    "eventBased": "Basado en eventos",
+    "eventBasedDesc": "Activado por eventos del sistema",
+    "conditional": "Condicional",
+    "conditionalDesc": "Ejecutar cuando se cumplan condiciones",
+    "manual": "Manual",
+    "manualDesc": "Ejecutar manualmente bajo demanda"
+  },
+  "status": {
+    "running": "En ejecución",
+    "scheduled": "Programado",
+    "paused": "Pausado",
+    "completed": "Completado",
+    "failed": "Fallido"
+  },
+  "nodes": {
+    "trigger": "Disparador",
+    "action": "Acción",
+    "condition": "Condición",
+    "addNode": "Agregar nodo",
+    "triggerPlaceholder": "Condición del disparador...",
+    "conditionPlaceholder": "Condición...",
+    "actionPlaceholder": "Nombre de la acción...",
+    "intensity": "Intensidad"
+  },
+  "list": {
+    "searchPlaceholder": "Buscar flujos de trabajo...",
+    "runNow": "Ejecutar ahora",
+    "archive": "Archivar",
+    "noWorkflowsFound": "No se encontraron flujos de trabajo"
+  },
+  "viewer": {
+    "selectWorkflow": "Seleccione un flujo de trabajo para ver su flujo de automatización",
+    "status": {
+      "active": "Activo",
+      "paused": "Pausado",
+      "error": "Error",
+      "draft": "Borrador"
+    }
+  },
+  "inspector": {
+    "title": "Inspector de flujo",
+    "properties": "Propiedades",
+    "triggers": "Disparadores",
+    "actions": "Acciones",
+    "history": "Historial"
+  },
+  "aiAssist": {
+    "title": "Asistente de IA",
+    "placeholder": "Pida ayuda a la IA para su flujo de trabajo...",
+    "suggestions": "Sugerencias"
+  },
+  "actions": {
+    "run": "Ejecutar",
+    "pause": "Pausar",
+    "stop": "Detener",
+    "duplicate": "Duplicar",
+    "delete": "Eliminar",
+    "export": "Exportar"
+  },
+  "empty": {
+    "title": "Sin flujos de trabajo",
+    "message": "Cree su primer flujo de trabajo para automatizar tareas"
+  }
+}

@@ -5,6 +5,14 @@ export type ResizeHandle =
   | 'n' | 's' | 'e' | 'w'
   | 'ne' | 'nw' | 'se' | 'sw';
 
+interface ChildSnapshot {
+  id: string;
+  position_x: number;
+  position_y: number;
+  width: number;
+  height: number;
+}
+
 interface ResizeState {
   isResizing: boolean;
   handle: ResizeHandle;
@@ -16,6 +24,8 @@ interface ResizeState {
   startPosX: number;
   startPosY: number;
   aspectRatio: number | null; // Native aspect ratio if locked
+  isGroup: boolean;
+  childSnapshots: ChildSnapshot[]; // Snapshot of children at resize start
 }
 
 export function useResize() {
@@ -34,8 +44,26 @@ export function useResize() {
       // Check if aspect ratio is locked (for images)
       let aspectRatio: number | null = null;
       if (element.content.type === 'image' && element.content.aspectRatioLocked) {
-        aspectRatio = element.content.nativeAspectRatio || 
+        aspectRatio = element.content.nativeAspectRatio ||
           (element.width && element.height ? element.width / element.height : null);
+      }
+
+      // Check if this is a group and capture children snapshots
+      const isGroup = element.element_type === 'group';
+      const childSnapshots: ChildSnapshot[] = [];
+
+      if (isGroup) {
+        // Get all direct children of this group
+        const children = elements.filter(el => el.parent_element_id === elementId);
+        children.forEach(child => {
+          childSnapshots.push({
+            id: child.id,
+            position_x: child.position_x,
+            position_y: child.position_y,
+            width: child.width ?? 100,
+            height: child.height ?? 100,
+          });
+        });
       }
 
       setResizeState({
@@ -49,6 +77,8 @@ export function useResize() {
         startPosX: element.position_x,
         startPosY: element.position_y,
         aspectRatio,
+        isGroup,
+        childSnapshots,
       });
       hasResizedRef.current = false;
     },
@@ -169,6 +199,21 @@ export function useResize() {
         position_x: newX,
         position_y: newY,
       });
+
+      // If this is a group, scale all children proportionally
+      if (resizeState.isGroup && resizeState.childSnapshots.length > 0) {
+        const scaleX = newWidth / resizeState.startWidth;
+        const scaleY = newHeight / resizeState.startHeight;
+
+        resizeState.childSnapshots.forEach(childSnapshot => {
+          updateElement(childSnapshot.id, {
+            position_x: childSnapshot.position_x * scaleX,
+            position_y: childSnapshot.position_y * scaleY,
+            width: childSnapshot.width * scaleX,
+            height: childSnapshot.height * scaleY,
+          });
+        });
+      }
     },
     [resizeState, zoom, updateElement]
   );

@@ -1,0 +1,91 @@
+{
+  "buttons": {
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "submit": "Soumettre",
+    "reset": "Réinitialiser",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "apply": "Appliquer",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "view": "Voir",
+    "viewDetails": "Voir les détails",
+    "applyOptimization": "Appliquer l'optimisation",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "refresh": "Actualiser",
+    "export": "Exporter",
+    "import": "Importer"
+  },
+  "status": {
+    "loading": "Chargement...",
+    "saving": "Enregistrement...",
+    "submitting": "Envoi...",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "warning": "Avertissement",
+    "error": "Erreur",
+    "success": "Succès",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "running": "En cours",
+    "scheduled": "Planifié",
+    "paused": "En pause",
+    "resolved": "Résolu",
+    "pending": "En attente"
+  },
+  "labels": {
+    "type": "Type",
+    "title": "Titre",
+    "description": "Description",
+    "name": "Nom",
+    "status": "Statut",
+    "date": "Date",
+    "time": "Heure",
+    "system": "Système",
+    "zone": "Zone",
+    "device": "Appareil",
+    "all": "Tout",
+    "none": "Aucun",
+    "unknown": "Inconnu"
+  },
+  "time": {
+    "now": "Maintenant",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "thisWeek": "Cette semaine",
+    "thisMonth": "Ce mois",
+    "startsIn": "Commence dans {{time}}",
+    "ago": "Il y a {{time}}",
+    "minutes": "minutes",
+    "hours": "heures",
+    "days": "jours",
+    "seconds": "secondes"
+  },
+  "pagination": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page",
+    "of": "sur",
+    "showing": "Affichage",
+    "entries": "entrées"
+  },
+  "noData": {
+    "title": "Aucune donnée",
+    "message": "Aucune donnée disponible",
+    "noResults": "Aucun résultat trouvé"
+  },
+  "actions": {
+    "save": "Enregistrer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "create": "Créer",
+    "update": "Mettre à jour",
+    "add": "Ajouter",
+    "remove": "Supprimer"
+  }
+}

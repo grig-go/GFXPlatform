@@ -378,7 +378,11 @@ export type ElementContent =
         scale?: number; // Scale factor (0.1 to 5)
         rotation?: number; // Rotation in degrees
         opacity?: number; // Texture opacity (0-1)
+        blur?: number; // Blur amount in pixels (0-50)
         blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
+        // Video-specific options
+        playbackMode?: 'loop' | 'pingpong' | 'once'; // How video plays (default: loop)
+        playbackSpeed?: number; // Playback speed multiplier (0.25-2, default: 1)
       };
       // Auto-size to fit children (text elements, etc.)
       fitToContent?: boolean;
@@ -907,7 +911,7 @@ export interface DynamicElements {
 }
 
 export interface AIChanges {
-  type: 'create' | 'update' | 'delete' | 'mixed';
+  type: 'create' | 'update' | 'replace' | 'delete' | 'mixed';
   layerType?: LayerType;
   elements?: Partial<Element>[];
   animations?: Partial<Animation>[];

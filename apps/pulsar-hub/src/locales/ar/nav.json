@@ -1,0 +1,28 @@
+{
+  "menus": {
+    "apps": "التطبيقات",
+    "tools": "الأدوات",
+    "settings": "الإعدادات",
+    "help": "المساعدة"
+  },
+  "tools": {
+    "configureDashboard": "تكوين لوحة التحكم",
+    "systemLogs": "سجلات النظام",
+    "aiAssistant": "مساعد الذكاء الاصطناعي"
+  },
+  "settings": {
+    "preferences": "التفضيلات",
+    "darkMode": "الوضع الداكن",
+    "lightMode": "الوضع الفاتح",
+    "language": "اللغة",
+    "advancedSettings": "الإعدادات المتقدمة",
+    "accountSettings": "إعدادات الحساب",
+    "signOut": "تسجيل الخروج"
+  },
+  "help": {
+    "documentation": "التوثيق",
+    "contactSupport": "الاتصال بالدعم"
+  },
+  "utilities": "الأدوات المساعدة",
+  "noAppsAvailable": "لا توجد تطبيقات متاحة"
+}

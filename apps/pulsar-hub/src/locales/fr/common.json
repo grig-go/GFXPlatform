@@ -1,0 +1,25 @@
+{
+  "buttons": {
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "submit": "Soumettre",
+    "reset": "Réinitialiser",
+    "close": "Fermer",
+    "confirm": "Confirmer"
+  },
+  "status": {
+    "loading": "Chargement...",
+    "saving": "Enregistrement...",
+    "submitting": "Envoi en cours...",
+    "enabled": "activé",
+    "disabled": "désactivé",
+    "visible": "Visible",
+    "hidden": "Masqué"
+  },
+  "labels": {
+    "type": "Type",
+    "title": "Titre",
+    "description": "Description",
+    "name": "Nom"
+  }
+}

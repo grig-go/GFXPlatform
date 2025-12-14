@@ -1,0 +1,46 @@
+{
+  "title": "Contacter le support",
+  "description": "Signalez un bug, demandez une fonctionnalité ou posez une question. Nous sommes là pour vous aider !",
+  "ticketTypes": {
+    "bug": "Rapport de bug",
+    "feature": "Demande de fonctionnalité",
+    "question": "Question",
+    "other": "Autre"
+  },
+  "fields": {
+    "type": "Type",
+    "title": "Titre",
+    "titleRequired": "Titre *",
+    "description": "Description",
+    "descriptionRequired": "Description *"
+  },
+  "placeholders": {
+    "bug": {
+      "title": "Brève description du problème",
+      "description": "Veuillez décrire :\n1. Ce qui s'est passé\n2. Ce que vous attendiez\n3. Étapes pour reproduire"
+    },
+    "feature": {
+      "title": "Nom ou résumé de la fonctionnalité",
+      "description": "Veuillez décrire :\n1. Quelle fonctionnalité vous souhaitez\n2. Pourquoi elle serait utile\n3. Exigences spécifiques"
+    },
+    "question": {
+      "title": "Votre question en bref",
+      "description": "Veuillez fournir le contexte et les détails de votre question..."
+    },
+    "other": {
+      "title": "Sujet",
+      "description": "Veuillez décrire votre demande..."
+    }
+  },
+  "validation": {
+    "fillRequired": "Veuillez remplir tous les champs obligatoires"
+  },
+  "toast": {
+    "submitFailed": "Échec de l'envoi de votre demande. Veuillez réessayer."
+  },
+  "success": {
+    "title": "Merci !",
+    "message": "Votre {{type}} a été soumis avec succès. Nous l'examinerons et vous répondrons bientôt."
+  },
+  "charCount": "{{count}}/2000"
+}

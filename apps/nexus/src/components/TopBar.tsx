@@ -1,4 +1,5 @@
-import { Bell, Grid3x3, Wrench, Settings, HelpCircle, Moon, Sun, User, Users, LayoutDashboard, Zap, LogOut, Landmark, FileText, MessageSquare, Sparkles, Activity } from "lucide-react";
+import { Bell, Grid3x3, Wrench, Settings, HelpCircle, Moon, Sun, User, Users, LayoutDashboard, Zap, LogOut, Landmark, FileText, MessageSquare, Sparkles, Activity, Globe, Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -7,29 +8,40 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 import { useTheme } from "./ThemeContext";
 import { useMode } from "./ModeContext";
 import { useState, useEffect } from "react";
 import { supabase } from "../utils/supabase/client";
+import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, type SupportedLanguage } from "../i18n";
 
 interface TopBarProps {
   onNavigateToMain?: () => void;
 }
 
 export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
+  const { t } = useTranslation('nav');
   const { theme, toggleTheme } = useTheme();
   const { mode, toggleMode } = useMode();
+  const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
 
   // State for apps
-  const [apps, setApps] = useState<Array<{ 
-    id: string; 
-    name: string; 
-    app_url: string; 
+  const [apps, setApps] = useState<Array<{
+    id: string;
+    name: string;
+    app_url: string;
     sort_order: number;
     app_key: string;
   }>>([]);
+
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    changeLanguage(lang);
+    setCurrentLang(lang);
+  };
 
   // Fetch apps from backend
   useEffect(() => {
@@ -104,14 +116,14 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Landmark className="w-4 h-4" />
-                Venues
+                {t('menus.venues')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-              <DropdownMenuItem className="text-slate-700 dark:text-slate-100 cursor-pointer">Terminal A (EWR)</DropdownMenuItem>
-              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>Terminal B (EWR)</DropdownMenuItem>
-              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>Terminal C (EWR)</DropdownMenuItem>
-              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>Terminal Long Term Parking (EWR)</DropdownMenuItem>
+              <DropdownMenuItem className="text-slate-700 dark:text-slate-100 cursor-pointer">{t('venuesList.terminalA')}</DropdownMenuItem>
+              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>{t('venuesList.terminalB')}</DropdownMenuItem>
+              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>{t('venuesList.terminalC')}</DropdownMenuItem>
+              <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>{t('venuesList.parking')}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -124,14 +136,14 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Grid3x3 className="w-4 h-4" />
-                Apps
+                {t('menus.apps')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
               {apps.length > 0 ? (
                 apps.map(app => (
-                  <DropdownMenuItem 
-                    key={app.id} 
+                  <DropdownMenuItem
+                    key={app.id}
                     className="text-slate-700 dark:text-slate-100 cursor-pointer"
                     onClick={() => {
                       console.log('App clicked:', app.name, 'navigating to:', app.app_url);
@@ -143,7 +155,7 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 ))
               ) : (
                 <DropdownMenuItem className="text-slate-400 dark:text-slate-500" disabled>
-                  No apps available
+                  {t('noAppsAvailable')}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -158,22 +170,22 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Wrench className="w-4 h-4" />
-                Tools
+                {t('menus.tools')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 w-56">
-              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">Utilities</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">{t('tools.utilities')}</DropdownMenuLabel>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <FileText className="w-4 h-4 mr-2" />
-                Log Analyzer
+                <FileText className="w-4 h-4 me-2" />
+                {t('tools.logAnalyzer')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Sparkles className="w-4 h-4 mr-2" />
-                AI Assistant
+                <Sparkles className="w-4 h-4 me-2" />
+                {t('tools.aiAssistant')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Activity className="w-4 h-4 mr-2" />
-                Network Ping
+                <Activity className="w-4 h-4 me-2" />
+                {t('tools.networkPing')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -187,24 +199,24 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Settings className="w-4 h-4" />
-                Settings
+                {t('menus.settings')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 w-56">
-              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">Preferences</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">{t('settings.preferences')}</DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={toggleTheme}
                 className="text-slate-700 dark:text-slate-100 cursor-pointer"
               >
                 {theme === "dark" ? (
                   <>
-                    <Sun className="w-4 h-4 mr-2" />
-                    Light Mode
+                    <Sun className="w-4 h-4 me-2" />
+                    {t('settings.lightMode')}
                   </>
                 ) : (
                   <>
-                    <Moon className="w-4 h-4 mr-2" />
-                    Dark Mode
+                    <Moon className="w-4 h-4 me-2" />
+                    {t('settings.darkMode')}
                   </>
                 )}
               </DropdownMenuItem>
@@ -214,37 +226,63 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
               >
                 {mode === "operator" ? (
                   <>
-                    <Wrench className="w-4 h-4 mr-2" />
-                    Engineer Mode
+                    <Wrench className="w-4 h-4 me-2" />
+                    {t('settings.engineerMode')}
                   </>
                 ) : (
                   <>
-                    <User className="w-4 h-4 mr-2" />
-                    Operator Mode
+                    <User className="w-4 h-4 me-2" />
+                    {t('settings.operatorMode')}
                   </>
                 )}
               </DropdownMenuItem>
+
+              {/* Language Selector */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="text-slate-700 dark:text-slate-100 cursor-pointer">
+                  <Globe className="w-4 h-4 me-2" />
+                  {t('settings.language')}
+                  <span className="ms-auto me-2 text-xs text-slate-400">
+                    {SUPPORTED_LANGUAGES.find(l => l.code === currentLang)?.nativeName}
+                  </span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => handleLanguageChange(lang.code)}
+                      className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                    >
+                      {currentLang === lang.code && <Check className="w-4 h-4 me-2" />}
+                      <span className={currentLang !== lang.code ? "ms-6" : ""}>
+                        {lang.nativeName}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <User className="w-4 h-4 mr-2" />
-                Account Settings
+                <User className="w-4 h-4 me-2" />
+                {t('settings.accountSettings')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Users className="w-4 h-4 mr-2" />
-                Users and Groups
+                <Users className="w-4 h-4 me-2" />
+                {t('settings.usersAndGroups')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <LayoutDashboard className="w-4 h-4 mr-2" />
-                Dashboard Preferences
+                <LayoutDashboard className="w-4 h-4 me-2" />
+                {t('settings.dashboardPreferences')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Zap className="w-4 h-4 mr-2" />
-                AI Connections
+                <Zap className="w-4 h-4 me-2" />
+                {t('settings.aiConnections')}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
               <DropdownMenuItem className="text-red-600 dark:text-red-400 cursor-pointer">
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
+                <LogOut className="w-4 h-4 me-2" />
+                {t('settings.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -258,26 +296,26 @@ export function TopBar({ onNavigateToMain }: TopBarProps = {}) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <HelpCircle className="w-4 h-4" />
-                Help
+                {t('menus.help')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 w-56">
-              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">Support</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">{t('help.support')}</DropdownMenuLabel>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <FileText className="w-4 h-4 mr-2" />
-                Documentation
+                <FileText className="w-4 h-4 me-2" />
+                {t('help.documentation')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Contact Support
+                <MessageSquare className="w-4 h-4 me-2" />
+                {t('help.contactSupport')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Sparkles className="w-4 h-4 mr-2" />
-                What's New
+                <Sparkles className="w-4 h-4 me-2" />
+                {t('help.whatsNew')}
               </DropdownMenuItem>
               <DropdownMenuItem className="text-slate-400 dark:text-slate-500 cursor-not-allowed" disabled>
-                <Activity className="w-4 h-4 mr-2" />
-                Status Page
+                <Activity className="w-4 h-4 me-2" />
+                {t('help.statusPage')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { ZoomIn, ZoomOut, Maximize2, Info, Plane, Coffee, ShoppingBag, Shield, Users, Package, Map as MapIcon, Satellite, Moon, Sun, Edit3, Save, X } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
 
@@ -205,6 +206,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
   const markerElements = useRef<{ [key: string]: HTMLDivElement }>({});
   const isDragging = useRef<{ [key: string]: boolean }>({});
   const { theme } = useTheme();
+  const { t } = useTranslation('zones');
 
   // Load saved positions from localStorage on mount
   useEffect(() => {
@@ -543,7 +545,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
   const handleSavePositions = () => {
     localStorage.setItem('zone-marker-positions', JSON.stringify(customPositions));
     setIsEditMode(false);
-    alert('Zone positions saved successfully!');
+    alert(t('mapPanel.saveSuccess'));
   };
 
   // Handle cancel edit
@@ -636,27 +638,27 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
       <div className="border-b border-slate-200 dark:border-slate-800 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-slate-900 dark:text-slate-100">Terminal A Interactive Map</h2>
-            <p className="text-slate-600 dark:text-slate-400">Gate Cluster A10-A18 • Live Map View</p>
+            <h2 className="text-slate-900 dark:text-slate-100">{t('mapPanel.title')}</h2>
+            <p className="text-slate-600 dark:text-slate-400">{t('mapPanel.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
             {/* Edit Mode Controls */}
             {isEditMode ? (
               <div className="flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-3 py-1.5">
-                <span className="text-yellow-800 dark:text-yellow-200 text-xs">Edit Mode: Drag markers to reposition</span>
+                <span className="text-yellow-800 dark:text-yellow-200 text-xs">{t('mapPanel.editModeHint')}</span>
                 <button
                   onClick={handleSavePositions}
                   className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition-colors text-xs"
                 >
                   <Save className="w-3 h-3" />
-                  Save
+                  {t('mapPanel.save')}
                 </button>
                 <button
                   onClick={handleCancelEdit}
                   className="flex items-center gap-1 px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors text-xs"
                 >
                   <X className="w-3 h-3" />
-                  Cancel
+                  {t('mapPanel.cancel')}
                 </button>
               </div>
             ) : (
@@ -666,11 +668,11 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
                   className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
                   <Edit3 className="w-4 h-4" />
-                  <span className="text-xs">Edit Positions</span>
+                  <span className="text-xs">{t('mapPanel.editPositions')}</span>
                 </button>
               </>
             )}
-            
+
             {/* Map Style Switcher */}
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
               <button
@@ -680,7 +682,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
-                title="Light Mode"
+                title={t('mapPanel.lightMode')}
               >
                 <Sun className="w-4 h-4" />
               </button>
@@ -691,7 +693,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
-                title="Dark Mode"
+                title={t('mapPanel.darkMode')}
               >
                 <Moon className="w-4 h-4" />
               </button>
@@ -702,7 +704,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
-                title="Satellite View"
+                title={t('mapPanel.satelliteView')}
               >
                 <Satellite className="w-4 h-4" />
               </button>
@@ -716,32 +718,32 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
         <div ref={mapContainer} className="w-full h-full" />
         
         {/* Legend */}
-        <div className="absolute bottom-4 left-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 shadow-lg max-w-xs z-10">
-          <div className="text-slate-900 dark:text-slate-100 mb-2">Legend</div>
+        <div className="absolute bottom-4 start-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 shadow-lg max-w-xs z-10">
+          <div className="text-slate-900 dark:text-slate-100 mb-2">{t('mapPanel.legend')}</div>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#3b82f6" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Gates</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendGates')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#ef4444" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Security</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendSecurity')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#f59e0b" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Food</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendFood')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#06b6d4" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Retail</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendRetail')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#84cc16" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Lounge</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendLounge')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: "#10b981" }}></div>
-              <span className="text-slate-700 dark:text-slate-300 text-xs">Baggage</span>
+              <span className="text-slate-700 dark:text-slate-300 text-xs">{t('mapPanel.legendBaggage')}</span>
             </div>
           </div>
         </div>
@@ -759,7 +761,7 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
         {showDebugInfo && (
           <div className="absolute top-4 right-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg z-10 max-w-md max-h-[calc(100%-2rem)] overflow-auto">
             <div className="sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 flex items-center justify-between">
-              <h3 className="text-slate-900 dark:text-slate-100">Map Configuration</h3>
+              <h3 className="text-slate-900 dark:text-slate-100">{t('mapPanel.configTitle')}</h3>
               <button
                 onClick={() => setShowDebugInfo(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
@@ -842,14 +844,14 @@ export function ZoneMapPanel({ hoveredZone, selectedZone, onZoneClick, onZoneNav
                   };
                   const success = await copyToClipboard(JSON.stringify(config, null, 2));
                   if (success) {
-                    alert('✅ Configuration copied to clipboard!');
+                    alert(t('mapPanel.copySuccess'));
                   } else {
-                    alert('❌ Failed to copy configuration.');
+                    alert(t('mapPanel.copyFailed'));
                   }
                 }}
                 className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs"
               >
-                Copy Full Configuration
+                {t('mapPanel.copyConfig')}
               </button>
             </div>
           </div>

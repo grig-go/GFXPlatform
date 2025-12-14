@@ -1,0 +1,139 @@
+{
+  "title": "Devices",
+  "page": {
+    "title": "All Devices",
+    "deviceCount": "{{filtered}} of {{total}} devices",
+    "viewTable": "Table",
+    "viewCards": "Cards",
+    "addDevice": "Add Device",
+    "searchPlaceholder": "Search devices by name, type, zone, location, or IP...",
+    "clearFilters": "Clear filters",
+    "clearAll": "Clear all ({{count}})",
+    "perPage": "per page",
+    "showingRange": "Showing {{start}}–{{end}} of {{total}}",
+    "noDevicesFound": "No devices found matching your filters"
+  },
+  "types": {
+    "ledPanel": "LED Panel",
+    "speaker": "Speaker",
+    "amplifier": "Amplifier",
+    "camera": "Camera",
+    "sensor": "Sensor",
+    "controller": "Controller",
+    "display": "Display",
+    "server": "Server",
+    "switch": "Switch",
+    "router": "Router"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "warning": "Warning",
+    "maintenance": "Maintenance"
+  },
+  "columns": {
+    "name": "Name",
+    "type": "Type",
+    "zone": "Zone",
+    "system": "System",
+    "status": "Status",
+    "lastSeen": "Last Seen",
+    "ipAddress": "IP Address",
+    "firmware": "Firmware",
+    "location": "Location",
+    "uptime": "Uptime",
+    "actions": "Actions"
+  },
+  "filters": {
+    "allTypes": "All Types",
+    "allZones": "All Zones",
+    "allSystems": "All Systems",
+    "allStatuses": "All Statuses"
+  },
+  "actions": {
+    "restart": "Restart",
+    "configure": "Configure",
+    "viewLogs": "View Logs",
+    "diagnostics": "Diagnostics",
+    "edit": "Edit",
+    "logs": "Logs",
+    "health": "System Health"
+  },
+  "details": {
+    "title": "Device Details",
+    "properties": "Properties",
+    "history": "History",
+    "configuration": "Configuration"
+  },
+  "stats": {
+    "total": "Total Devices",
+    "online": "Online",
+    "offline": "Offline",
+    "warnings": "Warnings"
+  },
+  "addDevice": {
+    "title": "Add New Device",
+    "description": "Enter the device details to add it to the system",
+    "deviceName": "Device Name",
+    "deviceNamePlaceholder": "e.g., LED Panel 1",
+    "deviceType": "Device Type",
+    "selectType": "Select type",
+    "selectZone": "Select zone",
+    "selectSystem": "Select system",
+    "selectStatus": "Select status",
+    "locationPlaceholder": "e.g., Gate A10",
+    "ipPlaceholder": "e.g., 10.20.1.10",
+    "specs": "Specs (Optional)",
+    "specsPlaceholder": "e.g., 55\" 4K or 3000-6500K",
+    "initialStatus": "Initial Status"
+  },
+  "card": {
+    "health": "Health",
+    "performance24h": "24h Performance",
+    "uptime": "Uptime",
+    "signal": "Signal",
+    "excellent": "Excellent",
+    "good": "Good",
+    "fair": "Fair",
+    "poor": "Poor",
+    "system": "System",
+    "load": "Load",
+    "location": "Location",
+    "ipAddress": "IP Address",
+    "specs": "Specs",
+    "restart": "Restart",
+    "viewLogs": "View Logs"
+  },
+  "modals": {
+    "edit": {
+      "title": "Edit Device Settings",
+      "deviceName": "Device Name",
+      "deviceType": "Device Type",
+      "location": "Location",
+      "ipAddress": "IP Address",
+      "specifications": "Specifications",
+      "autoRestart": "Enable auto-restart on failure",
+      "healthMonitoring": "Enable health monitoring"
+    },
+    "restart": {
+      "title": "Restart Device",
+      "confirmMessage": "Are you sure you want to restart this device?",
+      "warning": "This will cause a temporary interruption in service.",
+      "device": "Device",
+      "type": "Type",
+      "currentStatus": "Current Status",
+      "estDowntime": "Est. Downtime",
+      "confirmCheckbox": "I understand this will interrupt service",
+      "restartButton": "Restart Device"
+    },
+    "logs": {
+      "title": "Device Logs",
+      "last24Hours": "Last 24 hours",
+      "export": "Export Logs"
+    },
+    "health": {
+      "title": "System Health",
+      "exportReport": "Export Health Report"
+    }
+  }
+}

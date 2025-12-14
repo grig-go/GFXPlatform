@@ -1,0 +1,139 @@
+{
+  "title": "Dispositivos",
+  "page": {
+    "title": "Todos los dispositivos",
+    "deviceCount": "{{filtered}} de {{total}} dispositivos",
+    "viewTable": "Tabla",
+    "viewCards": "Tarjetas",
+    "addDevice": "Añadir dispositivo",
+    "searchPlaceholder": "Buscar por nombre, tipo, zona, ubicación o IP...",
+    "clearFilters": "Limpiar filtros",
+    "clearAll": "Limpiar todo ({{count}})",
+    "perPage": "por página",
+    "showingRange": "Mostrando {{start}}–{{end}} de {{total}}",
+    "noDevicesFound": "No se encontraron dispositivos que coincidan con tus filtros"
+  },
+  "types": {
+    "ledPanel": "Panel LED",
+    "speaker": "Altavoz",
+    "amplifier": "Amplificador",
+    "camera": "Cámara",
+    "sensor": "Sensor",
+    "controller": "Controlador",
+    "display": "Pantalla",
+    "server": "Servidor",
+    "switch": "Switch",
+    "router": "Router"
+  },
+  "status": {
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "warning": "Advertencia",
+    "maintenance": "Mantenimiento"
+  },
+  "columns": {
+    "name": "Nombre",
+    "type": "Tipo",
+    "zone": "Zona",
+    "system": "Sistema",
+    "status": "Estado",
+    "lastSeen": "Última vez visto",
+    "ipAddress": "Dirección IP",
+    "firmware": "Firmware",
+    "location": "Ubicación",
+    "uptime": "Tiempo activo",
+    "actions": "Acciones"
+  },
+  "filters": {
+    "allTypes": "Todos los tipos",
+    "allZones": "Todas las zonas",
+    "allSystems": "Todos los sistemas",
+    "allStatuses": "Todos los estados"
+  },
+  "actions": {
+    "restart": "Reiniciar",
+    "configure": "Configurar",
+    "viewLogs": "Ver registros",
+    "diagnostics": "Diagnósticos",
+    "edit": "Editar",
+    "logs": "Registros",
+    "health": "Salud del sistema"
+  },
+  "details": {
+    "title": "Detalles del dispositivo",
+    "properties": "Propiedades",
+    "history": "Historial",
+    "configuration": "Configuración"
+  },
+  "stats": {
+    "total": "Total de dispositivos",
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "warnings": "Advertencias"
+  },
+  "addDevice": {
+    "title": "Añadir nuevo dispositivo",
+    "description": "Ingrese los detalles del dispositivo para añadirlo al sistema",
+    "deviceName": "Nombre del dispositivo",
+    "deviceNamePlaceholder": "ej. Panel LED 1",
+    "deviceType": "Tipo de dispositivo",
+    "selectType": "Seleccionar tipo",
+    "selectZone": "Seleccionar zona",
+    "selectSystem": "Seleccionar sistema",
+    "selectStatus": "Seleccionar estado",
+    "locationPlaceholder": "ej. Puerta A10",
+    "ipPlaceholder": "ej. 10.20.1.10",
+    "specs": "Especificaciones (Opcional)",
+    "specsPlaceholder": "ej. 55\" 4K o 3000-6500K",
+    "initialStatus": "Estado inicial"
+  },
+  "card": {
+    "health": "Salud",
+    "performance24h": "Rendimiento 24h",
+    "uptime": "Tiempo activo",
+    "signal": "Señal",
+    "excellent": "Excelente",
+    "good": "Bueno",
+    "fair": "Regular",
+    "poor": "Deficiente",
+    "system": "Sistema",
+    "load": "Carga",
+    "location": "Ubicación",
+    "ipAddress": "Dirección IP",
+    "specs": "Especificaciones",
+    "restart": "Reiniciar",
+    "viewLogs": "Ver registros"
+  },
+  "modals": {
+    "edit": {
+      "title": "Editar configuración del dispositivo",
+      "deviceName": "Nombre del dispositivo",
+      "deviceType": "Tipo de dispositivo",
+      "location": "Ubicación",
+      "ipAddress": "Dirección IP",
+      "specifications": "Especificaciones",
+      "autoRestart": "Habilitar reinicio automático en caso de fallo",
+      "healthMonitoring": "Habilitar monitoreo de salud"
+    },
+    "restart": {
+      "title": "Reiniciar dispositivo",
+      "confirmMessage": "¿Estás seguro de que quieres reiniciar este dispositivo?",
+      "warning": "Esto causará una interrupción temporal en el servicio.",
+      "device": "Dispositivo",
+      "type": "Tipo",
+      "currentStatus": "Estado actual",
+      "estDowntime": "Tiempo estimado de inactividad",
+      "confirmCheckbox": "Entiendo que esto interrumpirá el servicio",
+      "restartButton": "Reiniciar dispositivo"
+    },
+    "logs": {
+      "title": "Registros del dispositivo",
+      "last24Hours": "Últimas 24 horas",
+      "export": "Exportar registros"
+    },
+    "health": {
+      "title": "Salud del sistema",
+      "exportReport": "Exportar informe de salud"
+    }
+  }
+}

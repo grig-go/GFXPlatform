@@ -1,6 +1,7 @@
 import { Workflow } from "../types/workflow";
 import { Button } from "./ui/button";
 import { Grid3x3, Plus, Edit, Save } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useCallback, useMemo, useEffect } from "react";
 import {
   ReactFlow,
@@ -31,7 +32,8 @@ interface NodeViewerProps {
 }
 
 export function NodeViewer({ workflow, onNodeSelect, selectedNodeId, onAddNodeClick, isEditMode = false, onEditModeChange }: NodeViewerProps) {
-  
+  const { t } = useTranslation(['workflows', 'common']);
+
   // Define custom node types
   const nodeTypes: NodeTypes = useMemo(() => ({
     trigger: TriggerNode,
@@ -105,7 +107,7 @@ export function NodeViewer({ workflow, onNodeSelect, selectedNodeId, onAddNodeCl
       <div className="h-full flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg">
         <div className="text-center">
           <Grid3x3 className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-          <p className="text-slate-600 dark:text-slate-400">Select a workflow to view its automation flow</p>
+          <p className="text-slate-600 dark:text-slate-400">{t('viewer.selectWorkflow')}</p>
         </div>
       </div>
     );
@@ -120,22 +122,22 @@ export function NodeViewer({ workflow, onNodeSelect, selectedNodeId, onAddNodeCl
           <div className="flex items-center gap-1">
             {workflow.status === "active" && (
               <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
-                Active
+                {t('viewer.status.active')}
               </span>
             )}
             {workflow.status === "paused" && (
               <span className="px-2 py-0.5 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full">
-                Paused
+                {t('viewer.status.paused')}
               </span>
             )}
             {workflow.status === "error" && (
               <span className="px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full">
-                Error
+                {t('viewer.status.error')}
               </span>
             )}
             {workflow.status === "draft" && (
               <span className="px-2 py-0.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 rounded-full">
-                Draft
+                {t('viewer.status.draft')}
               </span>
             )}
           </div>
@@ -144,19 +146,19 @@ export function NodeViewer({ workflow, onNodeSelect, selectedNodeId, onAddNodeCl
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={onAddNodeClick}>
             <Plus className="w-4 h-4 mr-1" />
-            Add Node
+            {t('nodes.addNode')}
           </Button>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-2" />
           <Button variant="ghost" size="sm" onClick={() => onEditModeChange?.(!isEditMode)}>
             {isEditMode ? (
               <>
                 <Save className="w-4 h-4 mr-1" />
-                Save
+                {t('common:actions.save')}
               </>
             ) : (
               <>
                 <Edit className="w-4 h-4 mr-1" />
-                Edit
+                {t('common:actions.edit')}
               </>
             )}
           </Button>

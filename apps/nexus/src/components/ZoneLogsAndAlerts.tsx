@@ -1,12 +1,13 @@
 import { AlertTriangle, Info, CheckCircle, XCircle, Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface LogEntry {
   id: string;
   timestamp: string;
   type: "info" | "warning" | "error" | "success";
-  category: string;
-  message: string;
-  zone?: string;
+  categoryKey: string;
+  messageKey: string;
+  zoneKey?: string;
 }
 
 const logs: LogEntry[] = [
@@ -14,97 +15,97 @@ const logs: LogEntry[] = [
     id: "1",
     timestamp: "14:32:45",
     type: "error",
-    category: "Audio System",
-    message: "Speaker 17 offline - Gate A14",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.audioSystem",
+    messageKey: "alerts.messages.speakerOffline",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "2",
     timestamp: "14:28:12",
     type: "warning",
-    category: "LED Display",
-    message: "Display 14 experiencing reduced brightness",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.ledDisplay",
+    messageKey: "alerts.messages.reducedBrightness",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "3",
     timestamp: "14:15:03",
     type: "success",
-    category: "Lighting",
-    message: "All lighting systems operational",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.lighting",
+    messageKey: "alerts.messages.lightingOperational",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "4",
     timestamp: "14:02:34",
     type: "info",
-    category: "Environmental",
-    message: "Temperature adjusted to 72°F in Gate A12",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.environmental",
+    messageKey: "alerts.messages.tempAdjusted",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "5",
     timestamp: "13:58:19",
     type: "warning",
-    category: "Security",
-    message: "Camera 8 requires lens cleaning",
-    zone: "Security"
+    categoryKey: "alerts.categories.security",
+    messageKey: "alerts.messages.cameraLensCleaning",
+    zoneKey: "alerts.zones.security"
   },
   {
     id: "6",
     timestamp: "13:45:27",
     type: "info",
-    category: "Signage",
-    message: "Flight information updated - 12 displays",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.signage",
+    messageKey: "alerts.messages.flightInfoUpdated",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "7",
     timestamp: "13:32:08",
     type: "success",
-    category: "Audio System",
-    message: "PA system test completed successfully",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.audioSystem",
+    messageKey: "alerts.messages.paTestComplete",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "8",
     timestamp: "13:18:45",
     type: "info",
-    category: "Show Playback",
-    message: "Content sync initiated for all displays",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.showPlayback",
+    messageKey: "alerts.messages.contentSyncInitiated",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "9",
     timestamp: "13:05:22",
     type: "warning",
-    category: "Environmental",
-    message: "HVAC Unit 3 running at 85% capacity",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.environmental",
+    messageKey: "alerts.messages.hvacCapacity",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "10",
     timestamp: "12:52:16",
     type: "info",
-    category: "LED Display",
-    message: "Scheduled content rotation complete",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.ledDisplay",
+    messageKey: "alerts.messages.contentRotationComplete",
+    zoneKey: "alerts.zones.gateCluster"
   },
   {
     id: "11",
     timestamp: "12:38:47",
     type: "success",
-    category: "Security",
-    message: "All security systems online",
-    zone: "Security"
+    categoryKey: "alerts.categories.security",
+    messageKey: "alerts.messages.securityOnline",
+    zoneKey: "alerts.zones.security"
   },
   {
     id: "12",
     timestamp: "12:21:33",
     type: "info",
-    category: "Lighting",
-    message: "Brightness adjusted for time of day",
-    zone: "Gate Cluster"
+    categoryKey: "alerts.categories.lighting",
+    messageKey: "alerts.messages.brightnessAdjusted",
+    zoneKey: "alerts.zones.gateCluster"
   }
 ];
 
@@ -151,19 +152,22 @@ function getLogBg(type: string) {
 }
 
 export function ZoneLogsAndAlerts() {
+  const { t } = useTranslation('zones');
   const alerts = logs.filter(log => log.type === "error" || log.type === "warning");
+  const criticalCount = alerts.filter(a => a.type === "error").length;
+  const warningCount = alerts.filter(a => a.type === "warning").length;
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
       <div className="border-b border-slate-200 dark:border-slate-800 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-slate-900 dark:text-slate-100">Active Alerts</h2>
+          <h2 className="text-slate-900 dark:text-slate-100">{t('logsAlerts.title')}</h2>
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs">
-              {alerts.filter(a => a.type === "error").length} Critical
+              {criticalCount} {t('logsAlerts.critical')}
             </span>
             <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded text-xs">
-              {alerts.filter(a => a.type === "warning").length} Warning
+              {warningCount} {t('logsAlerts.warning')}
             </span>
           </div>
         </div>
@@ -181,11 +185,11 @@ export function ZoneLogsAndAlerts() {
                 <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${getLogColor(alert.type)}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-slate-900 dark:text-slate-100">{alert.category}</span>
-                    <span className="text-slate-500 dark:text-slate-500 text-xs">{alert.zone}</span>
+                    <span className="text-slate-900 dark:text-slate-100">{t(alert.categoryKey)}</span>
+                    <span className="text-slate-500 dark:text-slate-500 text-xs">{alert.zoneKey ? t(alert.zoneKey) : ''}</span>
                   </div>
                   <p className="text-slate-700 dark:text-slate-300 text-xs">
-                    {alert.message}
+                    {t(alert.messageKey)}
                   </p>
                   <div className="flex items-center gap-1 mt-2 text-slate-500 dark:text-slate-500 text-xs">
                     <Clock className="w-3 h-3" />

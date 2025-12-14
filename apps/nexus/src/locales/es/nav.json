@@ -1,0 +1,56 @@
+{
+  "menus": {
+    "venues": "Sedes",
+    "apps": "Aplicaciones",
+    "tools": "Herramientas",
+    "settings": "Configuración",
+    "help": "Ayuda"
+  },
+  "venuesList": {
+    "terminalA": "Terminal A (EWR)",
+    "terminalB": "Terminal B (EWR)",
+    "terminalC": "Terminal C (EWR)",
+    "parking": "Estacionamiento de larga duración (EWR)"
+  },
+  "tools": {
+    "utilities": "Utilidades",
+    "logAnalyzer": "Analizador de registros",
+    "aiAssistant": "Asistente de IA",
+    "networkPing": "Ping de red"
+  },
+  "settings": {
+    "preferences": "Preferencias",
+    "lightMode": "Modo claro",
+    "darkMode": "Modo oscuro",
+    "language": "Idioma",
+    "engineerMode": "Modo ingeniero",
+    "operatorMode": "Modo operador",
+    "accountSettings": "Configuración de cuenta",
+    "usersAndGroups": "Usuarios y grupos",
+    "dashboardPreferences": "Preferencias del panel",
+    "aiConnections": "Conexiones de IA",
+    "signOut": "Cerrar sesión"
+  },
+  "help": {
+    "support": "Soporte",
+    "documentation": "Documentación",
+    "contactSupport": "Contactar soporte",
+    "whatsNew": "Novedades",
+    "statusPage": "Página de estado"
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "systemsMap": "Mapa de sistemas",
+    "zones": "Zonas",
+    "devices": "Dispositivos",
+    "workflows": "Flujos de trabajo",
+    "timeline": "Línea de tiempo",
+    "logsAlerts": "Registros y alertas",
+    "aiInsights": "Análisis de IA"
+  },
+  "search": {
+    "placeholder": "Buscar sistemas, dispositivos o flujos de trabajo...",
+    "noResults": "Sin resultados"
+  },
+  "noAppsAvailable": "No hay aplicaciones disponibles"
+}

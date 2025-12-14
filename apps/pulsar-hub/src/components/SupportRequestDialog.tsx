@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -28,27 +29,23 @@ interface SupportRequestDialogProps {
   defaultType?: TicketType;
 }
 
-const ticketTypeConfig: Record<
+const ticketTypeIcons: Record<
   TicketType,
-  { label: string; icon: React.ReactNode; color: string }
+  { icon: React.ReactNode; color: string }
 > = {
   bug: {
-    label: "Bug Report",
     icon: <Bug className="w-4 h-4" />,
     color: "text-red-400",
   },
   feature: {
-    label: "Feature Request",
     icon: <Lightbulb className="w-4 h-4" />,
     color: "text-amber-400",
   },
   question: {
-    label: "Question",
     icon: <HelpCircle className="w-4 h-4" />,
     color: "text-blue-400",
   },
   other: {
-    label: "Other",
     icon: <MoreHorizontal className="w-4 h-4" />,
     color: "text-muted-foreground",
   },
@@ -59,6 +56,8 @@ export function SupportRequestDialog({
   onOpenChange,
   defaultType = "bug",
 }: SupportRequestDialogProps) {
+  const { t } = useTranslation('support');
+  const { t: tCommon } = useTranslation('common');
   const [type, setType] = useState<TicketType>(defaultType);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -79,7 +78,7 @@ export function SupportRequestDialog({
 
   const handleSubmit = async () => {
     if (!title.trim() || !description.trim()) {
-      setError("Please fill in all required fields");
+      setError(t('validation.fillRequired'));
       return;
     }
 
@@ -126,7 +125,7 @@ export function SupportRequestDialog({
       }, 2000);
     } catch (err) {
       console.error("Failed to submit support ticket:", err);
-      setError("Failed to submit your request. Please try again.");
+      setError(t('toast.submitFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -140,10 +139,9 @@ export function SupportRequestDialog({
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
               <CheckCircle className="w-8 h-8 text-emerald-400" />
             </div>
-            <DialogTitle className="text-xl mb-2">Thank You!</DialogTitle>
+            <DialogTitle className="text-xl mb-2">{t('success.title')}</DialogTitle>
             <DialogDescription>
-              Your {ticketTypeConfig[type].label.toLowerCase()} has been
-              submitted successfully. We'll review it and get back to you soon.
+              {t('success.message', { type: t(`ticketTypes.${type}`).toLowerCase() })}
             </DialogDescription>
           </div>
         </DialogContent>
@@ -157,22 +155,21 @@ export function SupportRequestDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-cyan-400" />
-            Contact Support
+            {t('title')}
           </DialogTitle>
           <DialogDescription>
-            Report a bug, request a feature, or ask a question. We're here to
-            help!
+            {t('description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {/* Type Selection */}
           <div className="grid gap-2">
-            <label className="text-sm font-medium">Type</label>
+            <label className="text-sm font-medium">{t('fields.type')}</label>
             <div className="grid grid-cols-4 gap-2">
-              {(Object.keys(ticketTypeConfig) as TicketType[]).map(
+              {(Object.keys(ticketTypeIcons) as TicketType[]).map(
                 (ticketType) => {
-                  const config = ticketTypeConfig[ticketType];
+                  const config = ticketTypeIcons[ticketType];
                   return (
                     <button
                       key={ticketType}
@@ -187,7 +184,7 @@ export function SupportRequestDialog({
                     >
                       <span className={cn(config.color)}>{config.icon}</span>
                       <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {config.label}
+                        {t(`ticketTypes.${ticketType}`)}
                       </span>
                     </button>
                   );
@@ -199,19 +196,13 @@ export function SupportRequestDialog({
           {/* Title */}
           <div className="grid gap-2">
             <label htmlFor="ticket-title" className="text-sm font-medium">
-              Title <span className="text-red-500">*</span>
+              {t('fields.titleRequired')}
             </label>
             <input
               id="ticket-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={
-                type === "bug"
-                  ? "Brief description of the issue"
-                  : type === "feature"
-                  ? "What feature would you like?"
-                  : "Your question in brief"
-              }
+              placeholder={t(`placeholders.${type}.title`)}
               maxLength={100}
               className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             />
@@ -220,25 +211,19 @@ export function SupportRequestDialog({
           {/* Description */}
           <div className="grid gap-2">
             <label htmlFor="ticket-description" className="text-sm font-medium">
-              Description <span className="text-red-500">*</span>
+              {t('fields.descriptionRequired')}
             </label>
             <textarea
               id="ticket-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={
-                type === "bug"
-                  ? "What happened? What did you expect to happen? Steps to reproduce..."
-                  : type === "feature"
-                  ? "Describe the feature and how it would help you..."
-                  : "Provide more details about your question..."
-              }
+              placeholder={t(`placeholders.${type}.description`)}
               rows={5}
               maxLength={2000}
               className="flex w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
             />
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 text-right">
-              {description.length}/2000
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 text-end">
+              {t('charCount', { count: description.length })}
             </p>
           </div>
 
@@ -252,7 +237,7 @@ export function SupportRequestDialog({
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
           >
-            Cancel
+            {tCommon('buttons.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -260,13 +245,13 @@ export function SupportRequestDialog({
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Submitting...
+                <Loader2 className="w-4 h-4 me-2 animate-spin" />
+                {tCommon('status.submitting')}
               </>
             ) : (
               <>
-                <Send className="w-4 h-4 mr-2" />
-                Submit
+                <Send className="w-4 h-4 me-2" />
+                {tCommon('buttons.submit')}
               </>
             )}
           </Button>

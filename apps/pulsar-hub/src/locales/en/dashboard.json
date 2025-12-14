@@ -1,0 +1,29 @@
+{
+  "title": "Dashboard Configuration",
+  "description": "Configure which apps are visible and their display order. Drag to reorder.",
+  "stats": {
+    "enabled": "enabled",
+    "hidden": "hidden",
+    "total": "total"
+  },
+  "loading": "Loading dashboard configuration...",
+  "status": {
+    "visibleOnHome": "Visible on home",
+    "hiddenFromHome": "Hidden from home"
+  },
+  "buttons": {
+    "resetToDefaults": "Reset to Defaults",
+    "saveConfiguration": "Save Configuration"
+  },
+  "toast": {
+    "loadFailed": "Failed to load dashboard configuration",
+    "loadFailedDesc": "Using default settings",
+    "savedLocally": "Dashboard configuration saved locally!",
+    "savedLocallyDesc": "Backend records not found. Configuration saved to browser.",
+    "saved": "Dashboard configuration saved!",
+    "savedDesc": "Your changes have been applied successfully.",
+    "backendFailed": "Failed to save to backend",
+    "backendFailedDesc": "Configuration saved locally instead.",
+    "reset": "Configuration reset to defaults"
+  }
+}

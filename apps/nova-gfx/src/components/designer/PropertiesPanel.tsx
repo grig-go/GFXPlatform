@@ -4,7 +4,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Diamond, BarChart3, Group,
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
-  FolderOpen, Timer, Eraser, Trash2,
+  FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock,
 } from 'lucide-react';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
@@ -231,6 +231,297 @@ function FontFamilyPicker({ value, onChange }: { value: string; onChange: (fontF
   );
 }
 
+// Easing curve options for keyframe transitions
+const EASING_OPTIONS = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'ease', label: 'Ease' },
+  { value: 'ease-in', label: 'Ease In' },
+  { value: 'ease-out', label: 'Ease Out' },
+  { value: 'ease-in-out', label: 'Ease In Out' },
+  { value: 'cubic-bezier(0.4, 0, 0.2, 1)', label: 'Smooth' },
+  { value: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', label: 'Bounce' },
+  { value: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)', label: 'Back Out' },
+  { value: 'cubic-bezier(0.6, -0.28, 0.735, 0.045)', label: 'Back In' },
+  { value: 'steps(4)', label: 'Steps (4)' },
+  { value: 'steps(8)', label: 'Steps (8)' },
+];
+
+// Format property name for display (camelCase/snake_case to readable)
+function formatPropertyName(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim();
+}
+
+// Format property value for display
+function formatPropertyValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'number') {
+    // Round to 2 decimal places for cleaner display
+    return Number.isInteger(value) ? value.toString() : value.toFixed(2);
+  }
+  return String(value);
+}
+
+// Keyframe Inspector Component - shows detailed keyframe info and allows editing
+interface KeyframeInspectorProps {
+  keyframe: Keyframe;
+  animation: Animation;
+  phaseDuration: number;
+  onUpdate: (id: string, updates: Partial<Keyframe>) => void;
+  onDelete: (id: string) => void;
+  onRemoveProperty: (keyframeId: string, propertyKey: string) => void;
+  onDeselect: () => void;
+}
+
+function KeyframeInspector({
+  keyframe,
+  animation,
+  phaseDuration,
+  onUpdate,
+  onDelete,
+  onRemoveProperty,
+  onDeselect,
+}: KeyframeInspectorProps) {
+  const [isEditingPosition, setIsEditingPosition] = useState(false);
+  const [editPositionValue, setEditPositionValue] = useState('');
+  const [showEasingDropdown, setShowEasingDropdown] = useState(false);
+  const [expandedProperties, setExpandedProperties] = useState(true);
+
+  // Calculate time in ms from position percentage
+  const timeMs = (keyframe.position / 100) * phaseDuration;
+
+  // Format time for display
+  const formatTimeDisplay = (ms: number): string => {
+    const seconds = ms / 1000;
+    if (seconds < 1) return `${Math.round(ms)}ms`;
+    return `${seconds.toFixed(2)}s`;
+  };
+
+  // Parse time input and convert to position percentage
+  const parseTimeInput = (input: string): number | null => {
+    const trimmed = input.trim().toLowerCase();
+
+    // Handle milliseconds: "500ms"
+    if (trimmed.endsWith('ms')) {
+      const ms = parseFloat(trimmed.slice(0, -2));
+      if (isNaN(ms)) return null;
+      return Math.max(0, Math.min(100, (ms / phaseDuration) * 100));
+    }
+
+    // Handle seconds: "1.5s" or just "1.5"
+    if (trimmed.endsWith('s') || /^\d+\.?\d*$/.test(trimmed)) {
+      const seconds = parseFloat(trimmed.replace('s', ''));
+      if (isNaN(seconds)) return null;
+      const ms = seconds * 1000;
+      return Math.max(0, Math.min(100, (ms / phaseDuration) * 100));
+    }
+
+    // Handle percentage: "50%"
+    if (trimmed.endsWith('%')) {
+      const pct = parseFloat(trimmed.slice(0, -1));
+      if (isNaN(pct)) return null;
+      return Math.max(0, Math.min(100, pct));
+    }
+
+    return null;
+  };
+
+  const handlePositionSubmit = () => {
+    const newPosition = parseTimeInput(editPositionValue);
+    if (newPosition !== null) {
+      onUpdate(keyframe.id, { position: Math.round(newPosition) });
+    }
+    setIsEditingPosition(false);
+  };
+
+  const handleEasingChange = (easing: string) => {
+    onUpdate(keyframe.id, { easing });
+    setShowEasingDropdown(false);
+  };
+
+  const handlePropertyValueChange = (propertyKey: string, newValue: string) => {
+    // Try to parse as number, otherwise keep as string
+    let parsedValue: string | number = newValue;
+    const numValue = parseFloat(newValue);
+    if (!isNaN(numValue) && newValue.trim() !== '') {
+      parsedValue = numValue;
+    }
+
+    onUpdate(keyframe.id, {
+      properties: {
+        ...keyframe.properties,
+        [propertyKey]: parsedValue,
+      },
+    });
+  };
+
+  const currentEasing = keyframe.easing || 'linear';
+  const currentEasingLabel = EASING_OPTIONS.find(e => e.value === currentEasing)?.label || currentEasing;
+  const propertyKeys = Object.keys(keyframe.properties);
+
+  return (
+    <div className="space-y-3">
+      {/* Header with phase badge and actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
+          <span className="text-xs font-medium">Keyframe</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
+            {animation.phase.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            onClick={() => onDelete(keyframe.id)}
+            title="Delete keyframe"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            onClick={onDeselect}
+            title="Deselect keyframe"
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Time/Position Section */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] text-muted-foreground uppercase font-medium flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          Time Position
+        </label>
+        {isEditingPosition ? (
+          <Input
+            autoFocus
+            value={editPositionValue}
+            onChange={(e) => setEditPositionValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handlePositionSubmit();
+              if (e.key === 'Escape') setIsEditingPosition(false);
+            }}
+            onBlur={handlePositionSubmit}
+            className="h-6 text-[10px] px-2"
+            placeholder="e.g. 0.5s, 500ms, 50%"
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setEditPositionValue(formatTimeDisplay(timeMs));
+              setIsEditingPosition(true);
+            }}
+            className="w-full h-6 px-2 text-[10px] font-mono bg-muted hover:bg-muted/80 border border-input rounded-md flex items-center justify-between transition-colors"
+          >
+            <span>{formatTimeDisplay(timeMs)}</span>
+            <span className="text-muted-foreground">({keyframe.position}%)</span>
+          </button>
+        )}
+      </div>
+
+      {/* Easing Section */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] text-muted-foreground uppercase font-medium flex items-center gap-1">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M2 20 C 8 20, 8 4, 22 4" />
+          </svg>
+          Easing Curve
+        </label>
+        <div className="relative">
+          <button
+            onClick={() => setShowEasingDropdown(!showEasingDropdown)}
+            className="w-full h-6 px-2 text-[10px] bg-muted hover:bg-muted/80 border border-input rounded-md flex items-center justify-between transition-colors"
+          >
+            <span>{currentEasingLabel}</span>
+            <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", showEasingDropdown && "rotate-180")} />
+          </button>
+          {showEasingDropdown && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowEasingDropdown(false)}
+              />
+              <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                {EASING_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => handleEasingChange(option.value)}
+                    className={cn(
+                      "w-full px-2 py-1.5 text-[10px] text-left hover:bg-muted/50 transition-colors",
+                      currentEasing === option.value && "bg-primary/10 text-primary"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Properties Section */}
+      {propertyKeys.length > 0 && (
+        <div className="space-y-1.5">
+          <button
+            onClick={() => setExpandedProperties(!expandedProperties)}
+            className="w-full flex items-center gap-1 text-[10px] text-muted-foreground uppercase font-medium hover:text-foreground"
+          >
+            <ChevronDown className={cn("w-3 h-3 transition-transform", !expandedProperties && "-rotate-90")} />
+            Animated Properties ({propertyKeys.length})
+          </button>
+
+          {expandedProperties && (
+            <div className="space-y-1.5 pl-1">
+              {propertyKeys.map((key) => {
+                const value = keyframe.properties[key];
+                return (
+                  <div key={key} className="flex items-center gap-1.5 group">
+                    <span className="w-20 text-[10px] text-muted-foreground truncate" title={formatPropertyName(key)}>
+                      {formatPropertyName(key)}
+                    </span>
+                    <Input
+                      value={formatPropertyValue(value)}
+                      onChange={(e) => handlePropertyValueChange(key, e.target.value)}
+                      className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                    />
+                    <button
+                      onClick={() => onRemoveProperty(keyframe.id, key)}
+                      className="opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                      title={`Remove ${formatPropertyName(key)}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {propertyKeys.length === 0 && (
+        <div className="rounded-md border border-dashed border-border p-3 text-center">
+          <div className="text-[10px] text-muted-foreground">
+            No animated properties.<br />
+            <span className="text-[9px]">Edit element properties to add keyframe values.</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PropertiesPanel() {
   const {
     selectedElementIds,
@@ -243,8 +534,19 @@ export function PropertiesPanel() {
     currentPhase,
     currentTemplateId,
     selectKeyframes,
+    updateKeyframe,
+    deleteKeyframe,
+    removeKeyframeProperty,
+    phaseDurations,
   } = useDesignerStore();
   const [activeTab, setActiveTab] = useState('style');
+
+  // Auto-switch to keyframe tab when a keyframe is selected
+  useEffect(() => {
+    if (selectedKeyframeIds.length > 0) {
+      setActiveTab('keyframe');
+    }
+  }, [selectedKeyframeIds]);
 
   // Get selected element (always show element properties, even when keyframe selected)
   const selectedElement = useMemo(() => {
@@ -281,15 +583,18 @@ export function PropertiesPanel() {
     ) || null;
   }, [selectedElement, animations, currentPhase]);
 
-  // Check if selected keyframe belongs to the currently displayed element
-  // This prevents showing keyframe info from a different element
-  const isKeyframeForCurrentElement = useMemo(() => {
-    if (!selectedKeyframe || !currentAnimation) return false;
-    return selectedKeyframe.animation_id === currentAnimation.id;
-  }, [selectedKeyframe, currentAnimation]);
+  // Get the animation for the selected keyframe (may be different phase)
+  const keyframeAnimation = useMemo(() => {
+    if (!selectedKeyframe) return null;
+    return animations.find(a => a.id === selectedKeyframe.animation_id) || null;
+  }, [selectedKeyframe, animations]);
 
-  // Only show keyframe in header if it belongs to current element
-  const displayedKeyframe = isKeyframeForCurrentElement ? selectedKeyframe : null;
+  // Check if selected keyframe belongs to the currently displayed element
+  // (regardless of phase - we show it if it belongs to the element)
+  const isKeyframeForCurrentElement = useMemo(() => {
+    if (!selectedKeyframe || !keyframeAnimation || !selectedElement) return false;
+    return keyframeAnimation.element_id === selectedElement.id;
+  }, [selectedKeyframe, keyframeAnimation, selectedElement]);
 
   if (!selectedElement) {
     if (selectedElementIds.length > 1) {
@@ -321,6 +626,11 @@ export function PropertiesPanel() {
     );
   }
 
+  // Check if we have a valid keyframe to show
+  // Show the keyframe tab when ANY keyframe is selected and we have the related data
+  // Don't require the keyframe to be for the "current" element - just show it if selected
+  const hasKeyframeTab = selectedKeyframe && keyframeAnimation;
+
   return (
     <div className="h-full flex flex-col">
       {/* Element Header */}
@@ -333,57 +643,6 @@ export function PropertiesPanel() {
             className="h-6 text-xs font-medium bg-transparent border-transparent hover:border-input focus:border-input"
           />
         </div>
-        
-        {/* Show enhanced keyframe info if one is selected AND belongs to this element */}
-        {displayedKeyframe && (
-          <div className="mt-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Diamond className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span className="text-xs font-medium text-amber-400">
-                Keyframe Selected
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 text-[10px] px-1.5 ml-auto text-amber-400 hover:text-amber-300"
-                onClick={() => selectKeyframes([])}
-              >
-                ✕ Deselect
-              </Button>
-            </div>
-            <div className="text-[10px] text-amber-300/80 space-y-0.5">
-              <div className="flex justify-between">
-                <span>Position:</span>
-                <span className="font-mono">{displayedKeyframe.position}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Properties:</span>
-                <span className="font-mono">{Object.keys(displayedKeyframe.properties).length}</span>
-              </div>
-              {Object.keys(displayedKeyframe.properties).length > 0 && (
-                <div className="mt-1 pt-1 border-t border-amber-500/20">
-                  <div className="text-[9px] uppercase text-amber-400/60 mb-0.5">Animated:</div>
-                  <div className="flex flex-wrap gap-1">
-                    {Object.keys(displayedKeyframe.properties).slice(0, 6).map(key => (
-                      <span
-                        key={key}
-                        className="px-1 py-0.5 bg-amber-500/20 rounded text-[9px] text-amber-300"
-                      >
-                        {key.replace(/_/g, ' ')}
-                      </span>
-                    ))}
-                    {Object.keys(displayedKeyframe.properties).length > 6 && (
-                      <span className="px-1 py-0.5 text-[9px] text-amber-400/60">
-                        +{Object.keys(displayedKeyframe.properties).length - 6} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        
       </div>
 
       {/* Tabs */}
@@ -392,19 +651,25 @@ export function PropertiesPanel() {
           <TabsTrigger value="style" className="text-[10px] h-5 flex-1">Style</TabsTrigger>
           <TabsTrigger value="layout" className="text-[10px] h-5 flex-1">Layout</TabsTrigger>
           <TabsTrigger value="content" className="text-[10px] h-5 flex-1">Content</TabsTrigger>
+          {hasKeyframeTab && (
+            <TabsTrigger value="keyframe" className="text-[10px] h-5 flex-1 text-amber-400 data-[state=active]:text-amber-500">
+              <Diamond className="w-3 h-3 mr-1" />
+              Key
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <ScrollArea className="flex-1">
           <TabsContent value="style" className="mt-0 p-2">
-            <StyleEditor 
-              element={selectedElement} 
+            <StyleEditor
+              element={selectedElement}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
             />
           </TabsContent>
 
           <TabsContent value="layout" className="mt-0 p-2">
-            <LayoutEditor 
+            <LayoutEditor
               element={selectedElement}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
@@ -412,12 +677,27 @@ export function PropertiesPanel() {
           </TabsContent>
 
           <TabsContent value="content" className="mt-0 p-2">
-            <ContentEditor 
+            <ContentEditor
               element={selectedElement}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
             />
           </TabsContent>
+
+          {/* Keyframe Tab - only rendered when a keyframe is selected */}
+          {hasKeyframeTab && selectedKeyframe && keyframeAnimation && (
+            <TabsContent value="keyframe" className="mt-0 p-2">
+              <KeyframeInspector
+                keyframe={selectedKeyframe}
+                animation={keyframeAnimation}
+                phaseDuration={phaseDurations[keyframeAnimation.phase]}
+                onUpdate={updateKeyframe}
+                onDelete={deleteKeyframe}
+                onRemoveProperty={removeKeyframeProperty}
+                onDeselect={() => selectKeyframes([])}
+              />
+            </TabsContent>
+          )}
         </ScrollArea>
       </Tabs>
     </div>
@@ -2600,6 +2880,27 @@ function TextureFillSection({
               />
             </div>
 
+            {/* Blur */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Blur: {shapeContent.texture?.blur ?? 0}px
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={shapeContent.texture?.blur ?? 0}
+                onChange={(e) => updateContent({
+                  texture: {
+                    ...shapeContent.texture!,
+                    blur: parseFloat(e.target.value),
+                  },
+                })}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
             {/* Blend Mode */}
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Blend Mode</label>
@@ -2621,6 +2922,51 @@ function TextureFillSection({
                 <option value="lighten">Lighten</option>
               </select>
             </div>
+
+            {/* Video-specific options */}
+            {shapeContent.texture?.mediaType === 'video' && (
+              <>
+                {/* Playback Mode */}
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Playback Mode</label>
+                  <select
+                    value={shapeContent.texture?.playbackMode || 'loop'}
+                    onChange={(e) => updateContent({
+                      texture: {
+                        ...shapeContent.texture!,
+                        playbackMode: e.target.value as 'loop' | 'pingpong' | 'once',
+                      },
+                    })}
+                    className="w-full h-8 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+                  >
+                    <option value="loop">Loop</option>
+                    <option value="pingpong">Ping Pong</option>
+                    <option value="once">Play Once</option>
+                  </select>
+                </div>
+
+                {/* Playback Speed */}
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Speed: {shapeContent.texture?.playbackSpeed ?? 1}x
+                  </label>
+                  <input
+                    type="range"
+                    min="0.25"
+                    max="2"
+                    step="0.25"
+                    value={shapeContent.texture?.playbackSpeed ?? 1}
+                    onChange={(e) => updateContent({
+                      texture: {
+                        ...shapeContent.texture!,
+                        playbackSpeed: parseFloat(e.target.value),
+                      },
+                    })}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 

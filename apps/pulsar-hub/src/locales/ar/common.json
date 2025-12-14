@@ -1,0 +1,25 @@
+{
+  "buttons": {
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "submit": "إرسال",
+    "reset": "إعادة تعيين",
+    "close": "إغلاق",
+    "confirm": "تأكيد"
+  },
+  "status": {
+    "loading": "جاري التحميل...",
+    "saving": "جاري الحفظ...",
+    "submitting": "جاري الإرسال...",
+    "enabled": "مفعّل",
+    "disabled": "معطّل",
+    "visible": "مرئي",
+    "hidden": "مخفي"
+  },
+  "labels": {
+    "type": "النوع",
+    "title": "العنوان",
+    "description": "الوصف",
+    "name": "الاسم"
+  }
+}

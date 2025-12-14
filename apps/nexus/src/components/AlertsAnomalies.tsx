@@ -2,6 +2,7 @@ import { Card } from "./ui/card";
 import { AlertTriangle, AlertCircle, Info } from "lucide-react";
 import { SAMPLE_LOGS, LogEntry } from "../data/sampleLogs";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -13,19 +14,19 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Lightbulb, Volume2, Thermometer, Monitor, Workflow, Cpu, Sparkles, Shield, X, ChevronDown } from "lucide-react";
 
-function getTimeAgo(timestamp: string): string {
+function getTimeAgo(timestamp: string, t: (key: string, options?: Record<string, unknown>) => string): string {
   const date = new Date(timestamp);
   const now = new Date();
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-  
-  if (diffInMinutes < 1) return "Just now";
-  if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
-  
+
+  if (diffInMinutes < 1) return t('time.justNow');
+  if (diffInMinutes < 60) return t('time.minutesAgo', { count: diffInMinutes });
+
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
-  
+  if (diffInHours < 24) return t('time.hoursAgo', { count: diffInHours });
+
   const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
+  return t('time.daysAgo', { count: diffInDays });
 }
 
 function getSeverityFromType(type: string, status: string): string {
@@ -60,6 +61,17 @@ const systemIcons: Record<string, React.ElementType> = {
   "Security": Shield,
 };
 
+const systemTranslationKeys: Record<string, string> = {
+  "Lighting": "systems.lighting",
+  "Audio": "systems.audio",
+  "HVAC": "systems.hvac",
+  "LED": "systems.led",
+  "Pulsar": "systems.pulsar",
+  "Nova": "systems.nova",
+  "AI": "systems.ai",
+  "Security": "systems.security",
+};
+
 interface AlertsAnomaliesProps {
   onNavigateToLogs?: () => void;
 }
@@ -75,18 +87,19 @@ function SeverityIcon({ severity }: { severity: string }) {
 }
 
 export function AlertsAnomalies({ onNavigateToLogs }: AlertsAnomaliesProps) {
+  const { t } = useTranslation('dashboard');
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const [showRawJSON, setShowRawJSON] = useState(false);
-  
+
   // Get top 5 most recent logs
   const topLogs = SAMPLE_LOGS.slice(0, 5);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-slate-900 dark:text-slate-100">Alerts & Anomalies</h2>
+        <h2 className="text-slate-900 dark:text-slate-100">{t('alerts.title')}</h2>
         <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={onNavigateToLogs}>
-          View All
+          {t('viewAll')}
         </Button>
       </div>
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -115,12 +128,12 @@ export function AlertsAnomalies({ onNavigateToLogs }: AlertsAnomaliesProps) {
                   </div>
                   
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className="text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 shrink-0"
                     >
-                      <Icon className="w-3 h-3 mr-1" />
-                      {log.system}
+                      <Icon className="w-3 h-3 me-1" />
+                      {systemTranslationKeys[log.system] ? t(systemTranslationKeys[log.system]) : log.system}
                     </Badge>
                     
                     <Badge 
@@ -132,7 +145,7 @@ export function AlertsAnomalies({ onNavigateToLogs }: AlertsAnomaliesProps) {
                   </div>
                   
                   <div className="text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap ml-auto shrink-0">
-                    {getTimeAgo(log.timestamp)}
+                    {getTimeAgo(log.timestamp, t)}
                   </div>
                 </div>
                 

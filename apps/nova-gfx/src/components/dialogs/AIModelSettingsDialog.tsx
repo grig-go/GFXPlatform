@@ -308,9 +308,9 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                       <div>
                         <div className="font-medium flex items-center gap-2">
                           {model.name}
-                          {id === 'gemini-3.0-pro-image' && (
+                          {id === 'gemini-3-pro-image' && (
                             <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
-                              Latest
+                              Highest Quality
                             </span>
                           )}
                           {id === 'gemini-2.5-flash-image' && (

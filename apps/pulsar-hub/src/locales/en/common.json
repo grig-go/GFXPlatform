@@ -1,0 +1,25 @@
+{
+  "buttons": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "submit": "Submit",
+    "reset": "Reset",
+    "close": "Close",
+    "confirm": "Confirm"
+  },
+  "status": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "submitting": "Submitting...",
+    "enabled": "enabled",
+    "disabled": "disabled",
+    "visible": "Visible",
+    "hidden": "Hidden"
+  },
+  "labels": {
+    "type": "Type",
+    "title": "Title",
+    "description": "Description",
+    "name": "Name"
+  }
+}

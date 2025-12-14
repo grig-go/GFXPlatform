@@ -889,14 +889,18 @@ export function ChatPanel() {
           // Variable to track if we found an element to update
           let existingElement: typeof store.elements[0] | undefined = undefined;
 
-          // Check if this is an UPDATE to an existing element
-          if (expandedChanges.type === 'update') {
-            console.log('🔍 Looking for element to update:', { id: el.id, name: el.name });
+          // Check if this is an UPDATE or REPLACE to an existing element
+          if (expandedChanges.type === 'update' || expandedChanges.type === 'replace') {
+            console.log('🔍 Looking for element to update/replace:', { id: el.id, name: el.name });
             console.log('📋 Available elements:', store.elements.map(e => ({ id: e.id, name: e.name })));
-            
-            // Try to find the existing element by ID first, then by name
-            existingElement = el.id 
-              ? store.elements.find(e => e.id === el.id)
+
+            // Try to find the existing element by ID first (supports both full UUID and 8-char prefix)
+            existingElement = el.id
+              ? store.elements.find(e =>
+                  e.id === el.id || // Exact match
+                  e.id.startsWith(el.id) || // Provided ID is prefix of full ID
+                  el.id.startsWith(e.id.slice(0, 8)) // Provided ID matches 8-char prefix
+                )
               : undefined;
             
             // Fallback 1: Try matching by exact name (case insensitive)
@@ -928,44 +932,62 @@ export function ChatPanel() {
             }
             
             if (existingElement) {
-              // Update only the properties that were specified
-              const updates: Partial<typeof existingElement> = {};
-              
-              if (el.name !== undefined && el.name !== 'Untitled') updates.name = el.name;
-              if (el.position_x !== undefined) updates.position_x = el.position_x;
-              if (el.position_y !== undefined) updates.position_y = el.position_y;
-              if (el.width !== undefined) updates.width = el.width;
-              if (el.height !== undefined) updates.height = el.height;
-              if (el.rotation !== undefined) updates.rotation = el.rotation;
-              if (el.opacity !== undefined) updates.opacity = el.opacity;
-              if (el.styles !== undefined) {
-                // Merge styles instead of replacing - ensure both are objects
-                const existingStyles = existingElement.styles && typeof existingElement.styles === 'object'
-                  ? existingElement.styles
-                  : {};
-                const newStyles = el.styles && typeof el.styles === 'object' ? el.styles : {};
-                updates.styles = { ...existingStyles, ...newStyles };
+              // REPLACE action: Delete the old element first, then create the new one
+              if (expandedChanges.type === 'replace') {
+                console.log('🔄 REPLACE: Deleting old element:', existingElement.name, existingElement.id);
+                // Store info about the element being replaced for positioning
+                const replacedPosition = {
+                  position_x: el.position_x ?? existingElement.position_x,
+                  position_y: el.position_y ?? existingElement.position_y,
+                  width: el.width ?? existingElement.width,
+                  height: el.height ?? existingElement.height,
+                  z_index: existingElement.z_index,
+                };
+                // Delete the old element
+                store.deleteElements([existingElement.id]);
+                // Mark that we need to create the new element with replaced position
+                (el as any)._replacedPosition = replacedPosition;
+                existingElement = undefined; // Force creation of new element
+              } else {
+                // UPDATE action: Update only the properties that were specified
+                const updates: Partial<typeof existingElement> = {};
+
+                if (el.name !== undefined && el.name !== 'Untitled') updates.name = el.name;
+                if (el.position_x !== undefined) updates.position_x = el.position_x;
+                if (el.position_y !== undefined) updates.position_y = el.position_y;
+                if (el.width !== undefined) updates.width = el.width;
+                if (el.height !== undefined) updates.height = el.height;
+                if (el.rotation !== undefined) updates.rotation = el.rotation;
+                if (el.opacity !== undefined) updates.opacity = el.opacity;
+                if (el.styles !== undefined) {
+                  // Merge styles instead of replacing - ensure both are objects
+                  const existingStyles = existingElement.styles && typeof existingElement.styles === 'object'
+                    ? existingElement.styles
+                    : {};
+                  const newStyles = el.styles && typeof el.styles === 'object' ? el.styles : {};
+                  updates.styles = { ...existingStyles, ...newStyles };
+                }
+                if (el.content !== undefined) {
+                  // Merge content instead of replacing - ensure both are objects
+                  const existingContent = existingElement.content && typeof existingElement.content === 'object'
+                    ? existingElement.content
+                    : {};
+                  const newContent = el.content && typeof el.content === 'object' ? el.content : {};
+                  updates.content = { ...existingContent, ...newContent };
+                }
+
+                store.updateElement(existingElement.id, updates);
+                elementNameToId[existingElement.name] = existingElement.id;
+                console.log('✅ Updated existing element:', existingElement.name, 'with:', updates);
+                return; // Skip creation
               }
-              if (el.content !== undefined) {
-                // Merge content instead of replacing - ensure both are objects
-                const existingContent = existingElement.content && typeof existingElement.content === 'object'
-                  ? existingElement.content
-                  : {};
-                const newContent = el.content && typeof el.content === 'object' ? el.content : {};
-                updates.content = { ...existingContent, ...newContent };
-              }
-              
-              store.updateElement(existingElement.id, updates);
-              elementNameToId[existingElement.name] = existingElement.id;
-              console.log('✅ Updated existing element:', existingElement.name, 'with:', updates);
-              return; // Skip creation
             } else {
-              console.log('⚠️ Could not find element to update, will create new:', el.id || el.name);
+              console.log('⚠️ Could not find element to update/replace, will create new:', el.id || el.name);
             }
           }
-          
-          // CREATE a new element (if not updating, or if update didn't find element)
-          if (expandedChanges.type === 'create' || (expandedChanges.type === 'update' && !existingElement)) {
+
+          // CREATE a new element (if not updating, or if update/replace didn't find element, or after replace deleted old)
+          if (expandedChanges.type === 'create' || expandedChanges.type === 'replace' || (expandedChanges.type === 'update' && !existingElement)) {
             // Process content based on element type
             let content: any = el.content;
 
@@ -1027,10 +1049,21 @@ export function ChatPanel() {
               };
             }
 
+            // Use replaced position if available (from replace action)
+            const replacedPos = (el as any)._replacedPosition;
+            const finalPosition = {
+              position_x: el.position_x ?? replacedPos?.position_x ?? 100,
+              position_y: el.position_y ?? replacedPos?.position_y ?? 100,
+              width: el.width ?? replacedPos?.width ?? 200,
+              height: el.height ?? replacedPos?.height ?? 100,
+              z_index: replacedPos?.z_index ?? el._zIndex ?? index,
+            };
+
             console.log(`➕ Adding element: ${el.name} (${el.element_type}) to template ${templateId}`, {
-              position: { x: el.position_x ?? 100, y: el.position_y ?? 100 },
-              size: { w: el.width ?? 200, h: el.height ?? 100 },
+              position: { x: finalPosition.position_x, y: finalPosition.position_y },
+              size: { w: finalPosition.width, h: finalPosition.height },
               content: content,
+              isReplacement: !!replacedPos,
             });
 
             // Get fresh store reference for element creation
@@ -1039,15 +1072,15 @@ export function ChatPanel() {
               template_id: templateId,
               name: el.name || 'AI Element',
               element_type: el.element_type || 'shape',
-              position_x: el.position_x ?? 100,
-              position_y: el.position_y ?? 100,
-              width: el.width ?? 200,
-              height: el.height ?? 100,
+              position_x: finalPosition.position_x,
+              position_y: finalPosition.position_y,
+              width: finalPosition.width,
+              height: finalPosition.height,
               rotation: el.rotation ?? 0,
               opacity: el.opacity ?? 1,
               scale_x: el.scale_x ?? 1,
               scale_y: el.scale_y ?? 1,
-              z_index: el._zIndex ?? index,
+              z_index: finalPosition.z_index,
               styles: el.styles || {},
               content: content,
               visible: true, // Ensure elements are visible

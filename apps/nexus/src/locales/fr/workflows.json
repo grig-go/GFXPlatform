@@ -1,0 +1,87 @@
+{
+  "title": "Workflows",
+  "page": {
+    "newWorkflow": "Nouveau workflow",
+    "aiAssist": "Assistant IA"
+  },
+  "tabs": {
+    "allWorkflows": "Tous les workflows",
+    "activeOnly": "Actifs uniquement"
+  },
+  "create": {
+    "title": "Créer un nouveau workflow",
+    "name": "Nom du workflow",
+    "namePlaceholder": "Entrez le nom du workflow",
+    "description": "Description",
+    "descriptionPlaceholder": "Décrivez ce que fait ce workflow",
+    "type": "Type de workflow",
+    "icon": "Icône",
+    "button": "Créer le workflow"
+  },
+  "types": {
+    "scheduled": "Planifié",
+    "scheduledDesc": "Exécuter à des heures précises",
+    "eventBased": "Basé sur événement",
+    "eventBasedDesc": "Déclenché par des événements système",
+    "conditional": "Conditionnel",
+    "conditionalDesc": "Exécuter lorsque les conditions sont remplies",
+    "manual": "Manuel",
+    "manualDesc": "Exécuter manuellement à la demande"
+  },
+  "status": {
+    "running": "En cours",
+    "scheduled": "Planifié",
+    "paused": "En pause",
+    "completed": "Terminé",
+    "failed": "Échoué"
+  },
+  "nodes": {
+    "trigger": "Déclencheur",
+    "action": "Action",
+    "condition": "Condition",
+    "addNode": "Ajouter un nœud",
+    "triggerPlaceholder": "Condition de déclenchement...",
+    "conditionPlaceholder": "Condition...",
+    "actionPlaceholder": "Nom de l'action...",
+    "intensity": "Intensité"
+  },
+  "list": {
+    "searchPlaceholder": "Rechercher des workflows...",
+    "runNow": "Exécuter maintenant",
+    "archive": "Archiver",
+    "noWorkflowsFound": "Aucun workflow trouvé"
+  },
+  "viewer": {
+    "selectWorkflow": "Sélectionnez un workflow pour voir son flux d'automatisation",
+    "status": {
+      "active": "Actif",
+      "paused": "En pause",
+      "error": "Erreur",
+      "draft": "Brouillon"
+    }
+  },
+  "inspector": {
+    "title": "Inspecteur de workflow",
+    "properties": "Propriétés",
+    "triggers": "Déclencheurs",
+    "actions": "Actions",
+    "history": "Historique"
+  },
+  "aiAssist": {
+    "title": "Assistant IA",
+    "placeholder": "Demandez de l'aide à l'IA pour votre workflow...",
+    "suggestions": "Suggestions"
+  },
+  "actions": {
+    "run": "Exécuter",
+    "pause": "Mettre en pause",
+    "stop": "Arrêter",
+    "duplicate": "Dupliquer",
+    "delete": "Supprimer",
+    "export": "Exporter"
+  },
+  "empty": {
+    "title": "Aucun workflow",
+    "message": "Créez votre premier workflow pour automatiser des tâches"
+  }
+}

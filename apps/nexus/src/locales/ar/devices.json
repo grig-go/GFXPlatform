@@ -1,0 +1,139 @@
+{
+  "title": "الأجهزة",
+  "page": {
+    "title": "جميع الأجهزة",
+    "deviceCount": "{{filtered}} من {{total}} جهاز",
+    "viewTable": "جدول",
+    "viewCards": "بطاقات",
+    "addDevice": "إضافة جهاز",
+    "searchPlaceholder": "البحث بالاسم أو النوع أو المنطقة أو الموقع أو IP...",
+    "clearFilters": "مسح المرشحات",
+    "clearAll": "مسح الكل ({{count}})",
+    "perPage": "لكل صفحة",
+    "showingRange": "عرض {{start}}–{{end}} من {{total}}",
+    "noDevicesFound": "لم يتم العثور على أجهزة تطابق المرشحات"
+  },
+  "types": {
+    "ledPanel": "لوحة LED",
+    "speaker": "مكبر صوت",
+    "amplifier": "مضخم",
+    "camera": "كاميرا",
+    "sensor": "مستشعر",
+    "controller": "متحكم",
+    "display": "شاشة",
+    "server": "خادم",
+    "switch": "مبدل",
+    "router": "موجه"
+  },
+  "status": {
+    "online": "متصل",
+    "offline": "غير متصل",
+    "warning": "تحذير",
+    "maintenance": "صيانة"
+  },
+  "columns": {
+    "name": "الاسم",
+    "type": "النوع",
+    "zone": "المنطقة",
+    "system": "النظام",
+    "status": "الحالة",
+    "lastSeen": "آخر ظهور",
+    "ipAddress": "عنوان IP",
+    "firmware": "البرنامج الثابت",
+    "location": "الموقع",
+    "uptime": "وقت التشغيل",
+    "actions": "الإجراءات"
+  },
+  "filters": {
+    "allTypes": "جميع الأنواع",
+    "allZones": "جميع المناطق",
+    "allSystems": "جميع الأنظمة",
+    "allStatuses": "جميع الحالات"
+  },
+  "actions": {
+    "restart": "إعادة تشغيل",
+    "configure": "تكوين",
+    "viewLogs": "عرض السجلات",
+    "diagnostics": "التشخيص",
+    "edit": "تعديل",
+    "logs": "السجلات",
+    "health": "صحة النظام"
+  },
+  "details": {
+    "title": "تفاصيل الجهاز",
+    "properties": "الخصائص",
+    "history": "السجل",
+    "configuration": "التكوين"
+  },
+  "stats": {
+    "total": "إجمالي الأجهزة",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "warnings": "تحذيرات"
+  },
+  "addDevice": {
+    "title": "إضافة جهاز جديد",
+    "description": "أدخل تفاصيل الجهاز لإضافته إلى النظام",
+    "deviceName": "اسم الجهاز",
+    "deviceNamePlaceholder": "مثال: لوحة LED 1",
+    "deviceType": "نوع الجهاز",
+    "selectType": "اختر النوع",
+    "selectZone": "اختر المنطقة",
+    "selectSystem": "اختر النظام",
+    "selectStatus": "اختر الحالة",
+    "locationPlaceholder": "مثال: بوابة A10",
+    "ipPlaceholder": "مثال: 10.20.1.10",
+    "specs": "المواصفات (اختياري)",
+    "specsPlaceholder": "مثال: 55\" 4K أو 3000-6500K",
+    "initialStatus": "الحالة الأولية"
+  },
+  "card": {
+    "health": "الصحة",
+    "performance24h": "أداء 24 ساعة",
+    "uptime": "وقت التشغيل",
+    "signal": "الإشارة",
+    "excellent": "ممتاز",
+    "good": "جيد",
+    "fair": "مقبول",
+    "poor": "ضعيف",
+    "system": "النظام",
+    "load": "الحمل",
+    "location": "الموقع",
+    "ipAddress": "عنوان IP",
+    "specs": "المواصفات",
+    "restart": "إعادة تشغيل",
+    "viewLogs": "عرض السجلات"
+  },
+  "modals": {
+    "edit": {
+      "title": "تعديل إعدادات الجهاز",
+      "deviceName": "اسم الجهاز",
+      "deviceType": "نوع الجهاز",
+      "location": "الموقع",
+      "ipAddress": "عنوان IP",
+      "specifications": "المواصفات",
+      "autoRestart": "تمكين إعادة التشغيل التلقائي عند الفشل",
+      "healthMonitoring": "تمكين مراقبة الصحة"
+    },
+    "restart": {
+      "title": "إعادة تشغيل الجهاز",
+      "confirmMessage": "هل أنت متأكد من أنك تريد إعادة تشغيل هذا الجهاز؟",
+      "warning": "سيؤدي هذا إلى انقطاع مؤقت في الخدمة.",
+      "device": "الجهاز",
+      "type": "النوع",
+      "currentStatus": "الحالة الحالية",
+      "estDowntime": "وقت التوقف المقدر",
+      "confirmCheckbox": "أفهم أن هذا سيقطع الخدمة",
+      "restartButton": "إعادة تشغيل الجهاز"
+    },
+    "logs": {
+      "title": "سجلات الجهاز",
+      "last24Hours": "آخر 24 ساعة",
+      "export": "تصدير السجلات"
+    },
+    "health": {
+      "title": "صحة النظام",
+      "exportReport": "تصدير تقرير الصحة"
+    }
+  }
+}

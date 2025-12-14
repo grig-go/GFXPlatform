@@ -1,0 +1,56 @@
+{
+  "title": "الأنظمة",
+  "names": {
+    "lighting": "الإضاءة",
+    "ledDisplays": "شاشات LED",
+    "audio": "الصوت",
+    "broadcastControl": "التحكم في البث",
+    "showPlayback": "تشغيل العروض",
+    "graphics": "الرسومات",
+    "signage": "اللافتات",
+    "environmental": "البيئة",
+    "networkSecurity": "الشبكة والأمان"
+  },
+  "systems": {
+    "lighting": "الإضاءة",
+    "audio": "الصوت",
+    "ledDisplays": "شاشات LED",
+    "signage": "اللافتات",
+    "showPlayback": "تشغيل العروض",
+    "paging": "النداء",
+    "cctv": "كاميرات المراقبة",
+    "queueSensors": "مستشعرات الطابور",
+    "environmental": "البيئة",
+    "conveyorStatus": "حالة السيور الناقلة",
+    "hvac": "التكييف",
+    "digitalMenus": "القوائم الرقمية"
+  },
+  "subtitles": {
+    "lighting": "التحكم في إضاءة الموقع",
+    "ledDisplays": "شاشات العرض الكبيرة",
+    "audio": "نظام الصوت",
+    "broadcastControl": "البث المباشر",
+    "showPlayback": "تشغيل الوسائط",
+    "graphics": "رسومات في الوقت الحقيقي",
+    "signage": "اللافتات الرقمية",
+    "environmental": "التكييف والمناخ",
+    "networkSecurity": "البنية التحتية لتقنية المعلومات"
+  },
+  "integrations": {
+    "pixeraDisguise": "Pixera + Disguise",
+    "unreal": "Unreal",
+    "hvacEnergy": "التكييف + الطاقة"
+  },
+  "status": {
+    "operational": "تشغيلي",
+    "degraded": "متدهور",
+    "critical": "حرج",
+    "maintenance": "صيانة"
+  },
+  "metrics": {
+    "uptime": "وقت التشغيل",
+    "latency": "التأخير",
+    "throughput": "الإنتاجية",
+    "errorRate": "معدل الأخطاء"
+  }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useDrag } from '@/hooks/useDrag';
 import { useResize, RESIZE_CURSORS, type ResizeHandle } from '@/hooks/useResize';
@@ -19,10 +19,138 @@ import { LineElement } from './LineElement';
 import type { Element } from '@emergent-platform/types';
 import { cn } from '@emergent-platform/ui';
 
+// TextureVideo component with ping pong and playback speed support
+interface TextureVideoProps {
+  src: string;
+  style: React.CSSProperties;
+  playbackMode: 'loop' | 'pingpong' | 'once';
+  playbackSpeed: number;
+}
+
+function TextureVideo({ src, style, playbackMode, playbackSpeed }: TextureVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const stateRef = useRef({
+    direction: 1,
+    videoTime: 0,
+    lastTimestamp: 0,
+  });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Cancel any existing animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    // Reset state
+    stateRef.current = { direction: 1, videoTime: 0, lastTimestamp: 0 };
+
+    if (playbackMode === 'pingpong') {
+      video.loop = false;
+      video.muted = true;
+
+      const startPingPong = () => {
+        const duration = video.duration;
+        if (!duration || isNaN(duration)) return;
+
+        video.pause();
+        video.currentTime = 0;
+        stateRef.current.videoTime = 0;
+        stateRef.current.direction = 1;
+        stateRef.current.lastTimestamp = 0;
+
+        const animate = (timestamp: number) => {
+          const state = stateRef.current;
+
+          // Calculate delta
+          if (state.lastTimestamp === 0) {
+            state.lastTimestamp = timestamp;
+            animationRef.current = requestAnimationFrame(animate);
+            return;
+          }
+
+          const deltaSeconds = (timestamp - state.lastTimestamp) / 1000;
+          state.lastTimestamp = timestamp;
+
+          // Update time based on direction
+          state.videoTime += deltaSeconds * playbackSpeed * state.direction;
+
+          // Bounce at boundaries
+          if (state.videoTime >= duration) {
+            state.videoTime = duration - 0.01;
+            state.direction = -1;
+          } else if (state.videoTime <= 0) {
+            state.videoTime = 0.01;
+            state.direction = 1;
+          }
+
+          // Apply to video (only if different enough to avoid flickering)
+          if (Math.abs(video.currentTime - state.videoTime) > 0.01) {
+            video.currentTime = state.videoTime;
+          }
+
+          animationRef.current = requestAnimationFrame(animate);
+        };
+
+        animationRef.current = requestAnimationFrame(animate);
+      };
+
+      // Wait for video to be ready
+      if (video.readyState >= 2) {
+        startPingPong();
+      } else {
+        video.addEventListener('canplaythrough', startPingPong, { once: true });
+      }
+
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
+        }
+        video.removeEventListener('canplaythrough', startPingPong);
+      };
+
+    } else if (playbackMode === 'once') {
+      video.loop = false;
+      video.playbackRate = playbackSpeed;
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    } else {
+      // Loop mode (default)
+      video.loop = true;
+      video.playbackRate = playbackSpeed;
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [playbackMode, playbackSpeed, src]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      muted
+      playsInline
+      preload="auto"
+      style={style}
+    />
+  );
+}
+
 // Convert box-shadow to filter: drop-shadow() for icon shape matching
 function convertBoxShadowToFilter(boxShadow: string): string {
   if (!boxShadow || boxShadow === 'none') return '';
-  
+
   // Parse box-shadow: offsetX offsetY blur spread color
   // Example: "0 2px 8px 0 rgba(0,0,0,0.3)"
   const match = boxShadow.match(/([-\d.]+)px\s+([-\d.]+)px\s+([-\d.]+)px\s+([-\d.]+)?px?\s+(.+)/);
@@ -31,15 +159,64 @@ function convertBoxShadowToFilter(boxShadow: string): string {
     // drop-shadow doesn't support spread, so we approximate
     return `drop-shadow(${offsetX}px ${offsetY}px ${blur}px ${color})`;
   }
-  
+
   // Fallback: try to extract just color and blur
   const colorMatch = boxShadow.match(/rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/);
   const blurMatch = boxShadow.match(/(\d+)px/);
   if (colorMatch && blurMatch) {
     return `drop-shadow(0 0 ${blurMatch[1]}px ${colorMatch[0]})`;
   }
-  
+
   return '';
+}
+
+// Adjust box-shadow opacity based on animated opacity
+function adjustBoxShadowOpacity(boxShadow: string, opacity: number): string {
+  if (!boxShadow || boxShadow === 'none' || opacity >= 1) return boxShadow;
+  if (opacity <= 0) return 'none';
+
+  // Handle multiple shadows separated by commas
+  const shadows = boxShadow.split(/,(?![^(]*\))/);
+
+  return shadows.map(shadow => {
+    const trimmed = shadow.trim();
+
+    // Match rgba color
+    const rgbaMatch = trimmed.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+    if (rgbaMatch) {
+      const [fullMatch, r, g, b, a] = rgbaMatch;
+      const newAlpha = parseFloat(a) * opacity;
+      return trimmed.replace(fullMatch, `rgba(${r}, ${g}, ${b}, ${newAlpha.toFixed(3)})`);
+    }
+
+    // Match rgb color and convert to rgba
+    const rgbMatch = trimmed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (rgbMatch) {
+      const [fullMatch, r, g, b] = rgbMatch;
+      return trimmed.replace(fullMatch, `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(3)})`);
+    }
+
+    // Match hex color
+    const hexMatch = trimmed.match(/#([0-9a-fA-F]{3,8})\b/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      let r: number, g: number, b: number;
+      if (hex.length === 3) {
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else if (hex.length === 6) {
+        r = parseInt(hex.slice(0, 2), 16);
+        g = parseInt(hex.slice(2, 4), 16);
+        b = parseInt(hex.slice(4, 6), 16);
+      } else {
+        return trimmed; // 8-char hex with alpha, skip for now
+      }
+      return trimmed.replace(hexMatch[0], `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(3)})`);
+    }
+
+    return trimmed;
+  }).join(', ');
 }
 
 interface StageElementProps {
@@ -164,10 +341,22 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   );
 
   // Build transform style with animated properties
-  // Handle animated opacity
+  // Handle animated opacity - default to 1 if not set
   const animatedOpacity = animatedProps.opacity !== undefined
     ? Number(animatedProps.opacity)
-    : element.opacity;
+    : (element.opacity ?? 1);
+
+  // Debug: Log opacity values for shapes to trace animation issues
+  if (element.content.type === 'shape' && element.name?.toLowerCase().includes('background')) {
+    console.log('[StageElement Opacity Debug]', element.name, {
+      'animatedProps.opacity': animatedProps.opacity,
+      'element.opacity': element.opacity,
+      'final animatedOpacity': animatedOpacity,
+      'element.styles?.opacity': element.styles?.opacity,
+      'isPlaying': isPlaying,
+      'playheadPosition': playheadPosition,
+    });
+  }
 
   // Check if this is a glass-enabled shape element
   // Glass effect uses backdrop-filter which doesn't work with opacity: 0
@@ -363,6 +552,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         // - backgroundColor/background -> content.fill, gradient, glass, or texture
         // - borderRadius -> content.cornerRadius
         // - borderColor/borderWidth -> content.stroke/strokeWidth
+        // - backdropFilter/WebkitBackdropFilter -> glass effect controls these
+        // - opacity -> handled separately for glass elements
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const {
           backgroundColor: _excludedBgFromStyles,
@@ -371,8 +562,23 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           borderColor: _excludedBorderColor,
           borderWidth: _excludedBorderWidth,
           border: _excludedBorder,
-          ...shapeSafeStyles
+          backdropFilter: _excludedBackdropFilter,
+          WebkitBackdropFilter: _excludedWebkitBackdropFilter,
+          opacity: _excludedOpacity,
+          boxShadow: rawBoxShadow,
+          ...shapeSafeStylesWithoutShadow
         } = element.styles || {};
+
+        // Adjust box-shadow opacity based on animated opacity
+        const shapeSafeStyles = useMemo(() => {
+          const adjustedShadow = rawBoxShadow
+            ? adjustBoxShadowOpacity(rawBoxShadow as string, animatedOpacity)
+            : undefined;
+          return {
+            ...shapeSafeStylesWithoutShadow,
+            ...(adjustedShadow ? { boxShadow: adjustedShadow } : {}),
+          };
+        }, [shapeSafeStylesWithoutShadow, rawBoxShadow, animatedOpacity]);
 
         // Memoize gradient calculation to prevent infinite re-renders
         const gradientValue = useMemo(() => {
@@ -437,6 +643,9 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         const glassStyles: React.CSSProperties = useMemo(() => {
           if (!glass?.enabled) return {};
 
+          // Debug: Log glass rendering state
+          // console.log('[Glass Debug]', element.name, { animatedOpacity, blur: glass.blur, enabled: glass.enabled });
+
           // CRITICAL: When opacity is 0 or very close to 0, completely disable glass effect
           // backdrop-filter still creates a visible layer even with blur(0px)
           if (animatedOpacity < 0.01) {
@@ -475,15 +684,15 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             return `1px solid rgba(255, 255, 255, ${0.1 * borderOpacity})`;
           };
 
-          // Scale blur based on animated opacity for smooth fade effect
+          // Keep blur at full strength - the background color alpha handles the fade
+          // Don't scale blur with opacity, as this causes the glass effect to disappear during fade
           const baseBlur = glass.blur !== undefined ? glass.blur : 16;
-          const effectiveBlur = baseBlur * animatedOpacity;
           const saturationPart = glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : '';
 
           return {
             backgroundColor: colorToRgba(fillColor, effectiveOpacity),
-            backdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
-            WebkitBackdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
+            backdropFilter: `blur(${baseBlur}px)${saturationPart}`,
+            WebkitBackdropFilter: `blur(${baseBlur}px)${saturationPart}`,
             border: getBorder(),
           };
         }, [glass?.enabled, glass?.opacity, glass?.blur, glass?.saturation, glass?.borderWidth, glass?.borderColor, shapeContent.fill, animatedOpacity]);
@@ -526,6 +735,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           const posY = texture.position?.y ?? 0;
           const rotation = texture.rotation ?? 0;
           const opacity = texture.opacity ?? 1;
+          const blur = texture.blur ?? 0;
           const fit = texture.fit || 'cover';
           const blendMode = texture.blendMode || 'normal';
 
@@ -554,6 +764,13 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           const bgPosX = 50 + posX;
           const bgPosY = 50 + posY;
 
+          // Scale up slightly when blur is applied to hide the soft edges
+          const blurScale = blur > 0 ? 1 + (blur * 0.04) : 1;
+          const transform = [
+            rotation !== 0 ? `rotate(${rotation}deg)` : '',
+            blur > 0 ? `scale(${blurScale})` : '',
+          ].filter(Boolean).join(' ') || undefined;
+
           return {
             backgroundImage: `url(${texture.url})`,
             backgroundSize,
@@ -561,10 +778,10 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             backgroundRepeat,
             opacity,
             mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
-            // Note: rotation would need a wrapper div or CSS transform
-            ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
+            transform,
+            ...(blur > 0 ? { filter: `blur(${blur}px)` } : {}),
           };
-        }, [texture?.enabled, texture?.url, texture?.scale, texture?.position, texture?.rotation, texture?.opacity, texture?.fit, texture?.blendMode]);
+        }, [texture?.enabled, texture?.url, texture?.scale, texture?.position, texture?.rotation, texture?.opacity, texture?.blur, texture?.fit, texture?.blendMode]);
 
         // Determine background color/value
         const bgColorValue = typeof animatedBgColor === 'string'
@@ -645,19 +862,20 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           };
 
           // For gradient + glass, inner div should be transparent with just blur
-          // Apply animated opacity to glass effect
+          // Apply animated opacity to glass effect (but NOT to blur - blur stays constant)
           const glassOpacity = glass.opacity !== undefined ? glass.opacity : 0.3;
           const effectiveGlassOpacity = glassOpacity * animatedOpacity;
+          // Keep blur at full strength - the background color alpha handles the fade
+          // Don't scale blur with opacity, as this causes the glass effect to disappear during fade
           const baseBlur = glass.blur !== undefined ? glass.blur : 16;
-          const effectiveBlur = baseBlur * animatedOpacity;
           const saturationPart = glass.saturation !== undefined ? ` saturate(${glass.saturation}%)` : '';
 
           const innerStyle: React.CSSProperties = {
             position: 'absolute',
             inset: 0,
             backgroundColor: `rgba(255, 255, 255, ${effectiveGlassOpacity * 0.1})`, // Very subtle white overlay
-            backdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
-            WebkitBackdropFilter: `blur(${effectiveBlur}px)${saturationPart}`,
+            backdropFilter: `blur(${baseBlur}px)${saturationPart}`,
+            WebkitBackdropFilter: `blur(${baseBlur}px)${saturationPart}`,
             borderRadius: 'inherit',
           };
 
@@ -733,29 +951,38 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             pointerEvents: 'none',
           };
 
-          // If texture is a video, render video element
+          // If texture is a video, render video element with playback controls
           if (texture.mediaType === 'video') {
+            const videoStyle: React.CSSProperties = {
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: (texture.fit === 'cover' ? 'cover' : texture.fit === 'contain' ? 'contain' : 'fill') as React.CSSProperties['objectFit'],
+              objectPosition: `${50 + (texture.position?.x ?? 0)}% ${50 + (texture.position?.y ?? 0)}%`,
+              opacity: texture.opacity ?? 1,
+              mixBlendMode: (texture.blendMode || 'normal') as React.CSSProperties['mixBlendMode'],
+              // Scale up when blur is applied to hide soft edges
+              transform: (() => {
+                const scale = texture.scale ?? 1;
+                const blurScale = texture.blur ? 1 + (texture.blur * 0.04) : 1;
+                const totalScale = scale * blurScale;
+                return texture.rotation
+                  ? `scale(${totalScale}) rotate(${texture.rotation}deg)`
+                  : `scale(${totalScale})`;
+              })(),
+              filter: texture.blur ? `blur(${texture.blur}px)` : undefined,
+              borderRadius: 'inherit',
+              pointerEvents: 'none',
+            };
+
             return (
               <div style={textureBaseStyle}>
-                <video
+                <TextureVideo
                   src={texture.url}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: (texture.fit === 'cover' ? 'cover' : texture.fit === 'contain' ? 'contain' : 'fill') as React.CSSProperties['objectFit'],
-                    objectPosition: `${50 + (texture.position?.x ?? 0)}% ${50 + (texture.position?.y ?? 0)}%`,
-                    opacity: texture.opacity ?? 1,
-                    mixBlendMode: (texture.blendMode || 'normal') as React.CSSProperties['mixBlendMode'],
-                    transform: texture.rotation ? `scale(${texture.scale ?? 1}) rotate(${texture.rotation}deg)` : `scale(${texture.scale ?? 1})`,
-                    borderRadius: 'inherit',
-                    pointerEvents: 'none',
-                  }}
+                  style={videoStyle}
+                  playbackMode={texture.playbackMode || 'loop'}
+                  playbackSpeed={texture.playbackSpeed ?? 1}
                 />
               </div>
             );

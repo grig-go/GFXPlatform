@@ -1,0 +1,91 @@
+{
+  "buttons": {
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "submit": "Enviar",
+    "reset": "Restablecer",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "apply": "Aplicar",
+    "create": "Crear",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "view": "Ver",
+    "viewDetails": "Ver detalles",
+    "applyOptimization": "Aplicar optimización",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "refresh": "Actualizar",
+    "export": "Exportar",
+    "import": "Importar"
+  },
+  "status": {
+    "loading": "Cargando...",
+    "saving": "Guardando...",
+    "submitting": "Enviando...",
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "warning": "Advertencia",
+    "error": "Error",
+    "success": "Éxito",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "running": "En ejecución",
+    "scheduled": "Programado",
+    "paused": "Pausado",
+    "resolved": "Resuelto",
+    "pending": "Pendiente"
+  },
+  "labels": {
+    "type": "Tipo",
+    "title": "Título",
+    "description": "Descripción",
+    "name": "Nombre",
+    "status": "Estado",
+    "date": "Fecha",
+    "time": "Hora",
+    "system": "Sistema",
+    "zone": "Zona",
+    "device": "Dispositivo",
+    "all": "Todos",
+    "none": "Ninguno",
+    "unknown": "Desconocido"
+  },
+  "time": {
+    "now": "Ahora",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "thisWeek": "Esta semana",
+    "thisMonth": "Este mes",
+    "startsIn": "Comienza en {{time}}",
+    "ago": "Hace {{time}}",
+    "minutes": "minutos",
+    "hours": "horas",
+    "days": "días",
+    "seconds": "segundos"
+  },
+  "pagination": {
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "page": "Página",
+    "of": "de",
+    "showing": "Mostrando",
+    "entries": "entradas"
+  },
+  "noData": {
+    "title": "Sin datos",
+    "message": "No hay datos disponibles",
+    "noResults": "No se encontraron resultados"
+  },
+  "actions": {
+    "save": "Guardar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "create": "Crear",
+    "update": "Actualizar",
+    "add": "Agregar",
+    "remove": "Quitar"
+  }
+}

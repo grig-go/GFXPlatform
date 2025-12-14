@@ -1,0 +1,56 @@
+{
+  "menus": {
+    "venues": "Venues",
+    "apps": "Apps",
+    "tools": "Tools",
+    "settings": "Settings",
+    "help": "Help"
+  },
+  "venuesList": {
+    "terminalA": "Terminal A (EWR)",
+    "terminalB": "Terminal B (EWR)",
+    "terminalC": "Terminal C (EWR)",
+    "parking": "Terminal Long Term Parking (EWR)"
+  },
+  "tools": {
+    "utilities": "Utilities",
+    "logAnalyzer": "Log Analyzer",
+    "aiAssistant": "AI Assistant",
+    "networkPing": "Network Ping"
+  },
+  "settings": {
+    "preferences": "Preferences",
+    "lightMode": "Light Mode",
+    "darkMode": "Dark Mode",
+    "language": "Language",
+    "engineerMode": "Engineer Mode",
+    "operatorMode": "Operator Mode",
+    "accountSettings": "Account Settings",
+    "usersAndGroups": "Users and Groups",
+    "dashboardPreferences": "Dashboard Preferences",
+    "aiConnections": "AI Connections",
+    "signOut": "Sign Out"
+  },
+  "help": {
+    "support": "Support",
+    "documentation": "Documentation",
+    "contactSupport": "Contact Support",
+    "whatsNew": "What's New",
+    "statusPage": "Status Page"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "systemsMap": "Systems Map",
+    "zones": "Zones",
+    "devices": "Devices",
+    "workflows": "Workflows",
+    "timeline": "Timeline",
+    "logsAlerts": "Logs & Alerts",
+    "aiInsights": "AI Insights"
+  },
+  "search": {
+    "placeholder": "Search systems, devices, or workflows...",
+    "noResults": "No results found"
+  },
+  "noAppsAvailable": "No apps available"
+}

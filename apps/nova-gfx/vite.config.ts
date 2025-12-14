@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     envDir: '../../', // Load .env from root
     server: {
-      port: parseInt(env.VITE_NOVA_GFX_PORT || '3000'),
+      port: parseInt(env.VITE_NOVA_GFX_PORT || '3003'),
       strictPort: true,
     },
   };

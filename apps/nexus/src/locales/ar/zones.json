@@ -1,0 +1,258 @@
+{
+  "title": "المناطق",
+  "list": {
+    "title": "قائمة المناطق",
+    "search": "البحث في المناطق..."
+  },
+  "listPanel": {
+    "title": "مناطق الصالة A",
+    "subtitle": "انقر على منطقة لعرض التفاصيل"
+  },
+  "mapPanel": {
+    "title": "خريطة الصالة A التفاعلية",
+    "subtitle": "مجموعة البوابات A10-A18 • عرض مباشر",
+    "editModeHint": "وضع التحرير: اسحب العلامات لإعادة تحديد موضعها",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "editPositions": "تعديل المواقع",
+    "lightMode": "الوضع الفاتح",
+    "darkMode": "الوضع الداكن",
+    "satelliteView": "عرض القمر الصناعي",
+    "legend": "المفتاح",
+    "legendGates": "البوابات",
+    "legendSecurity": "الأمن",
+    "legendFood": "الطعام",
+    "legendRetail": "التسوق",
+    "legendLounge": "الصالة",
+    "legendBaggage": "الأمتعة",
+    "saveSuccess": "تم حفظ مواقع المناطق بنجاح!",
+    "configTitle": "إعدادات الخريطة",
+    "copyConfig": "نسخ الإعدادات الكاملة",
+    "copySuccess": "تم نسخ الإعدادات إلى الحافظة!",
+    "copyFailed": "فشل في نسخ الإعدادات."
+  },
+  "map": {
+    "title": "خريطة المناطق",
+    "showAll": "عرض الكل",
+    "hideInactive": "إخفاء غير النشطة"
+  },
+  "zoneNames": {
+    "gateClusterA": "بوابة A10 – A18",
+    "securityCheckpointA": "نقطة التفتيش الأمني A",
+    "immigrationHallA": "صالة الهجرة A",
+    "baggageClaimA": "استلام الأمتعة A",
+    "foodCourtA": "منطقة الطعام A",
+    "retailA": "التجزئة A",
+    "loungeA": "الصالة A"
+  },
+  "zoneTypes": {
+    "gateCluster": "مجموعة البوابات",
+    "security": "الأمن",
+    "immigration": "الهجرة",
+    "baggage": "الأمتعة",
+    "publicAmenities": "المرافق العامة",
+    "retailCluster": "مجموعة التجزئة",
+    "lounge": "الصالة"
+  },
+  "zoneDescriptions": {
+    "boardingAreaGroup": "مجموعة منطقة الصعود",
+    "tsaScreening": "فحص الأمن TSA",
+    "customsProcessing": "معالجة الجمارك",
+    "arrivalsHall": "صالة الوصول",
+    "concessionsArea": "منطقة الامتيازات",
+    "dutyFreeShops": "السوق الحرة + المتاجر",
+    "airlineLounge": "صالة شركة الطيران"
+  },
+  "location": "الموقع",
+  "zoneActions": "إجراءات المنطقة",
+  "menu": {
+    "detailsView": "عرض التفاصيل",
+    "viewLogs": "عرض السجلات",
+    "aiInsights": "تحليلات الذكاء الاصطناعي"
+  },
+  "actions": {
+    "addZone": "إضافة منطقة",
+    "generateReport": "إنشاء تقرير",
+    "aiOptimize": "تحسين الذكاء الاصطناعي"
+  },
+  "names": {
+    "gateA10A18": "بوابة A10 – A18",
+    "concourseA": "الردهة A",
+    "concourseB": "الردهة B",
+    "concourseC": "الردهة C",
+    "mainTerminal": "الصالة الرئيسية",
+    "arrivals": "الوصول",
+    "departures": "المغادرة",
+    "baggage": "استلام الأمتعة",
+    "security": "الأمن",
+    "retail": "منطقة التسوق"
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "maintenance": "صيانة"
+  },
+  "detail": {
+    "backToZones": "العودة إلى المناطق",
+    "operational": "تعمل"
+  },
+  "details": {
+    "title": "تفاصيل المنطقة",
+    "systems": "الأنظمة في المنطقة",
+    "devices": "أجهزة",
+    "alerts": "التنبيهات النشطة",
+    "telemetry": "القياسات"
+  },
+  "footer": {
+    "devicesOnline": "الأجهزة المتصلة",
+    "activeAlerts": "التنبيهات النشطة",
+    "systemsRunning": "الأنظمة العاملة"
+  },
+  "aiSummary": {
+    "title": "ملخص المنطقة بالذكاء الاصطناعي",
+    "subtitle": "تحليل ذكي وتوصيات",
+    "selectZone": "اختر منطقة لعرض التحليلات",
+    "noZoneSelected": "لم يتم اختيار منطقة",
+    "suggestedAction": "الإجراء المقترح",
+    "applyOptimization": "تطبيق التحسين",
+    "viewDetails": "عرض التفاصيل",
+    "performanceScore": "درجة أداء المنطقة",
+    "performanceExcellent": "أداء ممتاز عبر جميع الأنظمة",
+    "performanceGood": "أداء جيد مع فرص تحسين بسيطة",
+    "performanceAcceptable": "أداء مقبول، يوصى بالتحسين",
+    "recentOptimizations": "التحسينات الأخيرة",
+    "recommendations": "التوصيات"
+  },
+  "logsAlerts": {
+    "title": "التنبيهات النشطة",
+    "critical": "حرج",
+    "warning": "تحذير"
+  },
+  "aiInsights": {
+    "gateA": {
+      "lightingRecovered": "عادت زمن استجابة الإضاءة إلى طبيعتها بعد ارتفاع الصباح.",
+      "energyUsage": "استهلاك الطاقة أعلى بنسبة +8% من المستوى الأساسي بسبب زيادة تدفق الركاب.",
+      "ledOptimal": "شاشات LED تعمل بدرجة حرارة مثالية عبر جميع البوابات.",
+      "suggestedAction": "تقليل سطوع LED بنسبة 10% لتطبيع استهلاك الطاقة دون التأثير على تجربة الركاب."
+    },
+    "securityA": {
+      "cctvOperational": "جميع كاميرات المراقبة تعمل بنسبة تشغيل 99.9%.",
+      "queueSensors": "مستشعرات الطابور تكتشف تدفق الركاب المثالي.",
+      "pagingImproved": "تحسنت وضوح صوت نظام النداء بنسبة 15%.",
+      "suggestedAction": "فكر في إضافة مستشعرين إضافيين للطابور عند مدخل نقطة التفتيش لتحسين التنبؤ بالتدفق."
+    },
+    "immigrationA": {
+      "environmentalOptimal": "أجهزة الاستشعار البيئية تسجل درجة حرارة ورطوبة مثالية.",
+      "signageEffective": "اللافتات الرقمية تعرض تحديثات الطابور في الوقت الفعلي بفعالية.",
+      "ledGlare": "قد يحتاج سطوع شاشة LED إلى تعديل لتقليل الوهج.",
+      "suggestedAction": "تقليل سطوع شاشة LED بنسبة 15% خلال ساعات الذروة الشمسية لتقليل الوهج."
+    },
+    "baggageA": {
+      "conveyorAccurate": "شاشات حالة السيور تعرض دقة 100%.",
+      "playbackSmooth": "خوادم تشغيل العروض تعمل بسلاسة مع زمن استجابة منخفض.",
+      "audioAudible": "الإعلانات الصوتية واضحة ومسموعة في جميع أنحاء القاعة.",
+      "suggestedAction": "جدولة صيانة وقائية للسير الناقل 3 بناءً على أنماط الاستخدام."
+    },
+    "foodCourtA": {
+      "menuRealtime": "شاشات القوائم الرقمية تتحدث في الوقت الفعلي بدون تأخير.",
+      "hvacLoad": "حمل التكييف أعلى بنسبة +12% خلال ساعات الغداء.",
+      "lightingOptimal": "مستويات الإضاءة مثالية لتجربة تناول الطعام.",
+      "suggestedAction": "تبريد المنطقة مسبقًا قبل 15 دقيقة من ساعات الذروة لتقليل الضغط على التكييف."
+    },
+    "retailA": {
+      "ledEngagement": "شاشات LED تعرض محتوى ترويجي بمشاركة عالية.",
+      "audioBalanced": "مستويات الصوت متوازنة لأجواء تسوق مثالية.",
+      "signageRouting": "اللافتات توجه العملاء بكفاءة عبر ممر التجزئة.",
+      "suggestedAction": "زيادة سطوع شاشة LED بنسبة 5% لتحسين الرؤية في المناطق ذات الحركة المرتفعة."
+    },
+    "loungeA": {
+      "environmentalComfort": "أنظمة التحكم البيئية تحافظ على مستويات راحة ممتازة.",
+      "audioAmbient": "نظام الصوت يوفر خلفية محيطة بمستوى صوت مثالي.",
+      "lightingRelaxing": "الإضاءة تخلق أجواء مريحة بألوان دافئة.",
+      "suggestedAction": "تنفيذ تعديل إضاءة تلقائي بناءً على الوقت من اليوم لتحسين تجربة الضيوف."
+    }
+  },
+  "optimizations": {
+    "audioBalanced": "توازن مستويات الصوت",
+    "hvacOptimized": "تحسين جدول التكييف",
+    "lightingMerged": "دمج مناطق الإضاءة",
+    "cameraAdjusted": "تعديل زوايا الكاميرا",
+    "lightingIncreased": "زيادة شدة الإضاءة",
+    "audioCalibrated": "معايرة مناطق الصوت",
+    "hvacBalanced": "توازن التكييف",
+    "signageUpdated": "تحديث محتوى اللافتات",
+    "lightingDimmed": "تخفيت الإضاءة",
+    "displaySync": "تصحيح مزامنة الشاشة",
+    "audioVolume": "تعديل مستوى الصوت",
+    "playbackOptimized": "تحسين التشغيل",
+    "menuRefreshed": "تحديث محتوى القائمة",
+    "hvacAdjusted": "تعديل جدول التكييف",
+    "audioTuned": "ضبط الصوت المحيط",
+    "displayRotated": "تدوير محتوى الشاشة",
+    "audioSync": "مزامنة الصوت",
+    "tempAdjusted": "تعديل درجة الحرارة",
+    "lightingScenesUpdated": "تحديث مشاهد الإضاءة",
+    "audioPlaylistRefreshed": "تحديث قائمة تشغيل الصوت"
+  },
+  "time": {
+    "30mAgo": "منذ 30 دقيقة",
+    "1hAgo": "منذ ساعة",
+    "2hAgo": "منذ ساعتين",
+    "3hAgo": "منذ 3 ساعات",
+    "4hAgo": "منذ 4 ساعات",
+    "5hAgo": "منذ 5 ساعات",
+    "6hAgo": "منذ 6 ساعات",
+    "7hAgo": "منذ 7 ساعات",
+    "8hAgo": "منذ 8 ساعات"
+  },
+  "alerts": {
+    "categories": {
+      "audioSystem": "نظام الصوت",
+      "ledDisplay": "شاشة LED",
+      "lighting": "الإضاءة",
+      "environmental": "البيئة",
+      "security": "الأمن",
+      "signage": "اللافتات",
+      "showPlayback": "تشغيل العروض"
+    },
+    "zones": {
+      "gateCluster": "مجموعة البوابات",
+      "security": "الأمن"
+    },
+    "messages": {
+      "speakerOffline": "مكبر الصوت 17 غير متصل - بوابة A14",
+      "reducedBrightness": "الشاشة 14 تعاني من انخفاض السطوع",
+      "lightingOperational": "جميع أنظمة الإضاءة تعمل",
+      "tempAdjusted": "تم تعديل درجة الحرارة إلى 72°F في بوابة A12",
+      "cameraLensCleaning": "الكاميرا 8 تحتاج تنظيف العدسة",
+      "flightInfoUpdated": "تم تحديث معلومات الرحلة - 12 شاشة",
+      "paTestComplete": "اكتمل اختبار نظام النداء بنجاح",
+      "contentSyncInitiated": "بدأت مزامنة المحتوى لجميع الشاشات",
+      "hvacCapacity": "وحدة التكييف 3 تعمل بنسبة 85%",
+      "contentRotationComplete": "اكتمل تدوير المحتوى المجدول",
+      "securityOnline": "جميع أنظمة الأمن متصلة",
+      "brightnessAdjusted": "تم تعديل السطوع حسب الوقت من اليوم"
+    }
+  },
+  "systemStrip": {
+    "labels": {
+      "uptime": "وقت التشغيل",
+      "devices": "الأجهزة"
+    },
+    "systems": {
+      "lighting": "الإضاءة",
+      "ledDisplays": "شاشات LED",
+      "audio": "الصوت",
+      "showPlayback": "تشغيل العروض",
+      "environmental": "البيئة",
+      "security": "الأمن",
+      "pixera": "Pixera"
+    },
+    "actions": {
+      "restart": "إعادة تشغيل",
+      "test": "اختبار",
+      "mute": "كتم",
+      "power": "الطاقة"
+    }
+  }
+}

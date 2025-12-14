@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { AlertTriangle, XCircle, CheckCircle, Info } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface TimelineEvent {
   time: string;
   icon: string;
-  event: string;
-  system: string;
+  eventKey: string;
+  systemKey: string;
   status?: "success" | "warning" | "error";
   logs?: {
     timestamp: string;
     level: "info" | "warning" | "error";
-    message: string;
+    messageKey: string;
   }[];
 }
 
@@ -20,127 +21,128 @@ interface EventTimelinePreviewProps {
 }
 
 export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePreviewProps) {
+  const { t } = useTranslation('dashboard');
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   
   const events: TimelineEvent[] = [
     // Night Operations (00:00 - 04:00)
-    { time: "00:05", icon: "🛰️", event: "Night systems health check", system: "Nexus Core", status: "success" },
-    { time: "00:10", icon: "💡", event: "Terminal lighting reduced to 15%", system: "Lighting", status: "success" },
-    { time: "00:20", icon: "🌬️", event: "HVAC → Night Economy Mode", system: "Environmental", status: "success" },
-    { time: "00:30", icon: "🔊", event: "Cleaning zone audio mute enabled", system: "Audio", status: "success" },
-    { time: "00:45", icon: "💳", event: "Cleaning crew badge scan (Access Granted)", system: "Security", status: "success" },
-    { time: "01:00", icon: "💡", event: "Service corridor lighting 40%", system: "Lighting", status: "success" },
-    { time: "01:15", icon: "🧠", event: "AI diagnostic batch run started", system: "AI Engine", status: "success" },
-    { time: "01:30", icon: "📡", event: "Nova logs synced to cloud", system: "Nova Data Engine", status: "warning", logs: [
-      { timestamp: "01:30:12", level: "warning", message: "Cloud sync latency detected: 2.3s (normal: <1s)" },
-      { timestamp: "01:30:15", level: "info", message: "Retry initiated with compression enabled" },
-      { timestamp: "01:30:22", level: "info", message: "Sync completed successfully" }
+    { time: "00:05", icon: "🛰️", eventKey: "events.nightHealthCheck", systemKey: "systems.nexusCore", status: "success" },
+    { time: "00:10", icon: "💡", eventKey: "events.lightingReduced15", systemKey: "systems.lighting", status: "success" },
+    { time: "00:20", icon: "🌬️", eventKey: "events.hvacNightMode", systemKey: "systems.environmental", status: "success" },
+    { time: "00:30", icon: "🔊", eventKey: "events.cleaningAudioMute", systemKey: "systems.audio", status: "success" },
+    { time: "00:45", icon: "💳", eventKey: "events.cleaningCrewBadge", systemKey: "systems.security", status: "success" },
+    { time: "01:00", icon: "💡", eventKey: "events.serviceLighting40", systemKey: "systems.lighting", status: "success" },
+    { time: "01:15", icon: "🧠", eventKey: "events.aiDiagnosticStart", systemKey: "systems.aiEngine", status: "success" },
+    { time: "01:30", icon: "📡", eventKey: "events.novaCloudSync", systemKey: "systems.novaData", status: "warning", logs: [
+      { timestamp: "01:30:12", level: "warning", messageKey: "logs.cloudSyncLatency" },
+      { timestamp: "01:30:15", level: "info", messageKey: "logs.retryCompression" },
+      { timestamp: "01:30:22", level: "info", messageKey: "logs.syncComplete" }
     ]},
-    { time: "02:00", icon: "⚙️", event: "Pulsar daily scheduler reboot", system: "Pulsar Control", status: "success" },
-    { time: "02:10", icon: "🌡️", event: "Temp monitor: Lounges 70°F", system: "Environmental", status: "success" },
-    { time: "02:30", icon: "🪧", event: "Signage maintenance mode test", system: "Signage & CMS", status: "success" },
-    { time: "03:00", icon: "🧩", event: "System restart completed", system: "Nexus Core", status: "success" },
+    { time: "02:00", icon: "⚙️", eventKey: "events.pulsarReboot", systemKey: "systems.pulsarControl", status: "success" },
+    { time: "02:10", icon: "🌡️", eventKey: "events.tempMonitorLounges", systemKey: "systems.environmental", status: "success" },
+    { time: "02:30", icon: "🪧", eventKey: "events.signageMaintenanceTest", systemKey: "systems.signageCms", status: "success" },
+    { time: "03:00", icon: "🧩", eventKey: "events.systemRestartComplete", systemKey: "systems.nexusCore", status: "success" },
 
     // Morning Flight Window - Dense (04:00 - 07:30)
-    { time: "04:00", icon: "💡", event: "Pre-dawn lighting sequence start", system: "Lighting", status: "success" },
-    { time: "04:05", icon: "🌡️", event: "HVAC pre-warm Terminal A", system: "Environmental", status: "success" },
-    { time: "04:10", icon: "📡", event: "Nova → Flight schedule sync", system: "Nova Data", status: "success" },
-    { time: "04:15", icon: "🎛️", event: "Pulsar init 'Morning Prep' workflow", system: "Pulsar", status: "success" },
-    { time: "04:20", icon: "🪧", event: "Gate signage boot sequence", system: "Signage", status: "error", logs: [
-      { timestamp: "04:20:08", level: "error", message: "Display controller Gate B7 boot failure" },
-      { timestamp: "04:20:12", level: "warning", message: "Hardware watchdog triggered reboot" },
-      { timestamp: "04:20:28", level: "info", message: "Controller rebooted successfully" },
-      { timestamp: "04:20:35", level: "info", message: "Content sync restored" }
+    { time: "04:00", icon: "💡", eventKey: "events.preDawnLighting", systemKey: "systems.lighting", status: "success" },
+    { time: "04:05", icon: "🌡️", eventKey: "events.hvacPreWarm", systemKey: "systems.environmental", status: "success" },
+    { time: "04:10", icon: "📡", eventKey: "events.novaFlightSync", systemKey: "systems.novaData", status: "success" },
+    { time: "04:15", icon: "🎛️", eventKey: "events.pulsarMorningPrep", systemKey: "systems.pulsar", status: "success" },
+    { time: "04:20", icon: "🪧", eventKey: "events.gateSignageBoot", systemKey: "systems.signage", status: "error", logs: [
+      { timestamp: "04:20:08", level: "error", messageKey: "logs.displayBootFailure" },
+      { timestamp: "04:20:12", level: "warning", messageKey: "logs.watchdogReboot" },
+      { timestamp: "04:20:28", level: "info", messageKey: "logs.controllerRebooted" },
+      { timestamp: "04:20:35", level: "info", messageKey: "logs.contentSyncRestored" }
     ]},
-    { time: "04:25", icon: "🔊", event: "Ambient music soft-fade on", system: "Audio", status: "success" },
-    { time: "04:30", icon: "💡", event: "Lighting Ramp-Up to 60%", system: "Lighting", status: "success" },
-    { time: "04:40", icon: "🎞️", event: "LED ad loop check", system: "LED", status: "success" },
-    { time: "04:50", icon: "📣", event: "\"Good Morning\" announcement", system: "Audio", status: "success" },
-    { time: "05:00", icon: "✈️", event: "First departure flight check-in open", system: "Nova Flights", status: "success" },
-    { time: "05:05", icon: "🧍", event: "Crowd sensor readings > 300", system: "Nova Sensors", status: "success" },
-    { time: "05:10", icon: "🔊", event: "Gate A10 announcement trigger", system: "Audio", status: "success" },
-    { time: "05:15", icon: "🖥️", event: "LED content 'Sunrise Mode'", system: "LED", status: "success" },
-    { time: "05:20", icon: "🌬️", event: "HVAC adjust based on CO₂ > 800 ppm", system: "Environmental", status: "warning", logs: [
-      { timestamp: "05:20:05", level: "warning", message: "CO₂ levels at 845 ppm in Concourse A (threshold: 800)" },
-      { timestamp: "05:20:08", level: "info", message: "Increasing ventilation to 85%" },
-      { timestamp: "05:20:45", level: "info", message: "CO₂ levels normalized to 720 ppm" }
+    { time: "04:25", icon: "🔊", eventKey: "events.ambientMusicOn", systemKey: "systems.audio", status: "success" },
+    { time: "04:30", icon: "💡", eventKey: "events.lightingRamp60", systemKey: "systems.lighting", status: "success" },
+    { time: "04:40", icon: "🎞️", eventKey: "events.ledAdCheck", systemKey: "systems.led", status: "success" },
+    { time: "04:50", icon: "📣", eventKey: "events.goodMorningAnnounce", systemKey: "systems.audio", status: "success" },
+    { time: "05:00", icon: "✈️", eventKey: "events.firstDepartureCheckIn", systemKey: "systems.novaFlights", status: "success" },
+    { time: "05:05", icon: "🧍", eventKey: "events.crowdSensor300", systemKey: "systems.novaSensors", status: "success" },
+    { time: "05:10", icon: "🔊", eventKey: "events.gateA10Announce", systemKey: "systems.audio", status: "success" },
+    { time: "05:15", icon: "🖥️", eventKey: "events.ledSunriseMode", systemKey: "systems.led", status: "success" },
+    { time: "05:20", icon: "🌬️", eventKey: "events.hvacCo2Adjust", systemKey: "systems.environmental", status: "warning", logs: [
+      { timestamp: "05:20:05", level: "warning", messageKey: "logs.co2LevelsHigh" },
+      { timestamp: "05:20:08", level: "info", messageKey: "logs.increasingVentilation" },
+      { timestamp: "05:20:45", level: "info", messageKey: "logs.co2Normalized" }
     ]},
-    { time: "05:25", icon: "💡", event: "Boarding lights Gate A11 on", system: "Lighting", status: "success" },
-    { time: "05:30", icon: "🧠", event: "AI suggests power balancing", system: "AI Engine", status: "success" },
-    { time: "06:00", icon: "⚡", event: "Morning Lighting Sequence completed", system: "Workflow", status: "success" },
-    { time: "06:10", icon: "📊", event: "Nova crowd density sync", system: "Nova Analytics", status: "success" },
-    { time: "06:20", icon: "🪧", event: "Flight info update across signage", system: "CMS", status: "success" },
-    { time: "06:25", icon: "🔊", event: "Audio gate alert Gate A12", system: "Audio", status: "success" },
-    { time: "06:30", icon: "✈️", event: "UA1823 boarding initiated", system: "Nova Flights", status: "success" },
-    { time: "06:40", icon: "💡", event: "Lighting preset Boarding 90%", system: "Lighting", status: "success" },
-    { time: "06:45", icon: "🖥️", event: "LED boarding animation", system: "LED Displays", status: "success" },
-    { time: "06:50", icon: "🎚️", event: "Mixer snapshot load Boarding", system: "Audio", status: "success" },
-    { time: "07:00", icon: "⚙️", event: "Workflow 'Boarding Routine' complete", system: "Workflow", status: "success" },
-    { time: "07:15", icon: "🌬️", event: "HVAC revert Comfort Mode", system: "Environmental", status: "success" },
-    { time: "07:30", icon: "📡", event: "Nova update: Flight departed", system: "Nova Core", status: "success" },
+    { time: "05:25", icon: "💡", eventKey: "events.boardingLightsA11", systemKey: "systems.lighting", status: "success" },
+    { time: "05:30", icon: "🧠", eventKey: "events.aiPowerBalance", systemKey: "systems.aiEngine", status: "success" },
+    { time: "06:00", icon: "⚡", eventKey: "events.morningSequenceComplete", systemKey: "systems.workflow", status: "success" },
+    { time: "06:10", icon: "📊", eventKey: "events.novaCrowdSync", systemKey: "systems.novaAnalytics", status: "success" },
+    { time: "06:20", icon: "🪧", eventKey: "events.flightInfoUpdate", systemKey: "systems.cms", status: "success" },
+    { time: "06:25", icon: "🔊", eventKey: "events.audioGateA12", systemKey: "systems.audio", status: "success" },
+    { time: "06:30", icon: "✈️", eventKey: "events.ua1823Boarding", systemKey: "systems.novaFlights", status: "success" },
+    { time: "06:40", icon: "💡", eventKey: "events.lightingBoarding90", systemKey: "systems.lighting", status: "success" },
+    { time: "06:45", icon: "🖥️", eventKey: "events.ledBoardingAnim", systemKey: "systems.ledDisplays", status: "success" },
+    { time: "06:50", icon: "🎚️", eventKey: "events.mixerBoarding", systemKey: "systems.audio", status: "success" },
+    { time: "07:00", icon: "⚙️", eventKey: "events.boardingRoutineComplete", systemKey: "systems.workflow", status: "success" },
+    { time: "07:15", icon: "🌬️", eventKey: "events.hvacComfortMode", systemKey: "systems.environmental", status: "success" },
+    { time: "07:30", icon: "📡", eventKey: "events.novaFlightDeparted", systemKey: "systems.novaCore", status: "success" },
 
     // Midday Operations (08:00 - 16:00)
-    { time: "08:00", icon: "🖥️", event: "LED Ad rotation Retail Scene 02", system: "LED", status: "success" },
-    { time: "08:15", icon: "🪧", event: "Retail signage sync", system: "CMS", status: "success" },
-    { time: "08:30", icon: "🧠", event: "AI energy forecast model run", system: "AI", status: "success" },
-    { time: "09:00", icon: "💡", event: "Lighting auto-adjust Daylight Mode", system: "Lighting", status: "success" },
-    { time: "09:30", icon: "📊", event: "Passenger flow report sent to Nova", system: "Analytics", status: "success" },
-    { time: "10:00", icon: "🔊", event: "Security announcement loop", system: "Audio", status: "success" },
-    { time: "10:30", icon: "🪧", event: "Wayfinding signage refresh", system: "CMS", status: "success" },
-    { time: "11:00", icon: "🌡️", event: "HVAC load check threshold ok", system: "Environmental", status: "success" },
-    { time: "11:30", icon: "🖥️", event: "LED Ad rotation Scene 03", system: "LED", status: "success" },
-    { time: "12:00", icon: "️", event: "Food court playlist update", system: "Audio", status: "success" },
-    { time: "12:30", icon: "💡", event: "Lighting Lunch Preset applied", system: "Lighting", status: "success" },
-    { time: "13:00", icon: "📡", event: "Nova midday sync (flts & energy)", system: "Nova", status: "success" },
-    { time: "13:30", icon: "🧠", event: "AI Insight: Crowd peak at Gate A14", system: "AI Analytics", status: "success" },
-    { time: "14:00", icon: "🎞️", event: "Pixera content render update", system: "Show Playback", status: "error", logs: [
-      { timestamp: "14:00:08", level: "error", message: "Render server memory exceeded: 31.8GB / 32GB" },
-      { timestamp: "14:00:10", level: "error", message: "Content cache flush failed" },
-      { timestamp: "14:00:15", level: "warning", message: "Emergency cache clear initiated" },
-      { timestamp: "14:00:22", level: "info", message: "Memory freed: 12GB available" },
-      { timestamp: "14:00:28", level: "info", message: "Render pipeline resumed" }
+    { time: "08:00", icon: "🖥️", eventKey: "events.ledRetailScene02", systemKey: "systems.led", status: "success" },
+    { time: "08:15", icon: "🪧", eventKey: "events.retailSignageSync", systemKey: "systems.cms", status: "success" },
+    { time: "08:30", icon: "🧠", eventKey: "events.aiEnergyForecast", systemKey: "systems.ai", status: "success" },
+    { time: "09:00", icon: "💡", eventKey: "events.lightingDaylight", systemKey: "systems.lighting", status: "success" },
+    { time: "09:30", icon: "📊", eventKey: "events.passengerFlowReport", systemKey: "systems.analytics", status: "success" },
+    { time: "10:00", icon: "🔊", eventKey: "events.securityAnnounceLoop", systemKey: "systems.audio", status: "success" },
+    { time: "10:30", icon: "🪧", eventKey: "events.wayfindingRefresh", systemKey: "systems.cms", status: "success" },
+    { time: "11:00", icon: "🌡️", eventKey: "events.hvacLoadCheck", systemKey: "systems.environmental", status: "success" },
+    { time: "11:30", icon: "🖥️", eventKey: "events.ledScene03", systemKey: "systems.led", status: "success" },
+    { time: "12:00", icon: "🎵", eventKey: "events.foodCourtPlaylist", systemKey: "systems.audio", status: "success" },
+    { time: "12:30", icon: "💡", eventKey: "events.lightingLunchPreset", systemKey: "systems.lighting", status: "success" },
+    { time: "13:00", icon: "📡", eventKey: "events.novaMiddaySync", systemKey: "systems.nova", status: "success" },
+    { time: "13:30", icon: "🧠", eventKey: "events.aiCrowdPeakA14", systemKey: "systems.aiAnalytics", status: "success" },
+    { time: "14:00", icon: "🎞️", eventKey: "events.pixeraRenderUpdate", systemKey: "systems.showPlayback", status: "error", logs: [
+      { timestamp: "14:00:08", level: "error", messageKey: "logs.renderMemoryExceeded" },
+      { timestamp: "14:00:10", level: "error", messageKey: "logs.cacheFlushFailed" },
+      { timestamp: "14:00:15", level: "warning", messageKey: "logs.emergencyCacheClear" },
+      { timestamp: "14:00:22", level: "info", messageKey: "logs.memoryFreed" },
+      { timestamp: "14:00:28", level: "info", messageKey: "logs.renderPipelineResumed" }
     ]},
-    { time: "14:10", icon: "💡", event: "Lighting preset Retail A change", system: "Lighting", status: "success" },
-    { time: "14:20", icon: "🔊", event: "Audio volume balancing", system: "Audio", status: "success" },
-    { time: "14:30", icon: "🪧", event: "Signage promo update", system: "CMS", status: "success" },
-    { time: "15:00", icon: "🌬️", event: "HVAC mode Economy", system: "Environmental", status: "success" },
-    { time: "15:30", icon: "⚙️", event: "Workflow 'Afternoon Check' run", system: "Workflow", status: "success" },
-    { time: "16:00", icon: "🖥️", event: "LED Ad rotation Scene 04", system: "LED", status: "success" },
+    { time: "14:10", icon: "💡", eventKey: "events.lightingRetailAChange", systemKey: "systems.lighting", status: "success" },
+    { time: "14:20", icon: "🔊", eventKey: "events.audioVolumeBalance", systemKey: "systems.audio", status: "success" },
+    { time: "14:30", icon: "🪧", eventKey: "events.signagePromoUpdate", systemKey: "systems.cms", status: "success" },
+    { time: "15:00", icon: "🌬️", eventKey: "events.hvacEconomyMode", systemKey: "systems.environmental", status: "success" },
+    { time: "15:30", icon: "⚙️", eventKey: "events.afternoonCheckRun", systemKey: "systems.workflow", status: "success" },
+    { time: "16:00", icon: "🖥️", eventKey: "events.ledScene04", systemKey: "systems.led", status: "success" },
 
     // Evening Flight Window - Dense (17:00 - 20:30)
-    { time: "17:00", icon: "✈️", event: "Evening arrivals begin", system: "Nova Flights", status: "success" },
-    { time: "17:05", icon: "💡", event: "Lighting adjust Twilight 70%", system: "Lighting", status: "success" },
-    { time: "17:10", icon: "🔊", event: "Arrival announcement Gate A15", system: "Audio", status: "success" },
-    { time: "17:20", icon: "🪧", event: "Arrival signage update", system: "CMS", status: "success" },
-    { time: "17:25", icon: "🌡️", event: "HVAC increase ventilation", system: "Environmental", status: "success" },
-    { time: "17:30", icon: "⚙️", event: "Pulsar 'Evening Show' triggered", system: "Pulsar", status: "success" },
-    { time: "17:35", icon: "🖥️", event: "LED scene 'Evening Loop' active", system: "LED", status: "success" },
-    { time: "17:40", icon: "🎭", event: "Disguise show playback start", system: "Show Playback", status: "warning", logs: [
-      { timestamp: "17:40:05", level: "warning", message: "Network bandwidth utilization at 92%" },
-      { timestamp: "17:40:08", level: "info", message: "QoS prioritization applied to show control" },
-      { timestamp: "17:40:12", level: "info", message: "Playback stable, sync maintained" }
+    { time: "17:00", icon: "✈️", eventKey: "events.eveningArrivals", systemKey: "systems.novaFlights", status: "success" },
+    { time: "17:05", icon: "💡", eventKey: "events.lightingTwilight70", systemKey: "systems.lighting", status: "success" },
+    { time: "17:10", icon: "🔊", eventKey: "events.arrivalAnnounceA15", systemKey: "systems.audio", status: "success" },
+    { time: "17:20", icon: "🪧", eventKey: "events.arrivalSignageUpdate", systemKey: "systems.cms", status: "success" },
+    { time: "17:25", icon: "🌡️", eventKey: "events.hvacIncreaseVent", systemKey: "systems.environmental", status: "success" },
+    { time: "17:30", icon: "⚙️", eventKey: "events.pulsarEveningShow", systemKey: "systems.pulsar", status: "success" },
+    { time: "17:35", icon: "🖥️", eventKey: "events.ledEveningLoop", systemKey: "systems.led", status: "success" },
+    { time: "17:40", icon: "🎭", eventKey: "events.disguisePlaybackStart", systemKey: "systems.showPlayback", status: "warning", logs: [
+      { timestamp: "17:40:05", level: "warning", messageKey: "logs.networkBandwidth92" },
+      { timestamp: "17:40:08", level: "info", messageKey: "logs.qosPrioritization" },
+      { timestamp: "17:40:12", level: "info", messageKey: "logs.playbackStable" }
     ]},
-    { time: "17:50", icon: "🎚️", event: "Mixer snapshot load Evening", system: "Audio", status: "success" },
-    { time: "18:00", icon: "🧠", event: "AI Insight: Traffic High Concourse B", system: "AI", status: "success" },
-    { time: "18:15", icon: "💡", event: "Lighting preset adjust Zone 3", system: "Lighting", status: "success" },
-    { time: "18:30", icon: "🪧", event: "Retail signage 'Dinner Promos'", system: "CMS", status: "success" },
-    { time: "19:00", icon: "🌡️", event: "Temperature monitor – Crowded zones", system: "Environmental", status: "success" },
-    { time: "19:15", icon: "📊", event: "Nova sync: Crowd > 900", system: "Nova Analytics", status: "success" },
-    { time: "19:30", icon: "🔊", event: "Peak hour audio loop", system: "Audio", status: "success" },
-    { time: "20:00", icon: "⚡", event: "Evening Transition Sequence started", system: "Workflow", status: "success" },
-    { time: "20:15", icon: "🖥️", event: "LED Playlist 'Night Ads'", system: "LED", status: "success" },
-    { time: "20:30", icon: "💡", event: "Lighting preset Evening 80%", system: "Lighting", status: "success" },
+    { time: "17:50", icon: "🎚️", eventKey: "events.mixerEvening", systemKey: "systems.audio", status: "success" },
+    { time: "18:00", icon: "🧠", eventKey: "events.aiTrafficHighB", systemKey: "systems.ai", status: "success" },
+    { time: "18:15", icon: "💡", eventKey: "events.lightingZone3Adjust", systemKey: "systems.lighting", status: "success" },
+    { time: "18:30", icon: "🪧", eventKey: "events.retailDinnerPromos", systemKey: "systems.cms", status: "success" },
+    { time: "19:00", icon: "🌡️", eventKey: "events.tempMonitorCrowded", systemKey: "systems.environmental", status: "success" },
+    { time: "19:15", icon: "📊", eventKey: "events.novaCrowd900", systemKey: "systems.novaAnalytics", status: "success" },
+    { time: "19:30", icon: "🔊", eventKey: "events.peakHourAudioLoop", systemKey: "systems.audio", status: "success" },
+    { time: "20:00", icon: "⚡", eventKey: "events.eveningTransitionStart", systemKey: "systems.workflow", status: "success" },
+    { time: "20:15", icon: "🖥️", eventKey: "events.ledNightAds", systemKey: "systems.led", status: "success" },
+    { time: "20:30", icon: "💡", eventKey: "events.lightingEvening80", systemKey: "systems.lighting", status: "success" },
 
     // Night Shutdown (21:00 - 23:45)
-    { time: "21:00", icon: "📤", event: "Nova hourly report generated", system: "Nova", status: "success" },
-    { time: "21:15", icon: "🌬️", event: "HVAC reduce flow 10%", system: "Environmental", status: "success" },
-    { time: "21:30", icon: "🔉", event: "Audio fade-down retail zones", system: "Audio", status: "success" },
-    { time: "22:00", icon: "💡", event: "Night shutdown routine begin", system: "Lighting", status: "success" },
-    { time: "22:15", icon: "🧠", event: "AI recommends overnight load balance", system: "AI Engine", status: "success" },
-    { time: "22:30", icon: "⚙️", event: "Workflow 'Night Shutdown' executed", system: "Workflow", status: "success" },
-    { time: "23:00", icon: "🌬️", event: "HVAC Night Mode enabled", system: "Environmental", status: "success" },
-    { time: "23:30", icon: "🪧", event: "Signage switched to standby", system: "CMS", status: "success" },
-    { time: "23:45", icon: "🧩", event: "System backup and diagnostics", system: "Nexus Core", status: "success" },
+    { time: "21:00", icon: "📤", eventKey: "events.novaHourlyReport", systemKey: "systems.nova", status: "success" },
+    { time: "21:15", icon: "🌬️", eventKey: "events.hvacReduceFlow10", systemKey: "systems.environmental", status: "success" },
+    { time: "21:30", icon: "🔉", eventKey: "events.audioFadeDownRetail", systemKey: "systems.audio", status: "success" },
+    { time: "22:00", icon: "💡", eventKey: "events.nightShutdownBegin", systemKey: "systems.lighting", status: "success" },
+    { time: "22:15", icon: "🧠", eventKey: "events.aiOvernightBalance", systemKey: "systems.aiEngine", status: "success" },
+    { time: "22:30", icon: "⚙️", eventKey: "events.nightShutdownExecute", systemKey: "systems.workflow", status: "success" },
+    { time: "23:00", icon: "🌬️", eventKey: "events.hvacNightModeEnable", systemKey: "systems.environmental", status: "success" },
+    { time: "23:30", icon: "🪧", eventKey: "events.signageStandby", systemKey: "systems.cms", status: "success" },
+    { time: "23:45", icon: "🧩", eventKey: "events.systemBackupDiag", systemKey: "systems.nexusCore", status: "success" },
   ];
 
   const getStatusColor = (status?: string) => {
@@ -176,24 +178,24 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
       <div className="max-w-[1600px] mx-auto px-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm text-slate-900 dark:text-slate-100">24-Hour Event Timeline</h3>
+            <h3 className="text-sm text-slate-900 dark:text-slate-100">{t('timeline.title')}</h3>
             <div className="flex items-center gap-1.5 text-[10px]">
               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-                <span className="text-green-700 dark:text-green-400">Success</span>
+                <span className="text-green-700 dark:text-green-400">{t('timeline.success')}</span>
               </div>
               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
                 <div className="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
-                <span className="text-yellow-700 dark:text-yellow-400">Warning</span>
+                <span className="text-yellow-700 dark:text-yellow-400">{t('timeline.warning')}</span>
               </div>
               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30">
                 <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
-                <span className="text-red-700 dark:text-red-400">Error</span>
+                <span className="text-red-700 dark:text-red-400">{t('timeline.error')}</span>
               </div>
             </div>
           </div>
           <button className="px-3 py-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-md hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors text-xs" onClick={onNavigateToTimeline}>
-            View Full Timeline →
+            {t('timeline.viewAll')} →
           </button>
         </div>
         
@@ -244,12 +246,12 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
                   {/* Event Description */}
                   <div className="mt-2 text-center px-1">
                     <div className="text-xs text-slate-900 dark:text-slate-100 mb-0.5 line-clamp-2">
-                      {event.event}
+                      {t(event.eventKey)}
                     </div>
                     {/* Log indicator badge */}
                     {event.logs && event.logs.length > 0 && (
                       <div className="mt-1 text-[10px] text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Click for logs
+                        {t('timeline.clickForLogs')}
                       </div>
                     )}
                   </div>
@@ -269,9 +271,9 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
         <Dialog open={true} onOpenChange={() => setSelectedEvent(null)}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Event Details</DialogTitle>
+              <DialogTitle>{t('timeline.eventDetails')}</DialogTitle>
               <DialogDescription>
-                Detailed information about the selected event.
+                {t('timeline.eventDetailsDesc')}
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4">
@@ -282,30 +284,30 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
                 </div>
                 <div className="flex-1">
                   <div className="text-slate-900 dark:text-slate-100 mb-1">
-                    {selectedEvent.event}
+                    {t(selectedEvent.eventKey)}
                   </div>
                   <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                     <span>{selectedEvent.time}</span>
                     <span>•</span>
-                    <span>{selectedEvent.system}</span>
+                    <span>{t(selectedEvent.systemKey)}</span>
                   </div>
                   <div className="mt-2">
                     {selectedEvent.status === "error" && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs">
                         <XCircle className="w-3 h-3" />
-                        Error
+                        {t('timeline.error')}
                       </div>
                     )}
                     {selectedEvent.status === "warning" && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs">
                         <AlertTriangle className="w-3 h-3" />
-                        Warning
+                        {t('timeline.warning')}
                       </div>
                     )}
                     {selectedEvent.status === "success" && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs">
                         <CheckCircle className="w-3 h-3" />
-                        Success
+                        {t('timeline.success')}
                       </div>
                     )}
                   </div>
@@ -315,7 +317,7 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
               {/* Logs */}
               {selectedEvent.logs && selectedEvent.logs.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-3">Event Log</h4>
+                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-3">{t('timeline.eventLog')}</h4>
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {selectedEvent.logs.map((log, logIndex) => (
                       <div 
@@ -346,7 +348,7 @@ export function EventTimelinePreview({ onNavigateToTimeline }: EventTimelinePrev
                             </span>
                           </div>
                           <p className="text-sm text-slate-900 dark:text-slate-100">
-                            {log.message}
+                            {t(log.messageKey)}
                           </p>
                         </div>
                       </div>

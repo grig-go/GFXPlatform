@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, AlertCircle, XCircle, Activity, TrendingUp, Zap, Wifi, Gauge, Edit, ChevronDown, RotateCw, FileText } from 'lucide-react';
 import { Button } from './ui/button';
 import {
@@ -62,15 +63,15 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string, t: (key: string) => string) => {
   const baseClasses = "px-2 py-1 rounded-full text-xs";
   switch (status) {
     case "online":
-      return <span className={`${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400`}>Online</span>;
+      return <span className={`${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400`}>{t('status.online')}</span>;
     case "warning":
-      return <span className={`${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400`}>Warning</span>;
+      return <span className={`${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400`}>{t('status.warning')}</span>;
     case "offline":
-      return <span className={`${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400`}>Offline</span>;
+      return <span className={`${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400`}>{t('status.offline')}</span>;
     default:
       return null;
   }
@@ -123,6 +124,7 @@ const CircularProgress = ({ value, size = 70, strokeWidth = 6, status }: { value
 };
 
 export function DeviceCard({ device, onAction }: DeviceCardProps) {
+  const { t } = useTranslation(['devices', 'common']);
   const healthScore = useMemo(() => getHealthScore(device.status, device.uptime), [device.status, device.uptime]);
   const trendData = useMemo(() => generateTrendData(device.id), [device.id]);
   const loadPercent = useMemo(() => getLoadPercent(device.id), [device.id]);
@@ -156,7 +158,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
             <p className="text-slate-600 dark:text-slate-400 text-xs truncate">{device.type}</p>
           </div>
           <div className="ml-2">
-            {getStatusBadge(device.status)}
+            {getStatusBadge(device.status, t)}
           </div>
         </div>
 
@@ -165,7 +167,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
           <div className="relative">
             <CircularProgress value={healthScore} status={device.status} size={70} strokeWidth={6} />
             <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-              <span className="text-xs text-slate-600 dark:text-slate-400">Health</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{t('card.health')}</span>
             </div>
           </div>
         </div>
@@ -175,7 +177,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" />
-              24h Performance
+              {t('card.performance24h')}
             </span>
             <span className="text-xs text-slate-900 dark:text-slate-100">
               {trendData[trendData.length - 1].value.toFixed(0)}%
@@ -201,7 +203,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
           <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-0.5">
               <Activity className="w-3 h-3 text-blue-500" />
-              <span className="text-xs text-slate-600 dark:text-slate-400">Uptime</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{t('card.uptime')}</span>
             </div>
             <p className="text-slate-900 dark:text-slate-100 text-sm">{device.uptime}</p>
           </div>
@@ -210,16 +212,16 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
           <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-0.5">
               <Wifi className={`w-3 h-3 ${device.status === 'online' ? 'text-green-500' : device.status === 'warning' ? 'text-yellow-500' : 'text-red-500'}`} />
-              <span className="text-xs text-slate-600 dark:text-slate-400">Signal</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{t('card.signal')}</span>
             </div>
-            <p className="text-slate-900 dark:text-slate-100 text-xs">Excellent</p>
+            <p className="text-slate-900 dark:text-slate-100 text-xs">{t('card.excellent')}</p>
           </div>
 
           {/* System */}
           <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-0.5">
               <Zap className="w-3 h-3 text-purple-500" />
-              <span className="text-xs text-slate-600 dark:text-slate-400">System</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{t('card.system')}</span>
             </div>
             <p className="text-slate-900 dark:text-slate-100 text-xs truncate">{device.systemName}</p>
           </div>
@@ -228,7 +230,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
           <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-0.5">
               <Activity className="w-3 h-3 text-orange-500" />
-              <span className="text-xs text-slate-600 dark:text-slate-400">Load</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">{t('card.load')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-1">
@@ -245,16 +247,16 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
         {/* Location and IP */}
         <div className="space-y-1.5 mb-3 bg-white/50 dark:bg-slate-800/30 rounded-lg p-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 dark:text-slate-400">Location</span>
+            <span className="text-slate-600 dark:text-slate-400">{t('card.location')}</span>
             <span className="text-slate-900 dark:text-slate-100 font-medium">{device.location}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 dark:text-slate-400">IP Address</span>
+            <span className="text-slate-600 dark:text-slate-400">{t('card.ipAddress')}</span>
             <span className="text-slate-900 dark:text-slate-100 font-mono text-xs">{device.ipAddress}</span>
           </div>
           {device.specs && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-400">Specs</span>
+              <span className="text-slate-600 dark:text-slate-400">{t('card.specs')}</span>
               <span className="text-slate-900 dark:text-slate-100">{device.specs}</span>
             </div>
           )}
@@ -269,7 +271,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
             className="flex-1 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border-slate-300 dark:border-slate-700 h-8 text-xs"
           >
             <Gauge className="w-3 h-3 mr-1" />
-            Health
+            {t('card.health')}
           </Button>
           <Button
             variant="outline"
@@ -278,7 +280,7 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
             className="flex-1 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border-slate-300 dark:border-slate-700 h-8 text-xs"
           >
             <Edit className="w-3 h-3 mr-1" />
-            Edit
+            {t('common:actions.edit')}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -293,11 +295,11 @@ export function DeviceCard({ device, onAction }: DeviceCardProps) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onAction(device, 'restart')}>
                 <RotateCw className="w-3.5 h-3.5 mr-2" />
-                Restart
+                {t('card.restart')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAction(device, 'logs')}>
                 <FileText className="w-3.5 h-3.5 mr-2" />
-                View Logs
+                {t('card.viewLogs')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -1292,9 +1292,10 @@ function ElementsTree() {
     .sort((a, b) => a.sort_order - b.sort_order);
 
   // Handle multi-select with Ctrl/Cmd
+  // Skip auto-expand since user is already in the outline panel
   const handleElementClick = useCallback((elementId: string, event: React.MouseEvent) => {
     if (event.ctrlKey || event.metaKey) {
-      selectElements([elementId], 'toggle');
+      selectElements([elementId], 'toggle', { expandInOutline: false });
     } else if (event.shiftKey && selectedElementIds.length > 0) {
       // Shift+click for range selection
       const allIds = elements.map(e => e.id);
@@ -1304,9 +1305,9 @@ function ElementsTree() {
       const start = Math.min(lastIndex, clickedIndex);
       const end = Math.max(lastIndex, clickedIndex);
       const rangeIds = allIds.slice(start, end + 1);
-      selectElements(rangeIds, 'replace');
+      selectElements(rangeIds, 'replace', { expandInOutline: false });
     } else {
-      selectElements([elementId], 'replace');
+      selectElements([elementId], 'replace', { expandInOutline: false });
     }
   }, [selectElements, selectedElementIds, elements]);
 

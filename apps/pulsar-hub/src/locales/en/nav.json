@@ -1,0 +1,28 @@
+{
+  "menus": {
+    "apps": "Apps",
+    "tools": "Tools",
+    "settings": "Settings",
+    "help": "Help"
+  },
+  "tools": {
+    "configureDashboard": "Configure Dashboard",
+    "systemLogs": "System Logs",
+    "aiAssistant": "AI Assistant"
+  },
+  "settings": {
+    "preferences": "Preferences",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode",
+    "language": "Language",
+    "advancedSettings": "Advanced Settings",
+    "accountSettings": "Account Settings",
+    "signOut": "Sign Out"
+  },
+  "help": {
+    "documentation": "Documentation",
+    "contactSupport": "Contact Support"
+  },
+  "utilities": "Utilities",
+  "noAppsAvailable": "No apps available"
+}

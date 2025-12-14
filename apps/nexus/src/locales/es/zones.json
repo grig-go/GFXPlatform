@@ -1,0 +1,258 @@
+{
+  "title": "Zonas",
+  "list": {
+    "title": "Lista de zonas",
+    "search": "Buscar zonas..."
+  },
+  "listPanel": {
+    "title": "Zonas del Terminal A",
+    "subtitle": "Haz clic en una zona para ver detalles"
+  },
+  "mapPanel": {
+    "title": "Mapa interactivo del Terminal A",
+    "subtitle": "Clúster de puertas A10-A18 • Vista en vivo",
+    "editModeHint": "Modo edición: Arrastra los marcadores para reposicionar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "editPositions": "Editar posiciones",
+    "lightMode": "Modo claro",
+    "darkMode": "Modo oscuro",
+    "satelliteView": "Vista satélite",
+    "legend": "Leyenda",
+    "legendGates": "Puertas",
+    "legendSecurity": "Seguridad",
+    "legendFood": "Comida",
+    "legendRetail": "Comercio",
+    "legendLounge": "Sala VIP",
+    "legendBaggage": "Equipaje",
+    "saveSuccess": "¡Posiciones de zonas guardadas con éxito!",
+    "configTitle": "Configuración del mapa",
+    "copyConfig": "Copiar configuración completa",
+    "copySuccess": "¡Configuración copiada al portapapeles!",
+    "copyFailed": "Error al copiar la configuración."
+  },
+  "map": {
+    "title": "Mapa de zonas",
+    "showAll": "Mostrar todo",
+    "hideInactive": "Ocultar inactivos"
+  },
+  "zoneNames": {
+    "gateClusterA": "Puerta A10 – A18",
+    "securityCheckpointA": "Punto de control de seguridad A",
+    "immigrationHallA": "Sala de inmigración A",
+    "baggageClaimA": "Recogida de equipaje A",
+    "foodCourtA": "Zona de comidas A",
+    "retailA": "Comercio A",
+    "loungeA": "Sala VIP A"
+  },
+  "zoneTypes": {
+    "gateCluster": "Clúster de puertas",
+    "security": "Seguridad",
+    "immigration": "Inmigración",
+    "baggage": "Equipaje",
+    "publicAmenities": "Servicios públicos",
+    "retailCluster": "Clúster comercial",
+    "lounge": "Sala VIP"
+  },
+  "zoneDescriptions": {
+    "boardingAreaGroup": "Grupo de área de embarque",
+    "tsaScreening": "Control de seguridad TSA",
+    "customsProcessing": "Procesamiento de aduanas",
+    "arrivalsHall": "Sala de llegadas",
+    "concessionsArea": "Área de concesiones",
+    "dutyFreeShops": "Duty-free + tiendas",
+    "airlineLounge": "Sala de la aerolínea"
+  },
+  "location": "Ubicación",
+  "zoneActions": "Acciones de zona",
+  "menu": {
+    "detailsView": "Vista de detalles",
+    "viewLogs": "Ver registros",
+    "aiInsights": "Análisis de IA"
+  },
+  "actions": {
+    "addZone": "Añadir zona",
+    "generateReport": "Generar informe",
+    "aiOptimize": "Optimizar con IA"
+  },
+  "names": {
+    "gateA10A18": "Puerta A10 – A18",
+    "concourseA": "Vestíbulo A",
+    "concourseB": "Vestíbulo B",
+    "concourseC": "Vestíbulo C",
+    "mainTerminal": "Terminal principal",
+    "arrivals": "Llegadas",
+    "departures": "Salidas",
+    "baggage": "Recogida de equipaje",
+    "security": "Seguridad",
+    "retail": "Área comercial"
+  },
+  "status": {
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "maintenance": "Mantenimiento"
+  },
+  "detail": {
+    "backToZones": "Volver a zonas",
+    "operational": "Operacional"
+  },
+  "details": {
+    "title": "Detalles de la zona",
+    "systems": "Sistemas en la zona",
+    "devices": "dispositivos",
+    "alerts": "Alertas activas",
+    "telemetry": "Telemetría"
+  },
+  "footer": {
+    "devicesOnline": "Dispositivos en línea",
+    "activeAlerts": "Alertas activas",
+    "systemsRunning": "Sistemas en ejecución"
+  },
+  "aiSummary": {
+    "title": "Resumen de zona con IA",
+    "subtitle": "Análisis inteligente y recomendaciones",
+    "selectZone": "Selecciona una zona para ver análisis",
+    "noZoneSelected": "Ninguna zona seleccionada",
+    "suggestedAction": "Acción sugerida",
+    "applyOptimization": "Aplicar optimización",
+    "viewDetails": "Ver detalles",
+    "performanceScore": "Puntuación de rendimiento de la zona",
+    "performanceExcellent": "Excelente rendimiento en todos los sistemas",
+    "performanceGood": "Buen rendimiento con oportunidades menores de optimización",
+    "performanceAcceptable": "Rendimiento aceptable, se recomienda optimización",
+    "recentOptimizations": "Optimizaciones recientes",
+    "recommendations": "Recomendaciones"
+  },
+  "logsAlerts": {
+    "title": "Alertas activas",
+    "critical": "Crítico",
+    "warning": "Advertencia"
+  },
+  "aiInsights": {
+    "gateA": {
+      "lightingRecovered": "La latencia de iluminación volvió a la normalidad después del pico matutino.",
+      "energyUsage": "Consumo de energía +8% por encima de la línea base debido al aumento del flujo de pasajeros.",
+      "ledOptimal": "Las pantallas LED funcionan a temperatura óptima en todas las puertas.",
+      "suggestedAction": "Reducir el brillo LED en un 10% para normalizar el consumo de energía sin afectar la experiencia del pasajero."
+    },
+    "securityA": {
+      "cctvOperational": "Todas las cámaras CCTV operativas con 99.9% de tiempo activo.",
+      "queueSensors": "Los sensores de cola detectan un flujo de pasajeros óptimo.",
+      "pagingImproved": "La claridad de audio del sistema de megafonía mejoró un 15%.",
+      "suggestedAction": "Considerar añadir 2 sensores de cola adicionales en la entrada del punto de control para mejor predicción del flujo."
+    },
+    "immigrationA": {
+      "environmentalOptimal": "Los sensores ambientales reportan temperatura y humedad óptimas.",
+      "signageEffective": "La señalización digital muestra actualizaciones de cola en tiempo real de manera efectiva.",
+      "ledGlare": "El brillo de la pantalla LED puede necesitar ajuste para reducir el deslumbramiento.",
+      "suggestedAction": "Reducir el brillo de la pantalla LED en un 15% durante las horas pico de sol para minimizar el deslumbramiento."
+    },
+    "baggageA": {
+      "conveyorAccurate": "Las pantallas de estado de las cintas muestran 100% de precisión.",
+      "playbackSmooth": "Los servidores de reproducción funcionan sin problemas con baja latencia.",
+      "audioAudible": "Los anuncios de audio son claros y audibles en toda la sala.",
+      "suggestedAction": "Programar mantenimiento preventivo para la cinta transportadora 3 basándose en los patrones de uso."
+    },
+    "foodCourtA": {
+      "menuRealtime": "Las pantallas de menú digital se actualizan en tiempo real sin retraso.",
+      "hvacLoad": "Carga de HVAC +12% más alta durante las horas del almuerzo.",
+      "lightingOptimal": "Niveles de iluminación óptimos para la experiencia gastronómica.",
+      "suggestedAction": "Pre-enfriar el área 15 minutos antes de las horas pico para reducir la tensión del HVAC."
+    },
+    "retailA": {
+      "ledEngagement": "Las pantallas LED muestran contenido promocional con alto engagement.",
+      "audioBalanced": "Niveles de audio equilibrados para una atmósfera de compras óptima.",
+      "signageRouting": "La señalización dirige eficientemente a los clientes a través del corredor comercial.",
+      "suggestedAction": "Aumentar el brillo de la pantalla LED en un 5% para mejorar la visibilidad en áreas de alto tráfico."
+    },
+    "loungeA": {
+      "environmentalComfort": "Los controles ambientales mantienen niveles de confort premium.",
+      "audioAmbient": "El sistema de audio proporciona ambiente de fondo a volumen ideal.",
+      "lightingRelaxing": "La iluminación crea una atmósfera relajante con tonos cálidos.",
+      "suggestedAction": "Implementar ajuste automático de iluminación basado en la hora del día para mejorar la experiencia del huésped."
+    }
+  },
+  "optimizations": {
+    "audioBalanced": "Niveles de audio equilibrados",
+    "hvacOptimized": "Programación de HVAC optimizada",
+    "lightingMerged": "Zonas de iluminación fusionadas",
+    "cameraAdjusted": "Ángulos de cámara ajustados",
+    "lightingIncreased": "Intensidad de iluminación aumentada",
+    "audioCalibrated": "Zonas de audio calibradas",
+    "hvacBalanced": "HVAC equilibrado",
+    "signageUpdated": "Contenido de señalización actualizado",
+    "lightingDimmed": "Iluminación atenuada",
+    "displaySync": "Sincronización de pantalla corregida",
+    "audioVolume": "Volumen de audio ajustado",
+    "playbackOptimized": "Reproducción optimizada",
+    "menuRefreshed": "Contenido del menú actualizado",
+    "hvacAdjusted": "Programación de HVAC ajustada",
+    "audioTuned": "Ambiente de audio afinado",
+    "displayRotated": "Contenido de pantalla rotado",
+    "audioSync": "Audio sincronizado",
+    "tempAdjusted": "Temperatura ajustada",
+    "lightingScenesUpdated": "Escenas de iluminación actualizadas",
+    "audioPlaylistRefreshed": "Lista de reproducción de audio actualizada"
+  },
+  "time": {
+    "30mAgo": "hace 30m",
+    "1hAgo": "hace 1h",
+    "2hAgo": "hace 2h",
+    "3hAgo": "hace 3h",
+    "4hAgo": "hace 4h",
+    "5hAgo": "hace 5h",
+    "6hAgo": "hace 6h",
+    "7hAgo": "hace 7h",
+    "8hAgo": "hace 8h"
+  },
+  "alerts": {
+    "categories": {
+      "audioSystem": "Sistema de audio",
+      "ledDisplay": "Pantalla LED",
+      "lighting": "Iluminación",
+      "environmental": "Ambiental",
+      "security": "Seguridad",
+      "signage": "Señalización",
+      "showPlayback": "Reproducción de espectáculos"
+    },
+    "zones": {
+      "gateCluster": "Clúster de puertas",
+      "security": "Seguridad"
+    },
+    "messages": {
+      "speakerOffline": "Altavoz 17 sin conexión - Puerta A14",
+      "reducedBrightness": "La pantalla 14 experimenta brillo reducido",
+      "lightingOperational": "Todos los sistemas de iluminación operativos",
+      "tempAdjusted": "Temperatura ajustada a 22°C en la puerta A12",
+      "cameraLensCleaning": "La cámara 8 requiere limpieza de lente",
+      "flightInfoUpdated": "Información de vuelo actualizada - 12 pantallas",
+      "paTestComplete": "Prueba del sistema de megafonía completada con éxito",
+      "contentSyncInitiated": "Sincronización de contenido iniciada para todas las pantallas",
+      "hvacCapacity": "Unidad HVAC 3 funcionando al 85% de capacidad",
+      "contentRotationComplete": "Rotación de contenido programada completada",
+      "securityOnline": "Todos los sistemas de seguridad en línea",
+      "brightnessAdjusted": "Brillo ajustado según la hora del día"
+    }
+  },
+  "systemStrip": {
+    "labels": {
+      "uptime": "Tiempo activo",
+      "devices": "Dispositivos"
+    },
+    "systems": {
+      "lighting": "Iluminación",
+      "ledDisplays": "Pantallas LED",
+      "audio": "Audio",
+      "showPlayback": "Reproducción de espectáculos",
+      "environmental": "Ambiental",
+      "security": "Seguridad",
+      "pixera": "Pixera"
+    },
+    "actions": {
+      "restart": "Reiniciar",
+      "test": "Probar",
+      "mute": "Silenciar",
+      "power": "Encender"
+    }
+  }
+}

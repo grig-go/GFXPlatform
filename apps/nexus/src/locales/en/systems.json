@@ -1,0 +1,56 @@
+{
+  "title": "Systems",
+  "names": {
+    "lighting": "Lighting",
+    "ledDisplays": "LED Displays",
+    "audio": "Audio",
+    "broadcastControl": "Broadcast Control",
+    "showPlayback": "Show Playback",
+    "graphics": "Graphics",
+    "signage": "Signage",
+    "environmental": "Environmental",
+    "networkSecurity": "Network & Security"
+  },
+  "systems": {
+    "lighting": "Lighting",
+    "audio": "Audio",
+    "ledDisplays": "LED Displays",
+    "signage": "Signage",
+    "showPlayback": "Show Playback",
+    "paging": "Paging",
+    "cctv": "CCTV",
+    "queueSensors": "Queue Sensors",
+    "environmental": "Environmental",
+    "conveyorStatus": "Conveyor Status",
+    "hvac": "HVAC",
+    "digitalMenus": "Digital Menus"
+  },
+  "subtitles": {
+    "lighting": "Venue Lighting Control",
+    "ledDisplays": "Large Format Displays",
+    "audio": "Sound System",
+    "broadcastControl": "Live Broadcast",
+    "showPlayback": "Media Playback",
+    "graphics": "Real-time Graphics",
+    "signage": "Digital Signage",
+    "environmental": "HVAC & Climate",
+    "networkSecurity": "IT Infrastructure"
+  },
+  "integrations": {
+    "pixeraDisguise": "Pixera + Disguise",
+    "unreal": "Unreal",
+    "hvacEnergy": "HVAC + Energy"
+  },
+  "status": {
+    "operational": "Operational",
+    "degraded": "Degraded",
+    "critical": "Critical",
+    "maintenance": "Maintenance"
+  },
+  "metrics": {
+    "uptime": "Uptime",
+    "latency": "Latency",
+    "throughput": "Throughput",
+    "errorRate": "Error Rate"
+  }
+}

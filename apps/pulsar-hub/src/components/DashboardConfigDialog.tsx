@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -87,6 +88,8 @@ export function DashboardConfigDialog({
   open,
   onOpenChange,
 }: DashboardConfigDialogProps) {
+  const { t } = useTranslation('dashboard');
+  const { t: tCommon } = useTranslation('common');
   const [dashboards, setDashboards] = useState<DashboardConfig[]>(DEFAULT_DASHBOARDS);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -151,8 +154,8 @@ export function DashboardConfigDialog({
       }
     } catch (error) {
       console.error("Error fetching dashboard config:", error);
-      toast.error("Failed to load dashboard configuration", {
-        description: "Using default settings",
+      toast.error(t('toast.loadFailed'), {
+        description: t('toast.loadFailedDesc'),
       });
       // Fallback to localStorage
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -230,8 +233,8 @@ export function DashboardConfigDialog({
       if (updates.length === 0) {
         // No backend records to update, save to localStorage as fallback
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
-        toast.success("Dashboard configuration saved locally!", {
-          description: "Backend records not found. Configuration saved to browser.",
+        toast.success(t('toast.savedLocally'), {
+          description: t('toast.savedLocallyDesc'),
         });
         onOpenChange(false);
         setSaving(false);
@@ -261,8 +264,8 @@ export function DashboardConfigDialog({
         // Also save to localStorage as backup
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
 
-        toast.success("Dashboard configuration saved!", {
-          description: "Your changes have been applied successfully.",
+        toast.success(t('toast.saved'), {
+          description: t('toast.savedDesc'),
         });
 
         // Dispatch custom event to trigger reload on home page
@@ -278,8 +281,8 @@ export function DashboardConfigDialog({
       // Fallback: save to localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
 
-      toast.error("Failed to save to backend", {
-        description: "Configuration saved locally instead.",
+      toast.error(t('toast.backendFailed'), {
+        description: t('toast.backendFailedDesc'),
       });
     } finally {
       setSaving(false);
@@ -288,7 +291,7 @@ export function DashboardConfigDialog({
 
   const handleReset = () => {
     setDashboards(DEFAULT_DASHBOARDS);
-    toast.info("Configuration reset to defaults");
+    toast.info(t('toast.reset'));
   };
 
   const enabledCount = dashboards.filter((d) => d.enabled).length;
@@ -301,10 +304,10 @@ export function DashboardConfigDialog({
             <div className="p-2 bg-gradient-to-br from-violet-600 to-purple-500 rounded-lg">
               <Eye className="w-5 h-5 text-white" />
             </div>
-            Dashboard Configuration
+            {t('title')}
           </DialogTitle>
           <DialogDescription>
-            Configure which apps are visible and their display order. Drag to reorder.
+            {t('description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -313,28 +316,28 @@ export function DashboardConfigDialog({
           <div className="flex items-center gap-2">
             <Eye className="w-4 h-4 text-green-600" />
             <span className="text-sm">
-              <span className="font-semibold">{enabledCount}</span> enabled
+              <span className="font-semibold">{enabledCount}</span> {t('stats.enabled')}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <EyeOff className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm">
               <span className="font-semibold">{dashboards.length - enabledCount}</span>{" "}
-              hidden
+              {t('stats.hidden')}
             </span>
           </div>
-          <Badge variant="outline" className="ml-auto">
-            {dashboards.length} total
+          <Badge variant="outline" className="ms-auto">
+            {dashboards.length} {t('stats.total')}
           </Badge>
         </div>
 
         {/* Dashboards List */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+        <div className="flex-1 overflow-y-auto space-y-2 pe-2">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">
-                Loading dashboard configuration...
+                {t('loading')}
               </p>
             </div>
           ) : (
@@ -382,20 +385,20 @@ export function DashboardConfigDialog({
                       <div className="flex-1">
                         <p className="font-medium">{dashboard.label}</p>
                         <p className="text-xs text-muted-foreground">
-                          {dashboard.enabled ? "Visible on home" : "Hidden from home"}
+                          {dashboard.enabled ? t('status.visibleOnHome') : t('status.hiddenFromHome')}
                         </p>
                       </div>
 
                       {/* Status Badge */}
                       {dashboard.enabled ? (
                         <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                          <Eye className="w-3 h-3 mr-1" />
-                          Visible
+                          <Eye className="w-3 h-3 me-1" />
+                          {tCommon('status.visible')}
                         </Badge>
                       ) : (
                         <Badge variant="secondary">
-                          <EyeOff className="w-3 h-3 mr-1" />
-                          Hidden
+                          <EyeOff className="w-3 h-3 me-1" />
+                          {tCommon('status.hidden')}
                         </Badge>
                       )}
 
@@ -416,22 +419,22 @@ export function DashboardConfigDialog({
         <div className="flex items-center justify-between pt-4 border-t">
           <Button variant="outline" onClick={handleReset} className="gap-2">
             <RotateCcw className="w-4 h-4" />
-            Reset to Defaults
+            {t('buttons.resetToDefaults')}
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {tCommon('buttons.cancel')}
             </Button>
             <Button onClick={handleSave} className="gap-2" disabled={saving}>
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
+                  {tCommon('status.saving')}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  Save Configuration
+                  {t('buttons.saveConfiguration')}
                 </>
               )}
             </Button>

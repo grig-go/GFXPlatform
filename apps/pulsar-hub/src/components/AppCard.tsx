@@ -1,4 +1,5 @@
 import { LucideIcon, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export interface AppCardProps {
@@ -25,6 +26,8 @@ export function AppCard({
   stats,
   onClick,
 }: AppCardProps) {
+  const { t } = useTranslation('home');
+
   const handleClick = () => {
     if (onClick) {
       onClick();
@@ -57,7 +60,7 @@ export function AppCard({
           <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
             {label}
           </h3>
-          <ExternalLink className="w-5 h-5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+          <ExternalLink className="w-5 h-5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity ms-auto" />
         </div>
 
         {/* Description */}
@@ -84,7 +87,7 @@ export function AppCard({
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-400 dark:text-slate-500">
-                Click to launch
+                {t('appCard.clickToLaunch')}
               </span>
             </div>
           )}

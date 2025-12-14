@@ -1,0 +1,46 @@
+{
+  "title": "Contactar Soporte",
+  "description": "Reporte un error, solicite una función o haga una pregunta. ¡Estamos aquí para ayudar!",
+  "ticketTypes": {
+    "bug": "Reporte de Error",
+    "feature": "Solicitud de Función",
+    "question": "Pregunta",
+    "other": "Otro"
+  },
+  "fields": {
+    "type": "Tipo",
+    "title": "Título",
+    "titleRequired": "Título *",
+    "description": "Descripción",
+    "descriptionRequired": "Descripción *"
+  },
+  "placeholders": {
+    "bug": {
+      "title": "Breve descripción del problema",
+      "description": "Por favor describa:\n1. Qué sucedió\n2. Qué esperaba\n3. Pasos para reproducir"
+    },
+    "feature": {
+      "title": "Nombre o resumen de la función",
+      "description": "Por favor describa:\n1. Qué función desea\n2. Por qué sería útil\n3. Requisitos específicos"
+    },
+    "question": {
+      "title": "Su pregunta en breve",
+      "description": "Por favor proporcione contexto y detalles sobre su pregunta..."
+    },
+    "other": {
+      "title": "Asunto",
+      "description": "Por favor describa su consulta..."
+    }
+  },
+  "validation": {
+    "fillRequired": "Por favor complete todos los campos requeridos"
+  },
+  "toast": {
+    "submitFailed": "Error al enviar su solicitud. Por favor intente de nuevo."
+  },
+  "success": {
+    "title": "¡Gracias!",
+    "message": "Su {{type}} ha sido enviado exitosamente. Lo revisaremos y le responderemos pronto."
+  },
+  "charCount": "{{count}}/2000"
+}

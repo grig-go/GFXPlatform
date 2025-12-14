@@ -1,0 +1,91 @@
+{
+  "buttons": {
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "submit": "إرسال",
+    "reset": "إعادة تعيين",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "apply": "تطبيق",
+    "create": "إنشاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "view": "عرض",
+    "viewDetails": "عرض التفاصيل",
+    "applyOptimization": "تطبيق التحسين",
+    "search": "بحث",
+    "filter": "تصفية",
+    "refresh": "تحديث",
+    "export": "تصدير",
+    "import": "استيراد"
+  },
+  "status": {
+    "loading": "جاري التحميل...",
+    "saving": "جاري الحفظ...",
+    "submitting": "جاري الإرسال...",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "warning": "تحذير",
+    "error": "خطأ",
+    "success": "نجاح",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "running": "قيد التشغيل",
+    "scheduled": "مجدول",
+    "paused": "متوقف مؤقتاً",
+    "resolved": "تم الحل",
+    "pending": "قيد الانتظار"
+  },
+  "labels": {
+    "type": "النوع",
+    "title": "العنوان",
+    "description": "الوصف",
+    "name": "الاسم",
+    "status": "الحالة",
+    "date": "التاريخ",
+    "time": "الوقت",
+    "system": "النظام",
+    "zone": "المنطقة",
+    "device": "الجهاز",
+    "all": "الكل",
+    "none": "لا شيء",
+    "unknown": "غير معروف"
+  },
+  "time": {
+    "now": "الآن",
+    "today": "اليوم",
+    "yesterday": "أمس",
+    "thisWeek": "هذا الأسبوع",
+    "thisMonth": "هذا الشهر",
+    "startsIn": "يبدأ في {{time}}",
+    "ago": "منذ {{time}}",
+    "minutes": "دقائق",
+    "hours": "ساعات",
+    "days": "أيام",
+    "seconds": "ثواني"
+  },
+  "pagination": {
+    "previous": "السابق",
+    "next": "التالي",
+    "page": "صفحة",
+    "of": "من",
+    "showing": "عرض",
+    "entries": "إدخالات"
+  },
+  "noData": {
+    "title": "لا توجد بيانات",
+    "message": "لا توجد بيانات متاحة",
+    "noResults": "لم يتم العثور على نتائج"
+  },
+  "actions": {
+    "save": "حفظ",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "create": "إنشاء",
+    "update": "تحديث",
+    "add": "إضافة",
+    "remove": "إزالة"
+  }
+}

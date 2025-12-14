@@ -1,0 +1,21 @@
+{
+  "title": "Panel de Control Pulsar",
+  "subtitle": "Suite de control de producción y gráficos impulsada por IA. Inicie aplicaciones y supervise el estado del sistema.",
+  "emptyState": {
+    "title": "No hay aplicaciones visibles",
+    "message": "Use Herramientas → Configurar Panel para habilitar aplicaciones."
+  },
+  "appCard": {
+    "clickToLaunch": "Clic para iniciar"
+  },
+  "appDescriptions": {
+    "pulsar-gfx": "Sistema de creación de contenido gráfico impulsado por IA para transmisión y producción en vivo.",
+    "pulsar-vs": "Creación y gestión de contenido para entornos virtuales y pantallas LED impulsado por IA.",
+    "pulsar-mcr": "Programación, gestión y automatización avanzada de contenido para flujos de trabajo de transmisión.",
+    "nexus": "Panel de gestión de operaciones y monitoreo de sedes con estado del sistema en tiempo real."
+  },
+  "footer": {
+    "company": "Emergent Solutions",
+    "product": "Suite Pulsar"
+  }
+}

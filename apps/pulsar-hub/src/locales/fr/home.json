@@ -1,0 +1,21 @@
+{
+  "title": "Tableau de bord Pulsar",
+  "subtitle": "Suite de contrôle de production et de graphiques alimentée par l'IA. Lancez des applications et surveillez l'état du système.",
+  "emptyState": {
+    "title": "Aucune application visible",
+    "message": "Utilisez Outils → Configurer le tableau de bord pour activer les applications."
+  },
+  "appCard": {
+    "clickToLaunch": "Cliquez pour lancer"
+  },
+  "appDescriptions": {
+    "pulsar-gfx": "Système de création de contenu graphique alimenté par l'IA pour la diffusion et la production en direct.",
+    "pulsar-vs": "Création et gestion de contenu pour environnements virtuels et écrans LED alimentées par l'IA.",
+    "pulsar-mcr": "Planification, gestion et automatisation avancées du contenu pour les flux de diffusion.",
+    "nexus": "Tableau de bord de gestion des opérations et de surveillance des sites avec état du système en temps réel."
+  },
+  "footer": {
+    "company": "Emergent Solutions",
+    "product": "Suite Pulsar"
+  }
+}

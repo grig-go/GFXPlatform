@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Grid3x3,
   Settings,
@@ -12,6 +13,8 @@ import {
   Sparkles,
   Eye,
   ExternalLink,
+  Globe,
+  Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -24,14 +27,17 @@ import {
 } from "./ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
 import { SupportRequestDialog } from "./SupportRequestDialog";
+import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, type SupportedLanguage } from "@/i18n";
 
 interface TopBarProps {
   onOpenConfig?: () => void;
 }
 
 export function TopBar({ onOpenConfig }: TopBarProps) {
+  const { t } = useTranslation('nav');
   const [darkMode, setDarkMode] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
   const [apps, setApps] = useState<
     Array<{
       id: string;
@@ -77,6 +83,11 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("pulsar-hub-theme", "light");
     }
+  };
+
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    changeLanguage(lang);
+    setCurrentLang(lang);
   };
 
   return (
@@ -128,7 +139,7 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Grid3x3 className="w-4 h-4" />
-                Apps
+                {t('menus.apps')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -147,7 +158,7 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                 ))
               ) : (
                 <DropdownMenuItem className="text-slate-400 dark:text-slate-500" disabled>
-                  No apps available
+                  {t('noAppsAvailable')}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -162,33 +173,33 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Wrench className="w-4 h-4" />
-                Tools
+                {t('menus.tools')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 w-56">
               <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">
-                Utilities
+                {t('utilities')}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 className="text-slate-700 dark:text-slate-100 cursor-pointer"
                 onClick={onOpenConfig}
               >
-                <Eye className="w-4 h-4 mr-2" />
-                Configure Dashboard
+                <Eye className="w-4 h-4 me-2" />
+                {t('tools.configureDashboard')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-slate-400 dark:text-slate-500 cursor-not-allowed"
                 disabled
               >
-                <FileText className="w-4 h-4 mr-2" />
-                System Logs
+                <FileText className="w-4 h-4 me-2" />
+                {t('tools.systemLogs')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-slate-400 dark:text-slate-500 cursor-not-allowed"
                 disabled
               >
-                <Sparkles className="w-4 h-4 mr-2" />
-                AI Assistant
+                <Sparkles className="w-4 h-4 me-2" />
+                {t('tools.aiAssistant')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -202,7 +213,7 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <Settings className="w-4 h-4" />
-                Settings
+                {t('menus.settings')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -210,7 +221,7 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
               className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 w-56"
             >
               <DropdownMenuLabel className="text-slate-500 dark:text-slate-400">
-                Preferences
+                {t('settings.preferences')}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={toggleDarkMode}
@@ -218,28 +229,59 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
               >
                 {darkMode ? (
                   <>
-                    <Sun className="w-4 h-4 mr-2" />
-                    Light Mode
+                    <Sun className="w-4 h-4 me-2" />
+                    {t('settings.lightMode')}
                   </>
                 ) : (
                   <>
-                    <Moon className="w-4 h-4 mr-2" />
-                    Dark Mode
+                    <Moon className="w-4 h-4 me-2" />
+                    {t('settings.darkMode')}
                   </>
                 )}
               </DropdownMenuItem>
+
+              {/* Language Selector */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <DropdownMenuItem
+                    className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    <Globe className="w-4 h-4 me-2" />
+                    {t('settings.language')}
+                    <span className="ms-auto text-xs text-slate-400">
+                      {SUPPORTED_LANGUAGES.find(l => l.code === currentLang)?.nativeName}
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="left" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => handleLanguageChange(lang.code)}
+                      className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                    >
+                      {currentLang === lang.code && <Check className="w-4 h-4 me-2" />}
+                      <span className={currentLang !== lang.code ? "ms-6" : ""}>
+                        {lang.nativeName}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
               <DropdownMenuItem
                 className="text-slate-400 dark:text-slate-500 cursor-not-allowed"
                 disabled
               >
-                <User className="w-4 h-4 mr-2" />
-                Account Settings
+                <User className="w-4 h-4 me-2" />
+                {t('settings.accountSettings')}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
               <DropdownMenuItem className="text-red-600 dark:text-red-400 cursor-pointer">
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
+                <LogOut className="w-4 h-4 me-2" />
+                {t('settings.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -253,7 +295,7 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                 className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-2"
               >
                 <HelpCircle className="w-4 h-4" />
-                Help
+                {t('menus.help')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -271,17 +313,17 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
                   )
                 }
               >
-                <HelpCircle className="w-4 h-4 mr-2" />
-                Documentation
-                <ExternalLink className="ml-auto h-3 w-3 text-slate-400" />
+                <HelpCircle className="w-4 h-4 me-2" />
+                {t('help.documentation')}
+                <ExternalLink className="ms-auto h-3 w-3 text-slate-400" />
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
               <DropdownMenuItem
                 className="text-slate-700 dark:text-slate-100 cursor-pointer"
                 onClick={() => setShowSupportDialog(true)}
               >
-                <HelpCircle className="w-4 h-4 mr-2" />
-                Contact Support
+                <HelpCircle className="w-4 h-4 me-2" />
+                {t('help.contactSupport')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

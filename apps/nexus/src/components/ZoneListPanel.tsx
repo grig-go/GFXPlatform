@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Zone {
   id: string;
@@ -139,27 +140,89 @@ function getStatusColor(status: string) {
 
 export function ZoneListPanel({ onZoneSelect, onZoneNavigate, onZoneHover, highlightedZone, hoveredZone }: ZoneListPanelProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation(['zones', 'systems', 'common']);
+
+  // Translation mappings for zone names
+  const getZoneName = (id: string, defaultName: string) => {
+    const nameKeys: Record<string, string> = {
+      'gate-a10-a18': 'zones:zoneNames.gateClusterA',
+      'security-a': 'zones:zoneNames.securityCheckpointA',
+      'immigration-a': 'zones:zoneNames.immigrationHallA',
+      'baggage-a': 'zones:zoneNames.baggageClaimA',
+      'food-court-a': 'zones:zoneNames.foodCourtA',
+      'retail-a': 'zones:zoneNames.retailA',
+      'lounge-a': 'zones:zoneNames.loungeA'
+    };
+    return t(nameKeys[id] || defaultName, { defaultValue: defaultName });
+  };
+
+  // Translation mappings for zone types
+  const getZoneType = (type: string) => {
+    const typeKeys: Record<string, string> = {
+      'Gate Cluster': 'zones:zoneTypes.gateCluster',
+      'Security': 'zones:zoneTypes.security',
+      'Immigration': 'zones:zoneTypes.immigration',
+      'Baggage': 'zones:zoneTypes.baggage',
+      'Public Amenities': 'zones:zoneTypes.publicAmenities',
+      'Retail Cluster': 'zones:zoneTypes.retailCluster',
+      'Lounge': 'zones:zoneTypes.lounge'
+    };
+    return t(typeKeys[type] || type, { defaultValue: type });
+  };
+
+  // Translation mappings for zone descriptions
+  const getZoneDescription = (id: string, defaultDesc: string) => {
+    const descKeys: Record<string, string> = {
+      'gate-a10-a18': 'zones:zoneDescriptions.boardingAreaGroup',
+      'security-a': 'zones:zoneDescriptions.tsaScreening',
+      'immigration-a': 'zones:zoneDescriptions.customsProcessing',
+      'baggage-a': 'zones:zoneDescriptions.arrivalsHall',
+      'food-court-a': 'zones:zoneDescriptions.concessionsArea',
+      'retail-a': 'zones:zoneDescriptions.dutyFreeShops',
+      'lounge-a': 'zones:zoneDescriptions.airlineLounge'
+    };
+    return t(descKeys[id] || defaultDesc, { defaultValue: defaultDesc });
+  };
+
+  // Translation mappings for system names
+  const getSystemName = (name: string) => {
+    const systemKeys: Record<string, string> = {
+      'Lighting': 'systems:systems.lighting',
+      'Audio': 'systems:systems.audio',
+      'LED Displays': 'systems:systems.ledDisplays',
+      'Signage': 'systems:systems.signage',
+      'Show Playback': 'systems:systems.showPlayback',
+      'Paging': 'systems:systems.paging',
+      'CCTV': 'systems:systems.cctv',
+      'Queue Sensors': 'systems:systems.queueSensors',
+      'Environmental': 'systems:systems.environmental',
+      'Conveyor Status': 'systems:systems.conveyorStatus',
+      'HVAC': 'systems:systems.hvac',
+      'Digital Menus': 'systems:systems.digitalMenus'
+    };
+    return t(systemKeys[name] || name, { defaultValue: name });
+  };
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
       <div className="border-b border-slate-200 dark:border-slate-800 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-slate-900 dark:text-slate-100">Terminal A Zones</h2>
-            <p className="text-slate-600 dark:text-slate-400">Click zone to view details</p>
+            <h2 className="text-slate-900 dark:text-slate-100">{t('zones:listPanel.title')}</h2>
+            <p className="text-slate-600 dark:text-slate-400">{t('zones:listPanel.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="border-slate-200 dark:border-slate-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Zone
+              <Plus className="w-4 h-4 me-2" />
+              {t('zones:actions.addZone')}
             </Button>
             <Button variant="outline" size="sm" className="border-slate-200 dark:border-slate-700">
-              <FileText className="w-4 h-4 mr-2" />
-              Generate Report
+              <FileText className="w-4 h-4 me-2" />
+              {t('zones:actions.generateReport')}
             </Button>
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Sparkles className="w-4 h-4 mr-2" />
-              AI Optimize
+              <Sparkles className="w-4 h-4 me-2" />
+              {t('zones:actions.aiOptimize')}
             </Button>
           </div>
         </div>
@@ -185,24 +248,24 @@ export function ZoneListPanel({ onZoneSelect, onZoneNavigate, onZoneHover, highl
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-slate-900 dark:text-slate-100">{zone.name}</span>
+                    <span className="text-slate-900 dark:text-slate-100">{getZoneName(zone.id, zone.name)}</span>
                     <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded text-xs">
-                      {zone.type}
+                      {getZoneType(zone.type)}
                     </span>
                   </div>
                   <div className="text-slate-600 dark:text-slate-400 text-xs mb-1">
-                    {zone.description}
+                    {getZoneDescription(zone.id, zone.description)}
                   </div>
                   <div className="text-slate-500 dark:text-slate-500 text-xs">
-                    Location: {zone.location}
+                    {t('zones:location')}: {zone.location}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                <div className="flex items-center gap-1 flex-shrink-0 ms-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                       <div
                         className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors cursor-pointer"
-                        aria-label="Zone actions"
+                        aria-label={t('zones:zoneActions')}
                       >
                         <MoreVertical className="w-4 h-4 text-slate-400" />
                       </div>
@@ -212,30 +275,30 @@ export function ZoneListPanel({ onZoneSelect, onZoneNavigate, onZoneHover, highl
                         e.stopPropagation();
                         onZoneNavigate(zone.id);
                       }}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Details View
+                        <Pencil className="w-4 h-4 me-2" />
+                        {t('zones:menu.detailsView')}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
                         // Handle view logs
                         console.log('View logs for', zone.id);
                       }}>
-                        <ScrollText className="w-4 h-4 mr-2" />
-                        View Logs
+                        <ScrollText className="w-4 h-4 me-2" />
+                        {t('zones:menu.viewLogs')}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
                         // Handle AI insights
                         console.log('View AI insights for', zone.id);
                       }}>
-                        <SparklesIcon className="w-4 h-4 mr-2" />
-                        AI Insights
+                        <SparklesIcon className="w-4 h-4 me-2" />
+                        {t('zones:menu.aiInsights')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </div>
-              
+
               {/* Systems Grid */}
               <div className="grid grid-cols-2 gap-2">
                 {zone.systems.map((system) => (
@@ -244,7 +307,7 @@ export function ZoneListPanel({ onZoneSelect, onZoneNavigate, onZoneHover, highl
                     className="flex items-center gap-2 text-xs"
                   >
                     <system.icon className={`w-3 h-3 flex-shrink-0 ${getStatusColor(system.status)}`} />
-                    <span className="text-slate-700 dark:text-slate-300 truncate">{system.name}</span>
+                    <span className="text-slate-700 dark:text-slate-300 truncate">{getSystemName(system.name)}</span>
                     <span className="text-slate-500 dark:text-slate-500">({system.devices})</span>
                   </div>
                 ))}

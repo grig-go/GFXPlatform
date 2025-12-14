@@ -1,0 +1,87 @@
+{
+  "title": "Workflows",
+  "page": {
+    "newWorkflow": "New Workflow",
+    "aiAssist": "AI Assist"
+  },
+  "tabs": {
+    "allWorkflows": "All Workflows",
+    "activeOnly": "Active Only"
+  },
+  "create": {
+    "title": "Create New Workflow",
+    "name": "Workflow Name",
+    "namePlaceholder": "Enter workflow name",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe what this workflow does",
+    "type": "Workflow Type",
+    "icon": "Icon",
+    "button": "Create Workflow"
+  },
+  "types": {
+    "scheduled": "Scheduled",
+    "scheduledDesc": "Run at specific times",
+    "eventBased": "Event-Based",
+    "eventBasedDesc": "Triggered by system events",
+    "conditional": "Conditional",
+    "conditionalDesc": "Run when conditions are met",
+    "manual": "Manual",
+    "manualDesc": "Run manually on demand"
+  },
+  "status": {
+    "running": "Running",
+    "scheduled": "Scheduled",
+    "paused": "Paused",
+    "completed": "Completed",
+    "failed": "Failed"
+  },
+  "nodes": {
+    "trigger": "Trigger",
+    "action": "Action",
+    "condition": "Condition",
+    "addNode": "Add Node",
+    "triggerPlaceholder": "Trigger condition...",
+    "conditionPlaceholder": "Condition...",
+    "actionPlaceholder": "Action name...",
+    "intensity": "Intensity"
+  },
+  "list": {
+    "searchPlaceholder": "Search workflows...",
+    "runNow": "Run Now",
+    "archive": "Archive",
+    "noWorkflowsFound": "No workflows found"
+  },
+  "viewer": {
+    "selectWorkflow": "Select a workflow to view its automation flow",
+    "status": {
+      "active": "Active",
+      "paused": "Paused",
+      "error": "Error",
+      "draft": "Draft"
+    }
+  },
+  "inspector": {
+    "title": "Workflow Inspector",
+    "properties": "Properties",
+    "triggers": "Triggers",
+    "actions": "Actions",
+    "history": "History"
+  },
+  "aiAssist": {
+    "title": "AI Assistant",
+    "placeholder": "Ask AI for help with your workflow...",
+    "suggestions": "Suggestions"
+  },
+  "actions": {
+    "run": "Run",
+    "pause": "Pause",
+    "stop": "Stop",
+    "duplicate": "Duplicate",
+    "delete": "Delete",
+    "export": "Export"
+  },
+  "empty": {
+    "title": "No Workflows",
+    "message": "Create your first workflow to automate tasks"
+  }
+}

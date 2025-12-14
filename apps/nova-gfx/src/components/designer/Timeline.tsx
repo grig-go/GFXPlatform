@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronFirst, ChevronLast,
   Plus, ZoomIn, ZoomOut, Repeat, Maximize2, Trash2, Diamond,
-  GripHorizontal, Move, MonitorPlay, X, Layers,
+  GripHorizontal, Move, MonitorPlay, X, Layers, Clock, ChevronDown, Copy,
 } from 'lucide-react';
 import {
   Timeline as AnimationTimeline,
@@ -41,8 +41,9 @@ import { useDesignerStore } from '@/stores/designerStore';
 import { FRAME_RATE, FRAME_DURATION, createDefaultAnimation, formatTime } from '@/lib/animation';
 import type { AnimationPhase, Keyframe as StoreKeyframe } from '@emergent-platform/types';
 
-// Row height - must match for alignment
+// Row and header heights - must match for alignment between element list and timeline
 const ROW_HEIGHT = 32;
+const HEADER_HEIGHT = 31; // 30px content + 1px border
 
 // Parse time input string to milliseconds
 // Supports formats: "5" (seconds), "5s" (seconds), "5000ms" (ms), "1:30" (mm:ss), "1:30:15" (mm:ss:ff)
@@ -113,6 +114,7 @@ export function Timeline() {
     deleteSelectedKeyframes,
     deleteKeyframe,
     removeKeyframeProperty,
+    updateKeyframe,
     templates,
     layers,
     selectTemplate,
@@ -131,17 +133,34 @@ export function Timeline() {
   const [zoom, setZoom] = useState(1);
   const [editMode, setEditMode] = useState<'keyframes' | 'timeline'>('keyframes');
   const [isEditingDuration, setIsEditingDuration] = useState(false);
-  const [durationInput, setDurationInput] = useState('');
 
   // Context menu state
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [contextMenuTime, setContextMenuTime] = useState<number>(0);
   const [contextMenuElementId, setContextMenuElementId] = useState<string | null>(null);
   const [contextMenuSelectedKeyframes, setContextMenuSelectedKeyframes] = useState<string[]>([]);
+  const [contextMenuShowEasing, setContextMenuShowEasing] = useState(false);
+
+  // Easing options for context menu
+  const easingOptions = [
+    { value: 'linear', label: 'Linear' },
+    { value: 'ease', label: 'Ease' },
+    { value: 'ease-in', label: 'Ease In' },
+    { value: 'ease-out', label: 'Ease Out' },
+    { value: 'ease-in-out', label: 'Ease In Out' },
+    { value: 'cubic-bezier(0.4, 0, 0.2, 1)', label: 'Smooth' },
+    { value: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', label: 'Bounce' },
+  ];
 
   // Playback loop ref
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+
+  // Flag to skip model update after drag (prevents keyframe snap-back)
+  const skipNextModelUpdateRef = useRef(false);
+
+  // Track if a keyframe drag is in progress (to prevent model updates during drag)
+  const isDraggingKeyframeRef = useRef(false);
 
   // Keyboard event handler for deleting keyframes
   // Use refs to avoid stale closures and ensure the handler always has latest state
@@ -164,8 +183,12 @@ export function Timeline() {
         store.deleteSelectedKeyframes();
       }
 
-      // Escape to deselect keyframes
+      // Escape to deselect keyframes (but not when in an input field)
       if (e.key === 'Escape' && currentSelectedKeyframeIds.length > 0) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
         store.selectKeyframes([]);
       }
 
@@ -339,15 +362,13 @@ export function Timeline() {
         // Sort keyframes by position
         const sortedKfs = [...animKeyframes].sort((a, b) => a.position - b.position);
 
-        // Use phase duration for keyframe positioning (matches how keyframes are created)
-        const phaseDuration = phaseDurations[currentPhase];
-
         if (sortedKfs.length > 0) {
           // Create keyframes for this group with visual state based on selection
           // Note: Using 'any' type due to animation-timeline-js library type limitations
           const groupKeyframes = sortedKfs.map((kf) => {
-            // Use phase duration for positioning to match keyframe creation
-            const timeMs = (kf.position / 100) * phaseDuration;
+            // Position = animation delay + (keyframe position % * animation duration)
+            // This properly accounts for staggered animations with different delays
+            const timeMs = anim.delay + (kf.position / 100) * anim.duration;
             const isSelected = selectedKeyframeIds.includes(kf.id);
             const propertyCount = Object.keys(kf.properties).length;
 
@@ -468,26 +489,43 @@ export function Timeline() {
 
   // Track if component is mounted and visible
   const [isVisible, setIsVisible] = useState(false);
-  
-  // Check container visibility
+
+  // Check container visibility and trigger redraws on resize
   useEffect(() => {
     const container = timelineContainerRef.current;
     if (!container) return;
-    
+
     const checkVisibility = () => {
       const rect = container.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         setIsVisible(true);
       }
     };
-    
+
     // Initial check
     checkVisibility();
-    
+
+    // Resize handler - redraw timeline when container size changes
+    const handleResize = () => {
+      checkVisibility();
+      if (timelineRef.current) {
+        // Force timeline to recalculate its dimensions
+        try {
+          // @ts-ignore - resize method
+          if (typeof timelineRef.current.resize === 'function') {
+            timelineRef.current.resize();
+          }
+          timelineRef.current.redraw();
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+    };
+
     // Also check on resize
-    const observer = new ResizeObserver(checkVisibility);
+    const observer = new ResizeObserver(handleResize);
     observer.observe(container);
-    
+
     return () => observer.disconnect();
   }, []);
 
@@ -510,8 +548,7 @@ export function Timeline() {
     const timeAtClick = tl.pxToVal(clickX);
 
     // Find which element row was clicked (if any)
-    const headerHeight = 30;
-    const rowIndex = Math.floor((clickY - headerHeight) / ROW_HEIGHT);
+    const rowIndex = Math.floor((clickY - HEADER_HEIGHT) / ROW_HEIGHT);
     const clickedElement = rowIndex >= 0 && rowIndex < templateElements.length
       ? templateElements[rowIndex]
       : null;
@@ -551,8 +588,23 @@ export function Timeline() {
       if (closestKeyframeId) {
         // If the keyframe we clicked on isn't already selected, select it
         if (!currentSelectedKeyframes.includes(closestKeyframeId)) {
+          // Clear any lingering isolation state from full preview (without resetting playhead)
+          if (store.isPlayingFullPreview) {
+            store.pause();
+          }
+
           store.selectKeyframes([closestKeyframeId]);
           currentSelectedKeyframes = [closestKeyframeId];
+
+          // Also select the element that this keyframe belongs to
+          // Skip template switching to avoid isolating view
+          const kf = store.keyframes.find(k => k.id === closestKeyframeId);
+          if (kf) {
+            const anim = store.animations.find(a => a.id === kf.animation_id);
+            if (anim) {
+              store.selectElements([anim.element_id], 'replace', { skipTemplateSwitch: true });
+            }
+          }
         }
       }
     }
@@ -569,6 +621,7 @@ export function Timeline() {
   const closeContextMenu = useCallback(() => {
     setContextMenuPosition(null);
     setContextMenuElementId(null);
+    setContextMenuShowEasing(false);
   }, []);
 
   // Add keyframe at specific time for selected element
@@ -601,9 +654,13 @@ export function Timeline() {
       store.setAnimations([...store.animations, anim]);
     }
 
-    // Calculate position as percentage of phase duration
-    const phaseDur = store.phaseDurations[currentPhase];
-    const position = Math.max(0, Math.min(100, (timeMs / phaseDur) * 100));
+    // Calculate position as percentage within the animation's duration (accounting for delay)
+    // timeMs is the absolute position on the timeline
+    // We need to convert to a 0-100 position within the animation
+    const relativeTime = timeMs - anim.delay;
+    const position = anim.duration > 0
+      ? Math.max(0, Math.min(100, (relativeTime / anim.duration) * 100))
+      : 0;
 
     // Create new keyframe
     const newKeyframe: StoreKeyframe = {
@@ -637,12 +694,27 @@ export function Timeline() {
       timelineRef.current = null;
     }
 
+    // Calculate the exact height needed for all rows (to prevent extra scrollable space)
+    const calculatedHeight = HEADER_HEIGHT + (templateElements.length * ROW_HEIGHT);
+
     const options: TimelineOptions = {
       id: container,
-      headerHeight: 30,
+      headerHeight: HEADER_HEIGHT,
+      // @ts-ignore - fillScreen option helps the timeline render all rows
+      fillScreen: false,
+      // @ts-ignore - scrollable allows vertical scrolling through rows
+      scrollable: true,
+      // @ts-ignore - stretchHeight prevents adding extra empty space at the bottom
+      stretchHeight: false,
+      // @ts-ignore - Set explicit height to match row count
+      height: calculatedHeight,
       rowsStyle: {
         height: ROW_HEIGHT,
+        marginTop: 0,
         marginBottom: 0,
+        // Row separator lines - slightly thicker for visibility
+        strokeColor: 'rgba(255, 255, 255, 0.15)',
+        strokeThickness: 2,
         keyframesStyle: {
           shape: 'rhomb',
           width: 14,
@@ -714,16 +786,8 @@ export function Timeline() {
 
       timeline.setTime(playheadPosition);
 
-      // Set initial model
-      const model = buildTimelineModel();
-      timeline.setModel(model);
-      
-      // Force redraw after a short delay to ensure proper rendering
-      setTimeout(() => {
-        if (timelineRef.current) {
-          timelineRef.current.redraw();
-        }
-      }, 50);
+      // Note: Initial model is set by the separate "Update timeline model" useEffect
+      // which runs after this effect completes. This prevents timeline reset on keyframe changes.
 
       // Time changed event
       timeline.onTimeChanged((event: TimelineTimeChangedEvent) => {
@@ -737,8 +801,7 @@ export function Timeline() {
         if (event.elements && event.elements.length > 0) {
           const store = useDesignerStore.getState();
           const currentKeyframes = store.keyframes;
-          // Get phase duration to match how keyframes are displayed
-          const currentPhaseDuration = store.phaseDurations[store.currentPhase];
+          const currentAnimations = store.animations;
 
           const updatedKeyframes = [...currentKeyframes];
 
@@ -746,19 +809,31 @@ export function Timeline() {
             const data = draggedEl.keyframe?.data;
             if (data?.keyframeId && !data?.isPlaceholder) {
               const newTimeMs = draggedEl.keyframe?.val || 0;
-              // Convert timeline position back to 0-100 position using phase duration
-              const newPosition = Math.max(0, Math.min(100, (newTimeMs / currentPhaseDuration) * 100));
 
-              const kfIndex = updatedKeyframes.findIndex((kf) => kf.id === data.keyframeId);
-              if (kfIndex !== -1) {
-                updatedKeyframes[kfIndex] = {
-                  ...updatedKeyframes[kfIndex],
-                  position: Math.round(newPosition),
-                };
+              // Find the animation to get its delay and duration
+              const anim = currentAnimations.find(a => a.id === data.animationId);
+              if (anim) {
+                // Convert timeline position back to 0-100 position within the animation
+                // timeMs = anim.delay + (position / 100) * anim.duration
+                // So: position = ((timeMs - anim.delay) / anim.duration) * 100
+                const relativeTime = newTimeMs - anim.delay;
+                const newPosition = anim.duration > 0
+                  ? Math.max(0, Math.min(100, (relativeTime / anim.duration) * 100))
+                  : 0;
+
+                const kfIndex = updatedKeyframes.findIndex((kf) => kf.id === data.keyframeId);
+                if (kfIndex !== -1) {
+                  updatedKeyframes[kfIndex] = {
+                    ...updatedKeyframes[kfIndex],
+                    position: Math.round(newPosition),
+                  };
+                }
               }
             }
           });
 
+          // Set flag to skip the next model update (prevents snap-back)
+          skipNextModelUpdateRef.current = true;
           store.setKeyframes(updatedKeyframes);
         }
       });
@@ -772,7 +847,12 @@ export function Timeline() {
           const selectedIds: string[] = [];
 
           event.selected.forEach((sel) => {
-            const data = sel.keyframe?.data;
+            // Log full selection object to understand structure
+            console.log('[Timeline] Full selection object:', sel);
+            console.log('[Timeline] Selection keys:', Object.keys(sel));
+
+            // The library may use 'data' directly on the selection item
+            const data = sel.keyframe?.data || (sel as any).data;
             console.log('[Timeline] Selected keyframe data:', data);
             if (data?.keyframeId && !data?.isPlaceholder) {
               selectedIds.push(data.keyframeId);
@@ -781,13 +861,29 @@ export function Timeline() {
 
           console.log('[Timeline] Selecting keyframe IDs:', selectedIds);
           if (selectedIds.length > 0) {
+            // Clear any lingering isolation state from full preview (without resetting playhead)
+            if (store.isPlayingFullPreview) {
+              store.pause(); // Use pause instead of stop to preserve playhead position
+            }
+
+            // Set flag to skip model rebuild - this prevents drag interruption
+            // The library handles selection visually; we only need store state for PropertiesPanel
+            skipNextModelUpdateRef.current = true;
             store.selectKeyframes(selectedIds);
-            // DO NOT deselect element when keyframe is selected
-            // Keep the element selected so user can see its properties
-            // The PropertiesPanel will show keyframe info for the selected element's keyframes
-            const firstSelected = event.selected[0];
-            const keyframeTime = firstSelected.keyframe?.val || 0;
-            store.setPlayhead(keyframeTime);
+
+            // Also select the element that this keyframe belongs to
+            // This ensures the PropertiesPanel shows the element AND the keyframe inspector
+            // Use skipTemplateSwitch to avoid isolating view when clicking keyframes
+            const firstKeyframeId = selectedIds[0];
+            const kf = store.keyframes.find(k => k.id === firstKeyframeId);
+            if (kf) {
+              const anim = store.animations.find(a => a.id === kf.animation_id);
+              if (anim) {
+                console.log('[Timeline] Also selecting element:', anim.element_id);
+                store.selectElements([anim.element_id], 'replace', { skipTemplateSwitch: true });
+              }
+              // Don't move playhead when selecting keyframe - keep it at current position
+            }
           }
         } else {
           console.log('[Timeline] Clearing keyframe selection');
@@ -843,8 +939,7 @@ export function Timeline() {
           const clickY = e.clientY - rect.top;
 
           // Calculate which row was clicked based on Y position
-          const headerHeight = 30;
-          const rowIndex = Math.floor((clickY - headerHeight) / ROW_HEIGHT);
+          const rowIndex = Math.floor((clickY - HEADER_HEIGHT) / ROW_HEIGHT);
 
           const {
             animations: storeAnimations,
@@ -902,7 +997,23 @@ export function Timeline() {
 
           if (foundKeyframeId) {
             console.log('[Timeline] Canvas click selecting keyframe:', foundKeyframeId);
+
+            // Clear any lingering isolation state from full preview (without resetting playhead)
+            if (store.isPlayingFullPreview) {
+              store.pause();
+            }
+
             store.selectKeyframes([foundKeyframeId]);
+
+            // Also select the element that this keyframe belongs to
+            // Skip template switching to avoid isolating view
+            const kf = storeKeyframes.find(k => k.id === foundKeyframeId);
+            if (kf) {
+              const anim = store.animations.find(a => a.id === kf.animation_id);
+              if (anim) {
+                store.selectElements([anim.element_id], 'replace', { skipTemplateSwitch: true });
+              }
+            }
           } else {
             console.log('[Timeline] No keyframe found near click');
           }
@@ -933,14 +1044,55 @@ export function Timeline() {
         timelineRef.current = null;
       }
     };
-  }, [currentPhase, maxDuration, buildTimelineModel, isVisible, handleContextMenu]);
+  // Only recreate timeline when phase changes, visibility changes, or row count changes significantly
+  // DO NOT include buildTimelineModel - it changes on every keyframe update and would reset the timeline
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPhase, maxDuration, isVisible, handleContextMenu, templateElements.length]);
 
   // Update timeline model when data changes
   useEffect(() => {
     if (timelineRef.current) {
+      // Skip model update if flag is set (after keyframe drag to prevent snap-back)
+      if (skipNextModelUpdateRef.current) {
+        skipNextModelUpdateRef.current = false;
+        // Just redraw without rebuilding the model
+        timelineRef.current.redraw();
+        return;
+      }
+
       const model = buildTimelineModel();
       timelineRef.current.setModel(model);
+
+      // Update height option to match current row count (prevents extra scrollable space)
+      const calculatedHeight = HEADER_HEIGHT + (templateElements.length * ROW_HEIGHT);
+      timelineRef.current.setOptions({
+        // @ts-ignore
+        height: calculatedHeight,
+      });
+
+      // Force a resize to recalculate row heights when element count changes
+      // This fixes the issue where rows get cut off when there are many elements
+      try {
+        // @ts-ignore - resize method may exist
+        if (typeof timelineRef.current.resize === 'function') {
+          timelineRef.current.resize();
+        }
+        // @ts-ignore - rescale method may exist
+        if (typeof timelineRef.current.rescale === 'function') {
+          timelineRef.current.rescale();
+        }
+      } catch (e) {
+        // Ignore resize errors
+      }
+
       timelineRef.current.redraw();
+
+      // Additional redraw after a short delay to ensure proper rendering
+      setTimeout(() => {
+        if (timelineRef.current) {
+          timelineRef.current.redraw();
+        }
+      }, 50);
     }
   }, [buildTimelineModel, templateElements, animations, keyframes, currentPhase, currentTemplateId]);
 
@@ -1127,8 +1279,9 @@ export function Timeline() {
     outlineEl.addEventListener('wheel', handleWheel, { passive: true });
 
     // Setup timeline scroll sync after a short delay to ensure timeline is initialized
+    let timelineScrollCleanup: (() => void) | undefined;
     const timeoutId = setTimeout(() => {
-      setupTimelineScrollSync();
+      timelineScrollCleanup = setupTimelineScrollSync();
     }, 100);
 
     return () => {
@@ -1136,6 +1289,7 @@ export function Timeline() {
       timelineContainer.removeEventListener('wheel', handleWheel);
       outlineEl.removeEventListener('wheel', handleWheel);
       clearTimeout(timeoutId);
+      timelineScrollCleanup?.();
     };
   }, [isVisible]);
 
@@ -1493,26 +1647,30 @@ export function Timeline() {
                 <div className="flex items-center text-xs text-muted-foreground tabular-nums">
                   <span className="min-w-[50px] text-right">{formatTime(playheadPosition)}</span>
                   <span className="mx-1">/</span>
-                  {isEditingDuration ? (
-                    <Input
+                  {isEditingDuration && (
+                    <input
+                      key="duration-input"
+                      type="text"
                       autoFocus
-                      className="h-5 w-16 text-xs px-1 py-0 text-center"
-                      value={durationInput}
-                      onChange={(e) => setDurationInput(e.target.value)}
+                      className="h-5 w-16 text-xs px-1 py-0 text-center bg-background border border-input rounded"
+                      defaultValue={(phaseDuration / 1000).toFixed(1)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          const parsed = parseTimeInput(durationInput);
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const parsed = parseTimeInput(e.currentTarget.value);
                           if (parsed !== null) {
                             setPhaseDuration(currentPhase, parsed);
                           }
                           setIsEditingDuration(false);
-                        }
-                        if (e.key === 'Escape') {
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setIsEditingDuration(false);
                         }
                       }}
-                      onBlur={() => {
-                        const parsed = parseTimeInput(durationInput);
+                      onBlur={(e) => {
+                        const parsed = parseTimeInput(e.currentTarget.value);
                         if (parsed !== null) {
                           setPhaseDuration(currentPhase, parsed);
                         }
@@ -1520,11 +1678,12 @@ export function Timeline() {
                       }}
                       placeholder="e.g. 5s"
                     />
-                  ) : (
+                  )}
+                  {!isEditingDuration && (
                     <button
+                      key="duration-button"
                       className="min-w-[50px] text-left hover:text-foreground hover:bg-muted px-1 py-0.5 rounded cursor-pointer transition-colors"
                       onClick={() => {
-                        setDurationInput((phaseDuration / 1000).toFixed(1));
                         setIsEditingDuration(true);
                       }}
                       title="Click to edit duration"
@@ -1594,10 +1753,10 @@ export function Timeline() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left side: Element List with header */}
         <div className="w-52 border-r border-border flex flex-col flex-shrink-0">
-          {/* Element List Header - fixed at top */}
+          {/* Element List Header - fixed at top, must match timeline headerHeight exactly */}
           <div
             className="px-3 border-b border-border text-xs font-medium text-muted-foreground flex items-center justify-between bg-muted/30 flex-shrink-0"
-            style={{ height: 30 }}
+            style={{ height: HEADER_HEIGHT, boxSizing: 'border-box' }}
           >
             <div className="flex items-center gap-2">
               <span>ELEMENTS</span>
@@ -1618,9 +1777,8 @@ export function Timeline() {
 
           {/* Element List - scrollable, synced with timeline */}
           <div
-            className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-border"
+            className="flex-1 overflow-y-auto overflow-x-hidden"
             ref={outlineScrollRef}
-            style={{ scrollbarWidth: 'none' }} // Hide scrollbar - we want unified scrolling
           >
             <div>
               {templateElements.length === 0 ? (
@@ -1642,10 +1800,13 @@ export function Timeline() {
                     <div
                       key={element.id}
                       className={cn(
-                        'flex items-center gap-2 px-3 text-xs cursor-pointer hover:bg-muted/50 group border-b border-border/30',
+                        'flex items-center gap-2 px-3 text-xs cursor-pointer hover:bg-muted/50 group border-b border-border/50',
                         isSelected && 'bg-violet-500/20'
                       )}
-                      style={{ height: ROW_HEIGHT }}
+                      style={{
+                        height: ROW_HEIGHT,
+                        boxSizing: 'border-box', // Ensure border is included in height
+                      }}
                       onClick={() => {
                         // Select element and deselect any keyframes
                         selectElements([element.id]);
@@ -1693,8 +1854,12 @@ export function Timeline() {
         {/* Right side: Timeline Canvas */}
         <div
           ref={timelineContainerRef}
-          className="flex-1 bg-neutral-100 dark:bg-neutral-900"
-          style={{ minHeight: 150 }}
+          className="flex-1 bg-neutral-100 dark:bg-neutral-900 overflow-hidden timeline-canvas-container"
+          style={{
+            minHeight: 150,
+            // Ensure the timeline container matches the element list height
+            // This helps the animation-timeline-js library calculate row positions correctly
+          }}
         />
       </div>
 
@@ -1899,81 +2064,209 @@ export function Timeline() {
       </div>
 
       {/* Context Menu (right-click menu) */}
-      {contextMenuPosition && (
-        <>
-          {/* Backdrop to close menu on click outside */}
-          <div
-            className="fixed inset-0 z-50"
-            onClick={closeContextMenu}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              closeContextMenu();
-            }}
-          />
-          {/* Context menu */}
-          <div
-            className="fixed z-50 min-w-[180px] bg-popover border border-border rounded-md shadow-lg py-1 text-sm"
-            style={{
-              left: contextMenuPosition.x,
-              top: contextMenuPosition.y,
-            }}
-          >
-            {/* Delete Selected Keyframes */}
-            <button
-              className={cn(
-                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
-                contextMenuSelectedKeyframes.length === 0 && "opacity-50 cursor-not-allowed"
-              )}
-              disabled={contextMenuSelectedKeyframes.length === 0}
-              onClick={() => {
-                if (contextMenuSelectedKeyframes.length > 0) {
-                  deleteSelectedKeyframes();
-                  closeContextMenu();
-                }
+      {contextMenuPosition && (() => {
+        // Get selected keyframe details for the context menu
+        const selectedKf = contextMenuSelectedKeyframes.length === 1
+          ? keyframes.find(kf => kf.id === contextMenuSelectedKeyframes[0])
+          : null;
+        const selectedKfAnim = selectedKf
+          ? animations.find(a => a.id === selectedKf.animation_id)
+          : null;
+        const selectedKfTimeMs = selectedKf && selectedKfAnim
+          ? selectedKfAnim.delay + (selectedKf.position / 100) * selectedKfAnim.duration
+          : 0;
+        const selectedKfPropCount = selectedKf
+          ? Object.keys(selectedKf.properties).length
+          : 0;
+        const currentEasing = selectedKf?.easing || 'linear';
+        const currentEasingLabel = easingOptions.find(e => e.value === currentEasing)?.label || currentEasing;
+
+        return (
+          <>
+            {/* Backdrop to close menu on click outside */}
+            <div
+              className="fixed inset-0 z-50"
+              onClick={closeContextMenu}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                closeContextMenu();
+              }}
+            />
+            {/* Context menu - opens upward to avoid being cut off */}
+            <div
+              className="fixed z-50 min-w-[220px] max-w-[280px] bg-popover border border-border rounded-md shadow-lg py-1 text-sm"
+              style={{
+                left: contextMenuPosition.x,
+                bottom: window.innerHeight - contextMenuPosition.y,
               }}
             >
-              <span className="flex items-center gap-2">
-                <Trash2 className="w-4 h-4 text-red-400" />
-                <span>Delete Keyframe{contextMenuSelectedKeyframes.length > 1 ? 's' : ''}</span>
-              </span>
-              <span className="text-xs text-muted-foreground">Del</span>
-            </button>
+              {/* Keyframe Info Header - only shows when single keyframe selected */}
+              {selectedKf && (
+                <>
+                  <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <span className="text-xs font-medium text-amber-400">Keyframe Details</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Time:</span>
+                        <span className="font-mono text-amber-300">{formatTime(selectedKfTimeMs)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Position:</span>
+                        <span className="font-mono text-amber-300">{selectedKf.position}%</span>
+                      </div>
+                      <div className="flex items-center justify-between col-span-2">
+                        <span className="text-muted-foreground">Properties:</span>
+                        <span className="font-mono text-violet-400">{selectedKfPropCount}</span>
+                      </div>
+                    </div>
+                    {/* Property list preview */}
+                    {selectedKfPropCount > 0 && (
+                      <div className="mt-1.5 pt-1.5 border-t border-amber-500/20">
+                        <div className="flex flex-wrap gap-1">
+                          {Object.keys(selectedKf.properties).slice(0, 4).map(key => (
+                            <span
+                              key={key}
+                              className="px-1.5 py-0.5 bg-emerald-500/20 rounded text-[9px] text-emerald-400"
+                            >
+                              {key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()}
+                            </span>
+                          ))}
+                          {selectedKfPropCount > 4 && (
+                            <span className="px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                              +{selectedKfPropCount - 4}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Separator */}
-            <div className="h-px bg-border my-1" />
+                  {/* Easing Selector */}
+                  <div className="relative">
+                    <button
+                      className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors"
+                      onClick={() => setContextMenuShowEasing(!contextMenuShowEasing)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 20 C 8 20, 8 4, 22 4" />
+                        </svg>
+                        <span>Easing: <span className="text-blue-400">{currentEasingLabel}</span></span>
+                      </span>
+                      <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", contextMenuShowEasing && "rotate-180")} />
+                    </button>
+                    {contextMenuShowEasing && (
+                      <div className="border-t border-border bg-muted/30">
+                        {easingOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              updateKeyframe(selectedKf.id, { easing: option.value });
+                              setContextMenuShowEasing(false);
+                            }}
+                            className={cn(
+                              "w-full px-6 py-1 text-xs text-left hover:bg-muted/50 transition-colors",
+                              currentEasing === option.value && "bg-blue-500/20 text-blue-400"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-            {/* Add Keyframe Here */}
-            <button
-              className={cn(
-                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
-                (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+                  {/* Separator */}
+                  <div className="h-px bg-border my-1" />
+                </>
               )}
-              disabled={!contextMenuElementId && selectedElementIds.length === 0}
-              onClick={() => handleAddKeyframeAtTime(contextMenuTime, contextMenuElementId)}
-            >
-              <span className="flex items-center gap-2">
-                <Diamond className="w-4 h-4 text-amber-400" />
-                <span>Add Keyframe at {formatTime(contextMenuTime)}</span>
-              </span>
-            </button>
 
-            {/* Add Keyframe at Playhead */}
-            <button
-              className={cn(
-                "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
-                (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+              {/* Delete Selected Keyframes */}
+              <button
+                className={cn(
+                  "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                  contextMenuSelectedKeyframes.length === 0 && "opacity-50 cursor-not-allowed"
+                )}
+                disabled={contextMenuSelectedKeyframes.length === 0}
+                onClick={() => {
+                  if (contextMenuSelectedKeyframes.length > 0) {
+                    deleteSelectedKeyframes();
+                    closeContextMenu();
+                  }
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-red-400" />
+                  <span>Delete Keyframe{contextMenuSelectedKeyframes.length > 1 ? 's' : ''}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">Del</span>
+              </button>
+
+              {/* Duplicate Keyframe - only for single selection */}
+              {selectedKf && (
+                <button
+                  className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors"
+                  onClick={() => {
+                    // Create a duplicate keyframe at a slightly different position
+                    const newPosition = Math.min(100, selectedKf.position + 10);
+                    const newKeyframe = {
+                      id: crypto.randomUUID(),
+                      animation_id: selectedKf.animation_id,
+                      position: newPosition,
+                      easing: selectedKf.easing,
+                      properties: { ...selectedKf.properties },
+                    };
+                    setKeyframes([...keyframes, newKeyframe]);
+                    selectKeyframes([newKeyframe.id]);
+                    closeContextMenu();
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <Copy className="w-4 h-4 text-violet-400" />
+                    <span>Duplicate Keyframe</span>
+                  </span>
+                </button>
               )}
-              disabled={!contextMenuElementId && selectedElementIds.length === 0}
-              onClick={() => handleAddKeyframeAtTime(playheadPosition, contextMenuElementId)}
-            >
-              <span className="flex items-center gap-2">
-                <Plus className="w-4 h-4 text-violet-400" />
-                <span>Add Keyframe at Playhead</span>
-              </span>
-            </button>
-          </div>
-        </>
-      )}
+
+              {/* Separator */}
+              <div className="h-px bg-border my-1" />
+
+              {/* Add Keyframe Here */}
+              <button
+                className={cn(
+                  "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                  (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+                )}
+                disabled={!contextMenuElementId && selectedElementIds.length === 0}
+                onClick={() => handleAddKeyframeAtTime(contextMenuTime, contextMenuElementId)}
+              >
+                <span className="flex items-center gap-2">
+                  <Diamond className="w-4 h-4 text-amber-400" />
+                  <span>Add Keyframe at {formatTime(contextMenuTime)}</span>
+                </span>
+              </button>
+
+              {/* Add Keyframe at Playhead */}
+              <button
+                className={cn(
+                  "w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors",
+                  (!contextMenuElementId && selectedElementIds.length === 0) && "opacity-50 cursor-not-allowed"
+                )}
+                disabled={!contextMenuElementId && selectedElementIds.length === 0}
+                onClick={() => handleAddKeyframeAtTime(playheadPosition, contextMenuElementId)}
+              >
+                <span className="flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-violet-400" />
+                  <span>Add Keyframe at Playhead</span>
+                </span>
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

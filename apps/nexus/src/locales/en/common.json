@@ -1,0 +1,91 @@
+{
+  "buttons": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "submit": "Submit",
+    "reset": "Reset",
+    "close": "Close",
+    "confirm": "Confirm",
+    "apply": "Apply",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "viewDetails": "View Details",
+    "applyOptimization": "Apply Optimization",
+    "search": "Search",
+    "filter": "Filter",
+    "refresh": "Refresh",
+    "export": "Export",
+    "import": "Import"
+  },
+  "status": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "submitting": "Submitting...",
+    "online": "Online",
+    "offline": "Offline",
+    "warning": "Warning",
+    "error": "Error",
+    "success": "Success",
+    "active": "Active",
+    "inactive": "Inactive",
+    "running": "Running",
+    "scheduled": "Scheduled",
+    "paused": "Paused",
+    "resolved": "Resolved",
+    "pending": "Pending"
+  },
+  "labels": {
+    "type": "Type",
+    "title": "Title",
+    "description": "Description",
+    "name": "Name",
+    "status": "Status",
+    "date": "Date",
+    "time": "Time",
+    "system": "System",
+    "zone": "Zone",
+    "device": "Device",
+    "all": "All",
+    "none": "None",
+    "unknown": "Unknown"
+  },
+  "time": {
+    "now": "Now",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "startsIn": "Starts in {{time}}",
+    "ago": "{{time}} ago",
+    "minutes": "minutes",
+    "hours": "hours",
+    "days": "days",
+    "seconds": "seconds"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "of": "of",
+    "showing": "Showing",
+    "entries": "entries"
+  },
+  "noData": {
+    "title": "No Data",
+    "message": "No data available",
+    "noResults": "No results found"
+  },
+  "actions": {
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "create": "Create",
+    "update": "Update",
+    "add": "Add",
+    "remove": "Remove"
+  }
+}

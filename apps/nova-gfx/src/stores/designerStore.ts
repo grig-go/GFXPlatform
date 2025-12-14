@@ -343,7 +343,7 @@ interface DesignerActions {
   setZIndex: (id: string, zIndex: number) => void;
 
   // Selection
-  selectElements: (ids: string[], mode?: 'replace' | 'add' | 'toggle') => void;
+  selectElements: (ids: string[], mode?: 'replace' | 'add' | 'toggle', options?: { skipTemplateSwitch?: boolean; expandInOutline?: boolean }) => void;
   selectAll: () => void;
   deselectAll: () => void;
   setHoveredElement: (id: string | null) => void;
@@ -428,6 +428,7 @@ interface DesignerActions {
   toggleNode: (nodeId: string) => void;
   expandAll: () => void;
   collapseAll: () => void;
+  expandToElement: (elementId: string) => void;
 
   // Chat operations
   loadChatMessages: (projectId: string) => Promise<void>;
@@ -726,12 +727,18 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                     chatMessages: Array.isArray(localData.chatMessages) ? localData.chatMessages : [],
                   };
 
+                  // Load phaseDurations from project settings if available
+                  const savedPhaseDurations = safeData.project?.settings?.phaseDurations;
+                  const phaseDurations = savedPhaseDurations || { in: 1500, loop: 3000, out: 1500 };
+
                   set({
                     ...safeData,
                     currentTemplateId: safeData.templates?.[0]?.id || null,
                     isLoading: false,
                     isDirty: false,
                     error: null,
+                    tool: 'select', // Reset tool to select on project load
+                    phaseDurations, // Restore saved phase durations
                   });
                   console.log('✅ Loaded project from localStorage:', safeData.project?.name);
                   return;
@@ -1180,6 +1187,10 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               chatMessages = [];
             }
             
+            // Load phaseDurations from project settings if available
+            const savedPhaseDurations = project.settings?.phaseDurations;
+            const phaseDurations = savedPhaseDurations || { in: 1500, loop: 3000, out: 1500 };
+
             set({
               project,
               layers,
@@ -1193,6 +1204,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               isLoading: false,
               isDirty: false,
               error: null,
+              tool: 'select', // Reset tool to select on project load
+              phaseDurations, // Restore saved phase durations
               pendingDeletions: {
                 elements: [],
                 animations: [],
@@ -1202,7 +1215,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 layers: [],
               },
             });
-            
+
             console.log(`Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements`);
           } catch (error) {
             console.error('Error loading project:', error);
@@ -2660,12 +2673,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         // Selection
-        selectElements: (ids, mode = 'replace') => {
+        selectElements: (ids, mode = 'replace', options = {}) => {
           const state = get();
+          const { expandInOutline = true } = options;
 
           // Auto-select the template containing the first selected element
           // This ensures timeline shows the correct element's keyframes
-          if (ids.length > 0) {
+          // Skip if options.skipTemplateSwitch is true (e.g., when selecting via keyframe click)
+          if (ids.length > 0 && !options.skipTemplateSwitch) {
             const firstElement = state.elements.find(e => e.id === ids[0]);
             if (firstElement && firstElement.template_id !== state.currentTemplateId) {
               // Switch to the element's template
@@ -2690,6 +2705,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               draft.selectedElementIds = Array.from(current);
             }
           });
+
+          // Auto-expand outline to show selected element(s)
+          if (expandInOutline && ids.length > 0) {
+            get().expandToElement(ids[0]);
+          }
         },
 
         selectAll: () => {
@@ -3170,12 +3190,27 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         setPhaseDuration: (phase, duration) => {
-          set((state) => ({
-            phaseDurations: {
+          const clampedDuration = Math.max(500, Math.min(300000, duration)); // Min 0.5s, max 5 min
+          set((state) => {
+            const newPhaseDurations = {
               ...state.phaseDurations,
-              [phase]: Math.max(500, Math.min(300000, duration)), // Min 0.5s, max 5 min
-            },
-          }));
+              [phase]: clampedDuration,
+            };
+            // Also save to project settings for persistence (immutably)
+            const updatedProject = state.project ? {
+              ...state.project,
+              settings: {
+                ...state.project.settings,
+                phaseDurations: newPhaseDurations,
+              },
+            } : state.project;
+
+            return {
+              phaseDurations: newPhaseDurations,
+              project: updatedProject,
+              isDirty: true, // Mark as dirty so it gets saved
+            };
+          });
         },
 
         play: () => {
@@ -3210,9 +3245,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         endPreviewPlayback: () => {
-          // End playback but keep template isolated (isPlayingFullPreview stays true)
+          // End playback and reset isolation state
           // This is called when the animation naturally finishes
-          set({ isPlaying: false });
+          set({ isPlaying: false, isPlayingFullPreview: false });
         },
 
         // On-Air controls
@@ -3300,6 +3335,31 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         collapseAll: () => {
           set({ expandedNodes: new Set() });
+        },
+
+        expandToElement: (elementId) => {
+          const state = get();
+          const element = state.elements.find(e => e.id === elementId);
+          if (!element) return;
+
+          const expanded = new Set(state.expandedNodes);
+
+          // Expand all parent elements in the hierarchy
+          let currentElement = element;
+          while (currentElement.parent_element_id) {
+            expanded.add(currentElement.parent_element_id);
+            const parent = state.elements.find(e => e.id === currentElement.parent_element_id);
+            if (!parent) break;
+            currentElement = parent;
+          }
+
+          // Expand the layer containing the element's template
+          const template = state.templates.find(t => t.id === element.template_id);
+          if (template) {
+            expanded.add(template.layer_id);
+          }
+
+          set({ expandedNodes: expanded });
         },
 
         // Chat operations

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, Filter, ArrowUpDown, LayoutGrid, Table as TableIcon, Edit, RotateCw, FileText, Gauge, CheckCircle, AlertCircle, XCircle, ChevronDown, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -579,6 +580,7 @@ type SortField = 'name' | 'status' | 'zone' | 'type' | 'uptime';
 type SortOrder = 'asc' | 'desc';
 
 export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWorkflows, onNavigateToTimeline, onNavigateToLogsAlerts, initialSystemFilter }: DevicesPageProps) {
+  const { t } = useTranslation(['devices', 'common']);
   const [viewType, setViewType] = useState<ViewType>('cards');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
@@ -714,11 +716,11 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
     const baseClasses = "px-2 py-1 rounded-full text-xs";
     switch (status) {
       case "online":
-        return <span className={`${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400`}>Online</span>;
+        return <span className={`${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400`}>{t('status.online')}</span>;
       case "warning":
-        return <span className={`${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400`}>Warning</span>;
+        return <span className={`${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400`}>{t('status.warning')}</span>;
       case "offline":
-        return <span className={`${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400`}>Offline</span>;
+        return <span className={`${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400`}>{t('status.offline')}</span>;
       default:
         return null;
     }
@@ -774,9 +776,9 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-slate-900 dark:text-slate-100 text-2xl">All Devices</h1>
+              <h1 className="text-slate-900 dark:text-slate-100 text-2xl">{t('page.title')}</h1>
               <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-                {filteredDevices.length} of {allDevices.length} devices
+                {t('page.deviceCount', { filtered: filteredDevices.length, total: allDevices.length })}
               </p>
             </div>
             
@@ -792,18 +794,18 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                     : "hover:bg-slate-200 dark:hover:bg-slate-700"}
                 >
                   <TableIcon className="w-4 h-4 mr-2" />
-                  Table
+                  {t('page.viewTable')}
                 </Button>
                 <Button
                   variant={viewType === 'cards' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewType('cards')}
-                  className={viewType === 'cards' 
-                    ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900" 
+                  className={viewType === 'cards'
+                    ? "bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900"
                     : "hover:bg-slate-200 dark:hover:bg-slate-700"}
                 >
                   <LayoutGrid className="w-4 h-4 mr-2" />
-                  Cards
+                  {t('page.viewCards')}
                 </Button>
               </div>
               
@@ -812,7 +814,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                 className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Device
+                {t('page.addDevice')}
               </Button>
             </div>
           </div>
@@ -823,7 +825,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search devices by name, type, zone, location, or IP..."
+                placeholder={t('page.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -835,7 +837,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="w-4 h-4" />
-                  Zone
+                  {t('common:labels.zone')}
                   {selectedZones.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">
                       {selectedZones.length}
@@ -863,7 +865,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setSelectedZones([])}>
-                      Clear filters
+                      {t('page.clearFilters')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -875,7 +877,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="w-4 h-4" />
-                  System
+                  {t('common:labels.system')}
                   {selectedSystems.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">
                       {selectedSystems.length}
@@ -903,7 +905,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setSelectedSystems([])}>
-                      Clear filters
+                      {t('page.clearFilters')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -915,7 +917,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="w-4 h-4" />
-                  Type
+                  {t('common:labels.type')}
                   {selectedTypes.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">
                       {selectedTypes.length}
@@ -943,7 +945,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setSelectedTypes([])}>
-                      Clear filters
+                      {t('page.clearFilters')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -955,7 +957,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="w-4 h-4" />
-                  Status
+                  {t('common:labels.status')}
                   {selectedStatuses.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">
                       {selectedStatuses.length}
@@ -968,44 +970,44 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                 <DropdownMenuCheckboxItem
                   checked={selectedStatuses.includes('online')}
                   onCheckedChange={(checked) => {
-                    setSelectedStatuses(checked 
+                    setSelectedStatuses(checked
                       ? [...selectedStatuses, 'online']
                       : selectedStatuses.filter(s => s !== 'online')
                     );
                   }}
                 >
                   <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                  Online
+                  {t('status.online')}
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   checked={selectedStatuses.includes('warning')}
                   onCheckedChange={(checked) => {
-                    setSelectedStatuses(checked 
+                    setSelectedStatuses(checked
                       ? [...selectedStatuses, 'warning']
                       : selectedStatuses.filter(s => s !== 'warning')
                     );
                   }}
                 >
                   <AlertCircle className="w-4 h-4 text-yellow-500 mr-2" />
-                  Warning
+                  {t('status.warning')}
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   checked={selectedStatuses.includes('offline')}
                   onCheckedChange={(checked) => {
-                    setSelectedStatuses(checked 
+                    setSelectedStatuses(checked
                       ? [...selectedStatuses, 'offline']
                       : selectedStatuses.filter(s => s !== 'offline')
                     );
                   }}
                 >
                   <XCircle className="w-4 h-4 text-red-500 mr-2" />
-                  Offline
+                  {t('status.offline')}
                 </DropdownMenuCheckboxItem>
                 {selectedStatuses.length > 0 && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setSelectedStatuses([])}>
-                      Clear filters
+                      {t('page.clearFilters')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -1025,7 +1027,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                 }}
                 className="text-slate-600 dark:text-slate-400"
               >
-                Clear all ({activeFiltersCount})
+                {t('page.clearAll', { count: activeFiltersCount })}
               </Button>
             )}
           </div>
@@ -1036,9 +1038,9 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               <div className="flex items-center gap-4">
                 {/* Items per page */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">Show</span>
-                  <Select 
-                    value={itemsPerPage.toString()} 
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{t('common:pagination.showing')}</span>
+                  <Select
+                    value={itemsPerPage.toString()}
                     onValueChange={(value) => {
                       setItemsPerPage(Number(value));
                       setCurrentPage(1);
@@ -1054,12 +1056,12 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                       <SelectItem value="100">100</SelectItem>
                     </SelectContent>
                   </Select>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">per page</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{t('page.perPage')}</span>
                 </div>
 
                 {/* Current range */}
                 <div className="text-sm text-slate-600 dark:text-slate-400">
-                  Showing {startIndex + 1}–{Math.min(endIndex, filteredDevices.length)} of {filteredDevices.length}
+                  {t('page.showingRange', { start: startIndex + 1, end: Math.min(endIndex, filteredDevices.length), total: filteredDevices.length })}
                 </div>
               </div>
 
@@ -1073,7 +1075,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   className="h-9 gap-1"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  Previous
+                  {t('common:pagination.previous')}
                 </Button>
 
                 {/* Page numbers */}
@@ -1114,7 +1116,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   disabled={currentPage === totalPages}
                   className="h-9 gap-1"
                 >
-                  Next
+                  {t('common:pagination.next')}
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -1133,7 +1135,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                           onClick={() => toggleSort('name')}
                           className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
                         >
-                          Device
+                          {t('common:labels.device')}
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </th>
@@ -1142,7 +1144,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                           onClick={() => toggleSort('type')}
                           className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
                         >
-                          Type
+                          {t('common:labels.type')}
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </th>
@@ -1151,19 +1153,19 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                           onClick={() => toggleSort('zone')}
                           className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
                         >
-                          Zone
+                          {t('common:labels.zone')}
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </th>
                       <th className="px-4 py-3 text-left">
-                        <span className="text-slate-700 dark:text-slate-300">Location</span>
+                        <span className="text-slate-700 dark:text-slate-300">{t('columns.location')}</span>
                       </th>
                       <th className="px-4 py-3 text-left">
                         <button
                           onClick={() => toggleSort('status')}
                           className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
                         >
-                          Status
+                          {t('common:labels.status')}
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </th>
@@ -1172,15 +1174,15 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                           onClick={() => toggleSort('uptime')}
                           className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
                         >
-                          Uptime
+                          {t('columns.uptime')}
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </th>
                       <th className="px-4 py-3 text-left">
-                        <span className="text-slate-700 dark:text-slate-300">IP Address</span>
+                        <span className="text-slate-700 dark:text-slate-300">{t('columns.ipAddress')}</span>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-slate-700 dark:text-slate-300">Actions</span>
+                        <span className="text-slate-700 dark:text-slate-300">{t('columns.actions')}</span>
                       </th>
                     </tr>
                   </thead>
@@ -1250,7 +1252,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
               
               {filteredDevices.length === 0 && (
                 <div className="text-center py-12">
-                  <p className="text-slate-600 dark:text-slate-400">No devices found matching your filters</p>
+                  <p className="text-slate-600 dark:text-slate-400">{t('page.noDevicesFound')}</p>
                 </div>
               )}
             </div>
@@ -1278,7 +1280,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
           {viewType === 'cards' && filteredDevices.length === 0 && (
             <div className="text-center py-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
-              <p className="text-slate-600 dark:text-slate-400">No devices found matching your filters</p>
+              <p className="text-slate-600 dark:text-slate-400">{t('page.noDevicesFound')}</p>
             </div>
           )}
 
@@ -1299,19 +1301,19 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
           <Dialog open={isAddDeviceOpen} onOpenChange={setIsAddDeviceOpen}>
             <DialogContent className="max-w-2xl bg-white dark:bg-slate-900">
               <DialogHeader>
-                <DialogTitle>Add New Device</DialogTitle>
+                <DialogTitle>{t('addDevice.title')}</DialogTitle>
                 <DialogDescription>
-                  Enter the device details to add it to the system
+                  {t('addDevice.description')}
                 </DialogDescription>
               </DialogHeader>
               
               <div className="grid grid-cols-2 gap-4 py-4">
                 {/* Device Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-name">Device Name *</Label>
+                  <Label htmlFor="device-name">{t('addDevice.deviceName')} *</Label>
                   <Input
                     id="device-name"
-                    placeholder="e.g., LED Panel 1"
+                    placeholder={t('addDevice.deviceNamePlaceholder')}
                     value={newDevice.name}
                     onChange={(e) => setNewDevice({ ...newDevice, name: e.target.value })}
                     className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -1320,10 +1322,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* Device Type */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-type">Device Type *</Label>
+                  <Label htmlFor="device-type">{t('addDevice.deviceType')} *</Label>
                   <Select value={newDevice.type} onValueChange={(value) => setNewDevice({ ...newDevice, type: value })}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                      <SelectValue placeholder="Select type" />
+                      <SelectValue placeholder={t('addDevice.selectType')} />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueTypes.map(type => (
@@ -1335,10 +1337,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* Zone */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-zone">Zone *</Label>
+                  <Label htmlFor="device-zone">{t('common:labels.zone')} *</Label>
                   <Select value={newDevice.zone} onValueChange={(value) => setNewDevice({ ...newDevice, zone: value })}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                      <SelectValue placeholder="Select zone" />
+                      <SelectValue placeholder={t('addDevice.selectZone')} />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueZones.map(zone => (
@@ -1350,10 +1352,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* System */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-system">System *</Label>
+                  <Label htmlFor="device-system">{t('common:labels.system')} *</Label>
                   <Select value={newDevice.systemName} onValueChange={(value) => setNewDevice({ ...newDevice, systemName: value })}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                      <SelectValue placeholder="Select system" />
+                      <SelectValue placeholder={t('addDevice.selectSystem')} />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueSystems.map(system => (
@@ -1365,10 +1367,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* Location */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-location">Location *</Label>
+                  <Label htmlFor="device-location">{t('columns.location')} *</Label>
                   <Input
                     id="device-location"
-                    placeholder="e.g., Gate A10"
+                    placeholder={t('addDevice.locationPlaceholder')}
                     value={newDevice.location}
                     onChange={(e) => setNewDevice({ ...newDevice, location: e.target.value })}
                     className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -1377,10 +1379,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* IP Address */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-ip">IP Address *</Label>
+                  <Label htmlFor="device-ip">{t('columns.ipAddress')} *</Label>
                   <Input
                     id="device-ip"
-                    placeholder="e.g., 10.20.1.10"
+                    placeholder={t('addDevice.ipPlaceholder')}
                     value={newDevice.ipAddress}
                     onChange={(e) => setNewDevice({ ...newDevice, ipAddress: e.target.value })}
                     className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-mono"
@@ -1389,10 +1391,10 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* Specs */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-specs">Specs (Optional)</Label>
+                  <Label htmlFor="device-specs">{t('addDevice.specs')}</Label>
                   <Input
                     id="device-specs"
-                    placeholder="e.g., 55&quot; 4K or 3000-6500K"
+                    placeholder={t('addDevice.specsPlaceholder')}
                     value={newDevice.specs}
                     onChange={(e) => setNewDevice({ ...newDevice, specs: e.target.value })}
                     className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -1401,28 +1403,28 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
 
                 {/* Status */}
                 <div className="space-y-2">
-                  <Label htmlFor="device-status">Initial Status *</Label>
+                  <Label htmlFor="device-status">{t('addDevice.initialStatus')} *</Label>
                   <Select value={newDevice.status} onValueChange={(value: 'online' | 'warning' | 'offline') => setNewDevice({ ...newDevice, status: value })}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                      <SelectValue placeholder="Select status" />
+                      <SelectValue placeholder={t('addDevice.selectStatus')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="online">
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-4 h-4 text-green-500" />
-                          Online
+                          {t('status.online')}
                         </div>
                       </SelectItem>
                       <SelectItem value="warning">
                         <div className="flex items-center gap-2">
                           <AlertCircle className="w-4 h-4 text-yellow-500" />
-                          Warning
+                          {t('status.warning')}
                         </div>
                       </SelectItem>
                       <SelectItem value="offline">
                         <div className="flex items-center gap-2">
                           <XCircle className="w-4 h-4 text-red-500" />
-                          Offline
+                          {t('status.offline')}
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -1447,7 +1449,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                     });
                   }}
                 >
-                  Cancel
+                  {t('common:buttons.cancel')}
                 </Button>
                 <Button
                   onClick={() => {
@@ -1468,7 +1470,7 @@ export function DevicesPage({ onNavigateToMain, onNavigateToZone, onNavigateToWo
                   disabled={!newDevice.name || !newDevice.type || !newDevice.zone || !newDevice.systemName || !newDevice.location || !newDevice.ipAddress}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  Add Device
+                  {t('page.addDevice')}
                 </Button>
               </div>
             </DialogContent>

@@ -1,0 +1,87 @@
+{
+  "title": "سير العمل",
+  "page": {
+    "newWorkflow": "سير عمل جديد",
+    "aiAssist": "مساعد الذكاء الاصطناعي"
+  },
+  "tabs": {
+    "allWorkflows": "جميع سير العمل",
+    "activeOnly": "النشطة فقط"
+  },
+  "create": {
+    "title": "إنشاء سير عمل جديد",
+    "name": "اسم سير العمل",
+    "namePlaceholder": "أدخل اسم سير العمل",
+    "description": "الوصف",
+    "descriptionPlaceholder": "صف ما يفعله سير العمل هذا",
+    "type": "نوع سير العمل",
+    "icon": "الأيقونة",
+    "button": "إنشاء سير العمل"
+  },
+  "types": {
+    "scheduled": "مجدول",
+    "scheduledDesc": "التشغيل في أوقات محددة",
+    "eventBased": "قائم على الأحداث",
+    "eventBasedDesc": "يُشغل بواسطة أحداث النظام",
+    "conditional": "شرطي",
+    "conditionalDesc": "التشغيل عند استيفاء الشروط",
+    "manual": "يدوي",
+    "manualDesc": "التشغيل يدوياً عند الطلب"
+  },
+  "status": {
+    "running": "قيد التشغيل",
+    "scheduled": "مجدول",
+    "paused": "متوقف مؤقتاً",
+    "completed": "مكتمل",
+    "failed": "فشل"
+  },
+  "nodes": {
+    "trigger": "المشغل",
+    "action": "الإجراء",
+    "condition": "الشرط",
+    "addNode": "إضافة عقدة",
+    "triggerPlaceholder": "شرط التشغيل...",
+    "conditionPlaceholder": "الشرط...",
+    "actionPlaceholder": "اسم الإجراء...",
+    "intensity": "الشدة"
+  },
+  "list": {
+    "searchPlaceholder": "البحث في سير العمل...",
+    "runNow": "تشغيل الآن",
+    "archive": "أرشفة",
+    "noWorkflowsFound": "لم يتم العثور على سير عمل"
+  },
+  "viewer": {
+    "selectWorkflow": "اختر سير عمل لعرض تدفق الأتمتة",
+    "status": {
+      "active": "نشط",
+      "paused": "متوقف مؤقتاً",
+      "error": "خطأ",
+      "draft": "مسودة"
+    }
+  },
+  "inspector": {
+    "title": "مفتش سير العمل",
+    "properties": "الخصائص",
+    "triggers": "المشغلات",
+    "actions": "الإجراءات",
+    "history": "السجل"
+  },
+  "aiAssist": {
+    "title": "مساعد الذكاء الاصطناعي",
+    "placeholder": "اطلب المساعدة من الذكاء الاصطناعي لسير العمل الخاص بك...",
+    "suggestions": "الاقتراحات"
+  },
+  "actions": {
+    "run": "تشغيل",
+    "pause": "إيقاف مؤقت",
+    "stop": "إيقاف",
+    "duplicate": "تكرار",
+    "delete": "حذف",
+    "export": "تصدير"
+  },
+  "empty": {
+    "title": "لا يوجد سير عمل",
+    "message": "أنشئ أول سير عمل لك لأتمتة المهام"
+  }
+}

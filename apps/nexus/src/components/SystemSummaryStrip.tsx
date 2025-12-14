@@ -2,6 +2,7 @@ import { Lightbulb, Monitor, Volume2, SignpostBig, Thermometer, Shield, RotateCw
 import { Button } from "./ui/button";
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
+import { useTranslation } from "react-i18next";
 
 // Map zone system names to system IDs
 const zoneSystemMapping: { [zoneId: string]: string[] } = {
@@ -79,93 +80,93 @@ const zoneSystemData: { [zoneId: string]: any } = {
 const systems = [
   {
     id: "lighting",
-    name: "Lighting",
+    nameKey: "systemStrip.systems.lighting",
     icon: Lightbulb,
     uptime: "99.7%",
     devicesOnline: 48,
     devicesTotal: 48,
     sparklineData: [45, 52, 48, 55, 50, 48, 52, 49, 51, 48],
     actions: [
-      { icon: RotateCw, label: "Restart" },
-      { icon: TestTube, label: "Test" }
+      { icon: RotateCw, labelKey: "systemStrip.actions.restart" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "led",
-    name: "LED Displays",
+    nameKey: "systemStrip.systems.ledDisplays",
     icon: Monitor,
     uptime: "96.3%",
     devicesOnline: 26,
     devicesTotal: 27,
     sparklineData: [22, 24, 25, 26, 26, 25, 26, 26, 25, 26],
     actions: [
-      { icon: RotateCw, label: "Restart" },
-      { icon: TestTube, label: "Test" }
+      { icon: RotateCw, labelKey: "systemStrip.actions.restart" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "audio",
-    name: "Audio",
+    nameKey: "systemStrip.systems.audio",
     icon: Volume2,
     uptime: "98.1%",
     devicesOnline: 18,
     devicesTotal: 18,
     sparklineData: [15, 17, 18, 18, 17, 18, 18, 16, 18, 18],
     actions: [
-      { icon: VolumeX, label: "Mute" },
-      { icon: TestTube, label: "Test" }
+      { icon: VolumeX, labelKey: "systemStrip.actions.mute" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "signage",
-    name: "Show Playback",
+    nameKey: "systemStrip.systems.showPlayback",
     icon: SignpostBig,
     uptime: "100%",
     devicesOnline: 34,
     devicesTotal: 34,
     sparklineData: [34, 34, 34, 34, 34, 34, 34, 34, 34, 34],
     actions: [
-      { icon: RotateCw, label: "Restart" },
-      { icon: TestTube, label: "Test" }
+      { icon: RotateCw, labelKey: "systemStrip.actions.restart" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "environmental",
-    name: "Environmental",
+    nameKey: "systemStrip.systems.environmental",
     icon: Thermometer,
     uptime: "99.2%",
     devicesOnline: 12,
     devicesTotal: 12,
     sparklineData: [11, 12, 12, 12, 11, 12, 12, 12, 12, 12],
     actions: [
-      { icon: RotateCw, label: "Restart" },
-      { icon: TestTube, label: "Test" }
+      { icon: RotateCw, labelKey: "systemStrip.actions.restart" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "security",
-    name: "Security",
+    nameKey: "systemStrip.systems.security",
     icon: Shield,
     uptime: "100%",
     devicesOnline: 24,
     devicesTotal: 24,
     sparklineData: [24, 24, 24, 24, 24, 24, 24, 24, 24, 24],
     actions: [
-      { icon: Power, label: "Power" },
-      { icon: TestTube, label: "Test" }
+      { icon: Power, labelKey: "systemStrip.actions.power" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   },
   {
     id: "pixera",
-    name: "Pixera",
+    nameKey: "systemStrip.systems.pixera",
     icon: Video,
     uptime: "98.5%",
     devicesOnline: 10,
     devicesTotal: 10,
     sparklineData: [10, 10, 10, 9, 10, 10, 10, 10, 10, 10],
     actions: [
-      { icon: RotateCw, label: "Restart" },
-      { icon: TestTube, label: "Test" }
+      { icon: RotateCw, labelKey: "systemStrip.actions.restart" },
+      { icon: TestTube, labelKey: "systemStrip.actions.test" }
     ]
   }
 ];
@@ -284,16 +285,18 @@ interface SystemSummaryStripProps {
 }
 
 export function SystemSummaryStrip({ selectedZone }: SystemSummaryStripProps) {
+  const { t } = useTranslation('zones');
+
   // Get zone-specific data or fallback to default
-  const zoneData = selectedZone && zoneSystemData[selectedZone] 
-    ? zoneSystemData[selectedZone] 
+  const zoneData = selectedZone && zoneSystemData[selectedZone]
+    ? zoneSystemData[selectedZone]
     : zoneSystemData["gate-a10-a18"]; // Default to gate cluster
-  
+
   // Get which systems are available in this zone
   const availableSystems = selectedZone && zoneSystemMapping[selectedZone]
     ? zoneSystemMapping[selectedZone]
     : zoneSystemMapping["gate-a10-a18"]; // Default to gate cluster
-  
+
   // Filter systems to only show those available in the selected zone
   const filteredSystems = systems.filter(system => availableSystems.includes(system.id));
   
@@ -315,17 +318,17 @@ export function SystemSummaryStrip({ selectedZone }: SystemSummaryStripProps) {
             {/* Header with Icon and Name */}
             <div className="flex items-center gap-2 mb-3">
               <system.icon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-              <span className="text-slate-900 dark:text-slate-100">{system.name}</span>
+              <span className="text-slate-900 dark:text-slate-100">{t(system.nameKey)}</span>
             </div>
-            
+
             {/* Uptime and Devices */}
             <div className="space-y-1 mb-3">
               <div className="flex items-center justify-between">
-                <span className="text-slate-600 dark:text-slate-400">Uptime</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('systemStrip.labels.uptime')}</span>
                 <span className="text-slate-900 dark:text-slate-100">{systemData.uptime}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-600 dark:text-slate-400">Devices</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('systemStrip.labels.devices')}</span>
                 <span className="text-slate-900 dark:text-slate-100">
                   {systemData.devicesOnline}/{systemData.devicesTotal}
                 </span>

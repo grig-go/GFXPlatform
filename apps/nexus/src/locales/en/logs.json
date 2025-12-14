@@ -1,0 +1,57 @@
+{
+  "title": "Logs & Alerts",
+  "tabs": {
+    "all": "All",
+    "logs": "Logs",
+    "alerts": "Alerts"
+  },
+  "columns": {
+    "timestamp": "Timestamp",
+    "system": "System",
+    "type": "Type",
+    "status": "Status",
+    "message": "Message",
+    "source": "Source",
+    "level": "Level"
+  },
+  "types": {
+    "error": "Error",
+    "warning": "Warning",
+    "insight": "Insight",
+    "diagnostic": "Diagnostic",
+    "info": "Info",
+    "debug": "Debug"
+  },
+  "statuses": {
+    "active": "Active",
+    "resolved": "Resolved",
+    "predictive": "Predictive",
+    "advisory": "Advisory",
+    "queued": "Queued",
+    "scheduled": "Scheduled"
+  },
+  "filters": {
+    "allSystems": "All Systems",
+    "allTypes": "All Types",
+    "allStatuses": "All Statuses",
+    "allLevels": "All Levels",
+    "dateRange": "Date Range"
+  },
+  "actions": {
+    "acknowledge": "Acknowledge",
+    "resolve": "Resolve",
+    "ignore": "Ignore",
+    "escalate": "Escalate",
+    "viewDetails": "View Details"
+  },
+  "empty": {
+    "title": "No Logs",
+    "message": "No log entries match your filters"
+  },
+  "timeline": {
+    "monthly": "Monthly",
+    "weekly": "Weekly",
+    "daily": "Daily",
+    "hourly": "Hourly"
+  }
+}

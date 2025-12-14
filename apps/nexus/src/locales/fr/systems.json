@@ -1,0 +1,56 @@
+{
+  "title": "Systèmes",
+  "names": {
+    "lighting": "Éclairage",
+    "ledDisplays": "Écrans LED",
+    "audio": "Audio",
+    "broadcastControl": "Contrôle Broadcast",
+    "showPlayback": "Lecture de Show",
+    "graphics": "Graphiques",
+    "signage": "Affichage",
+    "environmental": "Environnement",
+    "networkSecurity": "Réseau & Sécurité"
+  },
+  "systems": {
+    "lighting": "Éclairage",
+    "audio": "Audio",
+    "ledDisplays": "Écrans LED",
+    "signage": "Affichage",
+    "showPlayback": "Lecture de Show",
+    "paging": "Annonces",
+    "cctv": "Vidéosurveillance",
+    "queueSensors": "Capteurs de file",
+    "environmental": "Environnement",
+    "conveyorStatus": "État des convoyeurs",
+    "hvac": "CVC",
+    "digitalMenus": "Menus numériques"
+  },
+  "subtitles": {
+    "lighting": "Contrôle d'éclairage du site",
+    "ledDisplays": "Écrans grand format",
+    "audio": "Système sonore",
+    "broadcastControl": "Diffusion en direct",
+    "showPlayback": "Lecture média",
+    "graphics": "Graphiques temps réel",
+    "signage": "Affichage numérique",
+    "environmental": "CVC & Climat",
+    "networkSecurity": "Infrastructure IT"
+  },
+  "integrations": {
+    "pixeraDisguise": "Pixera + Disguise",
+    "unreal": "Unreal",
+    "hvacEnergy": "CVC + Énergie"
+  },
+  "status": {
+    "operational": "Opérationnel",
+    "degraded": "Dégradé",
+    "critical": "Critique",
+    "maintenance": "Maintenance"
+  },
+  "metrics": {
+    "uptime": "Disponibilité",
+    "latency": "Latence",
+    "throughput": "Débit",
+    "errorRate": "Taux d'erreur"
+  }
+}

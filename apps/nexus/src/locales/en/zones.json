@@ -1,0 +1,258 @@
+{
+  "title": "Zones",
+  "list": {
+    "title": "Zone List",
+    "search": "Search zones..."
+  },
+  "listPanel": {
+    "title": "Terminal A Zones",
+    "subtitle": "Click zone to view details"
+  },
+  "mapPanel": {
+    "title": "Terminal A Interactive Map",
+    "subtitle": "Gate Cluster A10-A18 • Live Map View",
+    "editModeHint": "Edit Mode: Drag markers to reposition",
+    "save": "Save",
+    "cancel": "Cancel",
+    "editPositions": "Edit Positions",
+    "lightMode": "Light Mode",
+    "darkMode": "Dark Mode",
+    "satelliteView": "Satellite View",
+    "legend": "Legend",
+    "legendGates": "Gates",
+    "legendSecurity": "Security",
+    "legendFood": "Food",
+    "legendRetail": "Retail",
+    "legendLounge": "Lounge",
+    "legendBaggage": "Baggage",
+    "saveSuccess": "Zone positions saved successfully!",
+    "configTitle": "Map Configuration",
+    "copyConfig": "Copy Full Configuration",
+    "copySuccess": "Configuration copied to clipboard!",
+    "copyFailed": "Failed to copy configuration."
+  },
+  "map": {
+    "title": "Zone Map",
+    "showAll": "Show All",
+    "hideInactive": "Hide Inactive"
+  },
+  "zoneNames": {
+    "gateClusterA": "Gate A10 – A18",
+    "securityCheckpointA": "Security Checkpoint A",
+    "immigrationHallA": "Immigration Hall A",
+    "baggageClaimA": "Baggage Claim A",
+    "foodCourtA": "Food Court A",
+    "retailA": "Retail A",
+    "loungeA": "Lounge A"
+  },
+  "zoneTypes": {
+    "gateCluster": "Gate Cluster",
+    "security": "Security",
+    "immigration": "Immigration",
+    "baggage": "Baggage",
+    "publicAmenities": "Public Amenities",
+    "retailCluster": "Retail Cluster",
+    "lounge": "Lounge"
+  },
+  "zoneDescriptions": {
+    "boardingAreaGroup": "Boarding area group",
+    "tsaScreening": "TSA screening",
+    "customsProcessing": "Customs processing",
+    "arrivalsHall": "Arrivals hall",
+    "concessionsArea": "Concessions area",
+    "dutyFreeShops": "Duty-free + shops",
+    "airlineLounge": "Airline lounge"
+  },
+  "location": "Location",
+  "zoneActions": "Zone actions",
+  "menu": {
+    "detailsView": "Details View",
+    "viewLogs": "View Logs",
+    "aiInsights": "AI Insights"
+  },
+  "actions": {
+    "addZone": "Add Zone",
+    "generateReport": "Generate Report",
+    "aiOptimize": "AI Optimize"
+  },
+  "names": {
+    "gateA10A18": "Gate A10 – A18",
+    "concourseA": "Concourse A",
+    "concourseB": "Concourse B",
+    "concourseC": "Concourse C",
+    "mainTerminal": "Main Terminal",
+    "arrivals": "Arrivals",
+    "departures": "Departures",
+    "baggage": "Baggage Claim",
+    "security": "Security",
+    "retail": "Retail Area"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "maintenance": "Maintenance"
+  },
+  "detail": {
+    "backToZones": "Back to Zones",
+    "operational": "Operational"
+  },
+  "details": {
+    "title": "Zone Details",
+    "systems": "Systems in Zone",
+    "devices": "devices",
+    "alerts": "Active Alerts",
+    "telemetry": "Telemetry"
+  },
+  "footer": {
+    "devicesOnline": "Devices Online",
+    "activeAlerts": "Active Alerts",
+    "systemsRunning": "Systems Running"
+  },
+  "aiSummary": {
+    "title": "AI Zone Summary",
+    "subtitle": "Intelligent analysis & recommendations",
+    "selectZone": "Select a zone to view insights",
+    "noZoneSelected": "No zone selected",
+    "suggestedAction": "Suggested Action",
+    "applyOptimization": "Apply Optimization",
+    "viewDetails": "View Details",
+    "performanceScore": "Zone Performance Score",
+    "performanceExcellent": "Excellent performance across all systems",
+    "performanceGood": "Good performance with minor optimization opportunities",
+    "performanceAcceptable": "Performance acceptable, optimization recommended",
+    "recentOptimizations": "Recent Optimizations",
+    "recommendations": "Recommendations"
+  },
+  "logsAlerts": {
+    "title": "Active Alerts",
+    "critical": "Critical",
+    "warning": "Warning"
+  },
+  "aiInsights": {
+    "gateA": {
+      "lightingRecovered": "Lighting latency recovered to normal after morning spike.",
+      "energyUsage": "Energy usage +8% above baseline due to increased passenger flow.",
+      "ledOptimal": "LED displays running at optimal temperature across all gates.",
+      "suggestedAction": "Reduce LED brightness by 10% to normalize energy consumption without impacting passenger experience."
+    },
+    "securityA": {
+      "cctvOperational": "All CCTV cameras operational with 99.9% uptime.",
+      "queueSensors": "Queue sensors detecting optimal passenger flow.",
+      "pagingImproved": "Paging system audio clarity improved by 15%.",
+      "suggestedAction": "Consider adding 2 additional queue sensors at checkpoint entrance for better flow prediction."
+    },
+    "immigrationA": {
+      "environmentalOptimal": "Environmental sensors reporting optimal temperature and humidity.",
+      "signageEffective": "Digital signage displaying real-time queue updates effectively.",
+      "ledGlare": "LED display brightness may need adjustment for glare reduction.",
+      "suggestedAction": "Reduce LED display brightness by 15% during peak sunlight hours to minimize glare."
+    },
+    "baggageA": {
+      "conveyorAccurate": "Conveyor status displays showing 100% accuracy.",
+      "playbackSmooth": "Show playback servers running smoothly with low latency.",
+      "audioAudible": "Audio announcements clear and audible throughout hall.",
+      "suggestedAction": "Schedule preventive maintenance for conveyor belt 3 based on usage patterns."
+    },
+    "foodCourtA": {
+      "menuRealtime": "Digital menu displays updating in real-time with no lag.",
+      "hvacLoad": "HVAC load +12% higher during lunch hours.",
+      "lightingOptimal": "Lighting levels optimal for dining experience.",
+      "suggestedAction": "Pre-cool the area 15 minutes before peak lunch hours to reduce HVAC strain."
+    },
+    "retailA": {
+      "ledEngagement": "LED displays showcasing promotional content with high engagement.",
+      "audioBalanced": "Audio levels balanced for optimal shopping atmosphere.",
+      "signageRouting": "Signage routing customers efficiently through retail corridor.",
+      "suggestedAction": "Increase LED display brightness by 5% to improve visibility in high-traffic areas."
+    },
+    "loungeA": {
+      "environmentalComfort": "Environmental controls maintaining premium comfort levels.",
+      "audioAmbient": "Audio system providing ambient background at ideal volume.",
+      "lightingRelaxing": "Lighting creating relaxing atmosphere with warm tones.",
+      "suggestedAction": "Implement automated lighting adjustment based on time of day for enhanced guest experience."
+    }
+  },
+  "optimizations": {
+    "audioBalanced": "Audio levels balanced",
+    "hvacOptimized": "HVAC schedule optimized",
+    "lightingMerged": "Lighting zones merged",
+    "cameraAdjusted": "Camera angles adjusted",
+    "lightingIncreased": "Lighting intensity increased",
+    "audioCalibrated": "Audio zones calibrated",
+    "hvacBalanced": "HVAC balanced",
+    "signageUpdated": "Signage content updated",
+    "lightingDimmed": "Lighting dimmed",
+    "displaySync": "Display sync corrected",
+    "audioVolume": "Audio volume adjusted",
+    "playbackOptimized": "Playback optimized",
+    "menuRefreshed": "Menu content refreshed",
+    "hvacAdjusted": "HVAC schedule adjusted",
+    "audioTuned": "Audio ambiance tuned",
+    "displayRotated": "Display content rotated",
+    "audioSync": "Audio synchronized",
+    "tempAdjusted": "Temperature adjusted",
+    "lightingScenesUpdated": "Lighting scenes updated",
+    "audioPlaylistRefreshed": "Audio playlist refreshed"
+  },
+  "time": {
+    "30mAgo": "30m ago",
+    "1hAgo": "1h ago",
+    "2hAgo": "2h ago",
+    "3hAgo": "3h ago",
+    "4hAgo": "4h ago",
+    "5hAgo": "5h ago",
+    "6hAgo": "6h ago",
+    "7hAgo": "7h ago",
+    "8hAgo": "8h ago"
+  },
+  "alerts": {
+    "categories": {
+      "audioSystem": "Audio System",
+      "ledDisplay": "LED Display",
+      "lighting": "Lighting",
+      "environmental": "Environmental",
+      "security": "Security",
+      "signage": "Signage",
+      "showPlayback": "Show Playback"
+    },
+    "zones": {
+      "gateCluster": "Gate Cluster",
+      "security": "Security"
+    },
+    "messages": {
+      "speakerOffline": "Speaker 17 offline - Gate A14",
+      "reducedBrightness": "Display 14 experiencing reduced brightness",
+      "lightingOperational": "All lighting systems operational",
+      "tempAdjusted": "Temperature adjusted to 72°F in Gate A12",
+      "cameraLensCleaning": "Camera 8 requires lens cleaning",
+      "flightInfoUpdated": "Flight information updated - 12 displays",
+      "paTestComplete": "PA system test completed successfully",
+      "contentSyncInitiated": "Content sync initiated for all displays",
+      "hvacCapacity": "HVAC Unit 3 running at 85% capacity",
+      "contentRotationComplete": "Scheduled content rotation complete",
+      "securityOnline": "All security systems online",
+      "brightnessAdjusted": "Brightness adjusted for time of day"
+    }
+  },
+  "systemStrip": {
+    "labels": {
+      "uptime": "Uptime",
+      "devices": "Devices"
+    },
+    "systems": {
+      "lighting": "Lighting",
+      "ledDisplays": "LED Displays",
+      "audio": "Audio",
+      "showPlayback": "Show Playback",
+      "environmental": "Environmental",
+      "security": "Security",
+      "pixera": "Pixera"
+    },
+    "actions": {
+      "restart": "Restart",
+      "test": "Test",
+      "mute": "Mute",
+      "power": "Power"
+    }
+  }
+}

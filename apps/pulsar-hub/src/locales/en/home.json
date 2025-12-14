@@ -1,0 +1,21 @@
+{
+  "title": "Pulsar Dashboard",
+  "subtitle": "AI-powered graphics and production control suite. Launch applications and monitor system status.",
+  "emptyState": {
+    "title": "No apps visible",
+    "message": "Use Tools → Configure Dashboard to enable apps."
+  },
+  "appCard": {
+    "clickToLaunch": "Click to launch"
+  },
+  "appDescriptions": {
+    "pulsar-gfx": "AI-powered graphics content creation system for broadcast and live production.",
+    "pulsar-vs": "AI-powered virtual environment and LED screen content creation and management.",
+    "pulsar-mcr": "Advanced content scheduling, management, and automation for broadcast workflows.",
+    "nexus": "Operations management and venue monitoring dashboard with real-time system status."
+  },
+  "footer": {
+    "company": "Emergent Solutions",
+    "product": "Pulsar Suite"
+  }
+}

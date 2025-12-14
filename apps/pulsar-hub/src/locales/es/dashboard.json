@@ -1,0 +1,29 @@
+{
+  "title": "Configuración del Panel",
+  "description": "Configure qué aplicaciones son visibles y su orden de visualización. Arrastre para reordenar.",
+  "stats": {
+    "enabled": "habilitadas",
+    "hidden": "ocultas",
+    "total": "total"
+  },
+  "loading": "Cargando configuración del panel...",
+  "status": {
+    "visibleOnHome": "Visible en inicio",
+    "hiddenFromHome": "Oculto del inicio"
+  },
+  "buttons": {
+    "resetToDefaults": "Restablecer Valores",
+    "saveConfiguration": "Guardar Configuración"
+  },
+  "toast": {
+    "loadFailed": "Error al cargar la configuración",
+    "loadFailedDesc": "Usando configuración predeterminada",
+    "savedLocally": "¡Configuración guardada localmente!",
+    "savedLocallyDesc": "Registros del servidor no encontrados. Configuración guardada en el navegador.",
+    "saved": "¡Configuración del panel guardada!",
+    "savedDesc": "Sus cambios se han aplicado correctamente.",
+    "backendFailed": "Error al guardar en el servidor",
+    "backendFailedDesc": "Configuración guardada localmente en su lugar.",
+    "reset": "Configuración restablecida a valores predeterminados"
+  }
+}

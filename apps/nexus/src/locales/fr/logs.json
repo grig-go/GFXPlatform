@@ -1,0 +1,57 @@
+{
+  "title": "Logs & Alertes",
+  "tabs": {
+    "all": "Tout",
+    "logs": "Logs",
+    "alerts": "Alertes"
+  },
+  "columns": {
+    "timestamp": "Horodatage",
+    "system": "Système",
+    "type": "Type",
+    "status": "Statut",
+    "message": "Message",
+    "source": "Source",
+    "level": "Niveau"
+  },
+  "types": {
+    "error": "Erreur",
+    "warning": "Avertissement",
+    "insight": "Information",
+    "diagnostic": "Diagnostic",
+    "info": "Info",
+    "debug": "Débogage"
+  },
+  "statuses": {
+    "active": "Actif",
+    "resolved": "Résolu",
+    "predictive": "Prédictif",
+    "advisory": "Avis",
+    "queued": "En file d'attente",
+    "scheduled": "Planifié"
+  },
+  "filters": {
+    "allSystems": "Tous les systèmes",
+    "allTypes": "Tous les types",
+    "allStatuses": "Tous les statuts",
+    "allLevels": "Tous les niveaux",
+    "dateRange": "Plage de dates"
+  },
+  "actions": {
+    "acknowledge": "Accuser réception",
+    "resolve": "Résoudre",
+    "ignore": "Ignorer",
+    "escalate": "Escalader",
+    "viewDetails": "Voir les détails"
+  },
+  "empty": {
+    "title": "Aucun log",
+    "message": "Aucune entrée de log ne correspond à vos filtres"
+  },
+  "timeline": {
+    "monthly": "Mensuel",
+    "weekly": "Hebdomadaire",
+    "daily": "Quotidien",
+    "hourly": "Horaire"
+  }
+}

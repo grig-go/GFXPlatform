@@ -2,6 +2,7 @@ import { Workflow } from "../types/workflow";
 import { Input } from "./ui/input";
 import { Search, Clock, Users, Activity, MoreVertical, Play, Copy, Archive, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ interface WorkflowListPanelProps {
 }
 
 export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSelect }: WorkflowListPanelProps) {
+  const { t } = useTranslation(['workflows', 'common']);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "active">("active");
 
@@ -54,8 +56,8 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
     <div className="w-[380px] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-        <h2 className="text-slate-900 dark:text-slate-100 mb-3">Workflows</h2>
-        
+        <h2 className="text-slate-900 dark:text-slate-100 mb-3">{t('title')}</h2>
+
         {/* Tabs */}
         <div className="flex gap-1 mb-3 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
           <button
@@ -66,7 +68,7 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
-            All Workflows
+            {t('tabs.allWorkflows')}
           </button>
           <button
             onClick={() => setActiveTab("active")}
@@ -76,7 +78,7 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
-            Active Only
+            {t('tabs.activeOnly')}
           </button>
         </div>
 
@@ -84,7 +86,7 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Search workflows..."
+            placeholder={t('list.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -131,19 +133,19 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem>
                       <Play className="w-4 h-4 mr-2" />
-                      Run Now
+                      {t('list.runNow')}
                     </DropdownMenuItem>
                     <DropdownMenuItem>
                       <Copy className="w-4 h-4 mr-2" />
-                      Duplicate
+                      {t('actions.duplicate')}
                     </DropdownMenuItem>
                     <DropdownMenuItem>
                       <Archive className="w-4 h-4 mr-2" />
-                      Archive
+                      {t('list.archive')}
                     </DropdownMenuItem>
                     <DropdownMenuItem className="text-red-600 dark:text-red-400">
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
+                      {t('actions.delete')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -185,7 +187,7 @@ export function WorkflowListPanel({ workflows, selectedWorkflowId, onWorkflowSel
 
         {filteredWorkflows.length === 0 && (
           <div className="p-8 text-center text-slate-500 dark:text-slate-400">
-            No workflows found
+            {t('list.noWorkflowsFound')}
           </div>
         )}
       </div>

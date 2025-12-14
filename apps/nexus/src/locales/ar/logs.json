@@ -1,0 +1,57 @@
+{
+  "title": "السجلات والتنبيهات",
+  "tabs": {
+    "all": "الكل",
+    "logs": "السجلات",
+    "alerts": "التنبيهات"
+  },
+  "columns": {
+    "timestamp": "الطابع الزمني",
+    "system": "النظام",
+    "type": "النوع",
+    "status": "الحالة",
+    "message": "الرسالة",
+    "source": "المصدر",
+    "level": "المستوى"
+  },
+  "types": {
+    "error": "خطأ",
+    "warning": "تحذير",
+    "insight": "معلومة",
+    "diagnostic": "تشخيص",
+    "info": "معلومات",
+    "debug": "تصحيح"
+  },
+  "statuses": {
+    "active": "نشط",
+    "resolved": "تم الحل",
+    "predictive": "تنبؤي",
+    "advisory": "استشاري",
+    "queued": "في قائمة الانتظار",
+    "scheduled": "مجدول"
+  },
+  "filters": {
+    "allSystems": "جميع الأنظمة",
+    "allTypes": "جميع الأنواع",
+    "allStatuses": "جميع الحالات",
+    "allLevels": "جميع المستويات",
+    "dateRange": "نطاق التاريخ"
+  },
+  "actions": {
+    "acknowledge": "إقرار",
+    "resolve": "حل",
+    "ignore": "تجاهل",
+    "escalate": "تصعيد",
+    "viewDetails": "عرض التفاصيل"
+  },
+  "empty": {
+    "title": "لا توجد سجلات",
+    "message": "لا توجد إدخالات سجل تطابق عوامل التصفية الخاصة بك"
+  },
+  "timeline": {
+    "monthly": "شهري",
+    "weekly": "أسبوعي",
+    "daily": "يومي",
+    "hourly": "كل ساعة"
+  }
+}

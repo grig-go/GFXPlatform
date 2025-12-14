@@ -6,6 +6,7 @@ import { zones } from "./ZoneListPanel";
 import { ZoneAISummary } from "./ZoneAISummary";
 import { DeviceModals } from "./DeviceModals";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ZoneDetailViewProps {
   zoneId: string;
@@ -305,13 +306,14 @@ function getSystemIcon(systemName: string) {
 }
 
 export function ZoneDetailView({ zoneId, onBack, onNavigateToMain, onNavigateToDevices, onNavigateToWorkflows, onNavigateToTimeline }: ZoneDetailViewProps) {
+  const { t } = useTranslation(['zones', 'common', 'devices']);
   const zone = zones.find(z => z.id === zoneId);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [currentSystemName, setCurrentSystemName] = useState<string>("");
   const [modalType, setModalType] = useState<'edit' | 'restart' | 'logs' | 'health' | null>(null);
-  
+
   if (!zone) {
-    return <div>Zone not found</div>;
+    return <div>{t('common:noData.noResults')}</div>;
   }
 
   const devices = devicesByZone[zoneId] || {};
@@ -350,8 +352,8 @@ export function ZoneDetailView({ zoneId, onBack, onNavigateToMain, onNavigateToD
               onClick={onBack}
               className="mb-4 -ml-2"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Zones
+              <ArrowLeft className="w-4 h-4 me-2" />
+              {t('zones:detail.backToZones')}
             </Button>
             
             <div className="flex items-start justify-between">
@@ -363,11 +365,11 @@ export function ZoneDetailView({ zoneId, onBack, onNavigateToMain, onNavigateToD
                   </span>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span className="text-slate-600 dark:text-slate-400">Operational</span>
+                    <span className="text-slate-600 dark:text-slate-400">{t('zones:detail.operational')}</span>
                   </div>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400">{zone.description}</p>
-                <p className="text-slate-500 dark:text-slate-500">Location: {zone.location}</p>
+                <p className="text-slate-500 dark:text-slate-500">{t('zones:location')}: {zone.location}</p>
               </div>
             </div>
           </div>
@@ -391,12 +393,12 @@ export function ZoneDetailView({ zoneId, onBack, onNavigateToMain, onNavigateToD
                           <SystemIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                           <h2 className="text-slate-900 dark:text-slate-100">{system.name}</h2>
                           <span className="text-slate-600 dark:text-slate-400">
-                            {system.devices} devices
+                            {system.devices} {t('zones:details.devices')}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(system.status)}`}></div>
-                          <span className="text-slate-600 dark:text-slate-400 capitalize">{system.status}</span>
+                          <span className="text-slate-600 dark:text-slate-400 capitalize">{t(`common:status.${system.status}`)}</span>
                         </div>
                       </div>
                     </div>
@@ -420,19 +422,19 @@ export function ZoneDetailView({ zoneId, onBack, onNavigateToMain, onNavigateToD
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-slate-600 dark:text-slate-400 text-xs">
-                                Uptime: {device.uptime}
+                                {t('zones:systemStrip.labels.uptime')}: {device.uptime}
                               </div>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="sm" className="h-7 px-2" title="Edit" onClick={() => openModal(device, system.name, 'edit')}>
+                                <Button variant="ghost" size="sm" className="h-7 px-2" title={t('devices:actions.edit')} onClick={() => openModal(device, system.name, 'edit')}>
                                   <Edit className="w-3 h-3" />
                                 </Button>
-                                <Button variant="ghost" size="sm" className="h-7 px-2" title="Restart" onClick={() => openModal(device, system.name, 'restart')}>
+                                <Button variant="ghost" size="sm" className="h-7 px-2" title={t('devices:actions.restart')} onClick={() => openModal(device, system.name, 'restart')}>
                                   <RotateCw className="w-3 h-3" />
                                 </Button>
-                                <Button variant="ghost" size="sm" className="h-7 px-2" title="Logs" onClick={() => openModal(device, system.name, 'logs')}>
+                                <Button variant="ghost" size="sm" className="h-7 px-2" title={t('devices:actions.logs')} onClick={() => openModal(device, system.name, 'logs')}>
                                   <FileText className="w-3 h-3" />
                                 </Button>
-                                <Button variant="ghost" size="sm" className="h-7 px-2" title="System" onClick={() => openModal(device, system.name, 'health')}>
+                                <Button variant="ghost" size="sm" className="h-7 px-2" title={t('devices:actions.health')} onClick={() => openModal(device, system.name, 'health')}>
                                   <Gauge className="w-3 h-3" />
                                 </Button>
                               </div>

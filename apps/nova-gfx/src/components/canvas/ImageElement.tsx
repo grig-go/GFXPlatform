@@ -275,6 +275,10 @@ export function ImageElement({
 
   // Build image styles
   // Note: mixBlendMode is applied at the container level (StageElement) to blend with other elements
+  const blurAmount = content.blur?.enabled ? (content.blur.amount || 0) : 0;
+  // Scale up slightly when blur is applied to hide the soft edges
+  const blurScale = blurAmount > 0 ? 1 + (blurAmount * 0.04) : 1;
+
   const imageStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
@@ -283,7 +287,8 @@ export function ImageElement({
     border: content.border?.enabled
       ? `${content.border.width || 2}px solid ${content.border.color || '#FFFFFF'}`
       : undefined,
-    filter: content.blur?.enabled ? `blur(${content.blur.amount || 0}px)` : undefined,
+    filter: blurAmount > 0 ? `blur(${blurAmount}px)` : undefined,
+    transform: blurAmount > 0 ? `scale(${blurScale})` : undefined,
     opacity: content.opacity ?? 1,
     // mixBlendMode is handled at StageElement container level for proper blending with other elements
     ...style,
