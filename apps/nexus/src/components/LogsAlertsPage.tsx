@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TopBar } from "./TopBar";
 import { NavigationToolbar } from "./NavigationToolbar";
 import { Search, Download } from "lucide-react";
@@ -86,13 +87,14 @@ function formatTimestamp(timestamp: string) {
   });
 }
 
-export function LogsAlertsPage({ 
-  onNavigateToMain, 
-  onNavigateToZone, 
-  onNavigateToDevices, 
+export function LogsAlertsPage({
+  onNavigateToMain,
+  onNavigateToZone,
+  onNavigateToDevices,
   onNavigateToWorkflows,
-  onNavigateToTimeline 
+  onNavigateToTimeline
 }: LogsAlertsPageProps) {
+  const { t } = useTranslation(['logs', 'common']);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<string>("all");
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -197,8 +199,8 @@ export function LogsAlertsPage({
         <div className="max-w-[1600px] mx-auto space-y-6">
           {/* Header */}
           <div>
-            <h1 className="text-slate-900 dark:text-slate-100">Logs & Alerts</h1>
-            <p className="text-slate-500 dark:text-slate-400">Monitor system logs, alerts, and AI insights</p>
+            <h1 className="text-slate-900 dark:text-slate-100">{t('title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400">{t('subtitle')}</p>
           </div>
 
           {/* Toolbar */}
@@ -208,7 +210,7 @@ export function LogsAlertsPage({
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Search logs, devices, or messages..."
+                  placeholder={t('searchPlaceholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -218,66 +220,66 @@ export function LogsAlertsPage({
               {/* System Filter */}
               <Select value={selectedSystem} onValueChange={setSelectedSystem}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="System" />
+                  <SelectValue placeholder={t('columns.system')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Systems</SelectItem>
-                  <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="LED">LED</SelectItem>
-                  <SelectItem value="Audio">Audio</SelectItem>
-                  <SelectItem value="HVAC">HVAC</SelectItem>
-                  <SelectItem value="Nova">Nova</SelectItem>
-                  <SelectItem value="Pulsar">Pulsar</SelectItem>
-                  <SelectItem value="AI">AI</SelectItem>
-                  <SelectItem value="Security">Security</SelectItem>
+                  <SelectItem value="all">{t('filters.allSystems')}</SelectItem>
+                  <SelectItem value="Lighting">{t('systems.lighting')}</SelectItem>
+                  <SelectItem value="LED">{t('systems.led')}</SelectItem>
+                  <SelectItem value="Audio">{t('systems.audio')}</SelectItem>
+                  <SelectItem value="HVAC">{t('systems.hvac')}</SelectItem>
+                  <SelectItem value="Nova">{t('systems.nova')}</SelectItem>
+                  <SelectItem value="Pulsar">{t('systems.pulsar')}</SelectItem>
+                  <SelectItem value="AI">{t('systems.ai')}</SelectItem>
+                  <SelectItem value="Security">{t('systems.security')}</SelectItem>
                 </SelectContent>
               </Select>
 
               {/* Type Filter */}
               <Select value={selectedType} onValueChange={setSelectedType}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder={t('columns.type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Info">Info</SelectItem>
-                  <SelectItem value="Warning">Warning</SelectItem>
-                  <SelectItem value="Error">Error</SelectItem>
-                  <SelectItem value="Insight">Insight</SelectItem>
-                  <SelectItem value="Diagnostic">Diagnostic</SelectItem>
+                  <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
+                  <SelectItem value="Info">{t('types.info')}</SelectItem>
+                  <SelectItem value="Warning">{t('types.warning')}</SelectItem>
+                  <SelectItem value="Error">{t('types.error')}</SelectItem>
+                  <SelectItem value="Insight">{t('types.insight')}</SelectItem>
+                  <SelectItem value="Diagnostic">{t('types.diagnostic')}</SelectItem>
                 </SelectContent>
               </Select>
 
               {/* Status Filter */}
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('columns.status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="OK">OK</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Resolved">Resolved</SelectItem>
-                  <SelectItem value="Predictive">Predictive</SelectItem>
-                  <SelectItem value="Queued">Queued</SelectItem>
+                  <SelectItem value="all">{t('filters.allStatuses')}</SelectItem>
+                  <SelectItem value="OK">{t('statuses.ok')}</SelectItem>
+                  <SelectItem value="Active">{t('statuses.active')}</SelectItem>
+                  <SelectItem value="Resolved">{t('statuses.resolved')}</SelectItem>
+                  <SelectItem value="Predictive">{t('statuses.predictive')}</SelectItem>
+                  <SelectItem value="Queued">{t('statuses.queued')}</SelectItem>
                 </SelectContent>
               </Select>
 
               {/* AI Analyze Button */}
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="gap-2"
                 disabled={selectedLogIds.size === 0}
                 onClick={() => setShowAIAnalysisModal(true)}
               >
                 <Sparkles className="w-4 h-4" />
-                AI Analyze {selectedLogIds.size > 0 && `(${selectedLogIds.size})`}
+                {t('toolbar.aiAnalyze')} {selectedLogIds.size > 0 && `(${selectedLogIds.size})`}
               </Button>
 
               {/* Export Button */}
               <Button variant="outline" className="gap-2" onClick={handleExport}>
                 <Download className="w-4 h-4" />
-                Export {selectedLogIds.size > 0 && `(${selectedLogIds.size})`}
+                {t('common:buttons.export')} {selectedLogIds.size > 0 && `(${selectedLogIds.size})`}
               </Button>
             </div>
 
@@ -285,15 +287,15 @@ export function LogsAlertsPage({
             {selectedLogIds.size > 0 && (
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-slate-600 dark:text-slate-400">
-                  {selectedLogIds.size} log{selectedLogIds.size !== 1 ? 's' : ''} selected
+                  {t('toolbar.logsSelected', { count: selectedLogIds.size })}
                 </span>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setSelectedLogIds(new Set())}
                   className="text-xs"
                 >
-                  Clear selection
+                  {t('toolbar.clearSelection')}
                 </Button>
               </div>
             )}
@@ -309,31 +311,29 @@ export function LogsAlertsPage({
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-900 dark:text-slate-100">AI Summary</span>
+                      <span className="text-slate-900 dark:text-slate-100">{t('aiSummary.title')}</span>
                       <Badge variant="outline" className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
-                        Last 24h
+                        {t('aiSummary.last24h')}
                       </Badge>
                     </div>
                     <p className="text-slate-600 dark:text-slate-400">
-                      {activeAlerts} active alerts, {warnings} warnings detected. Energy consumption ↑ 12% week-over-week. 
-                      Pattern detected: recurring LED overheating when Pulsar workflows run {">"} 3 hrs. 
-                      Suggestion: verify LED node thermal management and stagger workflow execution.
+                      {t('aiSummary.summaryText', { alerts: activeAlerts, warnings })}
                     </p>
                     <div className="flex gap-2 pt-2">
                       <Button variant="outline" size="sm" className="text-xs">
-                        Explain Selected
+                        {t('aiSummary.explainSelected')}
                       </Button>
                       <Button variant="outline" size="sm" className="text-xs">
-                        Group by Pattern
+                        {t('aiSummary.groupByPattern')}
                       </Button>
                       <Button variant="outline" size="sm" className="text-xs">
-                        Generate Report
+                        {t('aiSummary.generateReport')}
                       </Button>
                     </div>
                   </div>
                 </div>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="sm"
                   onClick={() => setShowAISummary(false)}
                 >
@@ -349,16 +349,16 @@ export function LogsAlertsPage({
               <div className="border-b border-slate-200 dark:border-slate-800 px-6 pt-4">
                 <TabsList className="bg-transparent p-0 h-auto">
                   <TabsTrigger value="all" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none pb-3">
-                    All Logs ({SAMPLE_LOGS.length})
+                    {t('tabs.allLogs', { count: SAMPLE_LOGS.length })}
                   </TabsTrigger>
                   <TabsTrigger value="alerts" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none pb-3">
-                    Active Alerts ({activeAlerts})
+                    {t('tabs.activeAlerts', { count: activeAlerts })}
                   </TabsTrigger>
                   <TabsTrigger value="resolved" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none pb-3">
-                    Resolved
+                    {t('tabs.resolved')}
                   </TabsTrigger>
                   <TabsTrigger value="insights" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none pb-3">
-                    AI Insights ({insights})
+                    {t('tabs.aiInsights', { count: insights })}
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -370,17 +370,17 @@ export function LogsAlertsPage({
                     <thead className="border-b border-slate-200 dark:border-slate-800">
                       <tr className="text-slate-500 dark:text-slate-400 text-xs">
                         <th className="px-4 py-3 w-12">
-                          <Checkbox 
+                          <Checkbox
                             checked={selectedLogIds.size === filteredLogs.length && filteredLogs.length > 0}
                             onCheckedChange={toggleSelectAll}
                           />
                         </th>
-                        <th className="px-6 py-3 text-left">Timestamp</th>
-                        <th className="px-6 py-3 text-left">System</th>
-                        <th className="px-6 py-3 text-left">Type</th>
-                        <th className="px-6 py-3 text-left">Message</th>
-                        <th className="px-6 py-3 text-left">Device</th>
-                        <th className="px-6 py-3 text-left">Status</th>
+                        <th className="px-6 py-3 text-left">{t('columns.timestamp')}</th>
+                        <th className="px-6 py-3 text-left">{t('columns.system')}</th>
+                        <th className="px-6 py-3 text-left">{t('columns.type')}</th>
+                        <th className="px-6 py-3 text-left">{t('columns.message')}</th>
+                        <th className="px-6 py-3 text-left">{t('columns.device')}</th>
+                        <th className="px-6 py-3 text-left">{t('columns.status')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -455,7 +455,7 @@ export function LogsAlertsPage({
 
                 {filteredLogs.length === 0 && (
                   <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-                    No logs found matching your filters
+                    {t('empty.message')}
                   </div>
                 )}
               </TabsContent>
@@ -486,26 +486,26 @@ export function LogsAlertsPage({
                 {/* Log Entry Header */}
                 <div className="space-y-1">
                   <div className="text-slate-500 text-xs">
-                    ===== LOG ENTRY =====
+                    ===== {t('dialog.logEntry')} =====
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <span className="text-green-400">timestamp:</span>
+                    <span className="text-green-400">{t('dialog.timestamp')}:</span>
                     <span className="text-amber-300">{selectedLog.timestamp}</span>
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <span className="text-green-400">device:</span>
+                    <span className="text-green-400">{t('dialog.device')}:</span>
                     <span className="text-blue-300">{selectedLog.device}</span>
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <span className="text-green-400">system:</span>
+                    <span className="text-green-400">{t('dialog.system')}:</span>
                     <span className="text-cyan-300">{selectedLog.system}</span>
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <span className="text-green-400">source:</span>
+                    <span className="text-green-400">{t('dialog.source')}:</span>
                     <span className="text-slate-300">{selectedLog.source}</span>
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <span className="text-green-400">status:</span>
+                    <span className="text-green-400">{t('dialog.status')}:</span>
                     <span className={
                       selectedLog.status === "Active" ? "text-red-400" :
                       selectedLog.status === "Resolved" ? "text-green-400" :
@@ -519,7 +519,7 @@ export function LogsAlertsPage({
                 {/* Message */}
                 <div className="space-y-1 border-t border-slate-800 pt-4">
                   <div className="text-slate-500 text-xs">
-                    --- MESSAGE ---
+                    --- {t('dialog.message')} ---
                   </div>
                   <div className="text-slate-200 leading-relaxed">
                     {selectedLog.message}
@@ -533,7 +533,7 @@ export function LogsAlertsPage({
                     className="flex items-center gap-2 text-slate-400 hover:text-slate-300 transition-colors text-xs"
                   >
                     <ChevronDown className={`w-3 h-3 transition-transform ${showRawJSON ? 'rotate-180' : ''}`} />
-                    <span>--- RAW DATA (JSON) ---</span>
+                    <span>--- {t('dialog.rawData')} ---</span>
                   </button>
                   {showRawJSON && (
                     <div className="bg-slate-900 border border-slate-800 rounded p-4 overflow-x-auto">
@@ -567,7 +567,7 @@ export function LogsAlertsPage({
                   <div className="space-y-2 border-t border-slate-800 pt-4">
                     <div className="flex items-center gap-2 text-xs">
                       <Sparkles className="w-3 h-3 text-violet-400" />
-                      <span className="text-slate-500">--- AI ANALYSIS ---</span>
+                      <span className="text-slate-500">--- {t('dialog.aiAnalysis')} ---</span>
                     </div>
                     <div className="bg-violet-500/10 border border-violet-500/30 rounded p-3">
                       <div className="text-violet-300 text-xs leading-relaxed">
@@ -589,7 +589,7 @@ export function LogsAlertsPage({
                 {/* Action Commands */}
                 <div className="space-y-2 border-t border-slate-800 pt-4">
                   <div className="text-slate-500 text-xs">
-                    --- AVAILABLE COMMANDS ---
+                    --- {t('dialog.availableCommands')} ---
                   </div>
                   <div className="space-y-2">
                     {selectedLog.status === "Active" && (
@@ -621,7 +621,7 @@ export function LogsAlertsPage({
 
                 {/* Footer */}
                 <div className="text-slate-600 text-xs border-t border-slate-800 pt-4">
-                  [END OF LOG ENTRY] — Press ESC to close
+                  [{t('dialog.endOfLogEntry')}] — {t('dialog.pressEscToClose')}
                 </div>
               </div>
             </div>

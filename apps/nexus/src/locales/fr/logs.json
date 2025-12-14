@@ -1,9 +1,15 @@
 {
   "title": "Logs & Alertes",
+  "subtitle": "Surveiller les logs système, alertes et aperçus IA",
+  "searchPlaceholder": "Rechercher logs, appareils ou messages...",
   "tabs": {
     "all": "Tout",
     "logs": "Logs",
-    "alerts": "Alertes"
+    "alerts": "Alertes",
+    "allLogs": "Tous les logs ({{count}})",
+    "activeAlerts": "Alertes actives ({{count}})",
+    "resolved": "Résolu",
+    "aiInsights": "Aperçus IA ({{count}})"
   },
   "columns": {
     "timestamp": "Horodatage",
@@ -12,7 +18,8 @@
     "status": "Statut",
     "message": "Message",
     "source": "Source",
-    "level": "Niveau"
+    "level": "Niveau",
+    "device": "Appareil"
   },
   "types": {
     "error": "Erreur",
@@ -28,7 +35,18 @@
     "predictive": "Prédictif",
     "advisory": "Avis",
     "queued": "En file d'attente",
-    "scheduled": "Planifié"
+    "scheduled": "Planifié",
+    "ok": "OK"
+  },
+  "systems": {
+    "lighting": "Éclairage",
+    "led": "LED",
+    "audio": "Audio",
+    "hvac": "CVC",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "ai": "IA",
+    "security": "Sécurité"
   },
   "filters": {
     "allSystems": "Tous les systèmes",
@@ -36,6 +54,19 @@
     "allStatuses": "Tous les statuts",
     "allLevels": "Tous les niveaux",
     "dateRange": "Plage de dates"
+  },
+  "toolbar": {
+    "aiAnalyze": "Analyse IA",
+    "logsSelected": "{{count}} log(s) sélectionné(s)",
+    "clearSelection": "Effacer la sélection"
+  },
+  "aiSummary": {
+    "title": "Résumé IA",
+    "last24h": "Dernières 24h",
+    "summaryText": "{{alerts}} alertes actives, {{warnings}} avertissements détectés. Consommation d'énergie ↑ 12% semaine après semaine. Pattern détecté: surchauffe LED récurrente lorsque les workflows Pulsar s'exécutent > 3 heures. Suggestion: vérifier la gestion thermique des nœuds LED et échelonner l'exécution des workflows.",
+    "explainSelected": "Expliquer la sélection",
+    "groupByPattern": "Grouper par pattern",
+    "generateReport": "Générer un rapport"
   },
   "actions": {
     "acknowledge": "Accuser réception",
@@ -46,7 +77,21 @@
   },
   "empty": {
     "title": "Aucun log",
-    "message": "Aucune entrée de log ne correspond à vos filtres"
+    "message": "Aucun log trouvé correspondant à vos filtres"
+  },
+  "dialog": {
+    "logEntry": "ENTRÉE DE LOG",
+    "timestamp": "horodatage",
+    "device": "appareil",
+    "system": "système",
+    "source": "source",
+    "status": "statut",
+    "message": "MESSAGE",
+    "rawData": "DONNÉES BRUTES (JSON)",
+    "aiAnalysis": "ANALYSE IA",
+    "availableCommands": "COMMANDES DISPONIBLES",
+    "endOfLogEntry": "FIN DE L'ENTRÉE DE LOG",
+    "pressEscToClose": "Appuyez sur ESC pour fermer"
   },
   "timeline": {
     "monthly": "Mensuel",

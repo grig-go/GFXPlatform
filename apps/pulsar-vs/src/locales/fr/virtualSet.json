@@ -1,0 +1,139 @@
+{
+  "title": "Plateau Virtuel",
+  "channel": {
+    "label": "Chaîne",
+    "selectChannel": "Sélectionner une chaîne",
+    "newChannel": "Nouvelle chaîne",
+    "manageChannels": "Gérer les chaînes",
+    "notFound": "Chaîne introuvable",
+    "noActiveUnreal": "Aucune chaîne Unreal active trouvée",
+    "creationComingSoon": "Création de chaîne bientôt disponible !",
+    "managementComingSoon": "Gestion des chaînes bientôt disponible !",
+    "connected": "Connecté",
+    "notConnected": "Non Connecté",
+    "loading": "Chargement...",
+    "offlineMode": "Mode hors ligne"
+  },
+  "projectType": {
+    "airport": "Aéroport",
+    "virtualSet": "Plateau Virtuel"
+  },
+  "loading": {
+    "title": "Chargement de la configuration de scène...",
+    "message": "Récupération des données d'instance depuis la base de données"
+  },
+  "error": {
+    "sceneNotLoaded": "Descripteur de scène non chargé",
+    "couldNotLoad": "Impossible de charger depuis la base de données : {{error}}",
+    "noInstanceData": "Aucune donnée d'instance trouvée pour cette chaîne.",
+    "selectChannelOrLoad": "Veuillez sélectionner une chaîne ou charger un JSON manuellement."
+  },
+  "actions": {
+    "label": "Actions",
+    "retryFetch": "Réessayer",
+    "debug": "Débogage",
+    "loadJson": "Charger JSON",
+    "sampleVirtualSet": "Exemple de plateau virtuel"
+  },
+  "manualJson": {
+    "placeholder": "Collez le JSON ici (schéma VirtualSet ou Airport)"
+  },
+  "environment": {
+    "virtualSetTitle": "Environnement du plateau virtuel",
+    "airportTitle": "Affichage aéroport",
+    "virtualSetSubtitle": "Décrivez la configuration de votre plateau virtuel",
+    "airportSubtitle": "Configurez les éléments d'affichage de l'aéroport"
+  },
+  "chat": {
+    "airportPlaceholder": "Décrivez la configuration de votre affichage aéroport...",
+    "virtualSetPlaceholder": "Commencez une conversation en décrivant votre plateau virtuel...",
+    "airportExample": "Exemple : Mettre l'heure au soir, utiliser option2 pour la base...",
+    "virtualSetExample": "Exemple : Murs en verre avec plateforme surélevée...",
+    "listening": "Écoute... Parlez maintenant",
+    "speechError": "Erreur de reconnaissance vocale : {{error}}",
+    "recordingStopped": "Enregistrement arrêté"
+  },
+  "generatedFields": {
+    "title": "Paramètres de scène générés ({{type}})",
+    "noneDisabled": "Aucun (désactivé)",
+    "selected": "Sélectionné : {{value}}"
+  },
+  "background": {
+    "title": "Arrière-plan du plateau virtuel",
+    "subtitle": "Générer une image d'arrière-plan par IA",
+    "placeholder": "Décrivez l'arrière-plan que vous souhaitez générer..."
+  },
+  "ai": {
+    "generatingBackdrop": "Génération de votre arrière-plan...",
+    "editingImage": "Modification de votre image...",
+    "heresYourBackdrop": "Voici votre arrière-plan : {{prompt}}",
+    "doneUpdatedImage": "Terminé ! J'ai mis à jour l'image : {{prompt}}",
+    "couldNotProcess": "Désolé, je n'ai pas pu traiter l'image : {{error}}",
+    "backgroundGenerated": "✓ Arrière-plan généré",
+    "sceneUpdated": "✓ Scène mise à jour"
+  },
+  "save": {
+    "title": "Enregistrer la configuration",
+    "description": "Enregistrez votre configuration {{type}} actuelle",
+    "nothingToSaveAirport": "Rien à enregistrer. Veuillez d'abord configurer l'affichage aéroport.",
+    "nothingToSaveVirtualSet": "Rien à enregistrer. Veuillez définir des paramètres ou générer un arrière-plan d'abord.",
+    "nameRequired": "Le nom est requis",
+    "maxTags": "Maximum 10 étiquettes autorisées",
+    "tagExists": "Étiquette déjà ajoutée",
+    "configSaved": "Configuration {{type}} enregistrée !",
+    "untitled": "Sans titre",
+    "untitledConfiguration": "Configuration sans titre",
+    "namePlaceholder": "Nom de la configuration",
+    "descriptionPlaceholder": "Description optionnelle",
+    "tags": "Étiquettes",
+    "addTagPlaceholder": "Ajouter une étiquette..."
+  },
+  "drawing": {
+    "title": "Outils de dessin",
+    "color": "Couleur :",
+    "brush": "Pinceau :",
+    "size": "Taille :",
+    "clear": "Effacer"
+  },
+  "backdrop": {
+    "selected": "Arrière-plan sélectionné",
+    "accept": "Accepter",
+    "edit": "Modifier",
+    "new": "Nouveau",
+    "drawing": "Dessin",
+    "drawTooltip": "Dessinez sur l'image pour marquer les zones à modifier",
+    "deselect": "Désélectionner",
+    "deselectTooltip": "Désélectionner l'arrière-plan",
+    "applyToSet": "Appliquer au plateau"
+  },
+  "recentBackdrops": {
+    "title": "Arrière-plans récents",
+    "searchPlaceholder": "Rechercher des arrière-plans...",
+    "loading": "Chargement des arrière-plans...",
+    "noBackdrops": "Aucun arrière-plan trouvé"
+  },
+  "sort": {
+    "dateNewest": "Date (Plus récent)",
+    "dateOldest": "Date (Plus ancien)",
+    "nameAZ": "Nom (A-Z)",
+    "nameZA": "Nom (Z-A)",
+    "sizeLargest": "Taille (Plus grand)",
+    "sizeSmallest": "Taille (Plus petit)",
+    "modelAZ": "Modèle (A-Z)"
+  },
+  "background.inputExample": "Exemple : Un paysage urbain futuriste au coucher du soleil avec des néons...",
+  "toast": {
+    "sceneUpdated": "Scène mise à jour",
+    "backdropAccepted": "Arrière-plan accepté",
+    "backdropApplied": "Arrière-plan appliqué au plateau virtuel !",
+    "failedApplyBackdrop": "Échec de l'application de l'arrière-plan",
+    "failedLoadBackdrops": "Échec du chargement des arrière-plans récents",
+    "enterDescription": "Veuillez entrer une description d'arrière-plan",
+    "configureApiKey": "Veuillez configurer votre clé API IA dans les Paramètres",
+    "backgroundGenerated": "Image d'arrière-plan générée avec succès !",
+    "backgroundEdited": "Image d'arrière-plan modifiée avec succès !",
+    "failedProcessBackground": "Échec du traitement de l'arrière-plan : {{error}}",
+    "historyCleared": "Historique effacé",
+    "backgroundHistoryCleared": "Historique des arrière-plans effacé"
+  }
+}

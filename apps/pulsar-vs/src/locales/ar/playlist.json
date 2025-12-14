@@ -1,0 +1,211 @@
+{
+  "title": "قوائم التشغيل",
+  "tabs": {
+    "playlists": "القوائم",
+    "calendar": "التقويم",
+    "analytics": "التحليلات"
+  },
+  "search": {
+    "placeholder": "البحث عن قوائم...",
+    "searchEvents": "البحث عن أحداث..."
+  },
+  "buttons": {
+    "new": "جديد",
+    "createPlaylist": "إنشاء قائمة",
+    "demoPlaylist": "قائمة تجريبية",
+    "createDemoPlaylist": "إنشاء قائمة تجريبية",
+    "addItem": "إضافة",
+    "play": "تشغيل",
+    "pause": "إيقاف مؤقت",
+    "resume": "استئناف",
+    "stop": "إيقاف",
+    "skip": "تخطي",
+    "refresh": "تحديث",
+    "calendar": "التقويم",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "duplicate": "تكرار",
+    "ungroup": "إلغاء التجميع",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "update": "تحديث",
+    "apply": "تطبيق"
+  },
+  "table": {
+    "play": "تشغيل",
+    "status": "الحالة",
+    "name": "الاسم",
+    "items": "العناصر",
+    "duration": "المدة",
+    "channel": "القناة",
+    "schedule": "الجدولة",
+    "actions": "الإجراءات"
+  },
+  "itemTypes": {
+    "page": "صفحة",
+    "group": "مجموعة",
+    "media": "وسائط",
+    "groupCount": "مجموعة ({{count}} عناصر)",
+    "mediaPreview": "(انقر مرتين للمعاينة)"
+  },
+  "channel": {
+    "default": "افتراضي",
+    "noChannel": "بدون قناة",
+    "noDefault": "بدون افتراضي",
+    "selectChannel": "اختر قناة...",
+    "selectAChannel": "اختر قناة",
+    "ch": "قن:"
+  },
+  "form": {
+    "name": "الاسم",
+    "description": "الوصف",
+    "namePlaceholder": "اسم القائمة...",
+    "descriptionPlaceholder": "وصف اختياري...",
+    "loopPlaylist": "تكرار القائمة",
+    "durationSeconds": "المدة (ثواني)",
+    "scheduledTime": "الوقت المجدول (اختياري)",
+    "manualAdvance": "0 = تقدم يدوي"
+  },
+  "status": {
+    "next": "التالي",
+    "playing": "قيد التشغيل",
+    "paused": "متوقف مؤقتاً",
+    "playable": "قابل للتشغيل",
+    "selected": "محدد",
+    "notScheduled": "غير مجدول",
+    "noSchedule": "بدون جدولة"
+  },
+  "schedule": {
+    "title": "الجدولة",
+    "daily": "يومي",
+    "weekly": "أسبوعي (أيام محددة)",
+    "dateRange": "نطاق التاريخ",
+    "specificDates": "تواريخ محددة",
+    "datesCount": "{{count}} تواريخ",
+    "scheduled": "مجدول",
+    "scheduleType": "نوع الجدولة",
+    "startDate": "تاريخ البدء",
+    "endDate": "تاريخ الانتهاء",
+    "dayAbbrev": {
+      "sunday": "أحد",
+      "monday": "إثن",
+      "tuesday": "ثلا",
+      "wednesday": "أرب",
+      "thursday": "خمي",
+      "friday": "جمع",
+      "saturday": "سبت"
+    }
+  },
+  "calendar": {
+    "back": "رجوع",
+    "clear": "مسح",
+    "today": "اليوم",
+    "allDay": "طوال اليوم",
+    "events": "{{count}} أحداث",
+    "scheduledThisMonth": "{{count}} سير عمل مجدول هذا الشهر",
+    "scheduledEvents": "{{count}} أحداث مجدولة",
+    "noEventsDay": "لا توجد أحداث مجدولة لهذا اليوم",
+    "scheduledFor": "مجدول لـ {{date}}",
+    "time": "الوقت",
+    "duration": "المدة",
+    "type": "النوع",
+    "channel": "القناة",
+    "close": "إغلاق",
+    "playNow": "تشغيل الآن",
+    "more": "+{{count}} المزيد",
+    "days": {
+      "sun": "أحد",
+      "mon": "إثن",
+      "tue": "ثلا",
+      "wed": "أرب",
+      "thu": "خمي",
+      "fri": "جمع",
+      "sat": "سبت"
+    },
+    "months": {
+      "january": "يناير",
+      "february": "فبراير",
+      "march": "مارس",
+      "april": "أبريل",
+      "may": "مايو",
+      "june": "يونيو",
+      "july": "يوليو",
+      "august": "أغسطس",
+      "september": "سبتمبر",
+      "october": "أكتوبر",
+      "november": "نوفمبر",
+      "december": "ديسمبر"
+    },
+    "filters": {
+      "allTypes": "جميع الأنواع",
+      "video": "فيديو",
+      "image": "صورة",
+      "audio": "صوت",
+      "graphics": "رسومات",
+      "ticker": "شريط أخبار",
+      "layout": "تخطيط"
+    }
+  },
+  "empty": {
+    "noPlaylists": "لا توجد قوائم بعد",
+    "createFirst": "أنشئ أول قائمة للبدء",
+    "noItems": "لا توجد عناصر في هذه القائمة",
+    "addItemsMessage": "أضف صفحات أو وسائط أو مجموعات"
+  },
+  "tabs2": {
+    "allItems": "الكل",
+    "pages": "الصفحات",
+    "media": "الوسائط"
+  },
+  "aiInsights": {
+    "title": "تحليلات الذكاء الاصطناعي",
+    "button": "تحليلات الذكاء الاصطناعي"
+  },
+  "dialog": {
+    "createPlaylist": "إنشاء قائمة",
+    "editPlaylist": "تعديل القائمة",
+    "deletePlaylist": "حذف القائمة",
+    "deletePlaylistConfirm": "هل أنت متأكد من حذف \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+    "addItem": "إضافة عنصر",
+    "editItem": "تعديل العنصر",
+    "editItemDesc": "تحديث إعدادات \"{{name}}\"",
+    "deleteItem": "حذف العنصر",
+    "deleteItemConfirm": "هل أنت متأكد من حذف هذا العنصر؟",
+    "batchChannel": "تغيير القناة",
+    "batchChannelDesc": "اختر قناة للعناصر",
+    "batchDuration": "تغيير المدة",
+    "batchDurationDesc": "تعيين المدة للعناصر",
+    "applyToItems": "تطبيق على {{count}} عنصر"
+  },
+  "editItemDialog": {
+    "currentMedia": "الوسائط الحالية",
+    "replaceMedia": "استبدال الوسائط",
+    "cancelReplace": "إلغاء الاستبدال",
+    "newMediaSelected": "تم تحديد وسائط جديدة",
+    "searchMediaLibrary": "البحث في مكتبة الوسائط...",
+    "showingItems": "عرض {{start}}-{{end}} من {{total}} عنصر",
+    "noMediaFound": "لا توجد وسائط",
+    "current": "الحالي",
+    "previous": "السابق",
+    "next": "التالي",
+    "pageOf": "صفحة {{current}} من {{total}}"
+  },
+  "toast": {
+    "selectProjectFirst": "يرجى اختيار مشروع أولاً",
+    "demoPlaylistCreated": "تم إنشاء القائمة التجريبية! تحقق من التقويم.",
+    "failedCreateDemo": "فشل إنشاء القائمة التجريبية",
+    "playlistCreated": "تم إنشاء القائمة بنجاح",
+    "playlistUpdated": "تم تحديث القائمة بنجاح",
+    "playlistDeleted": "تم حذف القائمة بنجاح",
+    "itemAdded": "تمت إضافة العنصر إلى القائمة",
+    "itemUpdated": "تم تحديث العنصر",
+    "itemDeleted": "تم حذف العنصر",
+    "channelsUpdated": "تم تحديث القنوات لـ {{count}} عنصر",
+    "durationsUpdated": "تم تحديث المدد لـ {{count}} عنصر",
+    "failedLoad": "فشل تحميل القوائم",
+    "failedCreate": "فشل إنشاء القائمة",
+    "failedUpdate": "فشل تحديث القائمة",
+    "failedDelete": "فشل حذف القائمة",
+    "nameRequired": "الاسم مطلوب"
+  }
+}

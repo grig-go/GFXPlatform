@@ -1,0 +1,56 @@
+{
+  "title": "Canales",
+  "description": "Administre canales de transmisión y salida en diferentes sistemas",
+  "addChannel": "Agregar Canal",
+  "search": {
+    "placeholder": "Buscar canales por nombre, tipo o descripción..."
+  },
+  "filter": {
+    "byType": "Filtrar por tipo",
+    "allTypes": "Todos los Tipos",
+    "activeFilters": "Filtros activos:",
+    "clearAll": "Limpiar todo",
+    "filters": "Filtros"
+  },
+  "table": {
+    "name": "Nombre",
+    "type": "Tipo",
+    "status": "Estado",
+    "description": "Descripción",
+    "actions": "Acciones"
+  },
+  "dialog": {
+    "addTitle": "Agregar Nuevo Canal",
+    "editTitle": "Editar Canal",
+    "addDescription": "Cree un nuevo canal de transmisión o salida.",
+    "editDescription": "Actualice los detalles del canal a continuación."
+  },
+  "form": {
+    "channelName": "Nombre del Canal *",
+    "channelType": "Tipo de Canal *",
+    "description": "Descripción",
+    "activeStatus": "Estado Activo",
+    "enableChannel": "Habilitar este canal para uso en el sistema",
+    "namePlaceholder": "ej., Salida Principal A",
+    "descriptionPlaceholder": "Ingrese descripción del canal..."
+  },
+  "delete": {
+    "confirm": "¿Está seguro de que desea eliminar este canal?",
+    "warning": "Esta acción no se puede deshacer. Esto eliminará permanentemente el canal y todos los datos asociados."
+  },
+  "status": {
+    "showing": "Mostrando {{count}} de {{total}} canales",
+    "noChannels": "No se encontraron canales"
+  },
+  "toast": {
+    "nameRequired": "El nombre del canal es requerido",
+    "failedLoad": "Error al cargar canales",
+    "failedConnect": "Error al conectar con el servidor",
+    "addedSuccess": "Canal \"{{name}}\" agregado exitosamente",
+    "failedCreate": "Error al crear canal",
+    "updatedSuccess": "Canal \"{{name}}\" actualizado exitosamente",
+    "failedUpdate": "Error al actualizar canal",
+    "deletedSuccess": "Canal \"{{name}}\" eliminado exitosamente",
+    "failedDelete": "Error al eliminar canal"
+  }
+}

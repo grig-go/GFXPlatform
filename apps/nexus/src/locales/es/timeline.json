@@ -1,0 +1,84 @@
+{
+  "title": "Línea de tiempo completa",
+  "scheduledWorkflowsCount": "{{count}} flujos de trabajo programados este mes",
+  "searchPlaceholder": "Buscar eventos, flujos de trabajo, sistemas...",
+  "filters": {
+    "zone": "Zona",
+    "system": "Sistema",
+    "today": "Hoy",
+    "allZones": "Todas las zonas"
+  },
+  "days": {
+    "sun": "Dom",
+    "mon": "Lun",
+    "tue": "Mar",
+    "wed": "Mié",
+    "thu": "Jue",
+    "fri": "Vie",
+    "sat": "Sáb"
+  },
+  "calendar": {
+    "more": "+{{count}} más"
+  },
+  "realTimeTimeline": {
+    "title": "Línea de tiempo de eventos en tiempo real",
+    "subtitle": "Últimas 24 horas de actividad del sistema"
+  },
+  "status": {
+    "success": "Éxito",
+    "warning": "Advertencia",
+    "error": "Error",
+    "scheduled": "Programado"
+  },
+  "systems": {
+    "lighting": "Iluminación",
+    "audio": "Audio",
+    "ledDisplays": "Pantallas LED",
+    "hvac": "HVAC",
+    "signage": "Señalización",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "aiEngine": "Motor IA",
+    "security": "Seguridad"
+  },
+  "aiInsights": {
+    "title": "Perspectivas IA",
+    "todaysAnomalies": "{{count}} anomalías hoy ({{systems}})",
+    "upcoming": "Próximo: {{workflow}} en {{time}}",
+    "predictedCrowdSurge": "Aumento de multitud previsto a las {{time}} cerca de {{location}}"
+  },
+  "dialogs": {
+    "eventDetails": "Detalles del evento",
+    "eventLog": "Registro de eventos",
+    "scheduledWorkflow": "Flujo de trabajo programado",
+    "description": "Descripción",
+    "workflowDescription": "Flujo de trabajo automatizado de {{system}} programado para ejecutarse diariamente a las {{time}}.",
+    "recurrence": "Recurrencia",
+    "daily": "Diario",
+    "lastExecution": "Última ejecución",
+    "successfullyCompleted": "Ayer a las {{time}} - Completado exitosamente",
+    "viewInWorkflows": "Ver en flujos de trabajo"
+  },
+  "aiInsightsModal": {
+    "title": "Perspectivas IA semanales",
+    "systemHealth": {
+      "title": "Salud del sistema: Excelente",
+      "description": "Todos los sistemas críticos operando dentro de parámetros normales. Tiempo de actividad general: {{uptime}}"
+    },
+    "attentionRequired": {
+      "title": "Atención requerida",
+      "ledController": "El controlador LED de la puerta B7 experimentó 2 fallos de arranque esta semana",
+      "memoryUtilization": "La utilización de memoria de Show Playback aumenta (+8% semana tras semana)"
+    },
+    "predictions": {
+      "title": "Predicciones y recomendaciones",
+      "crowdSurge": "Aumento de multitud previsto mañana a las 07:40 AM en la puerta A12 (95% de confianza)",
+      "energyOptimization": "La optimización energética sugiere reprogramar el mantenimiento a horas de baja demanda",
+      "hvacEfficiency": "La eficiencia del HVAC mejoró 12% desde los ajustes de IA de la semana pasada"
+    },
+    "automationInsights": {
+      "title": "Perspectivas de automatización",
+      "description": "10 flujos de trabajo ejecutados exitosamente esta semana con 0 fallos. Tiempo promedio de ejecución: 2.3 minutos. La automatización Pulsar detectó y resolvió 3 conflictos de programación potenciales."
+    }
+  }
+}

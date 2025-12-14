@@ -1,0 +1,38 @@
+{
+  "menus": {
+    "apps": "Apps",
+    "tools": "Tools",
+    "window": "Window",
+    "settings": "Settings",
+    "help": "Help",
+    "menu": "Menu"
+  },
+  "tools": {
+    "channel": "Channel",
+    "projects": "Projects"
+  },
+  "window": {
+    "singleView": "Single View",
+    "contentView": "Content View",
+    "playlist": "Playlist"
+  },
+  "settings": {
+    "preferences": "Preferences",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode",
+    "advancedSettings": "Advanced Settings",
+    "aiPromptSettings": "AI Prompt Settings",
+    "language": "Language",
+    "signOut": "Sign Out"
+  },
+  "help": {
+    "documentation": "Documentation",
+    "whatsNew": "What's New",
+    "downloadUE55": "Download UE 5.5 project",
+    "downloadUE56": "Download UE 5.6 project",
+    "contactSupport": "Contact Support"
+  },
+  "accessibility": {
+    "navigateFeatures": "Navigate through app features and settings"
+  }
+}

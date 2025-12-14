@@ -1,0 +1,73 @@
+{
+  "buttons": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "close": "Fermer",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "apply": "Appliquer",
+    "discard": "Abandonner",
+    "loading": "Chargement...",
+    "saving": "Enregistrement...",
+    "creating": "Création...",
+    "retry": "Réessayer",
+    "refresh": "Actualiser",
+    "clearHistory": "Effacer l'historique",
+    "viewDetails": "Voir les détails",
+    "import": "Importer",
+    "export": "Exporter",
+    "resetToDefaults": "Réinitialiser par défaut"
+  },
+  "status": {
+    "active": "Actif",
+    "inactive": "Inactif",
+    "draft": "Brouillon",
+    "published": "Publié",
+    "scheduled": "Programmé",
+    "archived": "Archivé"
+  },
+  "messages": {
+    "somethingWentWrong": "Une erreur s'est produite",
+    "pleaseFillAllFields": "Veuillez remplir tous les champs",
+    "invalidInput": "Entrée invalide",
+    "fieldRequired": "{{field}} est requis",
+    "failedTo": "Échec de {{action}}",
+    "errorLoading": "Erreur lors du chargement de {{resource}}",
+    "savedSuccessfully": "{{item}} enregistré avec succès",
+    "createdSuccessfully": "{{item}} créé avec succès",
+    "updatedSuccessfully": "{{item}} mis à jour avec succès",
+    "deletedSuccessfully": "{{item}} supprimé avec succès",
+    "noResults": "Aucun résultat trouvé",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce(tte) {{item}} ?",
+    "cannotBeUndone": "Cette action est irréversible."
+  },
+  "labels": {
+    "name": "Nom",
+    "description": "Description",
+    "type": "Type",
+    "status": "Statut",
+    "actions": "Actions",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "all": "Tous",
+    "none": "Aucun",
+    "select": "Sélectionner",
+    "optional": "optionnel"
+  },
+  "time": {
+    "now": "Maintenant",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "tomorrow": "Demain"
+  },
+  "validation": {
+    "required": "Ce champ est requis",
+    "minLength": "Doit contenir au moins {{min}} caractères",
+    "maxLength": "Doit contenir au maximum {{max}} caractères",
+    "invalidEmail": "Adresse email invalide"
+  },
+  "aiAssistant": "Assistant IA"
+}

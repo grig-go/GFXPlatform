@@ -1,0 +1,73 @@
+{
+  "buttons": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "close": "إغلاق",
+    "next": "التالي",
+    "previous": "السابق",
+    "apply": "تطبيق",
+    "discard": "تجاهل",
+    "loading": "جاري التحميل...",
+    "saving": "جاري الحفظ...",
+    "creating": "جاري الإنشاء...",
+    "retry": "إعادة المحاولة",
+    "refresh": "تحديث",
+    "clearHistory": "مسح السجل",
+    "viewDetails": "عرض التفاصيل",
+    "import": "استيراد",
+    "export": "تصدير",
+    "resetToDefaults": "إعادة التعيين للافتراضي"
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "draft": "مسودة",
+    "published": "منشور",
+    "scheduled": "مجدول",
+    "archived": "مؤرشف"
+  },
+  "messages": {
+    "somethingWentWrong": "حدث خطأ ما",
+    "pleaseFillAllFields": "يرجى ملء جميع الحقول",
+    "invalidInput": "إدخال غير صالح",
+    "fieldRequired": "{{field}} مطلوب",
+    "failedTo": "فشل في {{action}}",
+    "errorLoading": "خطأ في تحميل {{resource}}",
+    "savedSuccessfully": "تم حفظ {{item}} بنجاح",
+    "createdSuccessfully": "تم إنشاء {{item}} بنجاح",
+    "updatedSuccessfully": "تم تحديث {{item}} بنجاح",
+    "deletedSuccessfully": "تم حذف {{item}} بنجاح",
+    "noResults": "لم يتم العثور على نتائج",
+    "confirmDelete": "هل أنت متأكد من حذف {{item}}؟",
+    "cannotBeUndone": "لا يمكن التراجع عن هذا الإجراء."
+  },
+  "labels": {
+    "name": "الاسم",
+    "description": "الوصف",
+    "type": "النوع",
+    "status": "الحالة",
+    "actions": "الإجراءات",
+    "search": "بحث",
+    "filter": "تصفية",
+    "all": "الكل",
+    "none": "لا شيء",
+    "select": "اختيار",
+    "optional": "اختياري"
+  },
+  "time": {
+    "now": "الآن",
+    "today": "اليوم",
+    "yesterday": "أمس",
+    "tomorrow": "غداً"
+  },
+  "validation": {
+    "required": "هذا الحقل مطلوب",
+    "minLength": "يجب أن يحتوي على {{min}} أحرف على الأقل",
+    "maxLength": "يجب أن يحتوي على {{max}} أحرف كحد أقصى",
+    "invalidEmail": "عنوان البريد الإلكتروني غير صالح"
+  },
+  "aiAssistant": "مساعد الذكاء الاصطناعي"
+}

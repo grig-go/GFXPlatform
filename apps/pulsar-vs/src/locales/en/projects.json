@@ -1,0 +1,42 @@
+{
+  "title": "Projects",
+  "subtitle": "Manage your virtual set projects",
+  "newProject": "New Project",
+  "createFirst": "Create First Project",
+  "empty": {
+    "title": "No projects yet",
+    "description": "Create your first project to organize your virtual set configurations"
+  },
+  "card": {
+    "setAsActive": "Set as active"
+  },
+  "form": {
+    "newTitle": "New Project",
+    "editTitle": "Edit Project",
+    "newDescription": "Create a new project to organize your work",
+    "editDescription": "Editing \"{{projectName}}\"",
+    "name": "Name *",
+    "namePlaceholder": "My Virtual Set Project",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe this project...",
+    "icon": "Icon",
+    "color": "Color",
+    "projectType": "Project Type"
+  },
+  "aiInstructions": {
+    "title": "AI Instructions",
+    "description": "Configure how the AI understands your commands when editing scene configurations.",
+    "placeholder": "Enter custom instructions for the AI...",
+    "loadAirportDefaults": "Load Airport Defaults",
+    "fieldAliases": "Field Aliases",
+    "customInstructions": "Custom Instructions"
+  },
+  "selector": {
+    "label": "Project",
+    "loading": "Loading...",
+    "selectProject": "Select a project",
+    "noProjects": "No projects yet",
+    "newProject": "New Project",
+    "manageProjects": "Manage Projects"
+  }
+}

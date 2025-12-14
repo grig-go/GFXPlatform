@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TopBar } from "./TopBar";
 import { NavigationToolbar } from "./NavigationToolbar";
 import { Button } from "./ui/button";
@@ -73,6 +74,7 @@ interface TimelinePageProps {
 }
 
 export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToDevices, onNavigateToWorkflows, onNavigateToLogsAlerts }: TimelinePageProps) {
+  const { t } = useTranslation(['timeline', 'common']);
   const [viewMode, setViewMode] = useState<"monthly" | "weekly">("monthly");
   const [selectedDate, setSelectedDate] = useState(new Date(2025, 10, 10)); // Nov 10, 2025
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,15 +87,15 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
 
   // System filter configuration
   const systemFilters = [
-    { id: "lighting", label: "Lighting", icon: Lightbulb, color: "text-yellow-500" },
-    { id: "audio", label: "Audio", icon: Volume2, color: "text-blue-500" },
-    { id: "led", label: "LED Displays", icon: Monitor, color: "text-purple-500" },
-    { id: "hvac", label: "HVAC", icon: Wind, color: "text-teal-500" },
-    { id: "signage", label: "Signage", icon: SignpostBig, color: "text-orange-500" },
-    { id: "nova", label: "Nova", icon: Radio, color: "text-green-500" },
-    { id: "pulsar", label: "Pulsar", icon: Sliders, color: "text-red-500" },
-    { id: "ai", label: "AI Engine", icon: Brain, color: "text-violet-500" },
-    { id: "security", label: "Security", icon: Shield, color: "text-slate-500" },
+    { id: "lighting", label: t('systems.lighting'), icon: Lightbulb, color: "text-yellow-500" },
+    { id: "audio", label: t('systems.audio'), icon: Volume2, color: "text-blue-500" },
+    { id: "led", label: t('systems.ledDisplays'), icon: Monitor, color: "text-purple-500" },
+    { id: "hvac", label: t('systems.hvac'), icon: Wind, color: "text-teal-500" },
+    { id: "signage", label: t('systems.signage'), icon: SignpostBig, color: "text-orange-500" },
+    { id: "nova", label: t('systems.nova'), icon: Radio, color: "text-green-500" },
+    { id: "pulsar", label: t('systems.pulsar'), icon: Sliders, color: "text-red-500" },
+    { id: "ai", label: t('systems.aiEngine'), icon: Brain, color: "text-violet-500" },
+    { id: "security", label: t('systems.security'), icon: Shield, color: "text-slate-500" },
   ];
 
   const toggleFilter = (filterId: string) => {
@@ -409,8 +411,8 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
         <div className="max-w-[1600px] mx-auto space-y-6">
           {/* Page Header */}
           <div>
-            <h1 className="text-slate-900 dark:text-slate-100">Full Timeline</h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400">{workflows.length} scheduled workflows this month</p>
+            <h1 className="text-slate-900 dark:text-slate-100">{t('title')}</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400">{t('scheduledWorkflowsCount', { count: workflows.length })}</p>
           </div>
 
           {/* Search and Filters Row */}
@@ -419,7 +421,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search events, workflows, systems..."
+                placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -432,12 +434,12 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                 <Button variant="outline" size="sm" className="gap-2 min-w-[140px] justify-between">
                   <div className="flex items-center gap-2">
                     <Filter className="w-4 h-4" />
-                    <span>Zone</span>
+                    <span>{t('filters.zone')}</span>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>All Zones</DropdownMenuItem>
+                <DropdownMenuItem>{t('filters.allZones')}</DropdownMenuItem>
                 <DropdownMenuItem>Concourse A</DropdownMenuItem>
                 <DropdownMenuItem>Concourse B</DropdownMenuItem>
                 <DropdownMenuItem>Terminal Main</DropdownMenuItem>
@@ -451,7 +453,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                 <Button variant="outline" size="sm" className="gap-2 min-w-[140px] justify-between">
                   <div className="flex items-center gap-2">
                     <Filter className="w-4 h-4" />
-                    <span>System</span>
+                    <span>{t('filters.system')}</span>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
@@ -478,7 +480,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
 
             {/* Today Button */}
             <Button variant="outline" size="sm" onClick={goToToday} className="min-w-[100px]">
-              Today
+              {t('filters.today')}
             </Button>
           </div>
 
@@ -499,14 +501,14 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                   </Button>
                 </div>
                 <div className="text-sm text-slate-600 dark:text-slate-400">
-                  {workflows.length} scheduled workflows this month
+                  {t('scheduledWorkflowsCount', { count: workflows.length })}
                 </div>
               </div>
 
               {/* Calendar Grid */}
               <div className="grid grid-cols-7 gap-1.5">
                 {/* Day headers */}
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                {[t('days.sun'), t('days.mon'), t('days.tue'), t('days.wed'), t('days.thu'), t('days.fri'), t('days.sat')].map(day => (
                   <div key={day} className="text-center text-xs text-slate-600 dark:text-slate-400 py-1">
                     {day}
                   </div>
@@ -549,7 +551,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                         ))}
                         {dayWorkflows.length >= 4 && (
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 px-1.5">
-                            +{workflows.filter(w => w.date.getDate() === day).length - 4} more
+                            {t('calendar.more', { count: workflows.filter(w => w.date.getDate() === day).length - 4 })}
                           </div>
                         )}
                       </div>
@@ -563,23 +565,23 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-xl text-slate-900 dark:text-slate-100">Real-Time Event Timeline</h2>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Last 24 hours of system activity</p>
+                  <h2 className="text-xl text-slate-900 dark:text-slate-100">{t('realTimeTimeline.title')}</h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{t('realTimeTimeline.subtitle')}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs mb-4">
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30">
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-green-700 dark:text-green-400">Success</span>
+                  <span className="text-green-700 dark:text-green-400">{t('status.success')}</span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
                   <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                  <span className="text-yellow-700 dark:text-yellow-400">Warning</span>
+                  <span className="text-yellow-700 dark:text-yellow-400">{t('status.warning')}</span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30">
                   <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <span className="text-red-700 dark:text-red-400">Error</span>
+                  <span className="text-red-700 dark:text-red-400">{t('status.error')}</span>
                 </div>
               </div>
 
@@ -629,23 +631,23 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
           <div className="flex items-center gap-6 text-white">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5" />
-              <span className="font-semibold">AI Insights:</span>
+              <span className="font-semibold">{t('aiInsights.title')}:</span>
             </div>
             <div className="flex items-center gap-4 text-sm">
-              <span>Today's anomalies: 2 (Lighting, Show Playback)</span>
+              <span>{t('aiInsights.todaysAnomalies', { count: 2, systems: 'Lighting, Show Playback' })}</span>
               <span>•</span>
-              <span>Upcoming: Morning Lighting Sequence in 6 hrs</span>
+              <span>{t('aiInsights.upcoming', { workflow: 'Morning Lighting Sequence', time: '6 hrs' })}</span>
               <span>•</span>
-              <span>Predicted crowd surge 07:40 AM (Gate A12)</span>
+              <span>{t('aiInsights.predictedCrowdSurge', { time: '07:40 AM', location: 'Gate A12' })}</span>
             </div>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="bg-white/20 border-white/40 text-white hover:bg-white/30"
             onClick={() => setShowAIInsights(true)}
           >
-            View Details
+            {t('common:buttons.viewDetails')}
           </Button>
         </div>
       </div>
@@ -655,7 +657,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
         <Dialog open={true} onOpenChange={() => setSelectedEvent(null)}>
           <DialogContent className="sm:max-w-[700px]">
             <DialogHeader>
-              <DialogTitle>Event Details</DialogTitle>
+              <DialogTitle>{t('dialogs.eventDetails')}</DialogTitle>
             </DialogHeader>
             <div className="mt-4">
               <div className="flex items-start gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -673,13 +675,13 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                     {selectedEvent.status === "error" && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs">
                         <XCircle className="w-3 h-3" />
-                        Error
+                        {t('status.error')}
                       </div>
                     )}
                     {selectedEvent.status === "warning" && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs">
                         <AlertTriangle className="w-3 h-3" />
-                        Warning
+                        {t('status.warning')}
                       </div>
                     )}
                   </div>
@@ -688,7 +690,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
 
               {selectedEvent.logs && selectedEvent.logs.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-3">Event Log</h4>
+                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-3">{t('dialogs.eventLog')}</h4>
                   <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {selectedEvent.logs.map((log, logIndex) => (
                       <div 
@@ -734,7 +736,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
         <Dialog open={true} onOpenChange={() => setSelectedWorkflow(null)}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Scheduled Workflow</DialogTitle>
+              <DialogTitle>{t('dialogs.scheduledWorkflow')}</DialogTitle>
             </DialogHeader>
             <div className="mt-4">
               <div className="flex items-start gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -753,7 +755,7 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                   <div className="mt-2">
                     <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs">
                       <CalendarIcon className="w-3 h-3" />
-                      Scheduled
+                      {t('status.scheduled')}
                     </div>
                   </div>
                 </div>
@@ -761,31 +763,30 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
 
               <div className="mt-4 space-y-4">
                 <div>
-                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">Description</h4>
+                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">{t('dialogs.description')}</h4>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Automated {selectedWorkflow.system} workflow scheduled to run at {selectedWorkflow.time}.
-                    This workflow is part of the venue's daily operations and executes based on Pulsar automation triggers.
+                    {t('dialogs.workflowDescription', { system: selectedWorkflow.system, time: selectedWorkflow.time })}
                   </p>
                 </div>
 
                 <div>
-                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">Recurrence</h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Daily</p>
+                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">{t('dialogs.recurrence')}</h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{t('dialogs.daily')}</p>
                 </div>
 
                 <div>
-                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">Last Execution</h4>
+                  <h4 className="text-sm text-slate-700 dark:text-slate-300 mb-2">{t('dialogs.lastExecution')}</h4>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-slate-600 dark:text-slate-400">
-                      Successfully completed yesterday at {selectedWorkflow.time}
+                      {t('dialogs.successfullyCompleted', { time: selectedWorkflow.time })}
                     </span>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                   <Button className="w-full" onClick={onNavigateToWorkflows}>
-                    View in Workflows
+                    {t('dialogs.viewInWorkflows')}
                   </Button>
                 </div>
               </div>
@@ -803,51 +804,50 @@ export function TimelinePage({ onNavigateToMain, onNavigateToZone, onNavigateToD
                 <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-lg flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
-                AI Weekly Insights
+                {t('aiInsightsModal.title')}
               </DialogTitle>
             </DialogHeader>
             <div className="mt-4 space-y-4">
               <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <h4 className="text-green-900 dark:text-green-100">System Health: Excellent</h4>
+                  <h4 className="text-green-900 dark:text-green-100">{t('aiInsightsModal.systemHealth.title')}</h4>
                 </div>
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  All critical systems operating within normal parameters. Overall uptime: 99.8%
+                  {t('aiInsightsModal.systemHealth.description', { uptime: '99.8%' })}
                 </p>
               </div>
 
               <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                  <h4 className="text-yellow-900 dark:text-yellow-100">Attention Required</h4>
+                  <h4 className="text-yellow-900 dark:text-yellow-100">{t('aiInsightsModal.attentionRequired.title')}</h4>
                 </div>
                 <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
-                  <li>• LED controller Gate B7 experienced 2 boot failures this week</li>
-                  <li>• Show Playback memory utilization trending upward (+8% week-over-week)</li>
+                  <li>• {t('aiInsightsModal.attentionRequired.ledController')}</li>
+                  <li>• {t('aiInsightsModal.attentionRequired.memoryUtilization')}</li>
                 </ul>
               </div>
 
               <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <h4 className="text-blue-900 dark:text-blue-100">Predictions & Recommendations</h4>
+                  <h4 className="text-blue-900 dark:text-blue-100">{t('aiInsightsModal.predictions.title')}</h4>
                 </div>
                 <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                  <li>• Crowd surge predicted tomorrow 07:40 AM at Gate A12 (95% confidence)</li>
-                  <li>• Energy optimization suggests rescheduling maintenance to off-peak hours</li>
-                  <li>• HVAC efficiency improved 12% since last week's AI adjustments</li>
+                  <li>• {t('aiInsightsModal.predictions.crowdSurge')}</li>
+                  <li>• {t('aiInsightsModal.predictions.energyOptimization')}</li>
+                  <li>• {t('aiInsightsModal.predictions.hvacEfficiency')}</li>
                 </ul>
               </div>
 
               <div className="p-4 rounded-lg bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800">
                 <div className="flex items-center gap-2 mb-2">
                   <Brain className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                  <h4 className="text-violet-900 dark:text-violet-100">Automation Insights</h4>
+                  <h4 className="text-violet-900 dark:text-violet-100">{t('aiInsightsModal.automationInsights.title')}</h4>
                 </div>
                 <p className="text-sm text-violet-700 dark:text-violet-300">
-                  10 workflows executed successfully this week with 0 failures. Average execution time: 2.3 minutes.
-                  Pulsar automation detected and resolved 3 potential scheduling conflicts.
+                  {t('aiInsightsModal.automationInsights.description')}
                 </p>
               </div>
             </div>

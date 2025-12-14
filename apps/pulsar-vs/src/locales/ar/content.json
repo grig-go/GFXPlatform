@@ -1,0 +1,133 @@
+{
+  "title": "مكتبة المحتوى",
+  "subtitle": "إدارة بيئات وخلفيات الاستوديو الافتراضي",
+  "search": {
+    "placeholder": "البحث بالاسم أو الوصف..."
+  },
+  "filter": {
+    "byType": "تصفية حسب النوع",
+    "allTypes": "جميع الأنواع",
+    "environment": "البيئة",
+    "background": "الخلفية",
+    "both": "كلاهما"
+  },
+  "folder": {
+    "title": "المجلدات",
+    "new": "مجلد جديد",
+    "create": "إنشاء مجلد",
+    "createNew": "إنشاء مجلد جديد",
+    "rename": "إعادة تسمية المجلد",
+    "namePlaceholder": "اسم المجلد...",
+    "selectFolder": "اختر مجلد",
+    "allItems": "جميع العناصر",
+    "newSubfolder": "مجلد فرعي جديد",
+    "enterName": "أدخل اسماً لمجلدك الجديد",
+    "enterNewName": "أدخل اسماً جديداً لهذا المجلد",
+    "rootNoFolder": "الجذر (بدون مجلد)",
+    "deleteConfirm": "هل أنت متأكد من حذف هذا المجلد؟ سيتم نقل المحتوى إلى الجذر."
+  },
+  "dialog": {
+    "createContent": "إنشاء محتوى",
+    "namePlaceholder": "اسم المحتوى...",
+    "descriptionPlaceholder": "الوصف (اختياري)...",
+    "moveToFolder": "نقل إلى مجلد",
+    "moveDestination": "اختر مجلد الوجهة لـ \"{{name}}\"",
+    "viewDetails": "عرض التفاصيل",
+    "confirmDelete": "تأكيد الحذف",
+    "confirmDeleteMessage": "هل أنت متأكد من حذف \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+    "confirmBatchDelete": "تأكيد الحذف المتعدد",
+    "confirmBatchDeleteMessage": "هل أنت متأكد من حذف {{count}} عنصر(ات) محددة؟ لا يمكن التراجع عن هذا الإجراء."
+  },
+  "import": {
+    "title": "استيراد صفحات المحتوى",
+    "description": "اختر مشروع وحدد صفحات المحتوى لاستيرادها إلى \"{{projectName}}\"",
+    "sourceProject": "المشروع المصدر",
+    "selectProject": "اختر مشروع للاستيراد منه...",
+    "contentPages": "صفحات المحتوى",
+    "noContentFound": "لا توجد صفحات محتوى في هذا المشروع",
+    "importedCount": "تم استيراد {{count}} صفحة(ات)",
+    "failedCount": "فشل استيراد {{count}} عنصر(ات)",
+    "failed": "فشل الاستيراد",
+    "selectAll": "تحديد الكل",
+    "deselectAll": "إلغاء تحديد الكل",
+    "itemsSelected": "{{count}} عنصر(ات) محددة"
+  },
+  "actions": {
+    "import": "استيراد",
+    "refresh": "تحديث",
+    "applyToVirtualSet": "تطبيق على الاستوديو الافتراضي",
+    "rename": "إعادة التسمية",
+    "delete": "حذف",
+    "move": "نقل",
+    "close": "إغلاق",
+    "cancel": "إلغاء",
+    "create": "إنشاء",
+    "saveChanges": "حفظ التغييرات"
+  },
+  "table": {
+    "name": "الاسم",
+    "type": "النوع",
+    "timeCreated": "تاريخ الإنشاء",
+    "actions": "الإجراءات",
+    "showing": "عرض {{filtered}} من {{total}} عنصر"
+  },
+  "empty": {
+    "noContent": "لا يوجد محتوى",
+    "createFirst": "أنشئ أول استوديو افتراضي لرؤيته هنا",
+    "adjustFilters": "جرب تعديل البحث أو التصفيات"
+  },
+  "batch": {
+    "selected": "{{count}} عنصر(ات) محددة",
+    "clearSelection": "مسح التحديد",
+    "deleteSelected": "حذف المحدد",
+    "deleteCount": "حذف {{count}} عنصر(ات)"
+  },
+  "details": {
+    "type": "النوع",
+    "visibility": "الرؤية",
+    "public": "عام",
+    "private": "خاص",
+    "created": "تاريخ الإنشاء",
+    "tags": "العلامات",
+    "sceneConfig": "إعدادات المشهد",
+    "loadingOptions": "جاري تحميل الخيارات...",
+    "backdropImage": "صورة الخلفية",
+    "noneDisabled": "لا شيء (معطل)"
+  },
+  "toast": {
+    "failedLoadFolders": "فشل تحميل المجلدات: {{error}}",
+    "failedLoadContent": "فشل تحميل المحتوى: {{error}}",
+    "failedLoadFromProject": "فشل تحميل المحتوى من المشروع",
+    "folderNameRequired": "اسم المجلد مطلوب",
+    "folderCreated": "تم إنشاء المجلد بنجاح",
+    "folderRenamed": "تم إعادة تسمية المجلد بنجاح",
+    "failedSaveFolder": "فشل حفظ المجلد: {{error}}",
+    "folderDeleted": "تم حذف المجلد بنجاح",
+    "failedDeleteFolder": "فشل حذف المجلد: {{error}}",
+    "movedTo": "تم نقل \"{{name}}\" إلى {{location}}",
+    "failedMove": "فشل نقل المحتوى: {{error}}",
+    "noActiveChannel": "لا توجد قناة Unreal نشطة. يرجى اختيار قناة في صفحة الاستوديو الافتراضي.",
+    "appliedToUnreal": "تم تطبيق \"{{name}}\" على Unreal Engine!",
+    "failedSendConfig": "فشل إرسال الإعدادات",
+    "deletedSuccess": "تم حذف \"{{name}}\" بنجاح",
+    "failedDelete": "فشل الحذف: {{error}}",
+    "deletedBatch": "تم حذف {{count}} عنصر(ات) بنجاح",
+    "failedBatchDelete": "فشل حذف العناصر",
+    "contentUpdated": "تم تحديث المحتوى بنجاح",
+    "failedUpdate": "فشل تحديث المحتوى: {{error}}",
+    "nameRequired": "الاسم مطلوب",
+    "partialSuccess": "نجاح جزئي",
+    "sceneBackdropFailed": "تم إرسال المشهد، لكن فشلت الخلفية",
+    "failedApply": "فشل تطبيق الإعدادات: {{error}}",
+    "airportConfigSent": "تم إرسال إعدادات المطار",
+    "sceneBackdropSent": "تم إرسال المشهد والخلفية بنجاح"
+  },
+  "sampleFolders": {
+    "newsSegments": "فقرات الأخبار",
+    "sportsHighlights": "أبرز الأحداث الرياضية",
+    "morningBrief": "موجز الصباح",
+    "eveningUpdate": "تحديث المساء",
+    "weatherReports": "تقارير الطقس",
+    "noonForecast": "توقعات الظهيرة"
+  }
+}

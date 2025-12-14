@@ -1,0 +1,73 @@
+{
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "next": "Next",
+    "previous": "Previous",
+    "apply": "Apply",
+    "discard": "Discard",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "creating": "Creating...",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "clearHistory": "Clear History",
+    "viewDetails": "View Details",
+    "import": "Import",
+    "export": "Export",
+    "resetToDefaults": "Reset to Defaults"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "draft": "Draft",
+    "published": "Published",
+    "scheduled": "Scheduled",
+    "archived": "Archived"
+  },
+  "messages": {
+    "somethingWentWrong": "Something went wrong",
+    "pleaseFillAllFields": "Please fill in all fields",
+    "invalidInput": "Invalid input",
+    "fieldRequired": "{{field}} is required",
+    "failedTo": "Failed to {{action}}",
+    "errorLoading": "Error loading {{resource}}",
+    "savedSuccessfully": "{{item}} saved successfully",
+    "createdSuccessfully": "{{item}} created successfully",
+    "updatedSuccessfully": "{{item}} updated successfully",
+    "deletedSuccessfully": "{{item}} deleted successfully",
+    "noResults": "No results found",
+    "confirmDelete": "Are you sure you want to delete this {{item}}?",
+    "cannotBeUndone": "This action cannot be undone."
+  },
+  "labels": {
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "status": "Status",
+    "actions": "Actions",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "none": "None",
+    "select": "Select",
+    "optional": "optional"
+  },
+  "time": {
+    "now": "Now",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow"
+  },
+  "validation": {
+    "required": "This field is required",
+    "minLength": "Must be at least {{min}} characters",
+    "maxLength": "Must be at most {{max}} characters",
+    "invalidEmail": "Invalid email address"
+  },
+  "aiAssistant": "AI Assistant"
+}

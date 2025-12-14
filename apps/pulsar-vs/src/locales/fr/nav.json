@@ -1,0 +1,38 @@
+{
+  "menus": {
+    "apps": "Applications",
+    "tools": "Outils",
+    "window": "Fenêtre",
+    "settings": "Paramètres",
+    "help": "Aide",
+    "menu": "Menu"
+  },
+  "tools": {
+    "channel": "Chaîne",
+    "projects": "Projets"
+  },
+  "window": {
+    "singleView": "Vue unique",
+    "contentView": "Vue contenu",
+    "playlist": "Liste de lecture"
+  },
+  "settings": {
+    "preferences": "Préférences",
+    "darkMode": "Mode sombre",
+    "lightMode": "Mode clair",
+    "advancedSettings": "Paramètres avancés",
+    "aiPromptSettings": "Paramètres de prompts IA",
+    "language": "Langue",
+    "signOut": "Déconnexion"
+  },
+  "help": {
+    "documentation": "Documentation",
+    "whatsNew": "Nouveautés",
+    "downloadUE55": "Télécharger le projet UE 5.5",
+    "downloadUE56": "Télécharger le projet UE 5.6",
+    "contactSupport": "Contacter le support"
+  },
+  "accessibility": {
+    "navigateFeatures": "Naviguez parmi les fonctionnalités et paramètres de l'application"
+  }
+}

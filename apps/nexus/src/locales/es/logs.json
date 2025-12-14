@@ -1,9 +1,15 @@
 {
-  "title": "Registros y alertas",
+  "title": "Registros y Alertas",
+  "subtitle": "Monitorear registros del sistema, alertas y perspectivas de IA",
+  "searchPlaceholder": "Buscar registros, dispositivos o mensajes...",
   "tabs": {
     "all": "Todos",
     "logs": "Registros",
-    "alerts": "Alertas"
+    "alerts": "Alertas",
+    "allLogs": "Todos los registros ({{count}})",
+    "activeAlerts": "Alertas activas ({{count}})",
+    "resolved": "Resuelto",
+    "aiInsights": "Perspectivas IA ({{count}})"
   },
   "columns": {
     "timestamp": "Marca de tiempo",
@@ -12,7 +18,8 @@
     "status": "Estado",
     "message": "Mensaje",
     "source": "Fuente",
-    "level": "Nivel"
+    "level": "Nivel",
+    "device": "Dispositivo"
   },
   "types": {
     "error": "Error",
@@ -28,7 +35,18 @@
     "predictive": "Predictivo",
     "advisory": "Aviso",
     "queued": "En cola",
-    "scheduled": "Programado"
+    "scheduled": "Programado",
+    "ok": "OK"
+  },
+  "systems": {
+    "lighting": "Iluminación",
+    "led": "LED",
+    "audio": "Audio",
+    "hvac": "HVAC",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "ai": "IA",
+    "security": "Seguridad"
   },
   "filters": {
     "allSystems": "Todos los sistemas",
@@ -36,6 +54,19 @@
     "allStatuses": "Todos los estados",
     "allLevels": "Todos los niveles",
     "dateRange": "Rango de fechas"
+  },
+  "toolbar": {
+    "aiAnalyze": "Análisis IA",
+    "logsSelected": "{{count}} registro(s) seleccionado(s)",
+    "clearSelection": "Limpiar selección"
+  },
+  "aiSummary": {
+    "title": "Resumen IA",
+    "last24h": "Últimas 24h",
+    "summaryText": "{{alerts}} alertas activas, {{warnings}} advertencias detectadas. Consumo de energía ↑ 12% semana tras semana. Patrón detectado: sobrecalentamiento LED recurrente cuando los flujos de trabajo Pulsar se ejecutan > 3 hrs. Sugerencia: verificar la gestión térmica del nodo LED y escalonar la ejecución de flujos de trabajo.",
+    "explainSelected": "Explicar seleccionado",
+    "groupByPattern": "Agrupar por patrón",
+    "generateReport": "Generar informe"
   },
   "actions": {
     "acknowledge": "Reconocer",
@@ -46,7 +77,21 @@
   },
   "empty": {
     "title": "Sin registros",
-    "message": "Ninguna entrada de registro coincide con sus filtros"
+    "message": "No se encontraron registros que coincidan con sus filtros"
+  },
+  "dialog": {
+    "logEntry": "ENTRADA DE REGISTRO",
+    "timestamp": "marca de tiempo",
+    "device": "dispositivo",
+    "system": "sistema",
+    "source": "fuente",
+    "status": "estado",
+    "message": "MENSAJE",
+    "rawData": "DATOS CRUDOS (JSON)",
+    "aiAnalysis": "ANÁLISIS IA",
+    "availableCommands": "COMANDOS DISPONIBLES",
+    "endOfLogEntry": "FIN DE ENTRADA DE REGISTRO",
+    "pressEscToClose": "Presione ESC para cerrar"
   },
   "timeline": {
     "monthly": "Mensual",

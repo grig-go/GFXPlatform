@@ -1,0 +1,9 @@
+[build]
+  command = "cd ../.. && pnpm install && pnpm --filter pulsar-vs build"
+  publish = "dist"
+
+# SPA routing - redirect all routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

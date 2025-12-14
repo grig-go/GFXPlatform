@@ -1,0 +1,139 @@
+{
+  "title": "الاستوديو الافتراضي",
+  "channel": {
+    "label": "القناة",
+    "selectChannel": "اختر قناة",
+    "newChannel": "قناة جديدة",
+    "manageChannels": "إدارة القنوات",
+    "notFound": "القناة غير موجودة",
+    "noActiveUnreal": "لا توجد قنوات Unreal نشطة",
+    "creationComingSoon": "إنشاء القناة قريباً!",
+    "managementComingSoon": "إدارة القنوات قريباً!",
+    "connected": "متصل",
+    "notConnected": "غير متصل",
+    "loading": "جاري التحميل...",
+    "offlineMode": "وضع عدم الاتصال"
+  },
+  "projectType": {
+    "airport": "مطار",
+    "virtualSet": "استوديو افتراضي"
+  },
+  "loading": {
+    "title": "جاري تحميل إعدادات المشهد...",
+    "message": "جاري جلب بيانات النموذج من قاعدة البيانات"
+  },
+  "error": {
+    "sceneNotLoaded": "لم يتم تحميل وصف المشهد",
+    "couldNotLoad": "تعذر التحميل من قاعدة البيانات: {{error}}",
+    "noInstanceData": "لا توجد بيانات نموذج لهذه القناة.",
+    "selectChannelOrLoad": "يرجى اختيار قناة أو تحميل JSON يدوياً."
+  },
+  "actions": {
+    "label": "الإجراءات",
+    "retryFetch": "إعادة المحاولة",
+    "debug": "تصحيح",
+    "loadJson": "تحميل JSON",
+    "sampleVirtualSet": "نموذج استوديو افتراضي"
+  },
+  "manualJson": {
+    "placeholder": "الصق JSON هنا (مخطط VirtualSet أو Airport)"
+  },
+  "environment": {
+    "virtualSetTitle": "بيئة الاستوديو الافتراضي",
+    "airportTitle": "عرض المطار",
+    "virtualSetSubtitle": "صف إعدادات الاستوديو الافتراضي",
+    "airportSubtitle": "إعداد عناصر عرض المطار"
+  },
+  "chat": {
+    "airportPlaceholder": "صف إعدادات عرض المطار...",
+    "virtualSetPlaceholder": "ابدأ محادثة بوصف الاستوديو الافتراضي...",
+    "airportExample": "مثال: اضبط الوقت للمساء، استخدم الخيار2 للقاعدة...",
+    "virtualSetExample": "مثال: جدران زجاجية مع منصة مرتفعة...",
+    "listening": "جاري الاستماع... تحدث الآن",
+    "speechError": "خطأ في التعرف على الصوت: {{error}}",
+    "recordingStopped": "توقف التسجيل"
+  },
+  "generatedFields": {
+    "title": "معلمات المشهد المولدة ({{type}})",
+    "noneDisabled": "لا شيء (معطل)",
+    "selected": "المحدد: {{value}}"
+  },
+  "background": {
+    "title": "خلفية الاستوديو الافتراضي",
+    "subtitle": "إنشاء صورة خلفية بالذكاء الاصطناعي",
+    "placeholder": "صف الخلفية التي تريد إنشاءها..."
+  },
+  "ai": {
+    "generatingBackdrop": "جاري إنشاء الخلفية...",
+    "editingImage": "جاري تعديل الصورة...",
+    "heresYourBackdrop": "إليك خلفيتك: {{prompt}}",
+    "doneUpdatedImage": "تم! لقد حدثت الصورة: {{prompt}}",
+    "couldNotProcess": "عذراً، تعذرت معالجة الصورة: {{error}}",
+    "backgroundGenerated": "✓ تم إنشاء الخلفية",
+    "sceneUpdated": "✓ تم تحديث المشهد"
+  },
+  "save": {
+    "title": "حفظ الإعدادات",
+    "description": "حفظ إعدادات {{type}} الحالية",
+    "nothingToSaveAirport": "لا شيء للحفظ. يرجى إعداد عرض المطار أولاً.",
+    "nothingToSaveVirtualSet": "لا شيء للحفظ. يرجى تعيين المعلمات أو إنشاء خلفية أولاً.",
+    "nameRequired": "الاسم مطلوب",
+    "maxTags": "الحد الأقصى 10 علامات",
+    "tagExists": "العلامة موجودة بالفعل",
+    "configSaved": "تم حفظ إعدادات {{type}}!",
+    "untitled": "بدون عنوان",
+    "untitledConfiguration": "إعدادات بدون عنوان",
+    "namePlaceholder": "اسم الإعدادات",
+    "descriptionPlaceholder": "وصف اختياري",
+    "tags": "العلامات",
+    "addTagPlaceholder": "إضافة علامة..."
+  },
+  "drawing": {
+    "title": "أدوات الرسم",
+    "color": "اللون:",
+    "brush": "الفرشاة:",
+    "size": "الحجم:",
+    "clear": "مسح"
+  },
+  "backdrop": {
+    "selected": "الخلفية المحددة",
+    "accept": "قبول",
+    "edit": "تعديل",
+    "new": "جديد",
+    "drawing": "رسم",
+    "drawTooltip": "ارسم على الصورة لتحديد مناطق التعديل",
+    "deselect": "إلغاء التحديد",
+    "deselectTooltip": "إلغاء تحديد الخلفية",
+    "applyToSet": "تطبيق على الاستوديو"
+  },
+  "recentBackdrops": {
+    "title": "الخلفيات الأخيرة",
+    "searchPlaceholder": "البحث عن خلفيات...",
+    "loading": "جاري تحميل الخلفيات...",
+    "noBackdrops": "لا توجد خلفيات"
+  },
+  "sort": {
+    "dateNewest": "التاريخ (الأحدث)",
+    "dateOldest": "التاريخ (الأقدم)",
+    "nameAZ": "الاسم (أ-ي)",
+    "nameZA": "الاسم (ي-أ)",
+    "sizeLargest": "الحجم (الأكبر)",
+    "sizeSmallest": "الحجم (الأصغر)",
+    "modelAZ": "النموذج (أ-ي)"
+  },
+  "background.inputExample": "مثال: منظر مدينة مستقبلي عند الغروب مع أضواء نيون...",
+  "toast": {
+    "sceneUpdated": "تم تحديث المشهد",
+    "backdropAccepted": "تم قبول الخلفية",
+    "backdropApplied": "تم تطبيق الخلفية على الاستوديو الافتراضي!",
+    "failedApplyBackdrop": "فشل تطبيق الخلفية",
+    "failedLoadBackdrops": "فشل تحميل الخلفيات الأخيرة",
+    "enterDescription": "يرجى إدخال وصف الخلفية",
+    "configureApiKey": "يرجى إعداد مفتاح API للذكاء الاصطناعي في الإعدادات",
+    "backgroundGenerated": "تم إنشاء صورة الخلفية بنجاح!",
+    "backgroundEdited": "تم تعديل صورة الخلفية بنجاح!",
+    "failedProcessBackground": "فشل معالجة الخلفية: {{error}}",
+    "historyCleared": "تم مسح السجل",
+    "backgroundHistoryCleared": "تم مسح سجل الخلفيات"
+  }
+}

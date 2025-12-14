@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, Plus, Layers, LayoutTemplate, Folder,
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
-  PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink,
+  PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink, Spline,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -1259,7 +1259,14 @@ function ElementsTree() {
     currentTemplateId,
     layers,
     addTemplate,
+    setShowEasingEditor,
   } = useDesignerStore();
+
+  // Handle opening the easing editor for an element
+  const handleEditEasing = useCallback((elementId: string) => {
+    selectElements([elementId], 'replace');
+    setShowEasingEditor(true);
+  }, [selectElements, setShowEasingEditor]);
 
   // Get layers that have no templates (empty layers)
   const emptyLayers = layers.filter(layer =>
@@ -1411,6 +1418,7 @@ function ElementsTree() {
               onUngroup={handleUngroup}
               onMoveToTemplate={moveElementsToTemplate}
               onMoveToEmptyLayer={handleMoveToEmptyLayer}
+              onEditEasing={handleEditEasing}
               templates={templates}
               layers={layers}
               currentTemplateId={currentTemplateId}
@@ -1512,6 +1520,7 @@ interface ElementItemProps {
   onUngroup: (id: string) => void;
   onMoveToTemplate: (elementIds: string[], templateId: string) => void;
   onMoveToEmptyLayer: (elementIds: string[], layerId: string) => void;
+  onEditEasing: (elementId: string) => void;
   templates: Template[];
   layers: Layer[];
   currentTemplateId: string | null;
@@ -1540,6 +1549,7 @@ function ElementItem({
   onUngroup,
   onMoveToTemplate,
   onMoveToEmptyLayer,
+  onEditEasing,
   templates,
   layers,
   currentTemplateId,
@@ -1877,6 +1887,14 @@ function ElementItem({
             </ContextMenuSub>
           )}
           <ContextMenuSeparator />
+          <ContextMenuItem
+            onClick={() => onEditEasing(element.id)}
+            className="text-violet-400"
+          >
+            <Spline className="mr-2 h-4 w-4" />
+            Edit Easing Curve...
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onClick={() => onDuplicate(element.id)}>
             <Copy className="mr-2 h-4 w-4" />
             Duplicate
@@ -1912,6 +1930,7 @@ function ElementItem({
               onUngroup={onUngroup}
               onMoveToTemplate={onMoveToTemplate}
               onMoveToEmptyLayer={onMoveToEmptyLayer}
+              onEditEasing={onEditEasing}
               templates={templates}
               layers={layers}
               currentTemplateId={currentTemplateId}

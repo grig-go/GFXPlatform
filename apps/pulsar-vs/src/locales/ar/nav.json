@@ -1,0 +1,38 @@
+{
+  "menus": {
+    "apps": "التطبيقات",
+    "tools": "الأدوات",
+    "window": "النافذة",
+    "settings": "الإعدادات",
+    "help": "المساعدة",
+    "menu": "القائمة"
+  },
+  "tools": {
+    "channel": "القناة",
+    "projects": "المشاريع"
+  },
+  "window": {
+    "singleView": "عرض فردي",
+    "contentView": "عرض المحتوى",
+    "playlist": "قائمة التشغيل"
+  },
+  "settings": {
+    "preferences": "التفضيلات",
+    "darkMode": "الوضع الداكن",
+    "lightMode": "الوضع الفاتح",
+    "advancedSettings": "الإعدادات المتقدمة",
+    "aiPromptSettings": "إعدادات أوامر الذكاء الاصطناعي",
+    "language": "اللغة",
+    "signOut": "تسجيل الخروج"
+  },
+  "help": {
+    "documentation": "التوثيق",
+    "whatsNew": "ما الجديد",
+    "downloadUE55": "تحميل مشروع UE 5.5",
+    "downloadUE56": "تحميل مشروع UE 5.6",
+    "contactSupport": "الاتصال بالدعم"
+  },
+  "accessibility": {
+    "navigateFeatures": "التنقل بين ميزات وإعدادات التطبيق"
+  }
+}

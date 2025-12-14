@@ -1,0 +1,133 @@
+{
+  "title": "Bibliothèque de contenu",
+  "subtitle": "Gérez vos environnements et arrière-plans de plateau virtuel",
+  "search": {
+    "placeholder": "Rechercher par nom ou description..."
+  },
+  "filter": {
+    "byType": "Filtrer par type",
+    "allTypes": "Tous les types",
+    "environment": "Environnement",
+    "background": "Arrière-plan",
+    "both": "Les deux"
+  },
+  "folder": {
+    "title": "Dossiers",
+    "new": "Nouveau dossier",
+    "create": "Créer un dossier",
+    "createNew": "Créer un nouveau dossier",
+    "rename": "Renommer le dossier",
+    "namePlaceholder": "Nom du dossier...",
+    "selectFolder": "Sélectionner un dossier",
+    "allItems": "Tous les éléments",
+    "newSubfolder": "Nouveau sous-dossier",
+    "enterName": "Entrez un nom pour votre nouveau dossier",
+    "enterNewName": "Entrez un nouveau nom pour ce dossier",
+    "rootNoFolder": "Racine (Aucun dossier)",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce dossier ? Le contenu sera déplacé à la racine."
+  },
+  "dialog": {
+    "createContent": "Créer du contenu",
+    "namePlaceholder": "Nom du contenu...",
+    "descriptionPlaceholder": "Description (optionnel)...",
+    "moveToFolder": "Déplacer vers le dossier",
+    "moveDestination": "Sélectionnez un dossier de destination pour \"{{name}}\"",
+    "viewDetails": "Voir les détails",
+    "confirmDelete": "Confirmer la suppression",
+    "confirmDeleteMessage": "Êtes-vous sûr de vouloir supprimer \"{{name}}\" ? Cette action est irréversible.",
+    "confirmBatchDelete": "Confirmer la suppression groupée",
+    "confirmBatchDeleteMessage": "Êtes-vous sûr de vouloir supprimer {{count}} élément(s) sélectionné(s) ? Cette action est irréversible."
+  },
+  "import": {
+    "title": "Importer des pages de contenu",
+    "description": "Sélectionnez un projet et choisissez les pages à importer dans \"{{projectName}}\"",
+    "sourceProject": "Projet source",
+    "selectProject": "Sélectionnez un projet à importer...",
+    "contentPages": "Pages de contenu",
+    "noContentFound": "Aucune page de contenu trouvée dans ce projet",
+    "importedCount": "{{count}} page(s) importée(s)",
+    "failedCount": "Échec de l'importation de {{count}} élément(s)",
+    "failed": "Échec de l'importation",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner",
+    "itemsSelected": "{{count}} élément(s) sélectionné(s)"
+  },
+  "actions": {
+    "import": "Importer",
+    "refresh": "Actualiser",
+    "applyToVirtualSet": "Appliquer au plateau virtuel",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "move": "Déplacer",
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "saveChanges": "Enregistrer les modifications"
+  },
+  "table": {
+    "name": "Nom",
+    "type": "Type",
+    "timeCreated": "Date de création",
+    "actions": "Actions",
+    "showing": "Affichage de {{filtered}} sur {{total}} éléments"
+  },
+  "empty": {
+    "noContent": "Aucun contenu trouvé",
+    "createFirst": "Créez votre premier plateau virtuel pour le voir ici",
+    "adjustFilters": "Essayez d'ajuster votre recherche ou vos filtres"
+  },
+  "batch": {
+    "selected": "{{count}} élément(s) sélectionné(s)",
+    "clearSelection": "Effacer la sélection",
+    "deleteSelected": "Supprimer la sélection",
+    "deleteCount": "Supprimer {{count}} élément(s)"
+  },
+  "details": {
+    "type": "Type",
+    "visibility": "Visibilité",
+    "public": "Public",
+    "private": "Privé",
+    "created": "Créé",
+    "tags": "Étiquettes",
+    "sceneConfig": "Configuration de scène",
+    "loadingOptions": "Chargement des options...",
+    "backdropImage": "Image d'arrière-plan",
+    "noneDisabled": "Aucun (désactivé)"
+  },
+  "toast": {
+    "failedLoadFolders": "Échec du chargement des dossiers : {{error}}",
+    "failedLoadContent": "Échec du chargement du contenu : {{error}}",
+    "failedLoadFromProject": "Échec du chargement du contenu du projet",
+    "folderNameRequired": "Le nom du dossier est requis",
+    "folderCreated": "Dossier créé avec succès",
+    "folderRenamed": "Dossier renommé avec succès",
+    "failedSaveFolder": "Échec de l'enregistrement du dossier : {{error}}",
+    "folderDeleted": "Dossier supprimé avec succès",
+    "failedDeleteFolder": "Échec de la suppression du dossier : {{error}}",
+    "movedTo": "\"{{name}}\" déplacé vers {{location}}",
+    "failedMove": "Échec du déplacement du contenu : {{error}}",
+    "noActiveChannel": "Aucune chaîne Unreal active trouvée. Veuillez sélectionner une chaîne sur la page Plateau Virtuel.",
+    "appliedToUnreal": "\"{{name}}\" appliqué à Unreal Engine !",
+    "failedSendConfig": "Échec de l'envoi de la configuration",
+    "deletedSuccess": "\"{{name}}\" supprimé avec succès",
+    "failedDelete": "Échec de la suppression : {{error}}",
+    "deletedBatch": "{{count}} élément(s) supprimé(s) avec succès",
+    "failedBatchDelete": "Échec de la suppression des éléments",
+    "contentUpdated": "Contenu mis à jour avec succès",
+    "failedUpdate": "Échec de la mise à jour du contenu : {{error}}",
+    "nameRequired": "Le nom est requis",
+    "partialSuccess": "Succès partiel",
+    "sceneBackdropFailed": "Scène envoyée, mais l'arrière-plan a échoué",
+    "failedApply": "Échec de l'application de la configuration : {{error}}",
+    "airportConfigSent": "Configuration aéroport envoyée",
+    "sceneBackdropSent": "Scène et arrière-plan envoyés avec succès"
+  },
+  "sampleFolders": {
+    "newsSegments": "Segments d'actualités",
+    "sportsHighlights": "Moments forts sportifs",
+    "morningBrief": "Briefing du matin",
+    "eveningUpdate": "Actualités du soir",
+    "weatherReports": "Bulletins météo",
+    "noonForecast": "Prévisions de midi"
+  }
+}

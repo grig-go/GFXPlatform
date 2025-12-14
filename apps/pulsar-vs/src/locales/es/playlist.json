@@ -1,0 +1,211 @@
+{
+  "title": "Listas de Reproducción",
+  "tabs": {
+    "playlists": "Listas",
+    "calendar": "Calendario",
+    "analytics": "Analíticas"
+  },
+  "search": {
+    "placeholder": "Buscar listas...",
+    "searchEvents": "Buscar eventos..."
+  },
+  "buttons": {
+    "new": "Nueva",
+    "createPlaylist": "Crear Lista",
+    "demoPlaylist": "Lista Demo",
+    "createDemoPlaylist": "Crear Lista Demo",
+    "addItem": "Agregar",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "stop": "Detener",
+    "skip": "Saltar",
+    "refresh": "Actualizar",
+    "calendar": "Calendario",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "duplicate": "Duplicar",
+    "ungroup": "Desagrupar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "update": "Actualizar",
+    "apply": "Aplicar"
+  },
+  "table": {
+    "play": "Repr.",
+    "status": "Estado",
+    "name": "Nombre",
+    "items": "Elem.",
+    "duration": "Duración",
+    "channel": "Canal",
+    "schedule": "Horario",
+    "actions": "Acciones"
+  },
+  "itemTypes": {
+    "page": "Página",
+    "group": "Grupo",
+    "media": "Medio",
+    "groupCount": "Grupo ({{count}} elem.)",
+    "mediaPreview": "(doble clic para ver)"
+  },
+  "channel": {
+    "default": "Predeterminado",
+    "noChannel": "Sin canal",
+    "noDefault": "Sin def.",
+    "selectChannel": "Seleccionar canal...",
+    "selectAChannel": "Seleccione un canal",
+    "ch": "Ca:"
+  },
+  "form": {
+    "name": "Nombre",
+    "description": "Descripción",
+    "namePlaceholder": "Nombre de la lista...",
+    "descriptionPlaceholder": "Descripción opcional...",
+    "loopPlaylist": "Repetir Lista",
+    "durationSeconds": "Duración (segundos)",
+    "scheduledTime": "Hora Programada (opcional)",
+    "manualAdvance": "0 = avance manual"
+  },
+  "status": {
+    "next": "Sig.",
+    "playing": "Repr.",
+    "paused": "Pausado",
+    "playable": "reprod.",
+    "selected": "selec.",
+    "notScheduled": "Sin programar",
+    "noSchedule": "Sin horario"
+  },
+  "schedule": {
+    "title": "Programación",
+    "daily": "Diario",
+    "weekly": "Semanal (días específicos)",
+    "dateRange": "Rango de Fechas",
+    "specificDates": "Fechas Específicas",
+    "datesCount": "{{count}} fechas",
+    "scheduled": "Programado",
+    "scheduleType": "Tipo de Horario",
+    "startDate": "Fecha Inicio",
+    "endDate": "Fecha Fin",
+    "dayAbbrev": {
+      "sunday": "DOM",
+      "monday": "LUN",
+      "tuesday": "MAR",
+      "wednesday": "MIÉ",
+      "thursday": "JUE",
+      "friday": "VIE",
+      "saturday": "SÁB"
+    }
+  },
+  "calendar": {
+    "back": "Volver",
+    "clear": "Limpiar",
+    "today": "Hoy",
+    "allDay": "Todo el día",
+    "events": "{{count}} eventos",
+    "scheduledThisMonth": "{{count}} flujos programados este mes",
+    "scheduledEvents": "{{count}} eventos programados",
+    "noEventsDay": "Sin eventos programados para este día",
+    "scheduledFor": "Programado para {{date}}",
+    "time": "Hora",
+    "duration": "Duración",
+    "type": "Tipo",
+    "channel": "Canal",
+    "close": "Cerrar",
+    "playNow": "Reproducir",
+    "more": "+{{count}} más",
+    "days": {
+      "sun": "Dom",
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mié",
+      "thu": "Jue",
+      "fri": "Vie",
+      "sat": "Sáb"
+    },
+    "months": {
+      "january": "Enero",
+      "february": "Febrero",
+      "march": "Marzo",
+      "april": "Abril",
+      "may": "Mayo",
+      "june": "Junio",
+      "july": "Julio",
+      "august": "Agosto",
+      "september": "Septiembre",
+      "october": "Octubre",
+      "november": "Noviembre",
+      "december": "Diciembre"
+    },
+    "filters": {
+      "allTypes": "Todos",
+      "video": "Video",
+      "image": "Imagen",
+      "audio": "Audio",
+      "graphics": "Gráficos",
+      "ticker": "Ticker",
+      "layout": "Diseño"
+    }
+  },
+  "empty": {
+    "noPlaylists": "Sin listas aún",
+    "createFirst": "Cree su primera lista para comenzar",
+    "noItems": "Sin elementos en esta lista",
+    "addItemsMessage": "Agregue páginas, medios o grupos"
+  },
+  "tabs2": {
+    "allItems": "Todos",
+    "pages": "Páginas",
+    "media": "Medios"
+  },
+  "aiInsights": {
+    "title": "IA Insights",
+    "button": "IA Insights"
+  },
+  "dialog": {
+    "createPlaylist": "Crear Lista",
+    "editPlaylist": "Editar Lista",
+    "deletePlaylist": "Eliminar Lista",
+    "deletePlaylistConfirm": "¿Está seguro de eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "addItem": "Agregar Elemento",
+    "editItem": "Editar Elemento",
+    "editItemDesc": "Actualizar configuración de \"{{name}}\"",
+    "deleteItem": "Eliminar Elemento",
+    "deleteItemConfirm": "¿Está seguro de eliminar este elemento?",
+    "batchChannel": "Cambiar Canal",
+    "batchChannelDesc": "Seleccione un canal para los elementos",
+    "batchDuration": "Cambiar Duración",
+    "batchDurationDesc": "Establezca la duración para los elementos",
+    "applyToItems": "Aplicar a {{count}} Elem."
+  },
+  "editItemDialog": {
+    "currentMedia": "Medio Actual",
+    "replaceMedia": "Reemplazar Medio",
+    "cancelReplace": "Cancelar Reemplazo",
+    "newMediaSelected": "Nuevo Medio Seleccionado",
+    "searchMediaLibrary": "Buscar en biblioteca...",
+    "showingItems": "Mostrando {{start}}-{{end}} de {{total}} elem.",
+    "noMediaFound": "Sin medios",
+    "current": "Actual",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "pageOf": "Pág. {{current}} de {{total}}"
+  },
+  "toast": {
+    "selectProjectFirst": "Seleccione un proyecto primero",
+    "demoPlaylistCreated": "¡Lista demo creada! Vea el calendario.",
+    "failedCreateDemo": "Error al crear lista demo",
+    "playlistCreated": "Lista creada exitosamente",
+    "playlistUpdated": "Lista actualizada exitosamente",
+    "playlistDeleted": "Lista eliminada exitosamente",
+    "itemAdded": "Elemento agregado a la lista",
+    "itemUpdated": "Elemento actualizado",
+    "itemDeleted": "Elemento eliminado",
+    "channelsUpdated": "Canales actualizados para {{count}} elem.",
+    "durationsUpdated": "Duraciones actualizadas para {{count}} elem.",
+    "failedLoad": "Error al cargar listas",
+    "failedCreate": "Error al crear lista",
+    "failedUpdate": "Error al actualizar lista",
+    "failedDelete": "Error al eliminar lista",
+    "nameRequired": "El nombre es requerido"
+  }
+}

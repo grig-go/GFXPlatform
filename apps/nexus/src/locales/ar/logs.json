@@ -1,9 +1,15 @@
 {
   "title": "السجلات والتنبيهات",
+  "subtitle": "مراقبة سجلات النظام والتنبيهات ورؤى الذكاء الاصطناعي",
+  "searchPlaceholder": "البحث في السجلات والأجهزة والرسائل...",
   "tabs": {
     "all": "الكل",
     "logs": "السجلات",
-    "alerts": "التنبيهات"
+    "alerts": "التنبيهات",
+    "allLogs": "جميع السجلات ({{count}})",
+    "activeAlerts": "التنبيهات النشطة ({{count}})",
+    "resolved": "تم الحل",
+    "aiInsights": "رؤى الذكاء الاصطناعي ({{count}})"
   },
   "columns": {
     "timestamp": "الطابع الزمني",
@@ -12,7 +18,8 @@
     "status": "الحالة",
     "message": "الرسالة",
     "source": "المصدر",
-    "level": "المستوى"
+    "level": "المستوى",
+    "device": "الجهاز"
   },
   "types": {
     "error": "خطأ",
@@ -28,7 +35,18 @@
     "predictive": "تنبؤي",
     "advisory": "استشاري",
     "queued": "في قائمة الانتظار",
-    "scheduled": "مجدول"
+    "scheduled": "مجدول",
+    "ok": "موافق"
+  },
+  "systems": {
+    "lighting": "الإضاءة",
+    "led": "LED",
+    "audio": "الصوت",
+    "hvac": "التكييف",
+    "nova": "نوفا",
+    "pulsar": "بولسار",
+    "ai": "الذكاء الاصطناعي",
+    "security": "الأمان"
   },
   "filters": {
     "allSystems": "جميع الأنظمة",
@@ -36,6 +54,19 @@
     "allStatuses": "جميع الحالات",
     "allLevels": "جميع المستويات",
     "dateRange": "نطاق التاريخ"
+  },
+  "toolbar": {
+    "aiAnalyze": "تحليل الذكاء الاصطناعي",
+    "logsSelected": "{{count}} سجل(ات) محددة",
+    "clearSelection": "مسح التحديد"
+  },
+  "aiSummary": {
+    "title": "ملخص الذكاء الاصطناعي",
+    "last24h": "آخر 24 ساعة",
+    "summaryText": "{{alerts}} تنبيهات نشطة، {{warnings}} تحذيرات تم اكتشافها. استهلاك الطاقة ↑ 12% أسبوعياً. نمط مكتشف: ارتفاع حرارة LED متكرر عندما تعمل تدفقات Pulsar > 3 ساعات. اقتراح: تحقق من إدارة حرارة عقدة LED وتوزيع تنفيذ التدفقات.",
+    "explainSelected": "شرح المحدد",
+    "groupByPattern": "تجميع حسب النمط",
+    "generateReport": "إنشاء تقرير"
   },
   "actions": {
     "acknowledge": "إقرار",
@@ -46,7 +77,21 @@
   },
   "empty": {
     "title": "لا توجد سجلات",
-    "message": "لا توجد إدخالات سجل تطابق عوامل التصفية الخاصة بك"
+    "message": "لم يتم العثور على سجلات تطابق عوامل التصفية"
+  },
+  "dialog": {
+    "logEntry": "إدخال السجل",
+    "timestamp": "الطابع الزمني",
+    "device": "الجهاز",
+    "system": "النظام",
+    "source": "المصدر",
+    "status": "الحالة",
+    "message": "الرسالة",
+    "rawData": "البيانات الخام (JSON)",
+    "aiAnalysis": "تحليل الذكاء الاصطناعي",
+    "availableCommands": "الأوامر المتاحة",
+    "endOfLogEntry": "نهاية إدخال السجل",
+    "pressEscToClose": "اضغط ESC للإغلاق"
   },
   "timeline": {
     "monthly": "شهري",

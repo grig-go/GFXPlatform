@@ -1,0 +1,84 @@
+{
+  "title": "Full Timeline",
+  "scheduledWorkflowsCount": "{{count}} scheduled workflows this month",
+  "searchPlaceholder": "Search events, workflows, systems...",
+  "filters": {
+    "zone": "Zone",
+    "system": "System",
+    "today": "Today",
+    "allZones": "All Zones"
+  },
+  "days": {
+    "sun": "Sun",
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat"
+  },
+  "calendar": {
+    "more": "+{{count}} more"
+  },
+  "realTimeTimeline": {
+    "title": "Real-Time Event Timeline",
+    "subtitle": "Last 24 hours of system activity"
+  },
+  "status": {
+    "success": "Success",
+    "warning": "Warning",
+    "error": "Error",
+    "scheduled": "Scheduled"
+  },
+  "systems": {
+    "lighting": "Lighting",
+    "audio": "Audio",
+    "ledDisplays": "LED Displays",
+    "hvac": "HVAC",
+    "signage": "Signage",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "aiEngine": "AI Engine",
+    "security": "Security"
+  },
+  "aiInsights": {
+    "title": "AI Insights",
+    "todaysAnomalies": "{{count}} anomalies today ({{systems}})",
+    "upcoming": "Upcoming: {{workflow}} in {{time}}",
+    "predictedCrowdSurge": "Predicted crowd surge at {{time}} near {{location}}"
+  },
+  "dialogs": {
+    "eventDetails": "Event Details",
+    "eventLog": "Event Log",
+    "scheduledWorkflow": "Scheduled Workflow",
+    "description": "Description",
+    "workflowDescription": "Automated {{system}} workflow scheduled to run daily at {{time}}.",
+    "recurrence": "Recurrence",
+    "daily": "Daily",
+    "lastExecution": "Last Execution",
+    "successfullyCompleted": "Yesterday at {{time}} - Successfully completed",
+    "viewInWorkflows": "View in Workflows"
+  },
+  "aiInsightsModal": {
+    "title": "AI Weekly Insights",
+    "systemHealth": {
+      "title": "System Health: Excellent",
+      "description": "All critical systems operating within normal parameters. Overall uptime: {{uptime}}"
+    },
+    "attentionRequired": {
+      "title": "Attention Required",
+      "ledController": "LED controller Gate B7 experienced 2 boot failures this week",
+      "memoryUtilization": "Show Playback memory utilization trending upward (+8% week-over-week)"
+    },
+    "predictions": {
+      "title": "Predictions & Recommendations",
+      "crowdSurge": "Crowd surge predicted tomorrow 07:40 AM at Gate A12 (95% confidence)",
+      "energyOptimization": "Energy optimization suggests rescheduling maintenance to off-peak hours",
+      "hvacEfficiency": "HVAC efficiency improved 12% since last week's AI adjustments"
+    },
+    "automationInsights": {
+      "title": "Automation Insights",
+      "description": "10 workflows executed successfully this week with 0 failures. Average execution time: 2.3 minutes. Pulsar automation detected and resolved 3 potential scheduling conflicts."
+    }
+  }
+}

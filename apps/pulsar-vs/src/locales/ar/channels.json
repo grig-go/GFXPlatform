@@ -1,0 +1,56 @@
+{
+  "title": "القنوات",
+  "description": "إدارة قنوات البث والإخراج عبر الأنظمة المختلفة",
+  "addChannel": "إضافة قناة",
+  "search": {
+    "placeholder": "البحث عن القنوات بالاسم أو النوع أو الوصف..."
+  },
+  "filter": {
+    "byType": "تصفية حسب النوع",
+    "allTypes": "جميع الأنواع",
+    "activeFilters": "التصفيات النشطة:",
+    "clearAll": "مسح الكل",
+    "filters": "التصفيات"
+  },
+  "table": {
+    "name": "الاسم",
+    "type": "النوع",
+    "status": "الحالة",
+    "description": "الوصف",
+    "actions": "الإجراءات"
+  },
+  "dialog": {
+    "addTitle": "إضافة قناة جديدة",
+    "editTitle": "تعديل القناة",
+    "addDescription": "إنشاء قناة بث أو إخراج جديدة.",
+    "editDescription": "تحديث تفاصيل القناة أدناه."
+  },
+  "form": {
+    "channelName": "اسم القناة *",
+    "channelType": "نوع القناة *",
+    "description": "الوصف",
+    "activeStatus": "حالة النشاط",
+    "enableChannel": "تفعيل هذه القناة للاستخدام في النظام",
+    "namePlaceholder": "مثال: الإخراج الرئيسي أ",
+    "descriptionPlaceholder": "أدخل وصف القناة..."
+  },
+  "delete": {
+    "confirm": "هل أنت متأكد من حذف هذه القناة؟",
+    "warning": "لا يمكن التراجع عن هذا الإجراء. سيتم حذف القناة وجميع البيانات المرتبطة بها نهائياً."
+  },
+  "status": {
+    "showing": "عرض {{count}} من {{total}} قناة",
+    "noChannels": "لا توجد قنوات"
+  },
+  "toast": {
+    "nameRequired": "اسم القناة مطلوب",
+    "failedLoad": "فشل تحميل القنوات",
+    "failedConnect": "فشل الاتصال بالخادم",
+    "addedSuccess": "تمت إضافة القناة \"{{name}}\" بنجاح",
+    "failedCreate": "فشل إنشاء القناة",
+    "updatedSuccess": "تم تحديث القناة \"{{name}}\" بنجاح",
+    "failedUpdate": "فشل تحديث القناة",
+    "deletedSuccess": "تم حذف القناة \"{{name}}\" بنجاح",
+    "failedDelete": "فشل حذف القناة"
+  }
+}

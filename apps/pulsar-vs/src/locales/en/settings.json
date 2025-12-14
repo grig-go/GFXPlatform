@@ -1,0 +1,90 @@
+{
+  "advanced": {
+    "title": "Advanced Settings",
+    "description": "Configure AI models and API keys for generation.",
+    "sections": {
+      "virtualSetGeneration": "Virtual Set Generation",
+      "backdropGeneration": "Backdrop Generation",
+      "rcpFunctions": "RCP Functions (Debug)",
+      "screenShare": "Screen Share"
+    },
+    "virtualSet": {
+      "geminiModel": "Gemini Model",
+      "geminiApiKey": "Gemini API Key",
+      "geminiPlaceholder": "Enter Gemini API Key",
+      "selectModel": "Select model"
+    },
+    "backdrop": {
+      "imagenModel": "Imagen Model",
+      "imagenApiKey": "Imagen API Key",
+      "imagenPlaceholder": "Enter Imagen API Key",
+      "defaultAspectRatio": "Default Aspect Ratio",
+      "selectAspectRatio": "Select aspect ratio"
+    },
+    "rcp": {
+      "setVirtualSetFunction": "Set Virtual Set Function",
+      "setBackdropFunction": "Set Backdrop Function",
+      "placeholder": "/remote/preset/..."
+    },
+    "screenShare": {
+      "type": "Type",
+      "screenToCapture": "Screen to Capture",
+      "captureTarget": "Capture Target",
+      "customTargetName": "Custom Target Name",
+      "customPlaceholder": "Enter custom target name...",
+      "types": {
+        "screen": "Screen",
+        "window": "Window"
+      },
+      "targets": {
+        "chrome": "Chrome",
+        "powerpoint": "PowerPoint",
+        "custom": "Custom"
+      },
+      "selectType": "Select type",
+      "selectScreen": "Select screen",
+      "selectTarget": "Select target"
+    },
+    "toast": {
+      "failedLoad": "Failed to load settings",
+      "savedSuccess": "Settings saved successfully",
+      "failedSave": "Failed to save settings"
+    }
+  },
+  "aiPrompt": {
+    "title": "AI Prompt Settings",
+    "description": "Configure AI instructions for different project types.",
+    "tabs": {
+      "virtualSet": "Virtual Set",
+      "airport": "Airport"
+    },
+    "virtualSet": {
+      "description": "Configure prompt injectors for camera angle, point of view, and scene considerations. These will be automatically added to your image generation prompts.",
+      "cameraAngle": "Camera Angle",
+      "cameraAnglePlaceholder": "e.g., Wide angle shot, cinematic perspective, slightly elevated viewpoint...",
+      "cameraAngleHelper": "Specify the camera angle and framing for generated images",
+      "pointOfView": "Point of View",
+      "pointOfViewPlaceholder": "e.g., Eye-level perspective, viewer positioned as observer, immersive viewpoint...",
+      "pointOfViewHelper": "Define the viewer's perspective and positioning",
+      "sceneConsiderations": "Scene Considerations",
+      "sceneConsiderationsPlaceholder": "e.g., Suitable for virtual production, broadcast-ready composition, appropriate depth of field...",
+      "sceneConsiderationsHelper": "Additional scene requirements and technical considerations"
+    },
+    "airport": {
+      "description": "Configure AI instructions for Airport scene configuration. These help the AI understand your shorthand commands when editing Airport scenes.",
+      "instructions": "AI Instructions for Airport",
+      "instructionsPlaceholder": "Enter instructions for the AI when working with Airport scenes...",
+      "instructionsHelper": "Define field aliases, option mappings, and behavior rules for the AI",
+      "quickReference": "Quick Reference",
+      "quickRefTop": "\"Top\" → ElementTop (Hawk, Flower, Stadium)",
+      "quickRefBackground": "\"Background\" → environment_background (Desert, Marble)",
+      "quickRefPattern": "\"Pattern\" → BaseTop (Gold, Metal, Dark)"
+    },
+    "toast": {
+      "failedLoad": "Failed to load settings",
+      "savedSuccess": "AI prompt settings saved successfully",
+      "failedSave": "Failed to save settings",
+      "resetAirport": "Reset to default Airport instructions"
+    }
+  }
+}

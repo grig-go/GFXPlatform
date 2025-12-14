@@ -1,0 +1,56 @@
+{
+  "title": "Chaînes",
+  "description": "Gérez les chaînes de diffusion et de sortie sur différents systèmes",
+  "addChannel": "Ajouter une chaîne",
+  "search": {
+    "placeholder": "Rechercher des chaînes par nom, type ou description..."
+  },
+  "filter": {
+    "byType": "Filtrer par type",
+    "allTypes": "Tous les types",
+    "activeFilters": "Filtres actifs :",
+    "clearAll": "Tout effacer",
+    "filters": "Filtres"
+  },
+  "table": {
+    "name": "Nom",
+    "type": "Type",
+    "status": "Statut",
+    "description": "Description",
+    "actions": "Actions"
+  },
+  "dialog": {
+    "addTitle": "Ajouter une nouvelle chaîne",
+    "editTitle": "Modifier la chaîne",
+    "addDescription": "Créer une nouvelle chaîne de diffusion ou de sortie.",
+    "editDescription": "Mettez à jour les détails de la chaîne ci-dessous."
+  },
+  "form": {
+    "channelName": "Nom de la chaîne *",
+    "channelType": "Type de chaîne *",
+    "description": "Description",
+    "activeStatus": "Statut actif",
+    "enableChannel": "Activer cette chaîne pour une utilisation dans le système",
+    "namePlaceholder": "ex. Sortie principale A",
+    "descriptionPlaceholder": "Entrez la description de la chaîne..."
+  },
+  "delete": {
+    "confirm": "Êtes-vous sûr de vouloir supprimer cette chaîne ?",
+    "warning": "Cette action est irréversible. Cela supprimera définitivement la chaîne et toutes les données associées."
+  },
+  "status": {
+    "showing": "Affichage de {{count}} sur {{total}} chaînes",
+    "noChannels": "Aucune chaîne trouvée"
+  },
+  "toast": {
+    "nameRequired": "Le nom de la chaîne est requis",
+    "failedLoad": "Échec du chargement des chaînes",
+    "failedConnect": "Échec de la connexion au serveur",
+    "addedSuccess": "Chaîne \"{{name}}\" ajoutée avec succès",
+    "failedCreate": "Échec de la création de la chaîne",
+    "updatedSuccess": "Chaîne \"{{name}}\" mise à jour avec succès",
+    "failedUpdate": "Échec de la mise à jour de la chaîne",
+    "deletedSuccess": "Chaîne \"{{name}}\" supprimée avec succès",
+    "failedDelete": "Échec de la suppression de la chaîne"
+  }
+}

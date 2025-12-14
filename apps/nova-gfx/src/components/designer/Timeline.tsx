@@ -2,8 +2,9 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronFirst, ChevronLast,
   Plus, ZoomIn, ZoomOut, Repeat, Maximize2, Trash2, Diamond,
-  GripHorizontal, Move, MonitorPlay, X, Layers, Clock, ChevronDown, Copy,
+  GripHorizontal, Move, MonitorPlay, X, Layers, Clock, ChevronDown, Copy, Spline,
 } from 'lucide-react';
+import { CurveGraphEditor } from './CurveGraphEditor';
 import {
   Timeline as AnimationTimeline,
   TimelineModel,
@@ -115,10 +116,13 @@ export function Timeline() {
     deleteKeyframe,
     removeKeyframeProperty,
     updateKeyframe,
+    updateAnimation,
     templates,
     layers,
     selectTemplate,
     playIn,
+    showEasingEditor,
+    setShowEasingEditor,
   } = useDesignerStore();
   
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
@@ -1863,6 +1867,70 @@ export function Timeline() {
         />
       </div>
 
+      {/* Curve Graph Editor Panel - positioned directly below timeline for alignment */}
+      {showEasingEditor && (() => {
+        // Get animations for selected elements OR from selected keyframes
+        const selectedAnims = currentAnimations.filter(a =>
+          selectedElementIds.includes(a.element_id)
+        );
+
+        // Also check if we have selected keyframes - get their animations
+        const keyframeAnims = selectedKeyframeIds.length > 0
+          ? [...new Set(
+              keyframes
+                .filter(kf => selectedKeyframeIds.includes(kf.id))
+                .map(kf => animations.find(a => a.id === kf.animation_id))
+                .filter(Boolean)
+            )] as typeof animations
+          : [];
+
+        // Combine and dedupe animations
+        const allAnims = [...new Map([...selectedAnims, ...keyframeAnims].map(a => [a.id, a])).values()];
+
+        if (allAnims.length === 0) return null;
+
+        // Get the first animation
+        const firstAnim = allAnims[0];
+
+        // Handler to update keyframe property value
+        const handleKeyframeUpdate = (keyframeId: string, property: string, value: number) => {
+          const kf = keyframes.find(k => k.id === keyframeId);
+          if (!kf) return;
+
+          // Update the specific property
+          const updates: Partial<StoreKeyframe> = {};
+
+          // Check if it's a typed property
+          if (property === 'position_x') updates.position_x = value;
+          else if (property === 'position_y') updates.position_y = value;
+          else if (property === 'rotation') updates.rotation = value;
+          else if (property === 'scale_x') updates.scale_x = value;
+          else if (property === 'scale_y') updates.scale_y = value;
+          else if (property === 'opacity') updates.opacity = value;
+          else if (property === 'filter_blur') updates.filter_blur = value;
+          else if (property === 'filter_brightness') updates.filter_brightness = value;
+          else {
+            // Update in properties object
+            updates.properties = { ...kf.properties, [property]: value };
+          }
+
+          updateKeyframe(keyframeId, updates);
+        };
+
+        return (
+          <div className="border-t border-border">
+            <CurveGraphEditor
+              animation={firstAnim}
+              keyframes={keyframes}
+              phaseDuration={phaseDurations[currentPhase]}
+              zoom={zoom}
+              playheadPosition={playheadPosition}
+              onKeyframeUpdate={handleKeyframeUpdate}
+            />
+          </div>
+        );
+      })()}
+
       {/* Status Bar with enhanced keyframe info */}
       <div className="h-7 px-3 border-t border-border bg-muted/30 flex items-center justify-between text-[10px] text-muted-foreground">
         <div className="flex items-center gap-4">
@@ -2060,6 +2128,42 @@ export function Timeline() {
           <span><kbd className="px-1 py-0.5 bg-muted rounded text-[9px]">Space</kbd> Play</span>
           <span><kbd className="px-1 py-0.5 bg-muted rounded text-[9px]">Del</kbd> Delete</span>
           <span><kbd className="px-1 py-0.5 bg-muted rounded text-[9px]">Esc</kbd> Deselect</span>
+          {/* Curve Graph Toggle */}
+          {(() => {
+            // Get animations for selected elements OR from selected keyframes
+            const selectedAnims = currentAnimations.filter(a =>
+              selectedElementIds.includes(a.element_id)
+            );
+
+            // Also check if we have selected keyframes - get their animations
+            const keyframeAnims = selectedKeyframeIds.length > 0
+              ? [...new Set(
+                  keyframes
+                    .filter(kf => selectedKeyframeIds.includes(kf.id))
+                    .map(kf => animations.find(a => a.id === kf.animation_id))
+                    .filter(Boolean)
+                )] as typeof animations
+              : [];
+
+            // Combine and dedupe animations
+            const allAnims = [...new Map([...selectedAnims, ...keyframeAnims].map(a => [a.id, a])).values()];
+
+            if (allAnims.length === 0) return null;
+
+            return (
+              <button
+                onClick={() => setShowEasingEditor(!showEasingEditor)}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-0.5 rounded transition-colors',
+                  showEasingEditor ? 'bg-violet-500/30 text-violet-300' : 'hover:bg-muted/50'
+                )}
+                title="Toggle Curve Graph Editor"
+              >
+                <Spline className="w-3 h-3" />
+                <span>Curves</span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -2160,6 +2264,21 @@ export function Timeline() {
                     </button>
                     {contextMenuShowEasing && (
                       <div className="border-t border-border bg-muted/30">
+                        {/* Edit Curve Button */}
+                        <button
+                          onClick={() => {
+                            // Select the element for this keyframe and open easing editor
+                            if (selectedKfAnim) {
+                              selectElements([selectedKfAnim.element_id]);
+                            }
+                            setShowEasingEditor(true);
+                            closeContextMenu();
+                          }}
+                          className="w-full px-6 py-1.5 text-xs text-left hover:bg-violet-500/20 transition-colors flex items-center gap-2 border-b border-border/50"
+                        >
+                          <Spline className="w-3.5 h-3.5 text-violet-400" />
+                          <span className="text-violet-400">Edit Curve...</span>
+                        </button>
                         {easingOptions.map((option) => (
                           <button
                             key={option.value}
@@ -2178,6 +2297,23 @@ export function Timeline() {
                       </div>
                     )}
                   </div>
+
+                  {/* Edit Easing Curve - prominent button */}
+                  <button
+                    onClick={() => {
+                      if (selectedKfAnim) {
+                        selectElements([selectedKfAnim.element_id]);
+                      }
+                      setShowEasingEditor(true);
+                      closeContextMenu();
+                    }}
+                    className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-violet-500/20 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Spline className="w-4 h-4 text-violet-400" />
+                      <span className="text-violet-400 font-medium">Edit Easing Curve...</span>
+                    </span>
+                  </button>
 
                   {/* Separator */}
                   <div className="h-px bg-border my-1" />

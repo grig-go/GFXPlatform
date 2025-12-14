@@ -1,0 +1,31 @@
+{
+  "title": "الاتصال بالدعم",
+  "description": "املأ النموذج أدناه وسيتواصل معك فريق الدعم في أقرب وقت ممكن.",
+  "form": {
+    "name": "الاسم *",
+    "namePlaceholder": "اسمك",
+    "email": "البريد الإلكتروني *",
+    "emailPlaceholder": "your.email@example.com",
+    "issueType": "نوع المشكلة *",
+    "issueTypePlaceholder": "اختر نوع المشكلة",
+    "subject": "الموضوع *",
+    "subjectPlaceholder": "وصف موجز للمشكلة",
+    "descriptionLabel": "الوصف *",
+    "descriptionPlaceholder": "يرجى تقديم معلومات تفصيلية عن مشكلتك..."
+  },
+  "issueTypes": {
+    "bugReport": "تقرير خطأ",
+    "featureRequest": "طلب ميزة",
+    "generalQuestion": "سؤال عام",
+    "technicalSupport": "دعم تقني",
+    "accountIssue": "مشكلة في الحساب",
+    "other": "أخرى"
+  },
+  "buttons": {
+    "submit": "إرسال الطلب"
+  },
+  "toast": {
+    "fillAllFields": "يرجى ملء جميع الحقول",
+    "submittedSuccess": "تم إرسال طلب الدعم بنجاح"
+  }
+}

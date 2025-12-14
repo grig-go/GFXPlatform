@@ -1,0 +1,133 @@
+{
+  "title": "Biblioteca de Contenido",
+  "subtitle": "Administre sus entornos de set virtual y fondos",
+  "search": {
+    "placeholder": "Buscar por nombre o descripción..."
+  },
+  "filter": {
+    "byType": "Filtrar por tipo",
+    "allTypes": "Todos los Tipos",
+    "environment": "Entorno",
+    "background": "Fondo",
+    "both": "Ambos"
+  },
+  "folder": {
+    "title": "Carpetas",
+    "new": "Nueva Carpeta",
+    "create": "Crear Carpeta",
+    "createNew": "Crear Nueva Carpeta",
+    "rename": "Renombrar Carpeta",
+    "namePlaceholder": "Nombre de carpeta...",
+    "selectFolder": "Seleccionar carpeta",
+    "allItems": "Todos los Elementos",
+    "newSubfolder": "Nueva Subcarpeta",
+    "enterName": "Ingrese un nombre para su nueva carpeta",
+    "enterNewName": "Ingrese un nuevo nombre para esta carpeta",
+    "rootNoFolder": "Raíz (Sin Carpeta)",
+    "deleteConfirm": "¿Está seguro de que desea eliminar esta carpeta? El contenido se moverá a la raíz."
+  },
+  "dialog": {
+    "createContent": "Crear Contenido",
+    "namePlaceholder": "Nombre del contenido...",
+    "descriptionPlaceholder": "Descripción (opcional)...",
+    "moveToFolder": "Mover a Carpeta",
+    "moveDestination": "Seleccione una carpeta de destino para \"{{name}}\"",
+    "viewDetails": "Ver Detalles",
+    "confirmDelete": "Confirmar Eliminación",
+    "confirmDeleteMessage": "¿Está seguro de que desea eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "confirmBatchDelete": "Confirmar Eliminación Múltiple",
+    "confirmBatchDeleteMessage": "¿Está seguro de que desea eliminar {{count}} elemento(s) seleccionado(s)? Esta acción no se puede deshacer."
+  },
+  "import": {
+    "title": "Importar Páginas de Contenido",
+    "description": "Seleccione un proyecto y elija qué páginas de contenido importar a \"{{projectName}}\"",
+    "sourceProject": "Proyecto de Origen",
+    "selectProject": "Seleccionar un proyecto para importar...",
+    "contentPages": "Páginas de Contenido",
+    "noContentFound": "No se encontraron páginas de contenido en este proyecto",
+    "importedCount": "{{count}} página(s) de contenido importada(s)",
+    "failedCount": "Error al importar {{count}} elemento(s)",
+    "failed": "Error en la importación",
+    "selectAll": "Seleccionar Todo",
+    "deselectAll": "Deseleccionar Todo",
+    "itemsSelected": "{{count}} elemento(s) seleccionado(s)"
+  },
+  "actions": {
+    "import": "Importar",
+    "refresh": "Actualizar",
+    "applyToVirtualSet": "Aplicar a Set Virtual",
+    "rename": "Renombrar",
+    "delete": "Eliminar",
+    "move": "Mover",
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "saveChanges": "Guardar Cambios"
+  },
+  "table": {
+    "name": "Nombre",
+    "type": "Tipo",
+    "timeCreated": "Fecha de Creación",
+    "actions": "Acciones",
+    "showing": "Mostrando {{filtered}} de {{total}} elementos"
+  },
+  "empty": {
+    "noContent": "No se encontró contenido",
+    "createFirst": "Cree su primer set virtual para verlo aquí",
+    "adjustFilters": "Intente ajustar su búsqueda o filtros"
+  },
+  "batch": {
+    "selected": "{{count}} elemento(s) seleccionado(s)",
+    "clearSelection": "Limpiar Selección",
+    "deleteSelected": "Eliminar Seleccionados",
+    "deleteCount": "Eliminar {{count}} Elemento(s)"
+  },
+  "details": {
+    "type": "Tipo",
+    "visibility": "Visibilidad",
+    "public": "Público",
+    "private": "Privado",
+    "created": "Creado",
+    "tags": "Etiquetas",
+    "sceneConfig": "Configuración de Escena",
+    "loadingOptions": "Cargando opciones...",
+    "backdropImage": "Imagen de Fondo",
+    "noneDisabled": "Ninguno (deshabilitado)"
+  },
+  "toast": {
+    "failedLoadFolders": "Error al cargar carpetas: {{error}}",
+    "failedLoadContent": "Error al cargar contenido: {{error}}",
+    "failedLoadFromProject": "Error al cargar contenido del proyecto",
+    "folderNameRequired": "El nombre de la carpeta es requerido",
+    "folderCreated": "Carpeta creada exitosamente",
+    "folderRenamed": "Carpeta renombrada exitosamente",
+    "failedSaveFolder": "Error al guardar carpeta: {{error}}",
+    "folderDeleted": "Carpeta eliminada exitosamente",
+    "failedDeleteFolder": "Error al eliminar carpeta: {{error}}",
+    "movedTo": "\"{{name}}\" movido a {{location}}",
+    "failedMove": "Error al mover contenido: {{error}}",
+    "noActiveChannel": "No se encontró canal Unreal activo. Por favor seleccione un canal en la página de Set Virtual.",
+    "appliedToUnreal": "¡\"{{name}}\" aplicado a Unreal Engine!",
+    "failedSendConfig": "Error al enviar configuración",
+    "deletedSuccess": "\"{{name}}\" eliminado exitosamente",
+    "failedDelete": "Error al eliminar: {{error}}",
+    "deletedBatch": "{{count}} elemento(s) eliminado(s) exitosamente",
+    "failedBatchDelete": "Error al eliminar elementos",
+    "contentUpdated": "Contenido actualizado exitosamente",
+    "failedUpdate": "Error al actualizar contenido: {{error}}",
+    "nameRequired": "El nombre es requerido",
+    "partialSuccess": "Éxito parcial",
+    "sceneBackdropFailed": "Escena enviada, pero el fondo falló",
+    "failedApply": "Error al aplicar configuración: {{error}}",
+    "airportConfigSent": "Configuración de aeropuerto enviada",
+    "sceneBackdropSent": "Escena y fondo enviados exitosamente"
+  },
+  "sampleFolders": {
+    "newsSegments": "Segmentos de Noticias",
+    "sportsHighlights": "Destacados Deportivos",
+    "morningBrief": "Resumen Matutino",
+    "eveningUpdate": "Actualización Nocturna",
+    "weatherReports": "Reportes del Clima",
+    "noonForecast": "Pronóstico del Mediodía"
+  }
+}

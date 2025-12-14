@@ -1,0 +1,56 @@
+{
+  "title": "Channels",
+  "description": "Manage broadcast and output channels across different systems",
+  "addChannel": "Add Channel",
+  "search": {
+    "placeholder": "Search channels by name, type, or description..."
+  },
+  "filter": {
+    "byType": "Filter by type",
+    "allTypes": "All Types",
+    "activeFilters": "Active filters:",
+    "clearAll": "Clear all",
+    "filters": "Filters"
+  },
+  "table": {
+    "name": "Name",
+    "type": "Type",
+    "status": "Status",
+    "description": "Description",
+    "actions": "Actions"
+  },
+  "dialog": {
+    "addTitle": "Add New Channel",
+    "editTitle": "Edit Channel",
+    "addDescription": "Create a new broadcast or output channel.",
+    "editDescription": "Update the channel details below."
+  },
+  "form": {
+    "channelName": "Channel Name *",
+    "channelType": "Channel Type *",
+    "description": "Description",
+    "activeStatus": "Active Status",
+    "enableChannel": "Enable this channel for use in the system",
+    "namePlaceholder": "e.g., Main Output A",
+    "descriptionPlaceholder": "Enter channel description..."
+  },
+  "delete": {
+    "confirm": "Are you sure you want to delete this channel?",
+    "warning": "This action cannot be undone. This will permanently delete the channel and remove all associated data."
+  },
+  "status": {
+    "showing": "Showing {{count}} of {{total}} channels",
+    "noChannels": "No channels found"
+  },
+  "toast": {
+    "nameRequired": "Channel name is required",
+    "failedLoad": "Failed to load channels",
+    "failedConnect": "Failed to connect to server",
+    "addedSuccess": "Channel \"{{name}}\" added successfully",
+    "failedCreate": "Failed to create channel",
+    "updatedSuccess": "Channel \"{{name}}\" updated successfully",
+    "failedUpdate": "Failed to update channel",
+    "deletedSuccess": "Channel \"{{name}}\" deleted successfully",
+    "failedDelete": "Failed to delete channel"
+  }
+}

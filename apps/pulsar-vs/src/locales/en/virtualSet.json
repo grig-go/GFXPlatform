@@ -1,0 +1,139 @@
+{
+  "title": "Virtual Set",
+  "channel": {
+    "label": "Channel",
+    "selectChannel": "Select a channel",
+    "newChannel": "New Channel",
+    "manageChannels": "Manage Channels",
+    "notFound": "Channel not found",
+    "noActiveUnreal": "No active Unreal channels found",
+    "creationComingSoon": "Channel creation coming soon!",
+    "managementComingSoon": "Channel management coming soon!",
+    "connected": "Connected",
+    "notConnected": "Not Connected",
+    "loading": "Loading...",
+    "offlineMode": "Offline Mode"
+  },
+  "projectType": {
+    "airport": "Airport",
+    "virtualSet": "VirtualSet"
+  },
+  "loading": {
+    "title": "Loading scene configuration...",
+    "message": "Fetching instance data from database"
+  },
+  "error": {
+    "sceneNotLoaded": "Scene descriptor not loaded",
+    "couldNotLoad": "Could not load from database: {{error}}",
+    "noInstanceData": "No instance data found for this channel.",
+    "selectChannelOrLoad": "Please select a channel or load JSON manually."
+  },
+  "actions": {
+    "label": "Actions",
+    "retryFetch": "Retry Fetch",
+    "debug": "Debug",
+    "loadJson": "Load JSON",
+    "sampleVirtualSet": "Sample VirtualSet"
+  },
+  "manualJson": {
+    "placeholder": "Paste JSON here (VirtualSet or Airport schema)"
+  },
+  "environment": {
+    "virtualSetTitle": "Virtual Set Environment",
+    "airportTitle": "Airport Display",
+    "virtualSetSubtitle": "Describe your virtual set configuration",
+    "airportSubtitle": "Configure airport display elements"
+  },
+  "chat": {
+    "airportPlaceholder": "Describe your airport display configuration...",
+    "virtualSetPlaceholder": "Start a conversation by describing your virtual set...",
+    "airportExample": "Example: Set time to evening, use option2 for base...",
+    "virtualSetExample": "Example: Glass walls with elevated platform...",
+    "listening": "Listening... Speak now",
+    "speechError": "Speech recognition error: {{error}}",
+    "recordingStopped": "Recording stopped"
+  },
+  "generatedFields": {
+    "title": "Generated Scene Parameters ({{type}})",
+    "noneDisabled": "None (disabled)",
+    "selected": "Selected: {{value}}"
+  },
+  "background": {
+    "title": "Virtual Set Background",
+    "subtitle": "Generate an AI image backdrop",
+    "placeholder": "Describe the backdrop you want to generate..."
+  },
+  "ai": {
+    "generatingBackdrop": "Generating your backdrop...",
+    "editingImage": "Editing your image...",
+    "heresYourBackdrop": "Here's your backdrop: {{prompt}}",
+    "doneUpdatedImage": "Done! I've updated the image: {{prompt}}",
+    "couldNotProcess": "Sorry, I couldn't process the image: {{error}}",
+    "backgroundGenerated": "✓ Background generated",
+    "sceneUpdated": "✓ Scene updated"
+  },
+  "save": {
+    "title": "Save Configuration",
+    "description": "Save your current {{type}} configuration",
+    "nothingToSaveAirport": "Nothing to save. Please configure the airport display first.",
+    "nothingToSaveVirtualSet": "Nothing to save. Please set parameters or generate a backdrop first.",
+    "nameRequired": "Name is required",
+    "maxTags": "Maximum 10 tags allowed",
+    "tagExists": "Tag already added",
+    "configSaved": "{{type}} configuration saved!",
+    "untitled": "Untitled",
+    "untitledConfiguration": "Untitled Configuration",
+    "namePlaceholder": "Configuration name",
+    "descriptionPlaceholder": "Optional description",
+    "tags": "Tags",
+    "addTagPlaceholder": "Add tag..."
+  },
+  "drawing": {
+    "title": "Drawing Tools",
+    "color": "Color:",
+    "brush": "Brush:",
+    "size": "Size:",
+    "clear": "Clear"
+  },
+  "backdrop": {
+    "selected": "Selected Backdrop",
+    "accept": "Accept",
+    "edit": "Edit",
+    "new": "New",
+    "drawing": "Drawing",
+    "drawTooltip": "Draw on image to mark areas for editing",
+    "deselect": "Deselect",
+    "deselectTooltip": "Deselect backdrop",
+    "applyToSet": "Apply to Set"
+  },
+  "recentBackdrops": {
+    "title": "Recent Backdrops",
+    "searchPlaceholder": "Search backdrops...",
+    "loading": "Loading backdrops...",
+    "noBackdrops": "No backdrops found"
+  },
+  "sort": {
+    "dateNewest": "Date (Newest)",
+    "dateOldest": "Date (Oldest)",
+    "nameAZ": "Name (A-Z)",
+    "nameZA": "Name (Z-A)",
+    "sizeLargest": "Size (Largest)",
+    "sizeSmallest": "Size (Smallest)",
+    "modelAZ": "Model (A-Z)"
+  },
+  "background.inputExample": "Example: A futuristic cityscape at sunset with neon lights...",
+  "toast": {
+    "sceneUpdated": "Scene updated",
+    "backdropAccepted": "Backdrop accepted",
+    "backdropApplied": "Backdrop applied to virtual set!",
+    "failedApplyBackdrop": "Failed to apply backdrop",
+    "failedLoadBackdrops": "Failed to load recent backdrops",
+    "enterDescription": "Please enter a background description",
+    "configureApiKey": "Please configure your AI API key in Settings",
+    "backgroundGenerated": "Background image generated successfully!",
+    "backgroundEdited": "Background image edited successfully!",
+    "failedProcessBackground": "Failed to process background: {{error}}",
+    "historyCleared": "History cleared",
+    "backgroundHistoryCleared": "Background history cleared"
+  }
+}

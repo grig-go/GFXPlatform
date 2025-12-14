@@ -1,0 +1,211 @@
+{
+  "title": "Playlists",
+  "tabs": {
+    "playlists": "Playlists",
+    "calendar": "Calendar",
+    "analytics": "Analytics"
+  },
+  "search": {
+    "placeholder": "Search playlists...",
+    "searchEvents": "Search events..."
+  },
+  "buttons": {
+    "new": "New",
+    "createPlaylist": "Create Playlist",
+    "demoPlaylist": "Demo Playlist",
+    "createDemoPlaylist": "Create Demo Playlist",
+    "addItem": "Add Item",
+    "play": "Play",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "skip": "Skip",
+    "refresh": "Refresh",
+    "calendar": "Calendar",
+    "edit": "Edit",
+    "delete": "Delete",
+    "duplicate": "Duplicate",
+    "ungroup": "Ungroup",
+    "cancel": "Cancel",
+    "save": "Save",
+    "update": "Update",
+    "apply": "Apply"
+  },
+  "table": {
+    "play": "Play",
+    "status": "Status",
+    "name": "Name",
+    "items": "Items",
+    "duration": "Duration",
+    "channel": "Channel",
+    "schedule": "Schedule",
+    "actions": "Actions"
+  },
+  "itemTypes": {
+    "page": "Page",
+    "group": "Group",
+    "media": "Media",
+    "groupCount": "Group ({{count}} items)",
+    "mediaPreview": "(double-click to preview)"
+  },
+  "channel": {
+    "default": "Default",
+    "noChannel": "No channel",
+    "noDefault": "No default",
+    "selectChannel": "Select channel...",
+    "selectAChannel": "Select a channel",
+    "ch": "Ch:"
+  },
+  "form": {
+    "name": "Name",
+    "description": "Description",
+    "namePlaceholder": "Enter playlist name...",
+    "descriptionPlaceholder": "Optional description...",
+    "loopPlaylist": "Loop Playlist",
+    "durationSeconds": "Duration (seconds)",
+    "scheduledTime": "Scheduled Time (optional)",
+    "manualAdvance": "0 = manual advance"
+  },
+  "status": {
+    "next": "Next",
+    "playing": "Playing",
+    "paused": "Paused",
+    "playable": "playable",
+    "selected": "selected",
+    "notScheduled": "Not scheduled",
+    "noSchedule": "No schedule"
+  },
+  "schedule": {
+    "title": "Schedule",
+    "daily": "Daily",
+    "weekly": "Weekly (specific days)",
+    "dateRange": "Date Range",
+    "specificDates": "Specific Dates",
+    "datesCount": "{{count}} dates",
+    "scheduled": "Scheduled",
+    "scheduleType": "Schedule Type",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "dayAbbrev": {
+      "sunday": "SUN",
+      "monday": "MON",
+      "tuesday": "TUE",
+      "wednesday": "WED",
+      "thursday": "THU",
+      "friday": "FRI",
+      "saturday": "SAT"
+    }
+  },
+  "calendar": {
+    "back": "Back",
+    "clear": "Clear",
+    "today": "Today",
+    "allDay": "All day",
+    "events": "{{count}} events",
+    "scheduledThisMonth": "{{count}} scheduled workflows this month",
+    "scheduledEvents": "{{count}} scheduled events",
+    "noEventsDay": "No events scheduled for this day",
+    "scheduledFor": "Scheduled for {{date}}",
+    "time": "Time",
+    "duration": "Duration",
+    "type": "Type",
+    "channel": "Channel",
+    "close": "Close",
+    "playNow": "Play Now",
+    "more": "+{{count}} more",
+    "days": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "months": {
+      "january": "January",
+      "february": "February",
+      "march": "March",
+      "april": "April",
+      "may": "May",
+      "june": "June",
+      "july": "July",
+      "august": "August",
+      "september": "September",
+      "october": "October",
+      "november": "November",
+      "december": "December"
+    },
+    "filters": {
+      "allTypes": "All Types",
+      "video": "Video",
+      "image": "Image",
+      "audio": "Audio",
+      "graphics": "Graphics",
+      "ticker": "Ticker",
+      "layout": "Layout"
+    }
+  },
+  "empty": {
+    "noPlaylists": "No playlists yet",
+    "createFirst": "Create your first playlist to get started",
+    "noItems": "No items in this playlist",
+    "addItemsMessage": "Add pages, media, or groups to this playlist"
+  },
+  "tabs2": {
+    "allItems": "All Items",
+    "pages": "Pages",
+    "media": "Media"
+  },
+  "aiInsights": {
+    "title": "AI Insights",
+    "button": "AI Insights"
+  },
+  "dialog": {
+    "createPlaylist": "Create Playlist",
+    "editPlaylist": "Edit Playlist",
+    "deletePlaylist": "Delete Playlist",
+    "deletePlaylistConfirm": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "addItem": "Add Item to Playlist",
+    "editItem": "Edit Item",
+    "editItemDesc": "Update item settings for \"{{name}}\"",
+    "deleteItem": "Delete Item",
+    "deleteItemConfirm": "Are you sure you want to delete this item?",
+    "batchChannel": "Change Channel",
+    "batchChannelDesc": "Select a channel for the selected items",
+    "batchDuration": "Change Duration",
+    "batchDurationDesc": "Set duration for the selected items",
+    "applyToItems": "Apply to {{count}} Item(s)"
+  },
+  "editItemDialog": {
+    "currentMedia": "Current Media",
+    "replaceMedia": "Replace Media",
+    "cancelReplace": "Cancel Replace",
+    "newMediaSelected": "New Media Selected",
+    "searchMediaLibrary": "Search media library...",
+    "showingItems": "Showing {{start}}-{{end}} of {{total}} items",
+    "noMediaFound": "No media found",
+    "current": "Current",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{current}} of {{total}}"
+  },
+  "toast": {
+    "selectProjectFirst": "Please select a project first",
+    "demoPlaylistCreated": "Demo playlist created! Check the calendar view.",
+    "failedCreateDemo": "Failed to create demo playlist",
+    "playlistCreated": "Playlist created successfully",
+    "playlistUpdated": "Playlist updated successfully",
+    "playlistDeleted": "Playlist deleted successfully",
+    "itemAdded": "Item added to playlist",
+    "itemUpdated": "Item updated successfully",
+    "itemDeleted": "Item deleted successfully",
+    "channelsUpdated": "Channels updated for {{count}} items",
+    "durationsUpdated": "Durations updated for {{count}} items",
+    "failedLoad": "Failed to load playlists",
+    "failedCreate": "Failed to create playlist",
+    "failedUpdate": "Failed to update playlist",
+    "failedDelete": "Failed to delete playlist",
+    "nameRequired": "Name is required"
+  }
+}

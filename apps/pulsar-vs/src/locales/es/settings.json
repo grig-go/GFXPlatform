@@ -1,0 +1,90 @@
+{
+  "advanced": {
+    "title": "Configuración Avanzada",
+    "description": "Configure modelos de IA y claves API para generación.",
+    "sections": {
+      "virtualSetGeneration": "Generación de Set Virtual",
+      "backdropGeneration": "Generación de Fondos",
+      "rcpFunctions": "Funciones RCP (Depuración)",
+      "screenShare": "Compartir Pantalla"
+    },
+    "virtualSet": {
+      "geminiModel": "Modelo Gemini",
+      "geminiApiKey": "Clave API de Gemini",
+      "geminiPlaceholder": "Ingrese Clave API de Gemini",
+      "selectModel": "Seleccionar modelo"
+    },
+    "backdrop": {
+      "imagenModel": "Modelo Imagen",
+      "imagenApiKey": "Clave API de Imagen",
+      "imagenPlaceholder": "Ingrese Clave API de Imagen",
+      "defaultAspectRatio": "Relación de Aspecto Predeterminada",
+      "selectAspectRatio": "Seleccionar relación de aspecto"
+    },
+    "rcp": {
+      "setVirtualSetFunction": "Función Set Virtual",
+      "setBackdropFunction": "Función Fondo",
+      "placeholder": "/remote/preset/..."
+    },
+    "screenShare": {
+      "type": "Tipo",
+      "screenToCapture": "Pantalla a Capturar",
+      "captureTarget": "Objetivo de Captura",
+      "customTargetName": "Nombre de Objetivo Personalizado",
+      "customPlaceholder": "Ingrese nombre de objetivo personalizado...",
+      "types": {
+        "screen": "Pantalla",
+        "window": "Ventana"
+      },
+      "targets": {
+        "chrome": "Chrome",
+        "powerpoint": "PowerPoint",
+        "custom": "Personalizado"
+      },
+      "selectType": "Seleccionar tipo",
+      "selectScreen": "Seleccionar pantalla",
+      "selectTarget": "Seleccionar objetivo"
+    },
+    "toast": {
+      "failedLoad": "Error al cargar configuración",
+      "savedSuccess": "Configuración guardada exitosamente",
+      "failedSave": "Error al guardar configuración"
+    }
+  },
+  "aiPrompt": {
+    "title": "Configuración de Prompts IA",
+    "description": "Configure instrucciones de IA para diferentes tipos de proyecto.",
+    "tabs": {
+      "virtualSet": "Set Virtual",
+      "airport": "Aeropuerto"
+    },
+    "virtualSet": {
+      "description": "Configure inyectores de prompt para ángulo de cámara, punto de vista y consideraciones de escena. Estos se agregarán automáticamente a sus prompts de generación de imágenes.",
+      "cameraAngle": "Ángulo de Cámara",
+      "cameraAnglePlaceholder": "ej., Toma gran angular, perspectiva cinematográfica, punto de vista ligeramente elevado...",
+      "cameraAngleHelper": "Especifique el ángulo de cámara y encuadre para las imágenes generadas",
+      "pointOfView": "Punto de Vista",
+      "pointOfViewPlaceholder": "ej., Perspectiva a nivel de ojos, espectador posicionado como observador, punto de vista inmersivo...",
+      "pointOfViewHelper": "Defina la perspectiva y posicionamiento del espectador",
+      "sceneConsiderations": "Consideraciones de Escena",
+      "sceneConsiderationsPlaceholder": "ej., Adecuado para producción virtual, composición lista para transmisión, profundidad de campo apropiada...",
+      "sceneConsiderationsHelper": "Requisitos adicionales de escena y consideraciones técnicas"
+    },
+    "airport": {
+      "description": "Configure instrucciones de IA para configuración de escenas de Aeropuerto. Estas ayudan a la IA a entender sus comandos abreviados al editar escenas de Aeropuerto.",
+      "instructions": "Instrucciones de IA para Aeropuerto",
+      "instructionsPlaceholder": "Ingrese instrucciones para la IA al trabajar con escenas de Aeropuerto...",
+      "instructionsHelper": "Defina alias de campos, mapeo de opciones y reglas de comportamiento para la IA",
+      "quickReference": "Referencia Rápida",
+      "quickRefTop": "\"Top\" → ElementTop (Hawk, Flower, Stadium)",
+      "quickRefBackground": "\"Background\" → environment_background (Desert, Marble)",
+      "quickRefPattern": "\"Pattern\" → BaseTop (Gold, Metal, Dark)"
+    },
+    "toast": {
+      "failedLoad": "Error al cargar configuración",
+      "savedSuccess": "Configuración de prompts IA guardada exitosamente",
+      "failedSave": "Error al guardar configuración",
+      "resetAirport": "Restablecido a instrucciones predeterminadas de Aeropuerto"
+    }
+  }
+}

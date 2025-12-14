@@ -278,6 +278,7 @@ interface DesignerState {
   isPlayingFullPreview: boolean; // Playing through all phases (IN → LOOP → OUT)
   selectedKeyframeIds: string[];
   phaseDurations: Record<AnimationPhase, number>; // Duration in ms for each phase
+  showEasingEditor: boolean; // Show/hide the bezier curve easing editor panel
 
   // On-Air state (for preview/playback testing)
   onAirTemplates: Record<string, { 
@@ -416,6 +417,7 @@ interface DesignerActions {
   playFullPreview: () => void; // Play through all phases (IN → LOOP → OUT)
   endPreviewPlayback: () => void; // End preview but keep template isolated
   isPlayingFullPreview: boolean; // Whether playing through all phases
+  setShowEasingEditor: (show: boolean) => void; // Toggle the bezier curve easing editor
 
   // On-Air controls
   playIn: (templateId: string, layerId: string) => void;
@@ -674,6 +676,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         isPlayingFullPreview: false,
         selectedKeyframeIds: [],
         phaseDurations: { in: 1500, loop: 3000, out: 1500 }, // Default durations in ms
+        showEasingEditor: false,
         onAirTemplates: {},
         chatMessages: [],
         isChatLoading: false,
@@ -3187,6 +3190,10 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           // Clamp playhead to valid range (0 to phase duration)
           const clampedPosition = Math.max(0, Math.min(position, maxPosition));
           set({ playheadPosition: clampedPosition });
+        },
+
+        setShowEasingEditor: (show) => {
+          set({ showEasingEditor: show });
         },
 
         setPhaseDuration: (phase, duration) => {

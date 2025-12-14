@@ -1,0 +1,42 @@
+{
+  "title": "Projets",
+  "subtitle": "Gérez vos projets de plateau virtuel",
+  "newProject": "Nouveau projet",
+  "createFirst": "Créer le premier projet",
+  "empty": {
+    "title": "Aucun projet encore",
+    "description": "Créez votre premier projet pour organiser vos configurations de plateau virtuel"
+  },
+  "card": {
+    "setAsActive": "Définir comme actif"
+  },
+  "form": {
+    "newTitle": "Nouveau projet",
+    "editTitle": "Modifier le projet",
+    "newDescription": "Créer un nouveau projet pour organiser votre travail",
+    "editDescription": "Modification de \"{{projectName}}\"",
+    "name": "Nom *",
+    "namePlaceholder": "Mon projet de plateau virtuel",
+    "description": "Description",
+    "descriptionPlaceholder": "Décrivez ce projet...",
+    "icon": "Icône",
+    "color": "Couleur",
+    "projectType": "Type de projet"
+  },
+  "aiInstructions": {
+    "title": "Instructions IA",
+    "description": "Configurez comment l'IA comprend vos commandes lors de la modification des configurations de scène.",
+    "placeholder": "Entrez des instructions personnalisées pour l'IA...",
+    "loadAirportDefaults": "Charger les paramètres aéroport par défaut",
+    "fieldAliases": "Alias de champs",
+    "customInstructions": "Instructions personnalisées"
+  },
+  "selector": {
+    "label": "Projet",
+    "loading": "Chargement...",
+    "selectProject": "Sélectionner un projet",
+    "noProjects": "Aucun projet encore",
+    "newProject": "Nouveau projet",
+    "manageProjects": "Gérer les projets"
+  }
+}

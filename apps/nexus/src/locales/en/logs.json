@@ -1,9 +1,15 @@
 {
   "title": "Logs & Alerts",
+  "subtitle": "Monitor system logs, alerts, and AI insights",
+  "searchPlaceholder": "Search logs, devices, or messages...",
   "tabs": {
     "all": "All",
     "logs": "Logs",
-    "alerts": "Alerts"
+    "alerts": "Alerts",
+    "allLogs": "All Logs ({{count}})",
+    "activeAlerts": "Active Alerts ({{count}})",
+    "resolved": "Resolved",
+    "aiInsights": "AI Insights ({{count}})"
   },
   "columns": {
     "timestamp": "Timestamp",
@@ -12,7 +18,8 @@
     "status": "Status",
     "message": "Message",
     "source": "Source",
-    "level": "Level"
+    "level": "Level",
+    "device": "Device"
   },
   "types": {
     "error": "Error",
@@ -28,14 +35,38 @@
     "predictive": "Predictive",
     "advisory": "Advisory",
     "queued": "Queued",
-    "scheduled": "Scheduled"
+    "scheduled": "Scheduled",
+    "ok": "OK"
+  },
+  "systems": {
+    "lighting": "Lighting",
+    "led": "LED",
+    "audio": "Audio",
+    "hvac": "HVAC",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "ai": "AI",
+    "security": "Security"
   },
   "filters": {
     "allSystems": "All Systems",
     "allTypes": "All Types",
-    "allStatuses": "All Statuses",
+    "allStatuses": "All Status",
     "allLevels": "All Levels",
     "dateRange": "Date Range"
+  },
+  "toolbar": {
+    "aiAnalyze": "AI Analyze",
+    "logsSelected": "{{count}} log(s) selected",
+    "clearSelection": "Clear selection"
+  },
+  "aiSummary": {
+    "title": "AI Summary",
+    "last24h": "Last 24h",
+    "summaryText": "{{alerts}} active alerts, {{warnings}} warnings detected. Energy consumption ↑ 12% week-over-week. Pattern detected: recurring LED overheating when Pulsar workflows run > 3 hrs. Suggestion: verify LED node thermal management and stagger workflow execution.",
+    "explainSelected": "Explain Selected",
+    "groupByPattern": "Group by Pattern",
+    "generateReport": "Generate Report"
   },
   "actions": {
     "acknowledge": "Acknowledge",
@@ -46,7 +77,21 @@
   },
   "empty": {
     "title": "No Logs",
-    "message": "No log entries match your filters"
+    "message": "No logs found matching your filters"
+  },
+  "dialog": {
+    "logEntry": "LOG ENTRY",
+    "timestamp": "timestamp",
+    "device": "device",
+    "system": "system",
+    "source": "source",
+    "status": "status",
+    "message": "MESSAGE",
+    "rawData": "RAW DATA (JSON)",
+    "aiAnalysis": "AI ANALYSIS",
+    "availableCommands": "AVAILABLE COMMANDS",
+    "endOfLogEntry": "END OF LOG ENTRY",
+    "pressEscToClose": "Press ESC to close"
   },
   "timeline": {
     "monthly": "Monthly",

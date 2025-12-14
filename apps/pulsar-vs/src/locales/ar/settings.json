@@ -1,0 +1,90 @@
+{
+  "advanced": {
+    "title": "الإعدادات المتقدمة",
+    "description": "إعداد نماذج الذكاء الاصطناعي ومفاتيح API للتوليد.",
+    "sections": {
+      "virtualSetGeneration": "توليد الاستوديو الافتراضي",
+      "backdropGeneration": "توليد الخلفية",
+      "rcpFunctions": "وظائف RCP (تصحيح)",
+      "screenShare": "مشاركة الشاشة"
+    },
+    "virtualSet": {
+      "geminiModel": "نموذج Gemini",
+      "geminiApiKey": "مفتاح API Gemini",
+      "geminiPlaceholder": "أدخل مفتاح API Gemini",
+      "selectModel": "اختر نموذج"
+    },
+    "backdrop": {
+      "imagenModel": "نموذج Imagen",
+      "imagenApiKey": "مفتاح API Imagen",
+      "imagenPlaceholder": "أدخل مفتاح API Imagen",
+      "defaultAspectRatio": "نسبة العرض إلى الارتفاع الافتراضية",
+      "selectAspectRatio": "اختر نسبة العرض إلى الارتفاع"
+    },
+    "rcp": {
+      "setVirtualSetFunction": "وظيفة Set Virtual Set",
+      "setBackdropFunction": "وظيفة Set Backdrop",
+      "placeholder": "/remote/preset/..."
+    },
+    "screenShare": {
+      "type": "النوع",
+      "screenToCapture": "الشاشة للالتقاط",
+      "captureTarget": "هدف الالتقاط",
+      "customTargetName": "اسم هدف مخصص",
+      "customPlaceholder": "أدخل اسم الهدف المخصص...",
+      "types": {
+        "screen": "شاشة",
+        "window": "نافذة"
+      },
+      "targets": {
+        "chrome": "Chrome",
+        "powerpoint": "PowerPoint",
+        "custom": "مخصص"
+      },
+      "selectType": "اختر نوع",
+      "selectScreen": "اختر شاشة",
+      "selectTarget": "اختر هدف"
+    },
+    "toast": {
+      "failedLoad": "فشل تحميل الإعدادات",
+      "savedSuccess": "تم حفظ الإعدادات بنجاح",
+      "failedSave": "فشل حفظ الإعدادات"
+    }
+  },
+  "aiPrompt": {
+    "title": "إعدادات أوامر الذكاء الاصطناعي",
+    "description": "إعداد تعليمات الذكاء الاصطناعي لأنواع المشاريع المختلفة.",
+    "tabs": {
+      "virtualSet": "الاستوديو الافتراضي",
+      "airport": "المطار"
+    },
+    "virtualSet": {
+      "description": "إعداد محقنات الأوامر لزاوية الكاميرا ووجهة النظر واعتبارات المشهد. سيتم إضافتها تلقائياً لأوامر توليد الصور.",
+      "cameraAngle": "زاوية الكاميرا",
+      "cameraAnglePlaceholder": "مثال: لقطة واسعة، منظور سينمائي، وجهة نظر مرتفعة قليلاً...",
+      "cameraAngleHelper": "حدد زاوية الكاميرا والإطار للصور المولدة",
+      "pointOfView": "وجهة النظر",
+      "pointOfViewPlaceholder": "مثال: منظور على مستوى العين، المشاهد موضوع كمراقب، وجهة نظر غامرة...",
+      "pointOfViewHelper": "حدد منظور المشاهد وموقعه",
+      "sceneConsiderations": "اعتبارات المشهد",
+      "sceneConsiderationsPlaceholder": "مثال: مناسب للإنتاج الافتراضي، تكوين جاهز للبث، عمق مجال مناسب...",
+      "sceneConsiderationsHelper": "متطلبات المشهد الإضافية والاعتبارات التقنية"
+    },
+    "airport": {
+      "description": "إعداد تعليمات الذكاء الاصطناعي لإعدادات مشهد المطار. تساعد الذكاء الاصطناعي على فهم أوامرك المختصرة عند تعديل مشاهد المطار.",
+      "instructions": "تعليمات الذكاء الاصطناعي للمطار",
+      "instructionsPlaceholder": "أدخل تعليمات للذكاء الاصطناعي عند العمل مع مشاهد المطار...",
+      "instructionsHelper": "حدد الأسماء البديلة للحقول وتعيينات الخيارات وقواعد السلوك للذكاء الاصطناعي",
+      "quickReference": "مرجع سريع",
+      "quickRefTop": "\"Top\" → ElementTop (Hawk, Flower, Stadium)",
+      "quickRefBackground": "\"Background\" → environment_background (Desert, Marble)",
+      "quickRefPattern": "\"Pattern\" → BaseTop (Gold, Metal, Dark)"
+    },
+    "toast": {
+      "failedLoad": "فشل تحميل الإعدادات",
+      "savedSuccess": "تم حفظ إعدادات أوامر الذكاء الاصطناعي بنجاح",
+      "failedSave": "فشل حفظ الإعدادات",
+      "resetAirport": "إعادة التعيين لتعليمات المطار الافتراضية"
+    }
+  }
+}

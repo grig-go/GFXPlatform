@@ -1,0 +1,31 @@
+{
+  "title": "Contactar Soporte",
+  "description": "Complete el formulario a continuación y nuestro equipo de soporte le responderá lo antes posible.",
+  "form": {
+    "name": "Nombre *",
+    "namePlaceholder": "Su nombre",
+    "email": "Correo Electrónico *",
+    "emailPlaceholder": "su.correo@ejemplo.com",
+    "issueType": "Tipo de Problema *",
+    "issueTypePlaceholder": "Seleccione un tipo de problema",
+    "subject": "Asunto *",
+    "subjectPlaceholder": "Breve descripción de su problema",
+    "descriptionLabel": "Descripción *",
+    "descriptionPlaceholder": "Por favor proporcione información detallada sobre su problema..."
+  },
+  "issueTypes": {
+    "bugReport": "Reporte de Error",
+    "featureRequest": "Solicitud de Función",
+    "generalQuestion": "Pregunta General",
+    "technicalSupport": "Soporte Técnico",
+    "accountIssue": "Problema de Cuenta",
+    "other": "Otro"
+  },
+  "buttons": {
+    "submit": "Enviar Solicitud"
+  },
+  "toast": {
+    "fillAllFields": "Por favor complete todos los campos",
+    "submittedSuccess": "Solicitud de soporte enviada exitosamente"
+  }
+}

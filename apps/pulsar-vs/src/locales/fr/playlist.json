@@ -1,0 +1,211 @@
+{
+  "title": "Listes de lecture",
+  "tabs": {
+    "playlists": "Listes",
+    "calendar": "Calendrier",
+    "analytics": "Analytiques"
+  },
+  "search": {
+    "placeholder": "Rechercher des listes...",
+    "searchEvents": "Rechercher des événements..."
+  },
+  "buttons": {
+    "new": "Nouveau",
+    "createPlaylist": "Créer une liste",
+    "demoPlaylist": "Liste démo",
+    "createDemoPlaylist": "Créer une liste démo",
+    "addItem": "Ajouter",
+    "play": "Lecture",
+    "pause": "Pause",
+    "resume": "Reprendre",
+    "stop": "Arrêter",
+    "skip": "Passer",
+    "refresh": "Actualiser",
+    "calendar": "Calendrier",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "duplicate": "Dupliquer",
+    "ungroup": "Dégrouper",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "update": "Mettre à jour",
+    "apply": "Appliquer"
+  },
+  "table": {
+    "play": "Lect.",
+    "status": "Statut",
+    "name": "Nom",
+    "items": "Élém.",
+    "duration": "Durée",
+    "channel": "Chaîne",
+    "schedule": "Horaire",
+    "actions": "Actions"
+  },
+  "itemTypes": {
+    "page": "Page",
+    "group": "Groupe",
+    "media": "Média",
+    "groupCount": "Groupe ({{count}} élém.)",
+    "mediaPreview": "(double-clic pour prévisualiser)"
+  },
+  "channel": {
+    "default": "Par défaut",
+    "noChannel": "Aucune chaîne",
+    "noDefault": "Pas de défaut",
+    "selectChannel": "Sélectionner une chaîne...",
+    "selectAChannel": "Sélectionnez une chaîne",
+    "ch": "Ch:"
+  },
+  "form": {
+    "name": "Nom",
+    "description": "Description",
+    "namePlaceholder": "Nom de la liste...",
+    "descriptionPlaceholder": "Description optionnelle...",
+    "loopPlaylist": "Lecture en boucle",
+    "durationSeconds": "Durée (secondes)",
+    "scheduledTime": "Heure programmée (optionnel)",
+    "manualAdvance": "0 = avance manuelle"
+  },
+  "status": {
+    "next": "Suiv.",
+    "playing": "Lecture",
+    "paused": "En pause",
+    "playable": "jouable",
+    "selected": "sélec.",
+    "notScheduled": "Non programmé",
+    "noSchedule": "Pas d'horaire"
+  },
+  "schedule": {
+    "title": "Programmation",
+    "daily": "Quotidien",
+    "weekly": "Hebdomadaire (jours spécifiques)",
+    "dateRange": "Plage de dates",
+    "specificDates": "Dates spécifiques",
+    "datesCount": "{{count}} dates",
+    "scheduled": "Programmé",
+    "scheduleType": "Type d'horaire",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "dayAbbrev": {
+      "sunday": "DIM",
+      "monday": "LUN",
+      "tuesday": "MAR",
+      "wednesday": "MER",
+      "thursday": "JEU",
+      "friday": "VEN",
+      "saturday": "SAM"
+    }
+  },
+  "calendar": {
+    "back": "Retour",
+    "clear": "Effacer",
+    "today": "Aujourd'hui",
+    "allDay": "Toute la journée",
+    "events": "{{count}} événements",
+    "scheduledThisMonth": "{{count}} flux programmés ce mois",
+    "scheduledEvents": "{{count}} événements programmés",
+    "noEventsDay": "Aucun événement programmé pour ce jour",
+    "scheduledFor": "Programmé pour {{date}}",
+    "time": "Heure",
+    "duration": "Durée",
+    "type": "Type",
+    "channel": "Chaîne",
+    "close": "Fermer",
+    "playNow": "Lire maintenant",
+    "more": "+{{count}} de plus",
+    "days": {
+      "sun": "Dim",
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mer",
+      "thu": "Jeu",
+      "fri": "Ven",
+      "sat": "Sam"
+    },
+    "months": {
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre"
+    },
+    "filters": {
+      "allTypes": "Tous les types",
+      "video": "Vidéo",
+      "image": "Image",
+      "audio": "Audio",
+      "graphics": "Graphiques",
+      "ticker": "Ticker",
+      "layout": "Mise en page"
+    }
+  },
+  "empty": {
+    "noPlaylists": "Aucune liste encore",
+    "createFirst": "Créez votre première liste pour commencer",
+    "noItems": "Aucun élément dans cette liste",
+    "addItemsMessage": "Ajoutez des pages, médias ou groupes"
+  },
+  "tabs2": {
+    "allItems": "Tous",
+    "pages": "Pages",
+    "media": "Médias"
+  },
+  "aiInsights": {
+    "title": "Analyses IA",
+    "button": "Analyses IA"
+  },
+  "dialog": {
+    "createPlaylist": "Créer une liste",
+    "editPlaylist": "Modifier la liste",
+    "deletePlaylist": "Supprimer la liste",
+    "deletePlaylistConfirm": "Êtes-vous sûr de vouloir supprimer \"{{name}}\" ? Cette action est irréversible.",
+    "addItem": "Ajouter un élément",
+    "editItem": "Modifier l'élément",
+    "editItemDesc": "Mettre à jour les paramètres de \"{{name}}\"",
+    "deleteItem": "Supprimer l'élément",
+    "deleteItemConfirm": "Êtes-vous sûr de vouloir supprimer cet élément ?",
+    "batchChannel": "Changer de chaîne",
+    "batchChannelDesc": "Sélectionnez une chaîne pour les éléments",
+    "batchDuration": "Changer la durée",
+    "batchDurationDesc": "Définir la durée pour les éléments",
+    "applyToItems": "Appliquer à {{count}} élém."
+  },
+  "editItemDialog": {
+    "currentMedia": "Média actuel",
+    "replaceMedia": "Remplacer le média",
+    "cancelReplace": "Annuler le remplacement",
+    "newMediaSelected": "Nouveau média sélectionné",
+    "searchMediaLibrary": "Rechercher dans la médiathèque...",
+    "showingItems": "Affichage {{start}}-{{end}} sur {{total}} élém.",
+    "noMediaFound": "Aucun média trouvé",
+    "current": "Actuel",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "pageOf": "Page {{current}} sur {{total}}"
+  },
+  "toast": {
+    "selectProjectFirst": "Veuillez d'abord sélectionner un projet",
+    "demoPlaylistCreated": "Liste démo créée ! Consultez le calendrier.",
+    "failedCreateDemo": "Échec de la création de la liste démo",
+    "playlistCreated": "Liste créée avec succès",
+    "playlistUpdated": "Liste mise à jour avec succès",
+    "playlistDeleted": "Liste supprimée avec succès",
+    "itemAdded": "Élément ajouté à la liste",
+    "itemUpdated": "Élément mis à jour",
+    "itemDeleted": "Élément supprimé",
+    "channelsUpdated": "Chaînes mises à jour pour {{count}} élém.",
+    "durationsUpdated": "Durées mises à jour pour {{count}} élém.",
+    "failedLoad": "Échec du chargement des listes",
+    "failedCreate": "Échec de la création de la liste",
+    "failedUpdate": "Échec de la mise à jour de la liste",
+    "failedDelete": "Échec de la suppression de la liste",
+    "nameRequired": "Le nom est requis"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "title": "Set Virtual",
+  "channel": {
+    "label": "Canal",
+    "selectChannel": "Seleccionar un canal",
+    "newChannel": "Nuevo Canal",
+    "manageChannels": "Administrar Canales",
+    "notFound": "Canal no encontrado",
+    "noActiveUnreal": "No se encontraron canales Unreal activos",
+    "creationComingSoon": "¡Creación de canales próximamente!",
+    "managementComingSoon": "¡Administración de canales próximamente!",
+    "connected": "Conectado",
+    "notConnected": "No Conectado",
+    "loading": "Cargando...",
+    "offlineMode": "Modo sin conexión"
+  },
+  "projectType": {
+    "airport": "Aeropuerto",
+    "virtualSet": "Set Virtual"
+  },
+  "loading": {
+    "title": "Cargando configuración de escena...",
+    "message": "Obteniendo datos de instancia desde la base de datos"
+  },
+  "error": {
+    "sceneNotLoaded": "Descriptor de escena no cargado",
+    "couldNotLoad": "No se pudo cargar desde la base de datos: {{error}}",
+    "noInstanceData": "No se encontraron datos de instancia para este canal.",
+    "selectChannelOrLoad": "Por favor seleccione un canal o cargue JSON manualmente."
+  },
+  "actions": {
+    "label": "Acciones",
+    "retryFetch": "Reintentar",
+    "debug": "Depurar",
+    "loadJson": "Cargar JSON",
+    "sampleVirtualSet": "Set Virtual de Ejemplo"
+  },
+  "manualJson": {
+    "placeholder": "Pegue JSON aquí (esquema VirtualSet o Airport)"
+  },
+  "environment": {
+    "virtualSetTitle": "Entorno del Set Virtual",
+    "airportTitle": "Pantalla de Aeropuerto",
+    "virtualSetSubtitle": "Describa la configuración de su set virtual",
+    "airportSubtitle": "Configure los elementos de la pantalla del aeropuerto"
+  },
+  "chat": {
+    "airportPlaceholder": "Describa la configuración de la pantalla del aeropuerto...",
+    "virtualSetPlaceholder": "Inicie una conversación describiendo su set virtual...",
+    "airportExample": "Ejemplo: Cambiar hora a atardecer, usar opción2 para base...",
+    "virtualSetExample": "Ejemplo: Paredes de vidrio con plataforma elevada...",
+    "listening": "Escuchando... Hable ahora",
+    "speechError": "Error de reconocimiento de voz: {{error}}",
+    "recordingStopped": "Grabación detenida"
+  },
+  "generatedFields": {
+    "title": "Parámetros de Escena Generados ({{type}})",
+    "noneDisabled": "Ninguno (deshabilitado)",
+    "selected": "Seleccionado: {{value}}"
+  },
+  "background": {
+    "title": "Fondo del Set Virtual",
+    "subtitle": "Genere un fondo con imagen IA",
+    "placeholder": "Describa el fondo que desea generar..."
+  },
+  "ai": {
+    "generatingBackdrop": "Generando su fondo...",
+    "editingImage": "Editando su imagen...",
+    "heresYourBackdrop": "Aquí está su fondo: {{prompt}}",
+    "doneUpdatedImage": "¡Listo! He actualizado la imagen: {{prompt}}",
+    "couldNotProcess": "Lo siento, no pude procesar la imagen: {{error}}",
+    "backgroundGenerated": "✓ Fondo generado",
+    "sceneUpdated": "✓ Escena actualizada"
+  },
+  "save": {
+    "title": "Guardar Configuración",
+    "description": "Guarda tu configuración actual de {{type}}",
+    "nothingToSaveAirport": "Nada que guardar. Por favor configure la pantalla del aeropuerto primero.",
+    "nothingToSaveVirtualSet": "Nada que guardar. Por favor establezca parámetros o genere un fondo primero.",
+    "nameRequired": "El nombre es requerido",
+    "maxTags": "Máximo 10 etiquetas permitidas",
+    "tagExists": "La etiqueta ya existe",
+    "configSaved": "¡Configuración de {{type}} guardada!",
+    "untitled": "Sin título",
+    "untitledConfiguration": "Configuración sin título",
+    "namePlaceholder": "Nombre de configuración",
+    "descriptionPlaceholder": "Descripción opcional",
+    "tags": "Etiquetas",
+    "addTagPlaceholder": "Agregar etiqueta..."
+  },
+  "drawing": {
+    "title": "Herramientas de Dibujo",
+    "color": "Color:",
+    "brush": "Pincel:",
+    "size": "Tamaño:",
+    "clear": "Limpiar"
+  },
+  "backdrop": {
+    "selected": "Fondo Seleccionado",
+    "accept": "Aceptar",
+    "edit": "Editar",
+    "new": "Nuevo",
+    "drawing": "Dibujando",
+    "drawTooltip": "Dibuje en la imagen para marcar áreas a editar",
+    "deselect": "Deseleccionar",
+    "deselectTooltip": "Deseleccionar fondo",
+    "applyToSet": "Aplicar al Set"
+  },
+  "recentBackdrops": {
+    "title": "Fondos Recientes",
+    "searchPlaceholder": "Buscar fondos...",
+    "loading": "Cargando fondos...",
+    "noBackdrops": "No se encontraron fondos"
+  },
+  "sort": {
+    "dateNewest": "Fecha (Más Reciente)",
+    "dateOldest": "Fecha (Más Antiguo)",
+    "nameAZ": "Nombre (A-Z)",
+    "nameZA": "Nombre (Z-A)",
+    "sizeLargest": "Tamaño (Mayor)",
+    "sizeSmallest": "Tamaño (Menor)",
+    "modelAZ": "Modelo (A-Z)"
+  },
+  "background.inputExample": "Ejemplo: Un paisaje urbano futurista al atardecer con luces de neón...",
+  "toast": {
+    "sceneUpdated": "Escena actualizada",
+    "backdropAccepted": "Fondo aceptado",
+    "backdropApplied": "¡Fondo aplicado al set virtual!",
+    "failedApplyBackdrop": "Error al aplicar el fondo",
+    "failedLoadBackdrops": "Error al cargar fondos recientes",
+    "enterDescription": "Por favor ingrese una descripción del fondo",
+    "configureApiKey": "Por favor configure su clave API de IA en Configuración",
+    "backgroundGenerated": "¡Imagen de fondo generada exitosamente!",
+    "backgroundEdited": "¡Imagen de fondo editada exitosamente!",
+    "failedProcessBackground": "Error al procesar el fondo: {{error}}",
+    "historyCleared": "Historial borrado",
+    "backgroundHistoryCleared": "Historial de fondos borrado"
+  }
+}

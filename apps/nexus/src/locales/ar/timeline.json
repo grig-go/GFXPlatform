@@ -1,0 +1,84 @@
+{
+  "title": "الجدول الزمني الكامل",
+  "scheduledWorkflowsCount": "{{count}} سير عمل مجدول هذا الشهر",
+  "searchPlaceholder": "البحث في الأحداث، سير العمل، الأنظمة...",
+  "filters": {
+    "zone": "المنطقة",
+    "system": "النظام",
+    "today": "اليوم",
+    "allZones": "جميع المناطق"
+  },
+  "days": {
+    "sun": "أحد",
+    "mon": "إثن",
+    "tue": "ثلا",
+    "wed": "أرب",
+    "thu": "خمي",
+    "fri": "جمع",
+    "sat": "سبت"
+  },
+  "calendar": {
+    "more": "+{{count}} المزيد"
+  },
+  "realTimeTimeline": {
+    "title": "الجدول الزمني للأحداث الفورية",
+    "subtitle": "آخر 24 ساعة من نشاط النظام"
+  },
+  "status": {
+    "success": "نجاح",
+    "warning": "تحذير",
+    "error": "خطأ",
+    "scheduled": "مجدول"
+  },
+  "systems": {
+    "lighting": "الإضاءة",
+    "audio": "الصوت",
+    "ledDisplays": "شاشات LED",
+    "hvac": "التكييف",
+    "signage": "اللافتات",
+    "nova": "نوفا",
+    "pulsar": "بولسار",
+    "aiEngine": "محرك الذكاء الاصطناعي",
+    "security": "الأمان"
+  },
+  "aiInsights": {
+    "title": "رؤى الذكاء الاصطناعي",
+    "todaysAnomalies": "{{count}} شذوذ اليوم ({{systems}})",
+    "upcoming": "القادم: {{workflow}} في {{time}}",
+    "predictedCrowdSurge": "ازدحام متوقع في {{time}} بالقرب من {{location}}"
+  },
+  "dialogs": {
+    "eventDetails": "تفاصيل الحدث",
+    "eventLog": "سجل الأحداث",
+    "scheduledWorkflow": "سير عمل مجدول",
+    "description": "الوصف",
+    "workflowDescription": "سير عمل {{system}} آلي مجدول للتشغيل يومياً في {{time}}.",
+    "recurrence": "التكرار",
+    "daily": "يومي",
+    "lastExecution": "آخر تنفيذ",
+    "successfullyCompleted": "أمس في {{time}} - تم بنجاح",
+    "viewInWorkflows": "عرض في سير العمل"
+  },
+  "aiInsightsModal": {
+    "title": "رؤى الذكاء الاصطناعي الأسبوعية",
+    "systemHealth": {
+      "title": "صحة النظام: ممتازة",
+      "description": "جميع الأنظمة الحرجة تعمل ضمن المعايير الطبيعية. وقت التشغيل الإجمالي: {{uptime}}"
+    },
+    "attentionRequired": {
+      "title": "يتطلب الانتباه",
+      "ledController": "وحدة تحكم LED في البوابة B7 واجهت فشلين في التمهيد هذا الأسبوع",
+      "memoryUtilization": "استخدام ذاكرة Show Playback في ارتفاع (+8% أسبوعياً)"
+    },
+    "predictions": {
+      "title": "التنبؤات والتوصيات",
+      "crowdSurge": "ازدحام متوقع غداً 07:40 صباحاً في البوابة A12 (ثقة 95%)",
+      "energyOptimization": "تحسين الطاقة يقترح إعادة جدولة الصيانة لأوقات غير الذروة",
+      "hvacEfficiency": "تحسنت كفاءة التكييف 12% منذ تعديلات الذكاء الاصطناعي الأسبوع الماضي"
+    },
+    "automationInsights": {
+      "title": "رؤى الأتمتة",
+      "description": "10 سير عمل تم تنفيذها بنجاح هذا الأسبوع مع 0 فشل. متوسط وقت التنفيذ: 2.3 دقيقة. اكتشفت أتمتة Pulsar وحلت 3 تعارضات جدولة محتملة."
+    }
+  }
+}

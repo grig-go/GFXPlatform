@@ -1,0 +1,134 @@
+{
+  "title": "Content Library",
+  "subtitle": "Manage your virtual set environments and backgrounds",
+  "search": {
+    "placeholder": "Search by name or description..."
+  },
+  "filter": {
+    "byType": "Filter by type",
+    "allTypes": "All Types",
+    "environment": "Environment",
+    "background": "Background",
+    "both": "Both",
+    "unknown": "Unknown"
+  },
+  "folder": {
+    "title": "Folders",
+    "new": "New Folder",
+    "create": "Create Folder",
+    "createNew": "Create New Folder",
+    "rename": "Rename Folder",
+    "namePlaceholder": "Folder name...",
+    "selectFolder": "Select folder",
+    "allItems": "All Items",
+    "newSubfolder": "New Subfolder",
+    "enterName": "Enter a name for your new folder",
+    "enterNewName": "Enter a new name for this folder",
+    "rootNoFolder": "Root (No Folder)",
+    "deleteConfirm": "Are you sure you want to delete this folder? Content inside will be moved to root."
+  },
+  "dialog": {
+    "createContent": "Create Content",
+    "namePlaceholder": "Content name...",
+    "descriptionPlaceholder": "Description (optional)...",
+    "moveToFolder": "Move to Folder",
+    "moveDestination": "Select a destination folder for \"{{name}}\"",
+    "viewDetails": "View Details",
+    "confirmDelete": "Confirm Delete",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirmBatchDelete": "Confirm Batch Delete",
+    "confirmBatchDeleteMessage": "Are you sure you want to delete {{count}} selected item(s)? This action cannot be undone."
+  },
+  "import": {
+    "title": "Import Content Pages",
+    "description": "Select a project and choose which content pages to import into \"{{projectName}}\"",
+    "sourceProject": "Source Project",
+    "selectProject": "Select a project to import from...",
+    "contentPages": "Content Pages",
+    "noContentFound": "No content pages found in this project",
+    "importedCount": "Imported {{count}} content page(s)",
+    "failedCount": "Failed to import {{count}} item(s)",
+    "failed": "Import failed",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "itemsSelected": "{{count}} item(s) selected"
+  },
+  "actions": {
+    "import": "Import",
+    "refresh": "Refresh",
+    "applyToVirtualSet": "Apply to Virtual Set",
+    "rename": "Rename",
+    "delete": "Delete",
+    "move": "Move",
+    "close": "Close",
+    "cancel": "Cancel",
+    "create": "Create",
+    "saveChanges": "Save Changes"
+  },
+  "table": {
+    "name": "Name",
+    "type": "Type",
+    "timeCreated": "Time Created",
+    "actions": "Actions",
+    "showing": "Showing {{filtered}} of {{total}} items"
+  },
+  "empty": {
+    "noContent": "No content found",
+    "createFirst": "Create your first virtual set to see it here",
+    "adjustFilters": "Try adjusting your search or filters"
+  },
+  "batch": {
+    "selected": "{{count}} item(s) selected",
+    "clearSelection": "Clear Selection",
+    "deleteSelected": "Delete Selected",
+    "deleteCount": "Delete {{count}} Item(s)"
+  },
+  "details": {
+    "type": "Type",
+    "visibility": "Visibility",
+    "public": "Public",
+    "private": "Private",
+    "created": "Created",
+    "tags": "Tags",
+    "sceneConfig": "Scene Configuration",
+    "loadingOptions": "Loading options...",
+    "backdropImage": "Backdrop Image",
+    "noneDisabled": "None (disabled)"
+  },
+  "toast": {
+    "failedLoadFolders": "Failed to load folders: {{error}}",
+    "failedLoadContent": "Failed to load content: {{error}}",
+    "failedLoadFromProject": "Failed to load content from project",
+    "folderNameRequired": "Folder name is required",
+    "folderCreated": "Folder created successfully",
+    "folderRenamed": "Folder renamed successfully",
+    "failedSaveFolder": "Failed to save folder: {{error}}",
+    "folderDeleted": "Folder deleted successfully",
+    "failedDeleteFolder": "Failed to delete folder: {{error}}",
+    "movedTo": "Moved \"{{name}}\" to {{location}}",
+    "failedMove": "Failed to move content: {{error}}",
+    "noActiveChannel": "No active Unreal channel found. Please select a channel on the Virtual Set page.",
+    "appliedToUnreal": "\"{{name}}\" applied to Unreal Engine!",
+    "failedSendConfig": "Failed to send configuration",
+    "deletedSuccess": "\"{{name}}\" deleted successfully",
+    "failedDelete": "Failed to delete: {{error}}",
+    "deletedBatch": "Deleted {{count}} item(s) successfully",
+    "failedBatchDelete": "Failed to delete items",
+    "contentUpdated": "Content updated successfully",
+    "failedUpdate": "Failed to update content: {{error}}",
+    "nameRequired": "Name is required",
+    "partialSuccess": "Partial success",
+    "sceneBackdropFailed": "Scene sent, but backdrop failed",
+    "failedApply": "Failed to apply configuration: {{error}}",
+    "airportConfigSent": "Airport configuration sent",
+    "sceneBackdropSent": "Scene and backdrop sent successfully"
+  },
+  "sampleFolders": {
+    "newsSegments": "News Segments",
+    "sportsHighlights": "Sports Highlights",
+    "morningBrief": "Morning Brief",
+    "eveningUpdate": "Evening Update",
+    "weatherReports": "Weather Reports",
+    "noonForecast": "Noon Forecast"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "title": "Chronologie complète",
+  "scheduledWorkflowsCount": "{{count}} workflows planifiés ce mois",
+  "searchPlaceholder": "Rechercher événements, workflows, systèmes...",
+  "filters": {
+    "zone": "Zone",
+    "system": "Système",
+    "today": "Aujourd'hui",
+    "allZones": "Toutes les zones"
+  },
+  "days": {
+    "sun": "Dim",
+    "mon": "Lun",
+    "tue": "Mar",
+    "wed": "Mer",
+    "thu": "Jeu",
+    "fri": "Ven",
+    "sat": "Sam"
+  },
+  "calendar": {
+    "more": "+{{count}} plus"
+  },
+  "realTimeTimeline": {
+    "title": "Chronologie des événements en temps réel",
+    "subtitle": "Dernières 24 heures d'activité système"
+  },
+  "status": {
+    "success": "Succès",
+    "warning": "Avertissement",
+    "error": "Erreur",
+    "scheduled": "Planifié"
+  },
+  "systems": {
+    "lighting": "Éclairage",
+    "audio": "Audio",
+    "ledDisplays": "Écrans LED",
+    "hvac": "CVC",
+    "signage": "Signalétique",
+    "nova": "Nova",
+    "pulsar": "Pulsar",
+    "aiEngine": "Moteur IA",
+    "security": "Sécurité"
+  },
+  "aiInsights": {
+    "title": "Aperçus IA",
+    "todaysAnomalies": "{{count}} anomalies aujourd'hui ({{systems}})",
+    "upcoming": "À venir : {{workflow}} dans {{time}}",
+    "predictedCrowdSurge": "Pic d'affluence prévu à {{time}} près de {{location}}"
+  },
+  "dialogs": {
+    "eventDetails": "Détails de l'événement",
+    "eventLog": "Journal des événements",
+    "scheduledWorkflow": "Workflow planifié",
+    "description": "Description",
+    "workflowDescription": "Workflow {{system}} automatisé planifié pour s'exécuter quotidiennement à {{time}}.",
+    "recurrence": "Récurrence",
+    "daily": "Quotidien",
+    "lastExecution": "Dernière exécution",
+    "successfullyCompleted": "Hier à {{time}} - Terminé avec succès",
+    "viewInWorkflows": "Voir dans les workflows"
+  },
+  "aiInsightsModal": {
+    "title": "Aperçus IA hebdomadaires",
+    "systemHealth": {
+      "title": "Santé du système : Excellente",
+      "description": "Tous les systèmes critiques fonctionnent dans les paramètres normaux. Disponibilité globale : {{uptime}}"
+    },
+    "attentionRequired": {
+      "title": "Attention requise",
+      "ledController": "Le contrôleur LED de la porte B7 a connu 2 échecs de démarrage cette semaine",
+      "memoryUtilization": "L'utilisation mémoire de Show Playback augmente (+8% semaine après semaine)"
+    },
+    "predictions": {
+      "title": "Prédictions et recommandations",
+      "crowdSurge": "Pic d'affluence prévu demain à 07h40 à la porte A12 (95% de confiance)",
+      "energyOptimization": "L'optimisation énergétique suggère de reprogrammer la maintenance aux heures creuses",
+      "hvacEfficiency": "L'efficacité CVC a augmenté de 12% depuis les ajustements IA de la semaine dernière"
+    },
+    "automationInsights": {
+      "title": "Aperçus d'automatisation",
+      "description": "10 workflows exécutés avec succès cette semaine avec 0 échec. Temps d'exécution moyen : 2,3 minutes. L'automatisation Pulsar a détecté et résolu 3 conflits de planification potentiels."
+    }
+  }
+}

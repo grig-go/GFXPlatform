@@ -1,0 +1,42 @@
+{
+  "title": "Proyectos",
+  "subtitle": "Administre sus proyectos de set virtual",
+  "newProject": "Nuevo Proyecto",
+  "createFirst": "Crear Primer Proyecto",
+  "empty": {
+    "title": "Sin proyectos aún",
+    "description": "Cree su primer proyecto para organizar sus configuraciones de set virtual"
+  },
+  "card": {
+    "setAsActive": "Establecer como activo"
+  },
+  "form": {
+    "newTitle": "Nuevo Proyecto",
+    "editTitle": "Editar Proyecto",
+    "newDescription": "Cree un nuevo proyecto para organizar su trabajo",
+    "editDescription": "Editando \"{{projectName}}\"",
+    "name": "Nombre *",
+    "namePlaceholder": "Mi Proyecto de Set Virtual",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Describa este proyecto...",
+    "icon": "Icono",
+    "color": "Color",
+    "projectType": "Tipo de Proyecto"
+  },
+  "aiInstructions": {
+    "title": "Instrucciones de IA",
+    "description": "Configure cómo la IA entiende sus comandos al editar configuraciones de escena.",
+    "placeholder": "Ingrese instrucciones personalizadas para la IA...",
+    "loadAirportDefaults": "Cargar Valores de Aeropuerto",
+    "fieldAliases": "Alias de Campos",
+    "customInstructions": "Instrucciones Personalizadas"
+  },
+  "selector": {
+    "label": "Proyecto",
+    "loading": "Cargando...",
+    "selectProject": "Seleccionar un proyecto",
+    "noProjects": "Sin proyectos aún",
+    "newProject": "Nuevo Proyecto",
+    "manageProjects": "Administrar Proyectos"
+  }
+}

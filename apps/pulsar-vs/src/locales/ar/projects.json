@@ -1,0 +1,42 @@
+{
+  "title": "المشاريع",
+  "subtitle": "إدارة مشاريع الاستوديو الافتراضي",
+  "newProject": "مشروع جديد",
+  "createFirst": "إنشاء أول مشروع",
+  "empty": {
+    "title": "لا توجد مشاريع بعد",
+    "description": "أنشئ مشروعك الأول لتنظيم إعدادات الاستوديو الافتراضي"
+  },
+  "card": {
+    "setAsActive": "تعيين كنشط"
+  },
+  "form": {
+    "newTitle": "مشروع جديد",
+    "editTitle": "تعديل المشروع",
+    "newDescription": "إنشاء مشروع جديد لتنظيم عملك",
+    "editDescription": "تعديل \"{{projectName}}\"",
+    "name": "الاسم *",
+    "namePlaceholder": "مشروع الاستوديو الافتراضي",
+    "description": "الوصف",
+    "descriptionPlaceholder": "صف هذا المشروع...",
+    "icon": "الأيقونة",
+    "color": "اللون",
+    "projectType": "نوع المشروع"
+  },
+  "aiInstructions": {
+    "title": "تعليمات الذكاء الاصطناعي",
+    "description": "إعداد كيفية فهم الذكاء الاصطناعي لأوامرك عند تعديل إعدادات المشهد.",
+    "placeholder": "أدخل تعليمات مخصصة للذكاء الاصطناعي...",
+    "loadAirportDefaults": "تحميل إعدادات المطار الافتراضية",
+    "fieldAliases": "الأسماء البديلة للحقول",
+    "customInstructions": "تعليمات مخصصة"
+  },
+  "selector": {
+    "label": "المشروع",
+    "loading": "جاري التحميل...",
+    "selectProject": "اختر مشروع",
+    "noProjects": "لا توجد مشاريع بعد",
+    "newProject": "مشروع جديد",
+    "manageProjects": "إدارة المشاريع"
+  }
+}

@@ -11,6 +11,7 @@ import enDevices from './locales/en/devices.json';
 import enWorkflows from './locales/en/workflows.json';
 import enZones from './locales/en/zones.json';
 import enLogs from './locales/en/logs.json';
+import enTimeline from './locales/en/timeline.json';
 
 // French
 import frCommon from './locales/fr/common.json';
@@ -21,6 +22,7 @@ import frDevices from './locales/fr/devices.json';
 import frWorkflows from './locales/fr/workflows.json';
 import frZones from './locales/fr/zones.json';
 import frLogs from './locales/fr/logs.json';
+import frTimeline from './locales/fr/timeline.json';
 
 // Arabic
 import arCommon from './locales/ar/common.json';
@@ -31,6 +33,7 @@ import arDevices from './locales/ar/devices.json';
 import arWorkflows from './locales/ar/workflows.json';
 import arZones from './locales/ar/zones.json';
 import arLogs from './locales/ar/logs.json';
+import arTimeline from './locales/ar/timeline.json';
 
 // Spanish
 import esCommon from './locales/es/common.json';
@@ -41,6 +44,7 @@ import esDevices from './locales/es/devices.json';
 import esWorkflows from './locales/es/workflows.json';
 import esZones from './locales/es/zones.json';
 import esLogs from './locales/es/logs.json';
+import esTimeline from './locales/es/timeline.json';
 
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English', nativeName: 'English', dir: 'ltr' },
@@ -61,6 +65,7 @@ const resources = {
     workflows: enWorkflows,
     zones: enZones,
     logs: enLogs,
+    timeline: enTimeline,
   },
   fr: {
     common: frCommon,
@@ -71,6 +76,7 @@ const resources = {
     workflows: frWorkflows,
     zones: frZones,
     logs: frLogs,
+    timeline: frTimeline,
   },
   ar: {
     common: arCommon,
@@ -81,6 +87,7 @@ const resources = {
     workflows: arWorkflows,
     zones: arZones,
     logs: arLogs,
+    timeline: arTimeline,
   },
   es: {
     common: esCommon,
@@ -91,6 +98,7 @@ const resources = {
     workflows: esWorkflows,
     zones: esZones,
     logs: esLogs,
+    timeline: esTimeline,
   },
 };
 
