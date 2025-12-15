@@ -31,6 +31,39 @@ Text elements display formatted text with rich styling options.
 | `word` | Wrap at word boundaries |
 | `character` | Wrap at any character |
 
+### Max Size Mode
+
+When **Max Size** is enabled, text will not wrap. Instead, it will scale down horizontally and/or vertically to fit within the element's bounding box.
+
+```typescript
+{
+  maxSize: boolean;  // Enable max size scaling mode
+}
+```
+
+**How it works:**
+1. Text is rendered without wrapping (`white-space: nowrap`)
+2. The natural text width and height are measured
+3. Scale factors are calculated to fit within the container
+4. The text is scaled down (never up) to fit
+
+:::tip Use Cases
+Max Size is ideal for:
+- Score displays that need to fit varying number lengths
+- Names or titles that may vary in length
+- Any text that should shrink to fit rather than wrap
+:::
+
+**Example:**
+```typescript
+{
+  text: "CHAMPIONSHIP",
+  maxSize: true,
+  // Text will scale horizontally to fit container width
+  // if the text is wider than the element
+}
+```
+
 ## Style Properties
 
 ### Font
@@ -182,10 +215,6 @@ Bind text to data sources:
 - Start: `scale: 0`
 - End: `scale: 1`
 
-#### Typewriter Effect
-- Animate `text` property character by character
-- Use custom animation library
-
 ### Animatable Properties
 
 | Property | Interpolation |
@@ -197,6 +226,99 @@ Bind text to data sources:
 | `fontSize` | Linear |
 | `letterSpacing` | Linear |
 | `fill` | Color interpolation |
+
+## Character Animation
+
+Nova GFX includes a powerful character-level animation system powered by [Splitting.js](https://splitting.js.org/). This allows you to animate text on a per-character basis for dynamic reveals and effects.
+
+### Enabling Character Animation
+
+1. Select a text element
+2. In the Properties panel, find **Character Animation**
+3. Toggle **Enable Character Animation**
+
+### Animation Types
+
+| Type | Description |
+|------|-------------|
+| `fade` | Characters fade in from transparent |
+| `slide-up` | Characters slide up from below |
+| `slide-down` | Characters slide down from above |
+| `slide-left` | Characters slide in from the right |
+| `slide-right` | Characters slide in from the left |
+| `scale` | Characters scale up from small to full size |
+| `blur` | Characters transition from blurred to sharp |
+| `wave` | Characters animate in a wave motion |
+| `bounce` | Characters bounce into place |
+
+### Animation Direction
+
+Control the order in which characters animate:
+
+| Direction | Description |
+|-----------|-------------|
+| `forward` | First character to last (left to right) |
+| `backward` | Last character to first (right to left) |
+| `center` | Middle characters first, expanding outward |
+| `edges` | Outer characters first, converging to center |
+
+### Animation Settings
+
+```typescript
+{
+  charAnimation: {
+    enabled: boolean;        // Enable/disable character animation
+    type: string;            // Animation type (fade, slide-up, etc.)
+    direction: string;       // Animation direction
+    stagger: number;         // Delay between characters (ms)
+    duration: number;        // Duration per character (ms)
+    easing: string;          // CSS easing function
+    progress: number;        // Animation progress (0-100%)
+    spread: number;          // How many characters animate simultaneously
+  }
+}
+```
+
+### Progress Control
+
+The `progress` property (0-100%) controls how much of the animation has completed:
+
+- **0%**: All characters in their starting state (e.g., invisible for fade)
+- **50%**: Half of the characters have animated in
+- **100%**: All characters fully visible in final state
+
+:::tip Keyframe Animation
+You can keyframe the `progress` property to control character animation timing:
+
+1. Add a keyframe at position 0% with `progress: 0`
+2. Add a keyframe at position 100% with `progress: 100`
+3. The characters will animate in sync with your timeline
+:::
+
+### Spread Setting
+
+The `spread` value controls how many characters are animating simultaneously:
+
+- **Low spread (1-3)**: Characters animate one at a time for a typewriter effect
+- **High spread (5-10)**: Multiple characters animate together for a wave effect
+
+### Example: News Lower Third
+
+```typescript
+{
+  charAnimation: {
+    enabled: true,
+    type: 'slide-up',
+    direction: 'forward',
+    stagger: 30,
+    duration: 400,
+    easing: 'ease-out',
+    spread: 3
+  }
+}
+```
+
+This creates a smooth left-to-right reveal with characters sliding up into position.
 
 ## Best Practices
 

@@ -250,8 +250,13 @@ const propertyToCSSMap: Record<string, string> = {
 
 // Properties that are element-level (not CSS styles)
 const elementProperties = new Set([
-  'position_x', 'position_y', 'rotation', 'scale_x', 'scale_y', 
-  'width', 'height', 'opacity', 'anchor_x', 'anchor_y'
+  'position_x', 'position_y', 'rotation', 'scale_x', 'scale_y',
+  'width', 'height', 'opacity', 'anchor_x', 'anchor_y',
+  // Screen mask properties
+  'screenMask_x', 'screenMask_y', 'screenMask_width', 'screenMask_height',
+  'screenMask_feather_top', 'screenMask_feather_right', 'screenMask_feather_bottom', 'screenMask_feather_left',
+  // Character animation progress
+  'charAnimation_progress'
 ]);
 
 // Calculate animated properties for an element at a given time
@@ -268,6 +273,20 @@ export function getAnimatedProperties(
   const shouldDebug = debug;
 
   const phaseAnimations = animations.filter((a) => a.element_id === element.id && a.phase === phase);
+
+  // Always log for text elements to debug char animation
+  if (element.content?.type === 'text') {
+    const allElementAnims = animations.filter((a) => a.element_id === element.id);
+    console.log('[Animation] Text element lookup:', {
+      elementId: element.id,
+      requestedPhase: phase,
+      foundInPhase: phaseAnimations.length,
+      totalAnimations: allElementAnims.length,
+      availablePhases: allElementAnims.map(a => a.phase),
+      time: time
+    });
+  }
+
   if (phaseAnimations.length === 0) {
     if (shouldDebug) console.log('[Animation] No animations for element', element.id, 'in phase', phase);
     return {};
@@ -280,11 +299,11 @@ export function getAnimatedProperties(
       .filter((k) => k.animation_id === anim.id)
       .sort((a, b) => a.position - b.position);
 
-    if (shouldDebug) {
-      console.log('[Animation] Animation', anim.id, 'has', animKeyframes.length, 'keyframes:',
-        animKeyframes.map(kf => ({ pos: kf.position, props: kf.properties }))
-      );
-    }
+    // Always log keyframes for debugging - show full details including property values
+    console.log('[Animation] Keyframes for', element.id, ':', animKeyframes.map(kf => ({
+      pos: kf.position,
+      props: JSON.stringify(kf.properties)
+    })));
 
     // If no keyframes, nothing to animate
     if (animKeyframes.length === 0) return;
@@ -300,9 +319,10 @@ export function getAnimatedProperties(
       return;
     }
 
-    // Use phase duration if provided, otherwise fall back to animation duration
-    // This ensures keyframes are interpolated correctly relative to the timeline
-    const effectiveDuration = phaseDuration || anim.duration;
+    // IMPORTANT: Always use anim.duration because keyframe positions are stored as percentages
+    // of anim.duration (see Timeline.tsx handleAddKeyframeAtTime). phaseDuration is only used
+    // for timeline visual display, not for keyframe interpolation.
+    const effectiveDuration = anim.duration;
 
     // Calculate progress within this animation
     const localTime = time - anim.delay;
@@ -328,16 +348,50 @@ export function getAnimatedProperties(
       progress = Math.min(progress, 1);
     }
 
-    // Apply easing
-    const easedProgress = applyEasing(progress, anim.easing);
-
     // Find the two keyframes we're between (0-100% scale)
-    const keyframeProgress = easedProgress * 100;
-    let fromKf = animKeyframes[0];
-    let toKf = animKeyframes[animKeyframes.length - 1];
+    // IMPORTANT: Use raw progress (not eased) to find keyframe positions
+    // Easing should only affect interpolation BETWEEN keyframes, not when we reach them
+    const keyframeProgress = progress * 100;
+    const firstKf = animKeyframes[0];
+    const lastKf = animKeyframes[animKeyframes.length - 1];
+
+    // DEBUG: Log keyframe progress comparison
+    console.log('[Animation] Keyframe timing:', {
+      time,
+      animDuration: anim.duration,
+      progress: progress.toFixed(4),
+      keyframeProgress: keyframeProgress.toFixed(4),
+      firstKfPos: firstKf.position,
+      lastKfPos: lastKf.position,
+      isBeforeFirst: keyframeProgress < firstKf.position,
+      isAfterLast: keyframeProgress >= lastKf.position,
+      numKeyframes: animKeyframes.length
+    });
+
+    // BEFORE first keyframe - use first keyframe values (no animation yet)
+    if (keyframeProgress < firstKf.position) {
+      Object.keys(firstKf.properties).forEach((prop) => {
+        const cssProperty = propertyToCSSMap[prop] || prop;
+        result[cssProperty] = firstKf.properties[prop] as string | number;
+      });
+      return; // Exit forEach for this animation
+    }
+
+    // AFTER last keyframe - use last keyframe values (animation complete)
+    if (keyframeProgress >= lastKf.position) {
+      Object.keys(lastKf.properties).forEach((prop) => {
+        const cssProperty = propertyToCSSMap[prop] || prop;
+        result[cssProperty] = lastKf.properties[prop] as string | number;
+      });
+      return; // Exit forEach for this animation
+    }
+
+    // BETWEEN keyframes - find which two we're between and interpolate
+    let fromKf = firstKf;
+    let toKf = lastKf;
 
     for (let i = 0; i < animKeyframes.length - 1; i++) {
-      if (keyframeProgress >= animKeyframes[i].position && keyframeProgress <= animKeyframes[i + 1].position) {
+      if (keyframeProgress >= animKeyframes[i].position && keyframeProgress < animKeyframes[i + 1].position) {
         fromKf = animKeyframes[i];
         toKf = animKeyframes[i + 1];
         break;
@@ -346,7 +400,11 @@ export function getAnimatedProperties(
 
     // Interpolate between keyframes
     const kfRange = toKf.position - fromKf.position;
-    const kfProgress = kfRange > 0 ? (keyframeProgress - fromKf.position) / kfRange : 0;
+    let kfProgress = kfRange > 0 ? (keyframeProgress - fromKf.position) / kfRange : 0;
+    // Clamp kfProgress to 0-1 to prevent extrapolation beyond keyframes
+    kfProgress = Math.max(0, Math.min(1, kfProgress));
+    // Apply easing to the interpolation between keyframes
+    const easedKfProgress = applyEasing(kfProgress, anim.easing);
 
     // Get all unique property names from both keyframes
     const allProps = new Set([...Object.keys(fromKf.properties), ...Object.keys(toKf.properties)]);
@@ -369,42 +427,52 @@ export function getAnimatedProperties(
         return;
       }
 
-      // Both values exist - interpolate
+      // Both values exist - interpolate using eased progress
       if (typeof fromValue === 'number' && typeof toValue === 'number') {
-        result[cssProperty] = interpolate(fromValue, toValue, kfProgress);
+        result[cssProperty] = interpolate(fromValue, toValue, easedKfProgress);
       } else if (prop === 'transform') {
-        result[cssProperty] = interpolateTransform(String(fromValue || ''), String(toValue || ''), kfProgress);
+        result[cssProperty] = interpolateTransform(String(fromValue || ''), String(toValue || ''), easedKfProgress);
       } else if (isColorProperty(prop) || (isColorValue(fromValue) && isColorValue(toValue))) {
         // Interpolate colors
-        result[cssProperty] = interpolateColor(fromValue, toValue, kfProgress);
+        result[cssProperty] = interpolateColor(fromValue, toValue, easedKfProgress);
       } else {
         // For non-interpolatable values, snap at 50%
-        result[cssProperty] = kfProgress < 0.5 ? (fromValue as string | number) : (toValue as string | number);
+        result[cssProperty] = easedKfProgress < 0.5 ? (fromValue as string | number) : (toValue as string | number);
       }
     });
 
     if (debug) {
-      console.log('[Animation] Result at time', time, '- progress:', kfProgress.toFixed(2), 'result:', result);
+      console.log('[Animation] Result at time', time, '- kfProgress:', kfProgress.toFixed(3), 'easedKfProgress:', easedKfProgress.toFixed(3), 'result:', result);
     }
   });
 
+  // Debug: log charAnimation_progress specifically if it exists
+  if (result.charAnimation_progress !== undefined) {
+    console.log('[Animation] charAnimation_progress interpolated:', result.charAnimation_progress, 'at time:', time, 'for element:', element.id, 'phase:', phase);
+  }
+
   return result;
 }
+
+// Animation type definitions
+export type InOutAnimationType = 'fade' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down' | 'scale' | 'custom';
+export type LoopAnimationType = 'pulse' | 'side-to-side' | 'up-and-down' | 'gentle-twist' | 'custom';
+export type AnimationType = InOutAnimationType | LoopAnimationType;
 
 // Create default animation for an element
 export function createDefaultAnimation(
   elementId: string,
   templateId: string,
   phase: 'in' | 'loop' | 'out',
-  animationType: 'fade' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down' | 'scale' | 'custom' = 'fade'
+  animationType: AnimationType = 'fade'
 ): { animation: Omit<Animation, 'id'>; keyframes: Omit<Keyframe, 'id' | 'animation_id'>[] } {
   const baseAnimation = {
     template_id: templateId,
     element_id: elementId,
     phase,
     delay: 0,
-    duration: phase === 'in' ? 500 : phase === 'out' ? 300 : 1000,
-    easing: 'ease-out',
+    duration: phase === 'in' ? 500 : phase === 'out' ? 300 : 1500,
+    easing: phase === 'loop' ? 'ease-in-out' : 'ease-out',
     library: null,
     library_config: null,
   };
@@ -412,8 +480,9 @@ export function createDefaultAnimation(
   let keyframes: Omit<Keyframe, 'id' | 'animation_id'>[];
 
   switch (animationType) {
+    // IN/OUT animations
     case 'fade':
-      keyframes = phase === 'out' 
+      keyframes = phase === 'out'
         ? [
             { position: 0, properties: { opacity: 1 } },
             { position: 100, properties: { opacity: 0 } },
@@ -482,6 +551,46 @@ export function createDefaultAnimation(
             { position: 0, properties: { opacity: 0, transform: 'scale(0.8)' } },
             { position: 100, properties: { opacity: 1, transform: 'scale(1)' } },
           ];
+      break;
+
+    // LOOP animations - all designed to be perfect loops (start and end at same state)
+    case 'pulse':
+      // Gentle scale pulse - grows slightly then returns to original size
+      keyframes = [
+        { position: 0, properties: { transform: 'scale(1)' } },
+        { position: 50, properties: { transform: 'scale(1.05)' } },
+        { position: 100, properties: { transform: 'scale(1)' } },
+      ];
+      break;
+
+    case 'side-to-side':
+      // Horizontal oscillation - moves left, right, then back to center
+      keyframes = [
+        { position: 0, properties: { transform: 'translateX(0)' } },
+        { position: 25, properties: { transform: 'translateX(-10px)' } },
+        { position: 75, properties: { transform: 'translateX(10px)' } },
+        { position: 100, properties: { transform: 'translateX(0)' } },
+      ];
+      break;
+
+    case 'up-and-down':
+      // Vertical oscillation - moves up, down, then back to center
+      keyframes = [
+        { position: 0, properties: { transform: 'translateY(0)' } },
+        { position: 25, properties: { transform: 'translateY(-8px)' } },
+        { position: 75, properties: { transform: 'translateY(8px)' } },
+        { position: 100, properties: { transform: 'translateY(0)' } },
+      ];
+      break;
+
+    case 'gentle-twist':
+      // Subtle rotation - rotates slightly clockwise then counter-clockwise
+      keyframes = [
+        { position: 0, properties: { transform: 'rotate(0deg)' } },
+        { position: 25, properties: { transform: 'rotate(-2deg)' } },
+        { position: 75, properties: { transform: 'rotate(2deg)' } },
+        { position: 100, properties: { transform: 'rotate(0deg)' } },
+      ];
       break;
 
     default:

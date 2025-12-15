@@ -132,7 +132,7 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
 }
 \`\`\`
 
-**NEVER use SVG patterns or inline HTML for backgrounds** - always use \`{{GENERATE:query}}\` or \`{{PEXELS:query}}\` placeholders.
+**NEVER use SVG patterns or inline HTML for backgrounds** - always use \`{{GENERATE:query}}\` placeholders.
 
 **Video Texture Example**:
 \`\`\`json

@@ -150,10 +150,6 @@ export const POPULAR_FONTS: Font[] = [
   { family: 'Figtree', label: 'Figtree', category: 'sans-serif', weights: [300, 400, 500, 600, 700, 800, 900], popularity: 42 },
 ];
 
-// For backwards compatibility
-export const GOOGLE_FONTS = POPULAR_FONTS;
-export const POPULAR_GOOGLE_FONTS = POPULAR_FONTS;
-
 // System fonts (no loading required)
 export const SYSTEM_FONTS: Font[] = [
   { family: 'Arial', label: 'Arial', category: 'sans-serif', weights: [400, 700], source: 'system' },
@@ -202,11 +198,6 @@ export function generateFontUrl(fonts: string[], weights?: number[]): string {
     });
     return `https://fonts.googleapis.com/css2?${families.join('&')}&display=swap`;
   }
-}
-
-// Legacy function for backwards compatibility
-export function generateGoogleFontsUrl(fonts: string[]): string {
-  return generateFontUrl(fonts);
 }
 
 // Load a font dynamically

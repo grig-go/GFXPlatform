@@ -702,10 +702,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             // For REAL projects (valid UUIDs), always load from database to ensure consistency
             // localStorage is only used for demo/local projects or as a fallback
+            // NOTE: We DON'T clear localStorage until AFTER successful DB load to prevent data loss
             if (isValidUUID && projectId !== 'demo') {
-              // Clear localStorage cache for this project to prevent stale data
-              localStorage.removeItem(`nova-project-${projectId}`);
-              console.log('🔄 Loading project from database (cleared localStorage cache)');
+              console.log('🔄 Loading project from database (localStorage will be refreshed after load)');
             } else {
               // For demo/local projects, check localStorage first
               const savedLocal = localStorage.getItem(`nova-project-${projectId}`);
@@ -1157,18 +1156,29 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
                 // Fetch keyframes for each animation (batch with timeout)
                 if (animations.length > 0) {
+                  console.log(`📦 Fetching keyframes for ${animations.length} animations in template ${template.id}...`);
                   try {
                     const keyframeResults = await withTimeout(
-                      Promise.all(animations.map(anim => fetchKeyframes(anim.id).catch(() => []))),
+                      Promise.all(animations.map(anim => fetchKeyframes(anim.id).catch((e) => {
+                        console.error(`Failed to fetch keyframes for animation ${anim.id}:`, e);
+                        return [];
+                      }))),
                       LOAD_TIMEOUT,
                       'Fetch keyframes'
                     );
+                    let templateKeyframeCount = 0;
                     keyframeResults.forEach(keyframes => {
-                      if (Array.isArray(keyframes)) allKeyframes.push(...keyframes);
+                      if (Array.isArray(keyframes)) {
+                        templateKeyframeCount += keyframes.length;
+                        allKeyframes.push(...keyframes);
+                      }
                     });
+                    console.log(`✅ Loaded ${templateKeyframeCount} keyframes for template ${template.id}`);
                   } catch (e) {
                     console.error('Error/timeout fetching keyframes:', e);
                   }
+                } else {
+                  console.log(`⚠️ No animations found for template ${template.id}, skipping keyframe fetch`);
                 }
               } catch (e) {
                 console.error(`Error/timeout processing template ${template.id}:`, e);
@@ -1219,7 +1229,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               },
             });
 
-            console.log(`Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements`);
+            console.log(`✅ Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements, ${allAnimations.length} animations, ${allKeyframes.length} keyframes`);
           } catch (error) {
             console.error('Error loading project:', error);
             set({ 
@@ -1238,9 +1248,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           const projectId = state.project.id;
 
-          // Capture canvas thumbnail
+          // Capture canvas thumbnail (lower quality for faster upload)
           set({ isSaving: true });
-          const thumbnailDataUrl = await captureCanvasSnapshot(0.7, 480);
+          const thumbnailDataUrl = await captureCanvasSnapshot(0.6, 400);
 
           // Upload thumbnail to Supabase Storage (only for real projects)
           let thumbnailUrl: string | null = state.project.thumbnail_url || null;
@@ -1249,16 +1259,18 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           if (thumbnailDataUrl && isValidUUID && projectId !== 'demo') {
             try {
+              // Use 30s timeout for thumbnail upload (network can be slow)
               const uploadedUrl = await withTimeout(
                 uploadThumbnailToStorage(projectId, thumbnailDataUrl),
-                15000,
+                30000,
                 'Upload thumbnail'
               );
               if (uploadedUrl) {
                 thumbnailUrl = uploadedUrl;
               }
             } catch (thumbnailError) {
-              console.warn('Thumbnail upload timed out or failed, continuing with save:', thumbnailError);
+              // Silently continue - thumbnail upload failure shouldn't block save
+              console.warn('Thumbnail upload failed, continuing with save');
             }
           }
 
@@ -1889,8 +1901,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             z_index: type === 'video' ? 0 : (maxZIndex + 10), // Video elements always get z_index 0, others get maxZIndex + 10
             position_x: position.x,
             position_y: position.y,
-            width: type === 'text' ? null : type === 'line' ? 200 : 200,
-            height: type === 'text' ? null : type === 'line' ? 2 : 100,
+            width: type === 'text' ? 200 : type === 'line' ? 200 : 200,
+            height: type === 'text' ? 40 : type === 'line' ? 2 : 100,
             rotation: 0,
             scale_x: 1,
             scale_y: 1,
@@ -1907,6 +1919,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((state) => {
             state.elements.push(newElement);
             state.selectedElementIds = [id];
+            state.selectedKeyframeIds = []; // Clear keyframe selection when creating new element
             state.isDirty = true;
           });
 
@@ -1961,6 +1974,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((state) => {
             state.elements.push(newElement);
             state.selectedElementIds = [id];
+            state.selectedKeyframeIds = []; // Clear keyframe selection when creating new element
             state.isDirty = true;
           });
 
@@ -2023,6 +2037,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((state) => {
             state.elements.push(duplicatedElement);
             state.selectedElementIds = [newId];
+            state.selectedKeyframeIds = []; // Clear keyframe selection when duplicating element
             state.isDirty = true;
           });
 
@@ -2170,12 +2185,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             });
 
             state.selectedElementIds = [groupId];
+            state.selectedKeyframeIds = []; // Clear keyframe selection when grouping elements
             state.isDirty = true;
 
             // Auto-expand the group to show children
             state.expandedNodes.add(groupId);
           });
-          
+
           get().pushHistory('Group elements');
           return groupId;
         },
@@ -2228,6 +2244,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             // Select the former children
             state.selectedElementIds = childIds;
+            state.selectedKeyframeIds = []; // Clear keyframe selection when ungrouping
             state.isDirty = true;
           });
 
@@ -2787,10 +2804,32 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         // Keyframe operations
         addKeyframe: (animationId, position, properties) => {
           const id = crypto.randomUUID();
+          const state = get();
+
+          // Find the animation and element to generate a name
+          const animation = state.animations.find(a => a.id === animationId);
+          const element = animation
+            ? state.elements.find(e => e.id === animation.element_id)
+            : null;
+
+          // Count existing keyframes for this animation to determine the number
+          const existingKeyframeCount = state.keyframes.filter(
+            kf => kf.animation_id === animationId
+          ).length;
+
+          // Generate name: ElementName_key_N (or just key_N if no element found)
+          const elementName = element?.name || 'element';
+          // Clean the element name: remove spaces, special chars, truncate if too long
+          const cleanName = elementName
+            .replace(/[^a-zA-Z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 20);
+          const keyframeName = `${cleanName}_key_${existingKeyframeCount + 1}`;
 
           const newKeyframe: Keyframe = {
             id,
             animation_id: animationId,
+            name: keyframeName,
             position,
             properties: properties as Record<string, string | number>,
           };
@@ -2800,7 +2839,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             state.isDirty = true;
           });
 
-          console.log('[Store] Added keyframe:', { id, animationId, position, properties });
+          console.log('[Store] Added keyframe:', { id, animationId, name: keyframeName, position, properties });
           return id;
         },
 

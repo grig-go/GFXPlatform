@@ -28,6 +28,8 @@ const sidebars: SidebarsConfig = {
         'features/ai-configuration',
         'features/design-guidelines',
         'features/project-settings',
+        'features/auto-follow',
+        'features/properties-search',
       ],
     },
     {
@@ -75,6 +77,7 @@ const sidebars: SidebarsConfig = {
         'animation/keyframes',
         'animation/easing',
         'animation/presets',
+        'animation/character-animation',
       ],
     },
     {

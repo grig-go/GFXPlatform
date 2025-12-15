@@ -133,7 +133,6 @@ export interface FontPairing {
   headingWeights: number[];
   bodyFamily: string;
   bodyWeights: number[];
-  googleFontsUrl?: string;
   isSystem: boolean;
   previewUrl?: string;
 }

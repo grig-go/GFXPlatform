@@ -203,6 +203,38 @@ All elements share these properties:
 - \`styles\`: CSS-like styles object
 - \`content\`: Type-specific content object
 
+## Character Animation (Text Elements)
+
+Add dynamic character-by-character text reveals for professional broadcast-style animations:
+
+\`\`\`json
+{"content":{"type":"text","text":"BREAKING NEWS","charAnimation":{"enabled":true,"type":"fade","direction":"forward","stagger":30,"duration":400,"easing":"ease-out","progress":100,"spread":3}}}
+\`\`\`
+
+**Animation Types:**
+| Type | Effect | Best For |
+|------|--------|----------|
+| \`fade\` | Characters fade in | Elegant reveals |
+| \`slide-up\` | Characters slide up from below | Lower thirds |
+| \`slide-down\` | Characters slide down from above | Titles |
+| \`scale\` | Characters scale up | Impact text |
+| \`blur\` | Characters transition from blurred | Cinematic |
+| \`wave\` | Characters animate in wave motion | Playful text |
+| \`bounce\` | Characters bounce into place | Sports, energy |
+
+**Direction:** \`forward\` (left-to-right), \`backward\`, \`center\` (outward), \`edges\` (inward)
+
+**Key Settings:**
+- \`stagger\`: Delay between chars (ms) - lower=faster reveal (20-100 typical)
+- \`duration\`: Time per char animation (ms) - 200-600 typical
+- \`spread\`: Chars animating simultaneously - 1=typewriter, 5+=wave
+- \`progress\`: 0-100% - animate this in keyframes for timeline control!
+
+**⚡ KEYFRAME TIP:** To animate char reveal on timeline, keyframe the \`charAnimation_progress\` property:
+\`\`\`json
+{"keyframes":[{"position":0,"properties":{"charAnimation_progress":0}},{"position":100,"properties":{"charAnimation_progress":100}}]}
+\`\`\`
+
 ## Tool Usage
 
 When you need specific information (like sports team logos), you can request it using this format in your response:
@@ -242,13 +274,18 @@ When you need images, use these placeholder syntaxes - they will be resolved aut
 {"content":{"type":"image","src":"{{LOGO:NFL:Chiefs}}","fit":"contain"}}
 \`\`\`
 
-### For Stock Photos - Use \`{{PEXELS:query}}\`:
+### For Background/Stock Images - Use \`{{GENERATE:description}}\`:
 \`\`\`json
-{"content":{"type":"image","src":"{{PEXELS:basketball}}","fit":"cover"}}
+{"content":{"type":"image","src":"{{GENERATE:basketball court professional lighting}}","fit":"cover"}}
 \`\`\`
 
-**⚠️ NEVER make up URLs or use unsplash.com links - they will 404!**
-**⚠️ For ANY background image or texture, ALWAYS use \`{{GENERATE:description}}\` syntax!**
+### For Person/Headshot Images - Use \`{{GENERATE:description}}\`:
+\`\`\`json
+{"content":{"type":"image","src":"{{GENERATE:professional male news anchor headshot studio lighting}}","fit":"cover"}}
+\`\`\`
+
+**⚠️ NEVER make up URLs or use unsplash.com/pexels.com links - they will 404!**
+**⚠️ For ANY image (backgrounds, textures, headshots, people), ALWAYS use \`{{GENERATE:description}}\` syntax!**
 
 ## Ask Clarifying Questions
 

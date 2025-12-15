@@ -169,7 +169,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [600, 700, 800],
     bodyFamily: 'Inter',
     bodyWeights: [400, 500, 600],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
     isSystem: true,
   },
   {
@@ -181,7 +180,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [400],
     bodyFamily: 'Roboto Condensed',
     bodyWeights: [400, 700],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Condensed:wght@400;700&display=swap',
     isSystem: true,
   },
   {
@@ -193,7 +191,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [500, 700],
     bodyFamily: 'Inter',
     bodyWeights: [400, 500],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap',
     isSystem: true,
   },
   {
@@ -205,7 +202,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [600, 700],
     bodyFamily: 'Source Sans Pro',
     bodyWeights: [400, 600],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+Pro:wght@400;600&display=swap',
     isSystem: true,
   },
   {
@@ -217,7 +213,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [500, 700, 900],
     bodyFamily: 'Roboto',
     bodyWeights: [400, 500],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap',
     isSystem: true,
   },
   {
@@ -229,7 +224,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [600, 700, 800],
     bodyFamily: 'Barlow',
     bodyWeights: [400, 500],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500&display=swap',
     isSystem: true,
   },
   {
@@ -241,7 +235,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [600, 700, 800],
     bodyFamily: 'Poppins',
     bodyWeights: [400, 500],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap',
     isSystem: true,
   },
   {
@@ -253,7 +246,6 @@ export const FONT_PAIRINGS: FontPairing[] = [
     headingWeights: [500, 600, 700],
     bodyFamily: 'Open Sans',
     bodyWeights: [400, 600],
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap',
     isSystem: true,
   },
 ];
@@ -336,24 +328,5 @@ export function getPalettesByCategory(category: string): ColorPalette[] {
 export function getFontPairingsByCategory(category: string): FontPairing[] {
   return FONT_PAIRINGS.filter(f => f.category === category);
 }
-
-// Generate Google Fonts URL from design system
-export function generateGoogleFontsUrl(fonts: { heading: { family: string; weights: number[] }; body: { family: string; weights: number[] } }): string {
-  const families: string[] = [];
-  
-  const headingWeights = fonts.heading.weights.join(';');
-  families.push(`family=${encodeURIComponent(fonts.heading.family)}:wght@${headingWeights}`);
-  
-  if (fonts.body.family !== fonts.heading.family) {
-    const bodyWeights = fonts.body.weights.join(';');
-    families.push(`family=${encodeURIComponent(fonts.body.family)}:wght@${bodyWeights}`);
-  }
-  
-  return `https://fonts.googleapis.com/css2?${families.join('&')}&display=swap`;
-}
-
-
-
-
 
 

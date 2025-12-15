@@ -124,23 +124,24 @@ Use descriptive queries for best results. Images are generated at 1280x720 (16:9
 - Abstract/textures: \`{{GENERATE:dark abstract texture broadcast}}\`, \`{{GENERATE:blue gradient professional background}}\`
 - Weather: \`{{GENERATE:storm clouds dramatic}}\`, \`{{GENERATE:sunny weather clear sky}}\`
 
-**For Player Headshots** - Ask the user to provide the image URL (AI cannot generate specific real people):
+**For Person/Headshot Images** - ALWAYS use \`{{GENERATE:query}}\` with descriptive terms:
 \`\`\`json
-"content": {
-  "type": "image",
-  "src": "",  // User will add their image
-  "fit": "cover"
-}
+"src": "{{GENERATE:professional male news anchor headshot}}"
+"src": "{{GENERATE:female sports reporter portrait studio lighting}}"
+"src": "{{GENERATE:professional anchor portrait blue background}}"
+"src": "{{GENERATE:male broadcaster headshot formal attire}}"
 \`\`\`
 
-**Legacy Stock Images** - The \`{{PEXELS:query}}\` placeholder is also supported for curated stock photos:
-\`\`\`json
-"src": "{{PEXELS:basketball}}"
-"src": "{{PEXELS:stadium}}"
-\`\`\`
+The AI will generate a realistic professional portrait. Include descriptive terms like:
+- Role: anchor, reporter, host, broadcaster
+- Style: professional, formal, studio lighting
+- Background: blue background, gradient background, studio backdrop
+- Gender/appearance if needed: male, female, etc.
 
 **NEVER use**:
-- unsplash.com direct links (they 404)
+- Direct pexels.com URLs (deprecated - use \`{{GENERATE:query}}\` instead)
+- Direct unsplash.com URLs (they 404)
+- Any direct image URLs from stock photo sites
 - Random placeholder URLs
 - Made-up image URLs
-- Direct pexels.com URLs (use the placeholder syntax instead)`;
+- \`{{PEXELS:query}}\` syntax (deprecated - use \`{{GENERATE:query}}\` instead)`;

@@ -1,8 +1,11 @@
 /**
- * Pexels Image Resolver
+ * Pexels Image Resolver (DEPRECATED)
  *
- * Resolves {{PEXELS:query}} placeholders to real Pexels image URLs.
- * Uses curated photo IDs for common categories to ensure fast, reliable results.
+ * This module is deprecated. All image generation should use {{GENERATE:query}} placeholders.
+ *
+ * This module converts:
+ * - {{PEXELS:query}} → {{GENERATE:query}} (for backward compatibility)
+ * - Raw pexels.com/unsplash.com URLs → {{GENERATE:generic description}}
  */
 
 // Curated Pexels photo IDs by category for instant resolution
@@ -99,14 +102,44 @@ export function getPexelsImageUrl(query: string, width = 1920, height = 1080): s
 
 /**
  * Resolve Pexels placeholders in AI response
- * Replaces {{PEXELS:query}} with actual Pexels URLs
+ * DEPRECATED: Converts {{PEXELS:query}} to {{GENERATE:query}} for AI image generation
+ * This maintains backward compatibility while migrating to the new system
  */
 export function resolvePexelsPlaceholders(text: string): string {
   const pexelsPattern = /\{\{PEXELS:([^}]+)\}\}/g;
 
-  return text.replace(pexelsPattern, (match, query) => {
-    const url = getPexelsImageUrl(query.trim());
-    console.log(`🖼️ Resolved Pexels placeholder: "${query}" → ${url}`);
-    return url;
+  return text.replace(pexelsPattern, (_match, query) => {
+    // Convert PEXELS placeholder to GENERATE placeholder for AI image generation
+    console.warn(`⚠️ DEPRECATED: Converting {{PEXELS:${query}}} to {{GENERATE:${query}}}. PEXELS syntax is deprecated.`);
+    return `{{GENERATE:${query.trim()}}}`;
   });
+}
+
+/**
+ * Convert raw stock photo URLs (pexels.com, unsplash.com) to GENERATE placeholders
+ * This handles cases where the AI outputs direct URLs instead of using the placeholder syntax
+ */
+export function convertStockPhotoUrls(text: string): string {
+  // Match pexels.com URLs - they don't have useful query params, so use a generic description
+  const pexelsUrlPattern = /https?:\/\/(?:images\.)?pexels\.com\/photos\/[^"'\s)}\]]+/g;
+
+  // Match unsplash.com URLs
+  const unsplashUrlPattern = /https?:\/\/(?:images\.)?unsplash\.com\/[^"'\s)}\]]+/g;
+
+  let result = text;
+
+  // Replace Pexels URLs
+  result = result.replace(pexelsUrlPattern, (url) => {
+    console.warn(`⚠️ Converting raw Pexels URL to GENERATE placeholder: ${url.substring(0, 50)}...`);
+    // Try to extract any meaningful info from the URL, otherwise use a generic prompt
+    return '{{GENERATE:professional headshot portrait studio lighting}}';
+  });
+
+  // Replace Unsplash URLs
+  result = result.replace(unsplashUrlPattern, (url) => {
+    console.warn(`⚠️ Converting raw Unsplash URL to GENERATE placeholder: ${url.substring(0, 50)}...`);
+    return '{{GENERATE:professional headshot portrait studio lighting}}';
+  });
+
+  return result;
 }

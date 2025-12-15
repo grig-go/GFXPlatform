@@ -5,6 +5,7 @@ import {
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
   PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink, Spline,
+  Search, X,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -61,6 +62,7 @@ export function OutlinePanel() {
   const [newItemName, setNewItemName] = useState('');
   const [selectedLayerType, setSelectedLayerType] = useState<string>('custom');
   const [selectedLayerId, setSelectedLayerId] = useState<string>('');
+  const [propertySearch, setPropertySearch] = useState('');
 
   // Resizable properties panel state
   const [propertiesHeight, setPropertiesHeight] = useState(() => {
@@ -414,11 +416,30 @@ export function OutlinePanel() {
         className="flex-shrink-0 overflow-hidden flex flex-col"
         style={{ height: propertiesHeight }}
       >
-        <div className="p-2 border-b border-border">
+        <div className="p-2 border-b border-border flex items-center justify-between gap-2">
           <h3 className="text-[10px] font-medium text-muted-foreground">PROPERTIES</h3>
+          {/* Property Search */}
+          <div className="relative flex-1 max-w-32">
+            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Search..."
+              value={propertySearch}
+              onChange={(e) => setPropertySearch(e.target.value)}
+              className="h-5 text-[10px] pl-5 pr-5 bg-muted/50 border-transparent focus:border-input"
+            />
+            {propertySearch && (
+              <button
+                onClick={() => setPropertySearch('')}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
         <ScrollArea className="flex-1">
-          <PropertiesPanel />
+          <PropertiesPanel searchFilter={propertySearch} />
         </ScrollArea>
       </div>
 

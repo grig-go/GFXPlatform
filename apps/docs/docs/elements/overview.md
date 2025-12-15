@@ -8,16 +8,42 @@ Elements are the visual building blocks of your graphics in Nova GFX. Each eleme
 
 ## Element Types
 
+Nova GFX supports 16 element types for creating broadcast graphics:
+
+### Core Elements
+
 | Type | Description | Use Cases |
 |------|-------------|-----------|
-| [Text](./text) | Rich text with formatting | Lower thirds, titles, scores |
+| [Text](./text) | Rich text with character animation | Lower thirds, titles, scores, credits |
 | [Image](./image) | Static and animated images | Logos, photos, backgrounds |
-| [Shape](./shape) | Vector shapes | Backgrounds, decorations, masks |
-| [Map](./map) | Interactive Mapbox maps | Location graphics, weather maps |
-| [Chart](./chart) | Data visualizations | Statistics, polls, leaderboards |
-| [Ticker](./ticker) | Scrolling text | News crawls, alerts |
-| [Icon](./icon) | Vector icons | UI elements, indicators |
-| [Group](./group) | Container for elements | Organization, shared transforms |
+| [Shape](./shape) | Vector shapes with fill/stroke, screen masking | Backgrounds, decorations, reveal effects |
+| [Line](./line) | Vector lines | Dividers, connectors, underlines |
+| [Video](./video) | Video playback (YouTube, Vimeo, HLS/DASH) | Background videos, replay clips |
+
+### Data Elements
+
+| Type | Description | Use Cases |
+|------|-------------|-----------|
+| [Chart](./chart) | Data visualizations including Bar, Line, Pie, Gauge, Finance (Candlestick, Index), Election (Parliament), and Sports (Soccer Field, Basketball Court) | Statistics, polls, elections, formations |
+| [Table](./table) | Data tables with formatting | Standings, schedules, results |
+| [Map](./map) | Interactive Mapbox maps with animated pan/zoom | Location graphics, weather maps |
+| [Ticker](./ticker) | Scrolling or carousel text | News crawls, alerts, scores |
+| [Countdown](./countdown) | Timer with multiple modes (countdown, datetime, clock) | Event countdowns, live clocks |
+
+### Decorative Elements
+
+| Type | Description | Use Cases |
+|------|-------------|-----------|
+| [Icon](./icon) | Multi-library icons (Lucide, FontAwesome, Weather) | UI elements, indicators |
+| [SVG](./svg) | SVG vector graphics | Custom shapes, logos |
+| [Lottie](./lottie) | Lottie animations | Animated icons, transitions |
+| [Topic Badge](./topic-badge) | Pre-styled category badges | Breaking news, sports categories |
+
+### Structural Elements
+
+| Type | Description | Use Cases |
+|------|-------------|-----------|
+| [Group](./group) | Container for organizing elements | Organization, shared transforms |
 
 ## Common Properties
 

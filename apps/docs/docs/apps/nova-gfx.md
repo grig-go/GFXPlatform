@@ -38,6 +38,8 @@ The main design area where you:
 - Visually position and resize elements
 - Preview animations
 - See real-time updates
+- Use rulers and guides for alignment
+- Toggle grid overlay for precise positioning
 
 ### Right Panel - Properties
 
@@ -134,6 +136,46 @@ The system will interpolate between keyframes automatically.
 | `M` | Add Map |
 | `G` | Group selected |
 | `Ctrl+G` | Ungroup |
+
+## Canvas Tools
+
+### Rulers
+
+Pixel rulers along the top and left edges help with precise positioning:
+
+- **Show/Hide**: Toggle rulers in View menu or press `Ctrl+R`
+- **Units**: Displayed in pixels
+- **Interactive**: Hover to see current position marker
+
+### Guides
+
+Create alignment guides by dragging from rulers:
+
+1. **Add Guide**: Click and drag from a ruler onto the canvas
+2. **Move Guide**: Drag an existing guide to reposition
+3. **Remove Guide**: Drag guide back to ruler area
+4. **Clear All**: Right-click ruler → "Clear Guides"
+
+Guides are:
+- Non-printing (don't appear in output)
+- Saved with the project
+- Snappable when moving elements
+
+### Grid
+
+Toggle a grid overlay for alignment:
+
+- **Show/Hide**: View menu → Show Grid, or press `Ctrl+'`
+- **Snap to Grid**: Elements snap to grid intersections when enabled
+- **Grid Size**: Configure in project settings
+
+### Safe Area
+
+Display broadcast-safe area boundaries:
+
+- **Action Safe**: Inner boundary for important content
+- **Title Safe**: Area where text remains fully visible
+- **Toggle**: View menu → Show Safe Area
 
 ## Preview Mode
 

@@ -162,6 +162,11 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
       },
     };
 
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const TIMEOUT_MS = 60000; // 60 seconds timeout for image generation
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${apiModel}:generateContent?key=${apiKey}`,
       {
@@ -181,8 +186,11 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
           ],
           generationConfig,
         }),
+        signal: controller.signal,
       }
     );
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -218,7 +226,11 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
     console.error('❌ No image data in Gemini response');
     return null;
   } catch (error) {
-    console.error('❌ Failed to generate image:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('❌ Image generation timed out (60s limit)');
+    } else {
+      console.error('❌ Failed to generate image:', error);
+    }
     return null;
   }
 }
@@ -321,15 +333,39 @@ async function uploadGeneratedImage(
 }
 
 /**
- * Generate a thumbnail from an image blob
+ * Generate a thumbnail from an image blob with timeout protection
  */
 async function generateThumbnail(imageBlob: Blob, maxSize: number = 400): Promise<Blob> {
+  // Add timeout to prevent hanging
+  const TIMEOUT_MS = 10000; // 10 seconds
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(imageBlob);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      URL.revokeObjectURL(url);
+    };
+
+    // Timeout handler
+    timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        reject(new Error('Thumbnail generation timed out'));
+      }
+    }, TIMEOUT_MS);
 
     img.onload = () => {
-      URL.revokeObjectURL(url);
+      if (resolved) return;
+      resolved = true;
+      cleanup();
 
       // Calculate thumbnail dimensions
       let width = img.naturalWidth;
@@ -374,7 +410,9 @@ async function generateThumbnail(imageBlob: Blob, maxSize: number = 400): Promis
     };
 
     img.onerror = () => {
-      URL.revokeObjectURL(url);
+      if (resolved) return;
+      resolved = true;
+      cleanup();
       reject(new Error('Failed to load image for thumbnail'));
     };
 
@@ -495,4 +533,15 @@ export async function resolveGeneratePlaceholders(
 export function hasGeneratePlaceholders(text: string): boolean {
   GENERATE_PATTERN.lastIndex = 0;
   return GENERATE_PATTERN.test(text);
+}
+
+/**
+ * Replace all GENERATE placeholders with the fallback placeholder URL
+ * Used when user wants to skip AI image generation
+ */
+export function replaceGenerateWithPlaceholder(text: string): string {
+  const placeholderUrl = getFallbackPlaceholderUrl();
+  // Reset regex state
+  GENERATE_PATTERN.lastIndex = 0;
+  return text.replace(GENERATE_PATTERN, placeholderUrl);
 }

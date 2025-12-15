@@ -1,9 +1,14 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import {
   ZoomIn, ZoomOut, Maximize, Grid3X3, Ruler, Undo, Redo, Trash2,
   MousePointer, RotateCw, Type, Image, Square, Circle, Hand, BarChart3, Loader2, MapPin, Video, ScrollText, Tag, FileCode, Sparkles, Table2, Minus, Timer,
+  TrendingUp, CandlestickChart, Vote, Trophy, Dribbble, LineChart, PieChart, Activity, Gauge,
 } from 'lucide-react';
-import { Button, Separator, cn } from '@emergent-platform/ui';
+import {
+  Button, Separator, cn,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger,
+} from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { uploadMedia, type UploadProgress } from '@/services/storageService';
 import { Stage } from '@/components/canvas/Stage';
@@ -12,6 +17,7 @@ import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { SVGPickerDialog } from '@/components/dialogs/SVGPickerDialog';
 import { IconPickerDialog } from '@/components/dialogs/IconPickerDialog';
 import { loadFonts, SYSTEM_FONTS } from '@/lib/fonts';
+import { getAnimatedProperties } from '@/lib/animation';
 
 type DrawState = {
   isDrawing: boolean;
@@ -36,6 +42,7 @@ export function Canvas() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconPickerPosition, setIconPickerPosition] = useState({ x: 100, y: 100 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [pendingChartType, setPendingChartType] = useState<string | null>(null);
 
   const {
     project,
@@ -69,6 +76,12 @@ export function Canvas() {
     redo,
     history,
     historyIndex,
+    // Animation state for screen mask preview
+    animations,
+    keyframes,
+    currentPhase,
+    playheadPosition,
+    selectedKeyframeIds,
   } = useDesignerStore();
 
   // Wrapper for addElement that automatically parents to selected group
@@ -487,11 +500,144 @@ export function Canvas() {
 
     // Chart tool - create chart on click (works anywhere on canvas)
     if (tool === 'chart') {
+      const chartType = pendingChartType || 'bar';
+      // addElement creates element with default content including data
       const id = addElement('d3-chart', { x: canvasPos.x, y: canvasPos.y });
+
+      // Get the created element to access its default content
+      const element = useDesignerStore.getState().elements.find(e => e.id === id);
+      const defaultContent = element?.content || {};
+
+      // Set dimensions based on chart type
+      let width = 400;
+      let height = 300;
+
+      // For basic charts, just update chartType while keeping default data
+      // For new chart types, we'll provide full content with sample data
+      let contentUpdate: Record<string, any> | null = null;
+
+      switch (chartType) {
+        // Basic charts - keep default data, just change chartType and dimensions
+        case 'bar':
+        case 'horizontal-bar':
+        case 'line':
+        case 'area':
+          // Use default width/height
+          contentUpdate = { ...defaultContent, chartType };
+          break;
+        case 'pie':
+        case 'donut':
+          width = 350;
+          height = 350;
+          contentUpdate = {
+            ...defaultContent,
+            chartType,
+            data: {
+              labels: ['Category A', 'Category B', 'Category C', 'Category D'],
+              datasets: [{ data: [30, 25, 25, 20] }],
+            },
+          };
+          break;
+        case 'gauge':
+          width = 300;
+          height = 250;
+          contentUpdate = {
+            ...defaultContent,
+            chartType,
+            data: { labels: ['Value'], datasets: [{ data: [72] }] },
+          };
+          break;
+        // New chart types - provide full content with appropriate sample data
+        case 'parliament':
+          width = 600;
+          height = 400;
+          contentUpdate = {
+            type: 'chart',
+            chartType: 'parliament',
+            sections: 4,
+            seatRadius: 8,
+            rowHeight: 20,
+            sectionGap: 20,
+            data: {
+              labels: ['Party A', 'Party B', 'Party C', 'Party D'],
+              datasets: [{ data: [120, 85, 45, 30] }],
+            },
+            options: { showLegend: true, animated: true },
+          };
+          break;
+        case 'soccer-field':
+          width = 700;
+          height = 476; // Standard pitch ratio (105:68)
+          contentUpdate = {
+            type: 'chart',
+            chartType: 'soccer-field',
+            showHeatmap: false,
+            theme: 'dark',
+            data: { labels: [], datasets: [] },
+            options: { showLegend: false },
+          };
+          break;
+        case 'basketball-court':
+          width = 564;
+          height = 600; // Half court ratio
+          contentUpdate = {
+            type: 'chart',
+            chartType: 'basketball-court',
+            showHexbin: true,
+            theme: 'dark',
+            data: { labels: [], datasets: [] },
+            options: { showLegend: false },
+          };
+          break;
+        case 'candlestick':
+          width = 600;
+          height = 400;
+          contentUpdate = {
+            type: 'chart',
+            chartType: 'candlestick',
+            data: {
+              labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+              datasets: [{
+                data: [
+                  { open: 100, high: 115, low: 95, close: 110 },
+                  { open: 110, high: 125, low: 105, close: 120 },
+                  { open: 120, high: 130, low: 110, close: 115 },
+                  { open: 115, high: 128, low: 108, close: 125 },
+                  { open: 125, high: 140, low: 118, close: 135 },
+                ],
+              }],
+            },
+            options: { showLegend: false, animated: true },
+          };
+          break;
+        case 'index-chart':
+          width = 600;
+          height = 400;
+          contentUpdate = {
+            type: 'chart',
+            chartType: 'index-chart',
+            data: {
+              labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+              datasets: [
+                { label: 'Stock A', data: [100, 105, 102, 110, 115, 120] },
+                { label: 'Stock B', data: [100, 98, 103, 108, 105, 112] },
+              ],
+            },
+            options: { showLegend: true, animated: true },
+          };
+          break;
+        default:
+          // Fallback - just update chartType
+          contentUpdate = { ...defaultContent, chartType };
+      }
+
       useDesignerStore.getState().updateElement(id, {
-        width: 400,
-        height: 300,
+        width,
+        height,
+        ...(contentUpdate && { content: contentUpdate }),
       });
+
+      setPendingChartType(null);
       setTool('select');
       return;
     }
@@ -907,6 +1053,7 @@ export function Canvas() {
 
   const drawRect = getDrawRect();
 
+  // Tools array - chart is handled separately with a dropdown
   const tools = [
     { id: 'select', icon: MousePointer, title: 'Select (V)', shortcut: 'V' },
     { id: 'rotate', icon: RotateCw, title: 'Rotate (Q)', shortcut: 'Q' },
@@ -918,13 +1065,37 @@ export function Canvas() {
     { id: 'svg', icon: FileCode, title: 'SVG (S)', shortcut: 'S' },
     { id: 'icon', icon: Sparkles, title: 'Icon (O)', shortcut: 'O' },
     { id: 'table', icon: Table2, title: 'Table (U)', shortcut: 'U' },
-    { id: 'chart', icon: BarChart3, title: 'Chart (C)', shortcut: 'C' },
+    // Chart is handled separately with dropdown
     { id: 'map', icon: MapPin, title: 'Map (M)', shortcut: 'M' },
     { id: 'video', icon: Video, title: 'Video (B)', shortcut: 'B' },
     { id: 'ticker', icon: ScrollText, title: 'Ticker (K)', shortcut: 'K' },
     { id: 'topic-badge', icon: Tag, title: 'Topic Badge (G)', shortcut: 'G' },
     { id: 'countdown', icon: Timer, title: 'Countdown (Y)', shortcut: 'Y' },
   ] as const;
+
+  // Chart categories for dropdown
+  const chartCategories = {
+    basic: [
+      { id: 'bar', name: 'Bar Chart', icon: BarChart3 },
+      { id: 'horizontal-bar', name: 'Horizontal Bar', icon: BarChart3 },
+      { id: 'line', name: 'Line Chart', icon: LineChart },
+      { id: 'area', name: 'Area Chart', icon: Activity },
+      { id: 'pie', name: 'Pie Chart', icon: PieChart },
+      { id: 'donut', name: 'Donut Chart', icon: PieChart },
+      { id: 'gauge', name: 'Gauge', icon: Gauge },
+    ],
+    finance: [
+      { id: 'index-chart', name: 'Index Chart', icon: TrendingUp },
+      { id: 'candlestick', name: 'Candlestick', icon: CandlestickChart },
+    ],
+    election: [
+      { id: 'parliament', name: 'Parliament', icon: Vote },
+    ],
+    sports: [
+      { id: 'soccer-field', name: 'Soccer Field', icon: Trophy },
+      { id: 'basketball-court', name: 'Basketball Court', icon: Dribbble },
+    ],
+  };
 
   // Get cursor based on tool
   const getCursor = () => {
@@ -1087,6 +1258,113 @@ export function Canvas() {
               <t.icon className="w-4 h-4" />
             </Button>
           ))}
+
+          {/* Chart Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={tool === 'chart' ? 'secondary' : 'ghost'}
+                size="icon"
+                className={cn(
+                  'h-8 w-8',
+                  tool === 'chart' && 'bg-violet-500/20 text-violet-400'
+                )}
+                title="Chart (C)"
+              >
+                <BarChart3 className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {/* Basic Charts */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Basic
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {chartCategories.basic.map((chart) => (
+                    <DropdownMenuItem
+                      key={chart.id}
+                      onClick={() => {
+                        setPendingChartType(chart.id);
+                        setTool('chart');
+                      }}
+                    >
+                      <chart.icon className="w-4 h-4 mr-2" />
+                      {chart.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              {/* Finance Charts */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  Finance
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {chartCategories.finance.map((chart) => (
+                    <DropdownMenuItem
+                      key={chart.id}
+                      onClick={() => {
+                        setPendingChartType(chart.id);
+                        setTool('chart');
+                      }}
+                    >
+                      <chart.icon className="w-4 h-4 mr-2" />
+                      {chart.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              {/* Election Charts */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Vote className="w-4 h-4 mr-2" />
+                  Election
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {chartCategories.election.map((chart) => (
+                    <DropdownMenuItem
+                      key={chart.id}
+                      onClick={() => {
+                        setPendingChartType(chart.id);
+                        setTool('chart');
+                      }}
+                    >
+                      <chart.icon className="w-4 h-4 mr-2" />
+                      {chart.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              {/* Sports Charts */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Sports
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {chartCategories.sports.map((chart) => (
+                    <DropdownMenuItem
+                      key={chart.id}
+                      onClick={() => {
+                        setPendingChartType(chart.id);
+                        setTool('chart');
+                      }}
+                    >
+                      <chart.icon className="w-4 h-4 mr-2" />
+                      {chart.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Separator orientation="vertical" className="h-6 mx-1" />
           <Button
             variant={tool === 'hand' ? 'secondary' : 'ghost'}
@@ -1259,6 +1537,216 @@ export function Canvas() {
             }}
           >
             <Stage />
+
+            {/* Screen Mask Preview Overlay - Interactive */}
+            {(() => {
+              // Show yellow preview for selected elements with screen mask enabled
+              const selectedElement = selectedElementIds.length === 1
+                ? elements.find(el => el.id === selectedElementIds[0])
+                : null;
+
+              if (selectedElement?.screenMask?.enabled) {
+                const baseMask = selectedElement.screenMask;
+                const elementId = selectedElement.id;
+
+                // Calculate animated mask values using keyframes
+                const animatedProps = getAnimatedProperties(
+                  selectedElement,
+                  animations,
+                  keyframes,
+                  playheadPosition,
+                  currentPhase
+                );
+
+                // Check if a keyframe is selected for this element - show keyframe values directly
+                const elementAnim = animations.find(
+                  a => a.element_id === selectedElement.id && a.phase === currentPhase
+                );
+                const selectedKeyframe = elementAnim
+                  ? keyframes.find(kf => selectedKeyframeIds.includes(kf.id) && kf.animation_id === elementAnim.id)
+                  : null;
+
+                // Get values from: 1) selected keyframe, 2) animated interpolation, 3) base mask
+                let displayX = baseMask.x;
+                let displayY = baseMask.y;
+                let displayWidth = baseMask.width;
+                let displayHeight = baseMask.height;
+
+                if (selectedKeyframe) {
+                  // When a keyframe is selected, show its exact values
+                  displayX = selectedKeyframe.properties.screenMask_x !== undefined
+                    ? Number(selectedKeyframe.properties.screenMask_x)
+                    : baseMask.x;
+                  displayY = selectedKeyframe.properties.screenMask_y !== undefined
+                    ? Number(selectedKeyframe.properties.screenMask_y)
+                    : baseMask.y;
+                  displayWidth = selectedKeyframe.properties.screenMask_width !== undefined
+                    ? Number(selectedKeyframe.properties.screenMask_width)
+                    : baseMask.width;
+                  displayHeight = selectedKeyframe.properties.screenMask_height !== undefined
+                    ? Number(selectedKeyframe.properties.screenMask_height)
+                    : baseMask.height;
+                } else {
+                  // Use animated interpolated values
+                  displayX = animatedProps.screenMask_x !== undefined
+                    ? Number(animatedProps.screenMask_x)
+                    : baseMask.x;
+                  displayY = animatedProps.screenMask_y !== undefined
+                    ? Number(animatedProps.screenMask_y)
+                    : baseMask.y;
+                  displayWidth = animatedProps.screenMask_width !== undefined
+                    ? Number(animatedProps.screenMask_width)
+                    : baseMask.width;
+                  displayHeight = animatedProps.screenMask_height !== undefined
+                    ? Number(animatedProps.screenMask_height)
+                    : baseMask.height;
+                }
+
+                // Use animated/keyframe values for display, but base mask for drag operations (updates the element)
+                const displayMask = {
+                  x: displayX,
+                  y: displayY,
+                  width: displayWidth,
+                  height: displayHeight,
+                };
+
+                const handleMaskDrag = (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const startMaskX = baseMask.x;
+                  const startMaskY = baseMask.y;
+
+                  const onMouseMove = (moveEvent: MouseEvent) => {
+                    const dx = (moveEvent.clientX - startX) / zoom;
+                    const dy = (moveEvent.clientY - startY) / zoom;
+                    useDesignerStore.getState().updateElement(elementId, {
+                      screenMask: {
+                        ...baseMask,
+                        x: Math.round(startMaskX + dx),
+                        y: Math.round(startMaskY + dy),
+                      },
+                    });
+                  };
+
+                  const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                  };
+
+                  document.addEventListener('mousemove', onMouseMove);
+                  document.addEventListener('mouseup', onMouseUp);
+                };
+
+                const handleResize = (e: React.MouseEvent, handle: string) => {
+                  e.stopPropagation();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const startMask = { ...baseMask };
+
+                  const onMouseMove = (moveEvent: MouseEvent) => {
+                    const dx = (moveEvent.clientX - startX) / zoom;
+                    const dy = (moveEvent.clientY - startY) / zoom;
+
+                    let newX = startMask.x;
+                    let newY = startMask.y;
+                    let newWidth = startMask.width;
+                    let newHeight = startMask.height;
+
+                    // Handle resize based on which handle is dragged
+                    if (handle.includes('n')) {
+                      newY = startMask.y + dy;
+                      newHeight = startMask.height - dy;
+                    }
+                    if (handle.includes('s')) {
+                      newHeight = startMask.height + dy;
+                    }
+                    if (handle.includes('w')) {
+                      newX = startMask.x + dx;
+                      newWidth = startMask.width - dx;
+                    }
+                    if (handle.includes('e')) {
+                      newWidth = startMask.width + dx;
+                    }
+
+                    // Ensure minimum size
+                    if (newWidth < 10) newWidth = 10;
+                    if (newHeight < 10) newHeight = 10;
+
+                    useDesignerStore.getState().updateElement(elementId, {
+                      screenMask: {
+                        ...baseMask,
+                        x: Math.round(newX),
+                        y: Math.round(newY),
+                        width: Math.round(newWidth),
+                        height: Math.round(newHeight),
+                      },
+                    });
+                  };
+
+                  const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                  };
+
+                  document.addEventListener('mousemove', onMouseMove);
+                  document.addEventListener('mouseup', onMouseUp);
+                };
+
+                const handleSize = 8;
+                const handles = [
+                  { id: 'nw', x: -handleSize/2, y: -handleSize/2, cursor: 'nw-resize' },
+                  { id: 'n', x: displayMask.width/2 - handleSize/2, y: -handleSize/2, cursor: 'n-resize' },
+                  { id: 'ne', x: displayMask.width - handleSize/2, y: -handleSize/2, cursor: 'ne-resize' },
+                  { id: 'w', x: -handleSize/2, y: displayMask.height/2 - handleSize/2, cursor: 'w-resize' },
+                  { id: 'e', x: displayMask.width - handleSize/2, y: displayMask.height/2 - handleSize/2, cursor: 'e-resize' },
+                  { id: 'sw', x: -handleSize/2, y: displayMask.height - handleSize/2, cursor: 'sw-resize' },
+                  { id: 's', x: displayMask.width/2 - handleSize/2, y: displayMask.height - handleSize/2, cursor: 's-resize' },
+                  { id: 'se', x: displayMask.width - handleSize/2, y: displayMask.height - handleSize/2, cursor: 'se-resize' },
+                ];
+
+                return (
+                  <div
+                    className="absolute"
+                    style={{
+                      left: displayMask.x,
+                      top: displayMask.y,
+                      width: displayMask.width,
+                      height: displayMask.height,
+                      border: '2px dashed #EAB308',
+                      zIndex: 9999,
+                      cursor: 'move',
+                    }}
+                    onMouseDown={handleMaskDrag}
+                  >
+                    {/* Corner labels - show animated values */}
+                    <div className="absolute -top-5 -left-1 text-[10px] text-yellow-500 font-mono bg-black/70 px-1 rounded pointer-events-none">
+                      {Math.round(displayMask.x)}, {Math.round(displayMask.y)}
+                    </div>
+                    <div className="absolute -bottom-5 -right-1 text-[10px] text-yellow-500 font-mono bg-black/70 px-1 rounded pointer-events-none">
+                      {Math.round(displayMask.width)} × {Math.round(displayMask.height)}
+                    </div>
+
+                    {/* Resize handles */}
+                    {handles.map((handle) => (
+                      <div
+                        key={handle.id}
+                        className="absolute bg-yellow-500 border border-yellow-600 rounded-sm"
+                        style={{
+                          left: handle.x,
+                          top: handle.y,
+                          width: handleSize,
+                          height: handleSize,
+                          cursor: handle.cursor,
+                        }}
+                        onMouseDown={(e) => handleResize(e, handle.id)}
+                      />
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Draw preview */}
             {drawState && drawRect && (

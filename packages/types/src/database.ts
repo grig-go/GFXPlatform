@@ -221,6 +221,21 @@ export type ElementType =
   | 'table'
   | 'countdown';
 
+// Screen Mask - clips element to screen coordinates
+export interface ScreenMask {
+  enabled: boolean;
+  x: number;      // Screen X coordinate (0-canvas width)
+  y: number;      // Screen Y coordinate (0-canvas height)
+  width: number;  // Mask width in pixels
+  height: number; // Mask height in pixels
+  feather?: {     // Per-side feathering in pixels (0-1000)
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+}
+
 export interface Element {
   id: string;
   template_id: string;
@@ -245,6 +260,16 @@ export interface Element {
   classes: string[];
   visible: boolean;
   locked: boolean;
+  screenMask?: ScreenMask; // Optional screen-coordinate based clipping mask
+  // Auto Follow - position this element relative to another element's bounding box
+  autoFollow?: {
+    enabled: boolean;
+    targetElementId: string; // The element to follow
+    side: 'left' | 'right' | 'top' | 'bottom'; // Which side of the target to follow
+    padding: number; // Gap between this element and the target
+    offsetX: number; // Horizontal offset (used when following top/bottom)
+    offsetY: number; // Vertical offset (used when following left/right)
+  };
 }
 
 // Table types
@@ -280,6 +305,17 @@ export type ElementContent =
         }>;
         customProperties?: Record<string, string | number>; // For custom animations
       };
+      // Character-by-character animation settings (uses Splitting.js)
+      charAnimation?: {
+        enabled: boolean;
+        type: 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'scale' | 'blur' | 'wave' | 'bounce';
+        easing: string; // CSS easing function (e.g., 'ease-out')
+        direction: 'forward' | 'backward' | 'center' | 'edges'; // Order of character animation
+        spread: number; // How many characters animate at once (1 = one at a time, higher = more overlap)
+        progress: number; // Animation progress 0-100 (keyframable)
+      };
+      // Max size mode - when enabled, text won't wrap and will scale to fit the bounding box
+      maxSize?: boolean;
     }
   | {
       type: 'line';
@@ -341,7 +377,7 @@ export type ElementContent =
     }
   | {
       type: 'shape';
-      shape: 'rectangle' | 'rhombus' | 'trapezoid' | 'parallelogram';
+      shape: 'rectangle' | 'ellipse' | 'rhombus' | 'trapezoid' | 'parallelogram';
       fill?: string;
       stroke?: string;
       strokeWidth?: number;
@@ -610,7 +646,7 @@ export interface MapMarkerTemplate {
     fontWeight?: string | number;
     textAlign?: 'left' | 'center' | 'right';
     // For shape
-    shapeType?: 'rectangle' | 'rhombus' | 'trapezoid' | 'parallelogram';
+    shapeType?: 'rectangle' | 'ellipse' | 'rhombus' | 'trapezoid' | 'parallelogram';
     fill?: string;
     stroke?: string;
     strokeWidth?: number;
@@ -677,16 +713,39 @@ export interface MapStyling {
 }
 
 // Chart types
-export type ChartType = 'bar' | 'line' | 'pie' | 'donut' | 'gauge' | 'area' | 'horizontal-bar';
+export type ChartType =
+  | 'bar'
+  | 'line'
+  | 'pie'
+  | 'donut'
+  | 'gauge'
+  | 'area'
+  | 'horizontal-bar'
+  // Finance charts
+  | 'candlestick'
+  | 'index-chart'
+  // Election charts
+  | 'parliament'
+  // Sports charts
+  | 'soccer-field'
+  | 'basketball-court';
 
 export interface ChartData {
   labels: string[];
   datasets: ChartDataset[];
 }
 
+// OHLC data point for candlestick charts
+export interface OHLCDataPoint {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 export interface ChartDataset {
   label?: string;
-  data: number[];
+  data: number[] | OHLCDataPoint[]; // Numbers for regular charts, OHLC for candlestick
   backgroundColor?: string | string[];
   borderColor?: string | string[];
   borderWidth?: number;
@@ -749,6 +808,28 @@ export interface ChartOptions {
   // Animation
   animationDuration?: number;
   animationEasing?: string;
+
+  // Finance chart options (Candlestick, Index)
+  upColor?: string; // Color for price increase
+  downColor?: string; // Color for price decrease
+  wickColor?: string; // Candlestick wick color
+  indexBaseValue?: number; // Starting base value for index chart (default 100)
+
+  // Parliament chart options
+  sections?: number; // Number of party sections
+  seatRadius?: number; // Radius of each seat circle
+  rowHeight?: number; // Height between seat rows
+  sectionGap?: number; // Gap between party sections
+  partyColors?: string[]; // Colors for each party
+
+  // Sports chart options (Soccer, Basketball)
+  theme?: 'light' | 'dark'; // Field/court theme
+  showHeatmap?: boolean; // Show heatmap overlay on soccer field
+  showHexbin?: boolean; // Show hexbin shot chart on basketball court
+  fieldColor?: string; // Field/court surface color
+  lineColor?: string; // Field/court line color
+  shotMadeColor?: string; // Color for made shots
+  shotMissedColor?: string; // Color for missed shots
 }
 
 // Animations
@@ -771,6 +852,7 @@ export interface Animation {
 export interface Keyframe {
   id: string;
   animation_id: string;
+  name?: string; // Optional keyframe name (e.g., "Title_key_1")
   position: number; // 0-100 percentage through animation
   easing?: string;
   // Individual typed properties for common animations
@@ -785,6 +867,17 @@ export interface Keyframe {
   filter_brightness?: number | null;
   color?: string | null;
   background_color?: string | null;
+  // Screen mask properties for animation
+  screenMask_x?: number | null;
+  screenMask_y?: number | null;
+  screenMask_width?: number | null;
+  screenMask_height?: number | null;
+  screenMask_feather_top?: number | null;
+  screenMask_feather_right?: number | null;
+  screenMask_feather_bottom?: number | null;
+  screenMask_feather_left?: number | null;
+  // Character animation progress (0-100)
+  charAnimation_progress?: number | null;
   // Flexible properties object for any CSS property
   properties: Record<string, string | number>;
   sort_order?: number;

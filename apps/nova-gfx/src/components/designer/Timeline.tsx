@@ -25,6 +25,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Tooltip,
   TooltipContent,
@@ -39,7 +40,7 @@ import {
   cn,
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
-import { FRAME_RATE, FRAME_DURATION, createDefaultAnimation, formatTime } from '@/lib/animation';
+import { FRAME_RATE, FRAME_DURATION, createDefaultAnimation, formatTime, type AnimationType } from '@/lib/animation';
 import type { AnimationPhase, Keyframe as StoreKeyframe } from '@emergent-platform/types';
 
 // Row and header heights - must match for alignment between element list and timeline
@@ -1300,12 +1301,12 @@ export function Timeline() {
   // Add animation to element
   const handleAddAnimation = useCallback((elementId: string, type: string) => {
     if (!currentTemplateId) return;
-    
+
     const { animation, keyframes: kfs } = createDefaultAnimation(
       elementId,
       currentTemplateId,
       currentPhase,
-      type as 'fade' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down' | 'scale' | 'custom'
+      type as AnimationType
     );
 
     const animId = crypto.randomUUID();
@@ -1323,6 +1324,24 @@ export function Timeline() {
     store.setKeyframes([...store.keyframes, ...newKeyframes]);
   }, [currentTemplateId, currentPhase]);
 
+  // Remove animation from element for current phase
+  const handleRemoveAnimation = useCallback((elementId: string) => {
+    const store = useDesignerStore.getState();
+
+    // Find animations for this element in the current phase
+    const animsToRemove = store.animations.filter(
+      (a) => a.element_id === elementId && a.phase === currentPhase
+    );
+
+    if (animsToRemove.length === 0) return;
+
+    const animIdsToRemove = new Set(animsToRemove.map(a => a.id));
+
+    // Remove animations and their keyframes
+    store.setAnimations(store.animations.filter(a => !animIdsToRemove.has(a.id)));
+    store.setKeyframes(store.keyframes.filter(kf => !animIdsToRemove.has(kf.animation_id)));
+  }, [currentPhase]);
+
   // Format time display
   const formatTime = (ms: number): string => {
     const seconds = ms / 1000;
@@ -1337,7 +1356,8 @@ export function Timeline() {
     { id: 'out', label: 'OUT', color: 'bg-amber-500' },
   ];
 
-  const animationTypes = [
+  // Animation types for IN/OUT phases
+  const inOutAnimationTypes = [
     { id: 'fade', label: 'Fade' },
     { id: 'slide-left', label: 'Slide Left' },
     { id: 'slide-right', label: 'Slide Right' },
@@ -1345,6 +1365,17 @@ export function Timeline() {
     { id: 'slide-down', label: 'Slide Down' },
     { id: 'scale', label: 'Scale' },
   ];
+
+  // Animation types for LOOP phase - designed as perfect loops
+  const loopAnimationTypes = [
+    { id: 'pulse', label: 'Pulse' },
+    { id: 'side-to-side', label: 'Side to Side' },
+    { id: 'up-and-down', label: 'Up and Down' },
+    { id: 'gentle-twist', label: 'Gentle Twist' },
+  ];
+
+  // Get animation types based on current phase
+  const animationTypes = currentPhase === 'loop' ? loopAnimationTypes : inOutAnimationTypes;
 
   // Group templates by layer
   const templatesByLayer = useMemo(() => {
@@ -1845,6 +1876,17 @@ export function Timeline() {
                               {type.label}
                             </DropdownMenuItem>
                           ))}
+                          {hasAnimation && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleRemoveAnimation(element.id)}
+                                className="text-red-500 focus:text-red-500"
+                              >
+                                Remove Animation
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1917,6 +1959,11 @@ export function Timeline() {
           updateKeyframe(keyframeId, updates);
         };
 
+        // Handler to update keyframe easing
+        const handleEasingUpdate = (keyframeId: string, easing: string) => {
+          updateKeyframe(keyframeId, { easing });
+        };
+
         return (
           <div className="border-t border-border">
             <CurveGraphEditor
@@ -1926,6 +1973,7 @@ export function Timeline() {
               zoom={zoom}
               playheadPosition={playheadPosition}
               onKeyframeUpdate={handleKeyframeUpdate}
+              onEasingUpdate={handleEasingUpdate}
             />
           </div>
         );
@@ -1960,7 +2008,11 @@ export function Timeline() {
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1.5 text-amber-400">
                   <Diamond className="w-3 h-3 fill-amber-400" />
-                  {selectedKeyframeIds.length} keyframe{selectedKeyframeIds.length > 1 ? 's' : ''}
+                  {selectedKfs.length === 1 && firstKf?.name ? (
+                    <span className="font-medium">{firstKf.name}</span>
+                  ) : (
+                    <span>{selectedKeyframeIds.length} keyframe{selectedKeyframeIds.length > 1 ? 's' : ''}</span>
+                  )}
                 </span>
                 {selectedKfs.length === 1 && firstKf && (
                   <>
@@ -2210,7 +2262,24 @@ export function Timeline() {
                   <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20">
                     <div className="flex items-center gap-2 mb-1.5">
                       <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
-                      <span className="text-xs font-medium text-amber-400">Keyframe Details</span>
+                      <input
+                        type="text"
+                        defaultValue={selectedKf.name || `key_${selectedKf.position}`}
+                        className="text-xs font-medium text-amber-400 bg-transparent border-none outline-none hover:bg-amber-500/10 focus:bg-amber-500/20 px-1 py-0.5 rounded -ml-1 flex-1 min-w-0"
+                        onBlur={(e) => {
+                          const newName = e.target.value.trim();
+                          if (newName && newName !== selectedKf.name) {
+                            updateKeyframe(selectedKf.id, { name: newName });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
                       <div className="flex items-center justify-between">

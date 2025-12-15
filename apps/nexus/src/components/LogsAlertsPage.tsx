@@ -76,12 +76,20 @@ function getStatusColor(status: string) {
   }
 }
 
-function formatTimestamp(timestamp: string) {
+function formatTimestamp(timestamp: string, locale: string) {
   const date = new Date(timestamp);
-  return date.toLocaleString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    hour: '2-digit', 
+  // Map i18n language codes to locale codes
+  const localeMap: Record<string, string> = {
+    'en': 'en-US',
+    'ar': 'ar-SA',
+    'fr': 'fr-FR',
+    'es': 'es-ES'
+  };
+  const localeCode = localeMap[locale] || 'en-US';
+  return date.toLocaleString(localeCode, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
   });
@@ -94,7 +102,7 @@ export function LogsAlertsPage({
   onNavigateToWorkflows,
   onNavigateToTimeline
 }: LogsAlertsPageProps) {
-  const { t } = useTranslation(['logs', 'common']);
+  const { t, i18n } = useTranslation(['logs', 'common']);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<string>("all");
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -403,9 +411,9 @@ export function LogsAlertsPage({
                               className="px-6 py-4 text-slate-600 dark:text-slate-400 text-sm cursor-pointer"
                               onClick={() => setSelectedLog(log)}
                             >
-                              {formatTimestamp(log.timestamp)}
+                              {formatTimestamp(log.timestamp, i18n.language)}
                             </td>
-                            <td 
+                            <td
                               className="px-6 py-4 cursor-pointer"
                               onClick={() => setSelectedLog(log)}
                             >
@@ -414,16 +422,16 @@ export function LogsAlertsPage({
                                   <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                 </div>
                                 <span className="text-slate-900 dark:text-slate-100 text-sm">
-                                  {log.system}
+                                  {t(`systems.${log.system.toLowerCase()}`)}
                                 </span>
                               </div>
                             </td>
-                            <td 
+                            <td
                               className="px-6 py-4 cursor-pointer"
                               onClick={() => setSelectedLog(log)}
                             >
                               <Badge variant="outline" className={`text-xs ${getTypeColor(log.type)}`}>
-                                {log.type}
+                                {t(`types.${log.type.toLowerCase()}`)}
                               </Badge>
                             </td>
                             <td 
@@ -438,12 +446,12 @@ export function LogsAlertsPage({
                             >
                               {log.device}
                             </td>
-                            <td 
+                            <td
                               className="px-6 py-4 cursor-pointer"
                               onClick={() => setSelectedLog(log)}
                             >
                               <Badge variant="outline" className={`text-xs ${getStatusColor(log.status)}`}>
-                                {log.status}
+                                {t(`statuses.${log.status.toLowerCase()}`)}
                               </Badge>
                             </td>
                           </tr>
@@ -477,7 +485,7 @@ export function LogsAlertsPage({
                   </span>
                 </div>
                 <Badge variant="outline" className={`${getTypeColor(selectedLog.type)} font-mono text-xs`}>
-                  {selectedLog.type.toUpperCase()}
+                  {t(`types.${selectedLog.type.toLowerCase()}`).toUpperCase()}
                 </Badge>
               </div>
 
@@ -498,7 +506,7 @@ export function LogsAlertsPage({
                   </div>
                   <div className="flex gap-2 text-xs">
                     <span className="text-green-400">{t('dialog.system')}:</span>
-                    <span className="text-cyan-300">{selectedLog.system}</span>
+                    <span className="text-cyan-300">{t(`systems.${selectedLog.system.toLowerCase()}`)}</span>
                   </div>
                   <div className="flex gap-2 text-xs">
                     <span className="text-green-400">{t('dialog.source')}:</span>
@@ -511,7 +519,7 @@ export function LogsAlertsPage({
                       selectedLog.status === "Resolved" ? "text-green-400" :
                       "text-slate-400"
                     }>
-                      {selectedLog.status}
+                      {t(`statuses.${selectedLog.status.toLowerCase()}`)}
                     </span>
                   </div>
                 </div>

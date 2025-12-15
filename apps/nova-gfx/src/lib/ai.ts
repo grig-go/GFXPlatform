@@ -5,7 +5,7 @@ import {
   buildContextMessage as buildDynamicContextMessage,
 } from './ai-prompts';
 import { resolveLogoPlaceholders } from './ai-prompts/tools/sports-logos';
-import { resolvePexelsPlaceholders } from './ai-prompts/tools/pexels-images';
+import { resolvePexelsPlaceholders, convertStockPhotoUrls } from './ai-prompts/tools/pexels-images';
 import { resolveGeneratePlaceholders, hasGeneratePlaceholders, getFallbackPlaceholderUrl, extractGeneratePlaceholders } from './ai-prompts/tools/ai-image-generator';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -25,8 +25,10 @@ async function resolveImagePlaceholders(
   text: string,
   onProgress?: ImageProgressCallback
 ): Promise<string> {
-  // First resolve synchronous placeholders
-  let resolved = resolveLogoPlaceholders(text);
+  // First convert any raw stock photo URLs to GENERATE placeholders
+  let resolved = convertStockPhotoUrls(text);
+  // Then resolve synchronous placeholders
+  resolved = resolveLogoPlaceholders(resolved);
   resolved = resolvePexelsPlaceholders(resolved);
 
   // Then resolve AI-generated images (async)
@@ -2496,6 +2498,116 @@ function collectValidationHints(data: any): ValidationHint[] {
   return hints;
 }
 
+/**
+ * Try to extract valid elements individually from corrupted JSON
+ * This handles cases where streaming corruption garbled part of the response
+ */
+function tryExtractElementsIndividually(jsonStr: string): { elements: any[]; animations: any[] } {
+  const validElements: any[] = [];
+  const validAnimations: any[] = [];
+
+  // Find the elements array section
+  const elementsMatch = jsonStr.match(/"elements"\s*:\s*\[/);
+  if (!elementsMatch) {
+    return { elements: [], animations: [] };
+  }
+
+  const elementsStart = jsonStr.indexOf(elementsMatch[0]) + elementsMatch[0].length;
+
+  // Strategy: Look for individual element objects by finding {"name" patterns
+  // Each element should start with {"name": or { "name":
+  const elementStartPattern = /\{\s*"(?:name|id|element_type)"\s*:/g;
+  let match;
+  const elementStartPositions: number[] = [];
+
+  while ((match = elementStartPattern.exec(jsonStr)) !== null) {
+    // Only consider positions after elementsStart
+    if (match.index >= elementsStart) {
+      elementStartPositions.push(match.index);
+    }
+  }
+
+  console.log(`🔧 Found ${elementStartPositions.length} potential element start positions`);
+
+  // Try to parse each element individually
+  for (let i = 0; i < elementStartPositions.length; i++) {
+    const startPos = elementStartPositions[i];
+    // Try to find where this element ends by counting braces
+    let braceCount = 0;
+    let endPos = -1;
+
+    for (let j = startPos; j < jsonStr.length; j++) {
+      if (jsonStr[j] === '{') braceCount++;
+      if (jsonStr[j] === '}') braceCount--;
+
+      if (braceCount === 0) {
+        endPos = j + 1;
+        break;
+      }
+    }
+
+    if (endPos > startPos) {
+      const elementStr = jsonStr.slice(startPos, endPos);
+      try {
+        const element = JSON.parse(elementStr);
+        // Validate it looks like an element
+        if (element && (element.name || element.element_type || element.id)) {
+          validElements.push(element);
+        }
+      } catch {
+        // This element is corrupted, skip it
+        console.log(`🔧 Skipping corrupted element at position ${startPos}`);
+      }
+    }
+  }
+
+  // Now try to extract animations similarly
+  const animationsMatch = jsonStr.match(/"animations"\s*:\s*\[/);
+  if (animationsMatch) {
+    const animationsStart = jsonStr.indexOf(animationsMatch[0]) + animationsMatch[0].length;
+
+    // Reset pattern
+    const animStartPattern = /\{\s*"(?:element_name|element_id|animation_type)"\s*:/g;
+    const animStartPositions: number[] = [];
+
+    while ((match = animStartPattern.exec(jsonStr)) !== null) {
+      if (match.index >= animationsStart) {
+        animStartPositions.push(match.index);
+      }
+    }
+
+    for (let i = 0; i < animStartPositions.length; i++) {
+      const startPos = animStartPositions[i];
+      let braceCount = 0;
+      let endPos = -1;
+
+      for (let j = startPos; j < jsonStr.length; j++) {
+        if (jsonStr[j] === '{') braceCount++;
+        if (jsonStr[j] === '}') braceCount--;
+
+        if (braceCount === 0) {
+          endPos = j + 1;
+          break;
+        }
+      }
+
+      if (endPos > startPos) {
+        const animStr = jsonStr.slice(startPos, endPos);
+        try {
+          const anim = JSON.parse(animStr);
+          if (anim && (anim.element_name || anim.element_id || anim.animation_type)) {
+            validAnimations.push(anim);
+          }
+        } catch {
+          // Skip corrupted animation
+        }
+      }
+    }
+  }
+
+  return { elements: validElements, animations: validAnimations };
+}
+
 export function parseChangesFromResponse(response: string): AIResponse['changes'] | null {
   console.log('🔍 Parsing AI response for changes...');
 
@@ -2688,7 +2800,42 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
       jsonStr = JSON.stringify(parsed); // Normalize
     }
   } catch (e) {
-    // JSON is invalid, attempt repair if truncated
+    // JSON is invalid - could be truncated OR corrupted mid-stream
+    // The error position tells us where corruption occurred
+    const parseError = e as SyntaxError;
+    const errorMatch = parseError.message.match(/position (\d+)/);
+    const errorPosition = errorMatch ? parseInt(errorMatch[1]) : -1;
+
+    console.log('🔧 JSON parse error at position:', errorPosition, 'Total length:', jsonStr.length);
+
+    // NEW STRATEGY: Try element-by-element extraction for mid-stream corruption
+    // This works even when the JSON is corrupted in the middle (not just truncated)
+    const extractedElements = tryExtractElementsIndividually(jsonStr);
+    if (extractedElements.elements.length > 0) {
+      wasRepaired = true;
+      console.log(`🔧 Extracted ${extractedElements.elements.length} valid elements using individual parsing`);
+
+      // Reconstruct the JSON with extracted elements
+      try {
+        // Try to extract action and layer_type from the beginning
+        const actionMatch = jsonStr.match(/"action"\s*:\s*"(create|update|delete)"/);
+        const layerTypeMatch = jsonStr.match(/"layer_type"\s*:\s*"([^"]+)"/);
+
+        const reconstructed = {
+          action: actionMatch ? actionMatch[1] : 'create',
+          layer_type: layerTypeMatch ? layerTypeMatch[1] : 'lower-third',
+          elements: extractedElements.elements,
+          animations: extractedElements.animations,
+        };
+
+        jsonStr = JSON.stringify(reconstructed);
+        console.log('🔧 Reconstructed JSON with', extractedElements.elements.length, 'elements and', extractedElements.animations.length, 'animations');
+      } catch (reconstructError) {
+        console.warn('🔧 Failed to reconstruct JSON:', reconstructError);
+      }
+    }
+
+    // If element extraction didn't help and JSON is truncated, try bracket-based repair
     if (isTruncated) {
       wasRepaired = true;
       console.log('🔧 Detected truncated JSON, attempting repair...', {
@@ -3396,7 +3543,12 @@ export async function sendDocsChatMessage(
         signal,
       });
     } else {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Use Vite proxy in development to avoid CORS issues
+      const apiUrl = import.meta.env.DEV
+        ? '/api/anthropic/v1/messages'
+        : 'https://api.anthropic.com/v1/messages';
+
+      response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3447,12 +3599,42 @@ export async function sendChatMessageStreaming(
   const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
   const provider = modelConfig.provider;
 
+  // Helper to make the streaming API call
+  const makeStreamingCall = async (): Promise<AIResponse> => {
+    if (provider === 'gemini') {
+      return sendGeminiMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
+    } else {
+      return sendClaudeMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
+    }
+  };
+
   // For streaming, we need direct API access (can't stream through Edge Function easily)
-  let response: AIResponse;
-  if (provider === 'gemini') {
-    response = await sendGeminiMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
-  } else {
-    response = await sendClaudeMessageStreaming(messages, context, modelConfig, dynamicSystemPrompt, contextInfo, onChunk, images, signal);
+  let response = await makeStreamingCall();
+
+  // Check if response looks like it should have JSON changes but parsing failed
+  // This could indicate streaming corruption - retry once if so
+  const looksLikeGraphicResponse = response.message &&
+    (response.message.includes('"action"') || response.message.includes('"elements"') || response.message.includes('```json'));
+
+  if (looksLikeGraphicResponse && !response.changes) {
+    console.warn('⚠️ Response appears to contain graphic JSON but parsing failed - retrying request once...');
+    onChunk('\n\n🔄 Retrying due to response corruption...', '');
+
+    // Wait a brief moment before retry
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Retry the request
+    try {
+      response = await makeStreamingCall();
+      if (response.changes) {
+        console.log('✅ Retry successful - JSON parsed correctly');
+      } else {
+        console.warn('⚠️ Retry also failed to produce valid JSON - proceeding with repair attempt');
+      }
+    } catch (retryError) {
+      console.error('❌ Retry failed:', retryError);
+      // Continue with original response and let the repair logic handle it
+    }
   }
 
   // Resolve any image placeholders in the response (logos, Pexels images, AI-generated)

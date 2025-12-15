@@ -199,6 +199,77 @@ Add glowing edges:
 }
 ```
 
+### Texture Fill
+
+Apply image textures to shapes:
+
+```typescript
+{
+  texture: {
+    enabled: true,
+    url: 'https://example.com/texture.jpg',  // Texture image URL
+    opacity: 0.8,        // 0-1 texture opacity
+    scale: 1,            // Texture scale factor
+    repeat: 'repeat',    // 'repeat', 'repeat-x', 'repeat-y', 'no-repeat'
+    position: 'center',  // CSS background-position value
+    blendMode: 'normal'  // CSS blend mode
+  }
+}
+```
+
+#### Organization Textures
+
+Your organization can upload shared textures:
+1. Go to Organization Settings
+2. Upload texture images to the texture library
+3. Select from library when configuring shape textures
+
+:::tip Texture Use Cases
+- Carbon fiber patterns for sports graphics
+- Paper textures for vintage looks
+- Noise/grain for subtle depth
+- Geometric patterns for backgrounds
+:::
+
+## Screen Masking
+
+Elements can use a **Screen Mask** to show only where a designated shape is visible. This is useful for reveal effects and complex compositions.
+
+### Enabling Screen Mask
+
+1. Select an element (image, video, group, etc.)
+2. In the Properties panel, find **Screen Mask**
+3. Select a shape element from the dropdown
+
+### How It Works
+
+```typescript
+{
+  screenMask: 'shape-element-id'  // ID of the masking shape
+}
+```
+
+The masked element will only be visible where the mask shape has pixels. The mask shape:
+- Uses its position, size, and rotation
+- Respects animations (animate the mask to reveal content)
+- Can be any shape type (rectangle, ellipse, custom)
+
+### Animated Masks
+
+Create reveal effects by animating the mask shape:
+
+1. Create a rectangle shape as the mask
+2. Assign it as the screenMask for your content
+3. Animate the mask's width from 0 to full width
+4. Content reveals as the mask expands
+
+### Use Cases
+
+- **Wipe transitions**: Rectangular mask expanding
+- **Circular reveals**: Ellipse mask scaling from center
+- **Complex reveals**: Custom shape masks for creative effects
+- **Text reveals**: Mask animated text for dramatic entrances
+
 ## Shape Types
 
 Nova GFX supports multiple shape types:

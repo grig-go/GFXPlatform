@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
 import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
-import { resolveGeneratePlaceholders, hasGeneratePlaceholders } from '@/lib/ai-prompts/tools/ai-image-generator';
+import { resolveGeneratePlaceholders, hasGeneratePlaceholders, replaceGenerateWithPlaceholder } from '@/lib/ai-prompts/tools/ai-image-generator';
 import { useAuthStore } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -392,6 +392,10 @@ export function ChatPanel() {
   });
   const [creationProgress, setCreationProgress] = useState<CreationProgress>({ phase: 'idle', message: '' });
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pendingAIChangesRef = useRef<{ changes: any; messageId: string } | null>(null); // Stores pending changes when user wants to skip images
+  const skipImagesRef = useRef(false); // Flag to skip remaining image generation
+  const [isSkippingImages, setIsSkippingImages] = useState(false); // UI state for skip button visibility
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -641,7 +645,13 @@ export function ChatPanel() {
       }
 
       // Expand dynamic_elements template if present (for standings, leaderboards, etc.)
-      const expandedChanges = expandDynamicElements(changes);
+      let expandedChanges = expandDynamicElements(changes);
+
+      // Normalize: AI sends 'action' but code expects 'type'
+      // Map 'action' to 'type' for consistency
+      if (!expandedChanges.type && expandedChanges.action) {
+        expandedChanges = { ...expandedChanges, type: expandedChanges.action };
+      }
 
       // Resolve {{GENERATE:query}} placeholders in element content BEFORE applying
       if (expandedChanges.elements?.length) {
@@ -664,12 +674,33 @@ export function ChatPanel() {
           if (contentStrings.length > 0) {
             console.log(`🖼️ [ChatPanel] Found ${contentStrings.length} element(s) with GENERATE placeholders - will show progress`);
 
+            // Store pending changes in case user wants to skip image generation
+            pendingAIChangesRef.current = { changes: JSON.parse(JSON.stringify(expandedChanges)), messageId };
+            skipImagesRef.current = false; // Reset skip flag
+            setIsSkippingImages(false); // Reset UI state
+
             // Resolve placeholders in all element content
             let imageIndex = 0;
             for (let i = 0; i < expandedChanges.elements.length; i++) {
               const el = expandedChanges.elements[i];
               const contentStr = JSON.stringify(el.content || {});
               if (hasGeneratePlaceholders(contentStr)) {
+                // Check if user requested to skip images
+                if (skipImagesRef.current) {
+                  console.log(`⏭️ Skipping image generation for: ${el.name} - using placeholder`);
+                  const placeholderContent = replaceGenerateWithPlaceholder(contentStr);
+                  try {
+                    const parsedContent = JSON.parse(placeholderContent);
+                    if (parsedContent.type === 'shape' && parsedContent.texture?.url) {
+                      parsedContent.texture.enabled = true;
+                    }
+                    expandedChanges.elements[i].content = parsedContent;
+                  } catch (parseError) {
+                    console.error(`❌ Failed to parse placeholder content for ${el.name}:`, parseError);
+                  }
+                  continue;
+                }
+
                 imageIndex++;
                 // Show which element's image is being generated
                 const elementLabel = el.name?.toLowerCase().includes('background')
@@ -704,6 +735,9 @@ export function ChatPanel() {
                 }
               }
             }
+
+            // Clear pending changes ref after image processing is complete
+            pendingAIChangesRef.current = null;
           }
         } else {
           console.warn('⚠️ Cannot generate images: no organization or user ID available');
@@ -712,13 +746,25 @@ export function ChatPanel() {
 
       console.log('🎨 Applying AI changes:', { type: expandedChanges.type, layerType: expandedChanges.layerType, elementCount: expandedChanges.elements?.length || 0 });
       const store = useDesignerStore.getState();
-      
+
       // Determine the target template based on AI's layer_type detection
       let templateId = store.currentTemplateId;
       let targetLayer = store.layers.find(l => l.id === store.templates.find(t => t.id === templateId)?.layer_id);
-      
-      // For CREATE actions, always create a NEW template in the appropriate layer
-      if (expandedChanges.type === 'create') {
+
+      // Check if current template is empty (no elements) - important for "replace" fallback
+      const currentTemplateElements = templateId
+        ? store.elements.filter(e => e.template_id === templateId)
+        : [];
+      const isCurrentTemplateEmpty = currentTemplateElements.length === 0;
+
+      // For "replace" action with empty template, treat it like "create"
+      // This handles the case where AI generates a "replace" payload but there's nothing to replace
+      const shouldCreateNewTemplate = expandedChanges.type === 'create' ||
+        (expandedChanges.type === 'replace' && isCurrentTemplateEmpty);
+
+      // For CREATE actions (or REPLACE with empty template), create a NEW template in the appropriate layer
+      if (shouldCreateNewTemplate) {
+        console.log(`📋 Action: ${expandedChanges.type}, Template empty: ${isCurrentTemplateEmpty}, Creating new template`);
         // If AI specified a layer type, use that layer
         if (expandedChanges.layerType) {
           targetLayer = store.layers.find(l => l.layer_type === expandedChanges.layerType);
@@ -877,7 +923,7 @@ export function ChatPanel() {
       const validationHints: Array<{ type: string; field: string; message: string; suggestion?: string }> =
         (expandedChanges as any).validationHints || [];
 
-      if ((expandedChanges.type === 'create' || expandedChanges.type === 'update') && expandedChanges.elements) {
+      if ((expandedChanges.type === 'create' || expandedChanges.type === 'update' || expandedChanges.type === 'replace') && expandedChanges.elements) {
         expandedChanges.elements.forEach((el: any, index: number) => {
           try {
             // Skip null/undefined elements
@@ -890,7 +936,9 @@ export function ChatPanel() {
           let existingElement: typeof store.elements[0] | undefined = undefined;
 
           // Check if this is an UPDATE or REPLACE to an existing element
-          if (expandedChanges.type === 'update' || expandedChanges.type === 'replace') {
+          // Skip looking for existing elements if we're creating a new template (shouldCreateNewTemplate is true)
+          // This handles the case where "replace" is used with an empty template - just create all elements
+          if ((expandedChanges.type === 'update' || expandedChanges.type === 'replace') && !shouldCreateNewTemplate) {
             console.log('🔍 Looking for element to update/replace:', { id: el.id, name: el.name });
             console.log('📋 Available elements:', store.elements.map(e => ({ id: e.id, name: e.name })));
 
@@ -1223,9 +1271,16 @@ export function ChatPanel() {
           };
           newAnimations.push(animation);
 
+          // Helper to generate keyframe name based on element name
+          const elementNameForKf = animData.element_name || 'element';
+          const cleanElementName = elementNameForKf
+            .replace(/[^a-zA-Z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 20);
+
           // Create keyframes from animation data
           if (animData.keyframes && Array.isArray(animData.keyframes) && animData.keyframes.length > 0) {
-            animData.keyframes.forEach((kfData: any) => {
+            animData.keyframes.forEach((kfData: any, kfIndex: number) => {
               // Skip invalid keyframe data
               if (!kfData || typeof kfData !== 'object') {
                 console.warn('Invalid keyframe data, skipping');
@@ -1263,6 +1318,7 @@ export function ChatPanel() {
               const keyframe = {
                 id: crypto.randomUUID(),
                 animation_id: animId,
+                name: `${cleanElementName}_${phase}_key_${kfIndex + 1}`,
                 position,
                 properties: kfProperties,
               };
@@ -1273,12 +1329,14 @@ export function ChatPanel() {
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
+              name: `${cleanElementName}_${phase}_key_1`,
               position: 0,
               properties: { opacity: 0 },
             });
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
+              name: `${cleanElementName}_${phase}_key_2`,
               position: 100,
               properties: { opacity: 1 },
             });
@@ -1323,10 +1381,17 @@ export function ChatPanel() {
 
               // Reverse the keyframes (swap 0 and 100 positions)
               const reversedKeyframes = [...inKeyframes].sort((a, b) => b.position - a.position);
+              // Get element name for keyframe naming
+              const outElement = currentStore.elements.find(e => e.id === elementId);
+              const outElementName = (outElement?.name || 'element')
+                .replace(/[^a-zA-Z0-9]/g, '_')
+                .replace(/_+/g, '_')
+                .substring(0, 20);
               reversedKeyframes.forEach((kf, index) => {
                 newKeyframes.push({
                   id: crypto.randomUUID(),
                   animation_id: outAnimId,
+                  name: `${outElementName}_out_key_${index + 1}`,
                   position: index === 0 ? 0 : 100,
                   properties: { ...kf.properties },
                 });
@@ -1370,9 +1435,16 @@ export function ChatPanel() {
               }
             });
 
+            // Generate name for the end keyframe
+            const fixElementName = (element?.name || 'element')
+              .replace(/[^a-zA-Z0-9]/g, '_')
+              .replace(/_+/g, '_')
+              .substring(0, 20);
+
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: anim.id,
+              name: `${fixElementName}_${anim.phase}_key_2`,
               position: 100,
               properties: endProperties,
             });
@@ -1413,16 +1485,24 @@ export function ChatPanel() {
             created_at: new Date().toISOString(),
           });
 
+          // Helper to clean element name for keyframe naming
+          const autoGenElementName = (element?.name || 'element')
+            .replace(/[^a-zA-Z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 20);
+
           // IN Keyframes
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: inAnimId,
+            name: `${autoGenElementName}_in_key_1`,
             position: 0,
             properties: { opacity: 0, transform: 'translateX(-50px)' },
           });
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: inAnimId,
+            name: `${autoGenElementName}_in_key_2`,
             position: 100,
             properties: { opacity: 1, transform: 'translateX(0)' },
           });
@@ -1447,12 +1527,14 @@ export function ChatPanel() {
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: outAnimId,
+            name: `${autoGenElementName}_out_key_1`,
             position: 0,
             properties: { opacity: 1, transform: 'translateX(0)' },
           });
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: outAnimId,
+            name: `${autoGenElementName}_out_key_2`,
             position: 100,
             properties: { opacity: 0, transform: 'translateX(-50px)' },
           });
@@ -1941,6 +2023,17 @@ Alternatively, configure your API key in Settings (⚙️).`,
     }
   }, []);
 
+  // Skip remaining image generation and use placeholder images
+  const handleSkipImages = useCallback(() => {
+    console.log('⏭️ User requested to skip image generation - using placeholders for remaining images');
+    skipImagesRef.current = true;
+    setIsSkippingImages(true);
+    setCreationProgress({
+      phase: 'images',
+      message: 'Skipping images, using placeholders...',
+    });
+  }, []);
+
   // Handle paste for images from clipboard
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -2206,12 +2299,22 @@ Alternatively, configure your API key in Settings (⚙️).`,
               ) : (
                 <Wand2 className="w-4 h-4 text-fuchsia-400 animate-pulse" />
               )}
-              <span className="text-muted-foreground">
+              <span className="text-muted-foreground flex-1">
                 {creationProgress.message}
                 {creationProgress.currentElement && (
                   <span className="ml-1 text-muted-foreground/70">{creationProgress.currentElement}</span>
                 )}
               </span>
+              {/* Skip Images button - only show during image generation phase */}
+              {creationProgress.phase === 'images' && !isSkippingImages && (
+                <button
+                  onClick={handleSkipImages}
+                  className="text-[10px] text-muted-foreground/60 hover:text-amber-400 transition-colors whitespace-nowrap"
+                  title="Use placeholder images instead of generating"
+                >
+                  (Skip Images)
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2462,7 +2565,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
             onPaste={handlePaste}
             placeholder={isListening ? "Listening... speak now" : isDocsMode ? "Ask about Nova GFX or Pulsar GFX..." : "Describe what you want... (paste images with Ctrl+V)"}
             className={cn(
-              "min-h-[48px] max-h-[96px] bg-muted border-border resize-none text-xs transition-all",
+              "min-h-[48px] max-h-[300px] bg-muted border-border resize-y text-xs transition-all",
               isListening && "border-red-500/50 bg-red-500/5"
             )}
             disabled={isLoading}

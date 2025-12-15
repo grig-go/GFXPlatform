@@ -1,10 +1,10 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import {
   Type, Image, Square, Move, RotateCcw,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Diamond, BarChart3, Group,
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
-  FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock,
+  FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock, Scissors,
 } from 'lucide-react';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
@@ -28,6 +28,9 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
   cn,
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -39,6 +42,47 @@ import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { getWeatherIcon } from '@/lib/weatherIcons';
 // @ts-ignore - react-animated-weather types
 import ReactAnimatedWeather from 'react-animated-weather';
+
+// Context for property search filter - allows PropertySection to access search without prop drilling
+const PropertySearchContext = createContext<string>('');
+
+// Context to track if we're inside a matching parent section (skip individual filtering)
+const ParentMatchContext = createContext<boolean>(false);
+
+// Hook to access property search filter
+function usePropertySearch() {
+  return useContext(PropertySearchContext);
+}
+
+// Hook to check if parent section matches search
+function useParentMatch() {
+  return useContext(ParentMatchContext);
+}
+
+// Property keywords for each section (used for search-based auto-expand)
+const CONTENT_PROPERTIES = [
+  'content', 'text', 'source', 'url', 'image', 'video', 'icon', 'name', 'label',
+  'data', 'chart', 'table', 'map', 'ticker', 'countdown', 'badge', 'topic',
+  'center', 'zoom', 'latitude', 'longitude', 'bearing', 'pitch'
+];
+
+const STYLE_PROPERTIES = [
+  'style', 'color', 'background', 'fill', 'stroke', 'border', 'opacity', 'shadow',
+  'font', 'size', 'weight', 'family', 'align', 'spacing', 'radius', 'blur',
+  'line', 'dash', 'arrow', 'cap', 'join', 'gradient', 'filter', 'blend'
+];
+
+const LAYOUT_PROPERTIES = [
+  'layout', 'position', 'x', 'y', 'width', 'height', 'size', 'rotation', 'scale',
+  'anchor', 'transform', 'z-index', 'order', 'visible', 'lock', 'clip', 'overflow'
+];
+
+// Check if search term matches any property in a section
+function searchMatchesSection(searchTerm: string, sectionProperties: string[]): boolean {
+  if (!searchTerm || searchTerm.trim() === '') return false;
+  const normalizedSearch = searchTerm.toLowerCase().trim();
+  return sectionProperties.some(prop => prop.includes(normalizedSearch) || normalizedSearch.includes(prop));
+}
 
 // Helper function to convert color to rgba with specified opacity
 function applyOpacityToColor(color: string, opacity: number): string {
@@ -269,6 +313,7 @@ function formatPropertyValue(value: string | number | null | undefined): string 
 interface KeyframeInspectorProps {
   keyframe: Keyframe;
   animation: Animation;
+  elementName: string;
   phaseDuration: number;
   onUpdate: (id: string, updates: Partial<Keyframe>) => void;
   onDelete: (id: string) => void;
@@ -279,6 +324,7 @@ interface KeyframeInspectorProps {
 function KeyframeInspector({
   keyframe,
   animation,
+  elementName,
   phaseDuration,
   onUpdate,
   onDelete,
@@ -291,35 +337,41 @@ function KeyframeInspector({
   const [expandedProperties, setExpandedProperties] = useState(true);
 
   // Calculate time in ms from position percentage
-  const timeMs = (keyframe.position / 100) * phaseDuration;
+  // Include animation delay to show absolute time within the phase
+  const animationDelay = animation.delay || 0;
+  const animationDuration = animation.duration || phaseDuration;
+  const timeMs = animationDelay + (keyframe.position / 100) * animationDuration;
 
-  // Format time for display
+  // Format time for display - always show in seconds
   const formatTimeDisplay = (ms: number): string => {
     const seconds = ms / 1000;
-    if (seconds < 1) return `${Math.round(ms)}ms`;
     return `${seconds.toFixed(2)}s`;
   };
 
-  // Parse time input and convert to position percentage
+  // Parse time input and convert to position percentage within the animation
   const parseTimeInput = (input: string): number | null => {
     const trimmed = input.trim().toLowerCase();
 
-    // Handle milliseconds: "500ms"
+    // Handle milliseconds: "500ms" - absolute time in phase, convert to position within animation
     if (trimmed.endsWith('ms')) {
       const ms = parseFloat(trimmed.slice(0, -2));
       if (isNaN(ms)) return null;
-      return Math.max(0, Math.min(100, (ms / phaseDuration) * 100));
+      // Convert absolute phase time to position within animation
+      const positionInAnimation = ((ms - animationDelay) / animationDuration) * 100;
+      return Math.max(0, Math.min(100, positionInAnimation));
     }
 
-    // Handle seconds: "1.5s" or just "1.5"
+    // Handle seconds: "1.5s" or just "1.5" - absolute time in phase
     if (trimmed.endsWith('s') || /^\d+\.?\d*$/.test(trimmed)) {
       const seconds = parseFloat(trimmed.replace('s', ''));
       if (isNaN(seconds)) return null;
       const ms = seconds * 1000;
-      return Math.max(0, Math.min(100, (ms / phaseDuration) * 100));
+      // Convert absolute phase time to position within animation
+      const positionInAnimation = ((ms - animationDelay) / animationDuration) * 100;
+      return Math.max(0, Math.min(100, positionInAnimation));
     }
 
-    // Handle percentage: "50%"
+    // Handle percentage: "50%" - direct position within animation
     if (trimmed.endsWith('%')) {
       const pct = parseFloat(trimmed.slice(0, -1));
       if (isNaN(pct)) return null;
@@ -368,7 +420,24 @@ function KeyframeInspector({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
-          <span className="text-xs font-medium">Keyframe</span>
+          <input
+            type="text"
+            defaultValue={keyframe.name || `${elementName}_key_${keyframe.position}`}
+            className="text-xs font-medium bg-transparent border-none outline-none hover:bg-muted/50 focus:bg-muted px-1 py-0.5 rounded -ml-1 max-w-[120px]"
+            onBlur={(e) => {
+              const newName = e.target.value.trim();
+              if (newName && newName !== keyframe.name) {
+                onUpdate(keyframe.id, { name: newName });
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              }
+              e.stopPropagation();
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
             {animation.phase.toUpperCase()}
           </span>
@@ -522,7 +591,7 @@ function KeyframeInspector({
   );
 }
 
-export function PropertiesPanel() {
+export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }) {
   const {
     selectedElementIds,
     elements,
@@ -539,14 +608,47 @@ export function PropertiesPanel() {
     removeKeyframeProperty,
     phaseDurations,
   } = useDesignerStore();
-  const [activeTab, setActiveTab] = useState('style');
 
-  // Auto-switch to keyframe tab when a keyframe is selected
+  // Collapsible section states (all open by default)
+  const [styleOpen, setStyleOpen] = useState(true);
+  const [contentOpen, setContentOpen] = useState(true);
+  const [layoutOpen, setLayoutOpen] = useState(true);
+
+  // Keyframe view state (shown when keyframe is selected)
+  const [showKeyframePanel, setShowKeyframePanel] = useState(false);
+
+  // Auto-switch to keyframe panel when a keyframe is selected
   useEffect(() => {
     if (selectedKeyframeIds.length > 0) {
-      setActiveTab('keyframe');
+      setShowKeyframePanel(true);
+    } else {
+      setShowKeyframePanel(false);
     }
   }, [selectedKeyframeIds]);
+
+  // Close keyframe panel when a new element is selected (clicked in outliner or canvas)
+  // But only if no keyframes are selected (to avoid conflict with keyframe selection)
+  useEffect(() => {
+    if (selectedElementIds.length > 0 && selectedKeyframeIds.length === 0) {
+      setShowKeyframePanel(false);
+    }
+  }, [selectedElementIds, selectedKeyframeIds]);
+
+  // Auto-expand sections when search matches properties within them
+  useEffect(() => {
+    if (!searchFilter || searchFilter.trim() === '') return;
+
+    // Check each section and expand if search matches
+    if (searchMatchesSection(searchFilter, CONTENT_PROPERTIES)) {
+      setContentOpen(true);
+    }
+    if (searchMatchesSection(searchFilter, STYLE_PROPERTIES)) {
+      setStyleOpen(true);
+    }
+    if (searchMatchesSection(searchFilter, LAYOUT_PROPERTIES)) {
+      setLayoutOpen(true);
+    }
+  }, [searchFilter]);
 
   // Get selected element (always show element properties, even when keyframe selected)
   const selectedElement = useMemo(() => {
@@ -627,9 +729,41 @@ export function PropertiesPanel() {
   }
 
   // Check if we have a valid keyframe to show
-  // Show the keyframe tab when ANY keyframe is selected and we have the related data
-  // Don't require the keyframe to be for the "current" element - just show it if selected
-  const hasKeyframeTab = selectedKeyframe && keyframeAnimation;
+  const hasKeyframeData = selectedKeyframe && keyframeAnimation;
+
+  // If keyframe panel is shown, display that instead
+  if (showKeyframePanel && hasKeyframeData && selectedKeyframe && keyframeAnimation) {
+    return (
+      <div className="h-full flex flex-col">
+        {/* Keyframe Header */}
+        <div className="p-2 border-b border-border">
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center">
+              <Diamond className="w-3 h-3 text-amber-400" />
+            </div>
+            <span className="text-xs font-medium text-amber-400">Keyframe</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {selectedElement?.name}
+            </span>
+          </div>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-2">
+            <KeyframeInspector
+              keyframe={selectedKeyframe}
+              animation={keyframeAnimation}
+              elementName={selectedElement?.name || 'element'}
+              phaseDuration={phaseDurations[keyframeAnimation.phase]}
+              onUpdate={updateKeyframe}
+              onDelete={deleteKeyframe}
+              onRemoveProperty={removeKeyframeProperty}
+              onDeselect={() => selectKeyframes([])}
+            />
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -645,61 +779,72 @@ export function PropertiesPanel() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-2 mt-1.5 h-6">
-          <TabsTrigger value="style" className="text-[10px] h-5 flex-1">Style</TabsTrigger>
-          <TabsTrigger value="layout" className="text-[10px] h-5 flex-1">Layout</TabsTrigger>
-          <TabsTrigger value="content" className="text-[10px] h-5 flex-1">Content</TabsTrigger>
-          {hasKeyframeTab && (
-            <TabsTrigger value="keyframe" className="text-[10px] h-5 flex-1 text-amber-400 data-[state=active]:text-amber-500">
-              <Diamond className="w-3 h-3 mr-1" />
-              Key
-            </TabsTrigger>
-          )}
-        </TabsList>
-
+      {/* Collapsible Sections */}
+      <PropertySearchContext.Provider value={searchFilter}>
         <ScrollArea className="flex-1">
-          <TabsContent value="style" className="mt-0 p-2">
-            <StyleEditor
-              element={selectedElement}
-              selectedKeyframe={selectedKeyframe}
-              currentAnimation={currentAnimation}
-            />
-          </TabsContent>
+          <div className="space-y-0.5">
+            {/* Content Section - First */}
+            <Collapsible open={contentOpen} onOpenChange={setContentOpen}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 bg-violet-500/10 hover:bg-violet-500/20 border-b border-violet-500/20 text-left sticky top-0 z-10">
+                <span className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider">Content</span>
+                <ChevronDown className={cn(
+                  "w-4 h-4 text-violet-400 transition-transform duration-200",
+                  !contentOpen && "-rotate-90"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-2 py-2 space-y-2">
+                  <ContentEditor
+                    element={selectedElement}
+                    selectedKeyframe={selectedKeyframe}
+                    currentAnimation={currentAnimation}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-          <TabsContent value="layout" className="mt-0 p-2">
-            <LayoutEditor
-              element={selectedElement}
-              selectedKeyframe={selectedKeyframe}
-              currentAnimation={currentAnimation}
-            />
-          </TabsContent>
+            {/* Style Section */}
+            <Collapsible open={styleOpen} onOpenChange={setStyleOpen}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 bg-violet-500/10 hover:bg-violet-500/20 border-b border-violet-500/20 text-left sticky top-0 z-10">
+                <span className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider">Style</span>
+                <ChevronDown className={cn(
+                  "w-4 h-4 text-violet-400 transition-transform duration-200",
+                  !styleOpen && "-rotate-90"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-2 py-2 space-y-2">
+                  <StyleEditor
+                    element={selectedElement}
+                    selectedKeyframe={selectedKeyframe}
+                    currentAnimation={currentAnimation}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-          <TabsContent value="content" className="mt-0 p-2">
-            <ContentEditor
-              element={selectedElement}
-              selectedKeyframe={selectedKeyframe}
-              currentAnimation={currentAnimation}
-            />
-          </TabsContent>
-
-          {/* Keyframe Tab - only rendered when a keyframe is selected */}
-          {hasKeyframeTab && selectedKeyframe && keyframeAnimation && (
-            <TabsContent value="keyframe" className="mt-0 p-2">
-              <KeyframeInspector
-                keyframe={selectedKeyframe}
-                animation={keyframeAnimation}
-                phaseDuration={phaseDurations[keyframeAnimation.phase]}
-                onUpdate={updateKeyframe}
-                onDelete={deleteKeyframe}
-                onRemoveProperty={removeKeyframeProperty}
-                onDeselect={() => selectKeyframes([])}
-              />
-            </TabsContent>
-          )}
+            {/* Layout Section */}
+            <Collapsible open={layoutOpen} onOpenChange={setLayoutOpen}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 bg-violet-500/10 hover:bg-violet-500/20 border-b border-violet-500/20 text-left sticky top-0 z-10">
+                <span className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider">Layout</span>
+                <ChevronDown className={cn(
+                  "w-4 h-4 text-violet-400 transition-transform duration-200",
+                  !layoutOpen && "-rotate-90"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-2 py-2 space-y-2">
+                  <LayoutEditor
+                    element={selectedElement}
+                    selectedKeyframe={selectedKeyframe}
+                    currentAnimation={currentAnimation}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
         </ScrollArea>
-      </Tabs>
+      </PropertySearchContext.Provider>
     </div>
   );
 }
@@ -1424,6 +1569,170 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
           <Separator className="my-4" />
         </>
       )}
+
+      {/* Character Animation (for text elements) */}
+      {element.content.type === 'text' && (() => {
+        const textContent = element.content;
+        const updateTextContent = (updates: Record<string, unknown>) => {
+          updateElement(element.id, {
+            content: { ...element.content, ...updates } as Element['content'],
+          });
+        };
+
+        return (
+          <>
+            <PropertySection title="Character Animation">
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={textContent.charAnimation?.enabled || false}
+                    onChange={(e) => updateTextContent({
+                      charAnimation: {
+                        enabled: e.target.checked,
+                        type: textContent.charAnimation?.type || 'fade',
+                        easing: textContent.charAnimation?.easing || 'ease-out',
+                        direction: textContent.charAnimation?.direction || 'forward',
+                        spread: textContent.charAnimation?.spread || 3,
+                        progress: textContent.charAnimation?.progress ?? 100,
+                      }
+                    })}
+                    className="rounded"
+                  />
+                  <span>Enable Character Animation</span>
+                </label>
+
+                {textContent.charAnimation?.enabled && (
+                  <div className="space-y-3 pl-4 border-l-2 border-violet-500/30">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Animation Type</label>
+                      <select
+                        value={textContent.charAnimation.type}
+                        onChange={(e) => updateTextContent({
+                          charAnimation: {
+                            ...textContent.charAnimation!,
+                            type: e.target.value as 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'scale' | 'blur' | 'wave' | 'bounce'
+                          }
+                        })}
+                        className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                      >
+                        <option value="fade">Fade</option>
+                        <option value="slide-up">Slide Up</option>
+                        <option value="slide-down">Slide Down</option>
+                        <option value="slide-left">Slide Left</option>
+                        <option value="slide-right">Slide Right</option>
+                        <option value="scale">Scale</option>
+                        <option value="blur">Blur</option>
+                        <option value="wave">Wave</option>
+                        <option value="bounce">Bounce</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Direction</label>
+                      <select
+                        value={textContent.charAnimation.direction}
+                        onChange={(e) => updateTextContent({
+                          charAnimation: {
+                            ...textContent.charAnimation!,
+                            direction: e.target.value as 'forward' | 'backward' | 'center' | 'edges'
+                          }
+                        })}
+                        className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                      >
+                        <option value="forward">Forward (Left to Right)</option>
+                        <option value="backward">Backward (Right to Left)</option>
+                        <option value="center">Center Out</option>
+                        <option value="edges">Edges In</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Easing</label>
+                      <select
+                        value={textContent.charAnimation.easing}
+                        onChange={(e) => updateTextContent({
+                          charAnimation: {
+                            ...textContent.charAnimation!,
+                            easing: e.target.value
+                          }
+                        })}
+                        className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                      >
+                        <option value="linear">Linear</option>
+                        <option value="ease-in">Ease In</option>
+                        <option value="ease-out">Ease Out</option>
+                        <option value="ease-in-out">Ease In Out</option>
+                        <option value="ease">Ease</option>
+                        <option value="cubic-bezier(0.68, -0.55, 0.265, 1.55)">Bounce</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Spread (chars at once)</label>
+                      <Input
+                        type="number"
+                        value={textContent.charAnimation.spread}
+                        onChange={(e) => updateTextContent({
+                          charAnimation: {
+                            ...textContent.charAnimation!,
+                            spread: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        min="1"
+                        max="50"
+                        step="1"
+                        className="h-6 text-[10px]"
+                      />
+                    </div>
+
+                    <KeyframableProperty
+                      title="Progress"
+                      propertyKey="charAnimation_progress"
+                      elementId={element.id}
+                      selectedKeyframe={selectedKeyframe}
+                      currentAnimation={currentAnimation}
+                      currentValue={textContent.charAnimation.progress}
+                      onChange={(value) => updateTextContent({
+                        charAnimation: {
+                          ...textContent.charAnimation!,
+                          progress: value as number
+                        }
+                      })}
+                    >
+                      {(displayValue, onChange) => (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="1"
+                              value={displayValue as number}
+                              onChange={(e) => onChange(parseInt(e.target.value))}
+                              className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-500"
+                            />
+                            <Input
+                              type="number"
+                              value={displayValue as number}
+                              onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                              min="0"
+                              max="100"
+                              className="w-14 h-6 text-[10px]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </KeyframableProperty>
+                  </div>
+                )}
+              </div>
+            </PropertySection>
+
+            <Separator className="my-4" />
+          </>
+        );
+      })()}
 
       {/* Opacity */}
       <KeyframableProperty
@@ -2189,10 +2498,11 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
       <PropertySection title="Shape Type">
         <select
           value={shapeContent.shape || 'rectangle'}
-          onChange={(e) => updateContent({ shape: e.target.value as 'rectangle' | 'rhombus' | 'trapezoid' | 'parallelogram' })}
+          onChange={(e) => updateContent({ shape: e.target.value as 'rectangle' | 'ellipse' | 'rhombus' | 'trapezoid' | 'parallelogram' })}
           className="w-full h-8 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
         >
           <option value="rectangle">Rectangle</option>
+          <option value="ellipse">Ellipse</option>
           <option value="parallelogram">Parallelogram</option>
           <option value="rhombus">Rhombus</option>
           <option value="trapezoid">Trapezoid</option>
@@ -3407,6 +3717,166 @@ function ChartStyleEditor({ element }: { element: Element }) {
         </>
       )}
 
+      {/* Parliament Styling */}
+      {chartContent.chartType === 'parliament' && (
+        <>
+          <Separator />
+          <PropertySection title="Parliament Styling">
+            <div className="space-y-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Seat Size</label>
+                <Input
+                  type="number"
+                  value={chartContent.options?.seatRadius || 8}
+                  onChange={(e) => updateContent({
+                    options: { ...chartContent.options, seatRadius: parseFloat(e.target.value) || 8 }
+                  })}
+                  min="4"
+                  max="20"
+                  className="h-6 text-[10px]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Row Spacing</label>
+                <Input
+                  type="number"
+                  value={chartContent.options?.rowHeight || 20}
+                  onChange={(e) => updateContent({
+                    options: { ...chartContent.options, rowHeight: parseFloat(e.target.value) || 20 }
+                  })}
+                  min="10"
+                  max="40"
+                  className="h-6 text-[10px]"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={chartContent.options?.flipped || false}
+                  onChange={(e) => updateContent({
+                    options: { ...chartContent.options, flipped: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+                Flip Upside Down
+              </label>
+            </div>
+          </PropertySection>
+
+          <Separator />
+          <PropertySection title="Party Breakdown Labels">
+            <div className="space-y-2">
+              <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={chartContent.options?.showPartyBreakdown || false}
+                  onChange={(e) => updateContent({
+                    options: { ...chartContent.options, showPartyBreakdown: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+                Show Party Breakdown
+              </label>
+
+              {chartContent.options?.showPartyBreakdown && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Number Size</label>
+                    <Input
+                      type="number"
+                      value={chartContent.options?.breakdownFontSize || 48}
+                      onChange={(e) => updateContent({
+                        options: { ...chartContent.options, breakdownFontSize: parseFloat(e.target.value) || 48 }
+                      })}
+                      min="20"
+                      max="100"
+                      className="h-6 text-[10px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Label Size</label>
+                    <Input
+                      type="number"
+                      value={chartContent.options?.breakdownLabelSize || 14}
+                      onChange={(e) => updateContent({
+                        options: { ...chartContent.options, breakdownLabelSize: parseFloat(e.target.value) || 14 }
+                      })}
+                      min="8"
+                      max="24"
+                      className="h-6 text-[10px]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </PropertySection>
+
+          <Separator />
+          <PropertySection title="Balance of Power Bar">
+            <div className="space-y-2">
+              <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={chartContent.options?.showBalanceOfPower || false}
+                  onChange={(e) => updateContent({
+                    options: { ...chartContent.options, showBalanceOfPower: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+                Show Balance of Power
+              </label>
+
+              {chartContent.options?.showBalanceOfPower && (
+                <>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Bar Title (optional)</label>
+                    <Input
+                      type="text"
+                      value={chartContent.options?.balanceTitle || ''}
+                      onChange={(e) => updateContent({
+                        options: { ...chartContent.options, balanceTitle: e.target.value }
+                      })}
+                      placeholder="e.g., BALANCE OF POWER"
+                      className="h-6 text-[10px]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Bar Height</label>
+                      <Input
+                        type="number"
+                        value={chartContent.options?.balanceBarHeight || 28}
+                        onChange={(e) => updateContent({
+                          options: { ...chartContent.options, balanceBarHeight: parseFloat(e.target.value) || 28 }
+                        })}
+                        min="16"
+                        max="50"
+                        className="h-6 text-[10px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Bar Y Position</label>
+                      <Input
+                        type="number"
+                        value={chartContent.options?.balanceBarY ?? ''}
+                        onChange={(e) => updateContent({
+                          options: {
+                            ...chartContent.options,
+                            balanceBarY: e.target.value === '' ? undefined : parseFloat(e.target.value)
+                          }
+                        })}
+                        placeholder="auto"
+                        className="h-6 text-[10px]"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </PropertySection>
+        </>
+      )}
+
       {/* Axis & Grid */}
       {(chartContent.chartType === 'bar' || chartContent.chartType === 'horizontal-bar' || chartContent.chartType === 'line' || chartContent.chartType === 'area') && (
         <>
@@ -3703,6 +4173,117 @@ function ImageStyleEditor({ element, updateContent }: { element: Element; update
   );
 }
 
+// Auto Follow Editor - allows element to follow another element's position
+function AutoFollowEditor({ element }: { element: Element }) {
+  const { updateElement, elements } = useDesignerStore();
+
+  // Get other elements that can be followed (exclude self)
+  const availableTargets = elements.filter(e => e.id !== element.id);
+
+  const autoFollow = element.autoFollow || {
+    enabled: false,
+    targetElementId: '',
+    side: 'right' as const,
+    padding: 10,
+    offsetX: 0,
+    offsetY: 0,
+  };
+
+  const updateAutoFollow = (updates: Partial<typeof autoFollow>) => {
+    updateElement(element.id, {
+      autoFollow: { ...autoFollow, ...updates },
+    });
+  };
+
+  return (
+    <SearchableSection title="Auto Follow">
+      <label className="flex items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={autoFollow.enabled}
+          onChange={(e) => updateAutoFollow({ enabled: e.target.checked })}
+          className="rounded"
+        />
+        <span>Follow another element</span>
+      </label>
+
+      {autoFollow.enabled && (
+        <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
+          {/* Target Element Selector */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Target Element</label>
+            <select
+              value={autoFollow.targetElementId}
+              onChange={(e) => updateAutoFollow({ targetElementId: e.target.value })}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="">Select element...</option>
+              {availableTargets.map((el) => (
+                <option key={el.id} value={el.id}>
+                  {el.name || el.element_id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Side Selector */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Follow Side</label>
+            <select
+              value={autoFollow.side}
+              onChange={(e) => updateAutoFollow({ side: e.target.value as 'left' | 'right' | 'top' | 'bottom' })}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="right">Right (position to the right of target)</option>
+              <option value="left">Left (position to the left of target)</option>
+              <option value="bottom">Bottom (position below target)</option>
+              <option value="top">Top (position above target)</option>
+            </select>
+          </div>
+
+          {/* Padding */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Padding (gap)</label>
+            <Input
+              type="number"
+              value={autoFollow.padding}
+              onChange={(e) => updateAutoFollow({ padding: parseFloat(e.target.value) || 0 })}
+              min="0"
+              className="h-7 text-xs"
+            />
+          </div>
+
+          {/* Horizontal Offset - shown when following top/bottom */}
+          {(autoFollow.side === 'top' || autoFollow.side === 'bottom') && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Horizontal Offset</label>
+              <Input
+                type="number"
+                value={autoFollow.offsetX ?? 0}
+                onChange={(e) => updateAutoFollow({ offsetX: parseFloat(e.target.value) || 0 })}
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+
+          {/* Vertical Offset - shown when following left/right */}
+          {(autoFollow.side === 'left' || autoFollow.side === 'right') && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Vertical Offset</label>
+              <Input
+                type="number"
+                value={autoFollow.offsetY ?? 0}
+                onChange={(e) => updateAutoFollow({ offsetY: parseFloat(e.target.value) || 0 })}
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </SearchableSection>
+  );
+}
+
 function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const {
     updateElement,
@@ -3717,10 +4298,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
   return (
     <div className="space-y-4">
       {/* Position Section */}
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Position
-        </div>
+      <SearchableSection title="Position">
         <div className="grid grid-cols-2 gap-2">
           <KeyframableProperty
             title="X"
@@ -3767,13 +4345,10 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             )}
           </KeyframableProperty>
         </div>
-      </div>
+      </SearchableSection>
 
       {/* Size Section */}
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Size
-        </div>
+      <SearchableSection title="Size">
         <div className="grid grid-cols-2 gap-2">
           <KeyframableProperty
             title="W"
@@ -3824,14 +4399,11 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             )}
           </KeyframableProperty>
         </div>
-      </div>
+      </SearchableSection>
 
       {/* Fit to Content - only for shapes */}
       {element.element_type === 'shape' && element.content.type === 'shape' && (
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Auto-Size
-          </div>
+        <SearchableSection title="Auto-Size">
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input
               type="checkbox"
@@ -3946,17 +4518,16 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
               </div>
             </div>
           )}
-        </div>
+        </SearchableSection>
       )}
+
+      {/* Auto Follow Section */}
+      <AutoFollowEditor element={element} />
 
       <Separator />
 
       {/* Transform Section */}
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Transform
-        </div>
-        
+      <SearchableSection title="Transform">
         {/* Rotation */}
         <KeyframableProperty
           title="Rotation"
@@ -4041,15 +4612,431 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             )}
           </KeyframableProperty>
         </div>
-      </div>
+      </SearchableSection>
+
+      <Separator />
+
+      {/* Screen Mask Section */}
+      <SearchableSection title="Screen Mask" icon={<Scissors className="w-3.5 h-3.5" />}>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={element.screenMask?.enabled || false}
+            onChange={(e) => {
+              updateElement(element.id, {
+                screenMask: e.target.checked
+                  ? {
+                      enabled: true,
+                      x: 0,
+                      y: 0,
+                      width: 1920,
+                      height: 1080,
+                      feather: { top: 0, right: 0, bottom: 0, left: 0 },
+                    }
+                  : { enabled: false, x: 0, y: 0, width: 1920, height: 1080, feather: { top: 0, right: 0, bottom: 0, left: 0 } },
+              });
+            }}
+            className="rounded"
+          />
+          <span>Enable Screen Mask</span>
+        </label>
+
+        {element.screenMask?.enabled && (
+          <div className="space-y-3 pt-2 pl-4 border-l-2 border-yellow-500/30">
+            <p className="text-[10px] text-muted-foreground">
+              Clips element to screen coordinates. Only the area inside the mask region will be visible.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <KeyframableProperty
+                title="X"
+                propertyKey="screenMask_x"
+                elementId={element.id}
+                selectedKeyframe={selectedKeyframe}
+                currentAnimation={currentAnimation}
+                currentValue={element.screenMask.x}
+                onChange={(value) => {
+                  updateElement(element.id, {
+                    screenMask: {
+                      ...element.screenMask!,
+                      x: value as number,
+                    },
+                  });
+                }}
+                compact
+              >
+                {(displayValue, onChange) => (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">X</label>
+                    <Input
+                      type="number"
+                      value={displayValue as number}
+                      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                )}
+              </KeyframableProperty>
+              <KeyframableProperty
+                title="Y"
+                propertyKey="screenMask_y"
+                elementId={element.id}
+                selectedKeyframe={selectedKeyframe}
+                currentAnimation={currentAnimation}
+                currentValue={element.screenMask.y}
+                onChange={(value) => {
+                  updateElement(element.id, {
+                    screenMask: {
+                      ...element.screenMask!,
+                      y: value as number,
+                    },
+                  });
+                }}
+                compact
+              >
+                {(displayValue, onChange) => (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Y</label>
+                    <Input
+                      type="number"
+                      value={displayValue as number}
+                      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                )}
+              </KeyframableProperty>
+              <KeyframableProperty
+                title="Width"
+                propertyKey="screenMask_width"
+                elementId={element.id}
+                selectedKeyframe={selectedKeyframe}
+                currentAnimation={currentAnimation}
+                currentValue={element.screenMask.width}
+                onChange={(value) => {
+                  updateElement(element.id, {
+                    screenMask: {
+                      ...element.screenMask!,
+                      width: value as number,
+                    },
+                  });
+                }}
+                compact
+              >
+                {(displayValue, onChange) => (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Width</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={displayValue as number}
+                      onChange={(e) => onChange(parseFloat(e.target.value) || 100)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                )}
+              </KeyframableProperty>
+              <KeyframableProperty
+                title="Height"
+                propertyKey="screenMask_height"
+                elementId={element.id}
+                selectedKeyframe={selectedKeyframe}
+                currentAnimation={currentAnimation}
+                currentValue={element.screenMask.height}
+                onChange={(value) => {
+                  updateElement(element.id, {
+                    screenMask: {
+                      ...element.screenMask!,
+                      height: value as number,
+                    },
+                  });
+                }}
+                compact
+              >
+                {(displayValue, onChange) => (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Height</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={displayValue as number}
+                      onChange={(e) => onChange(parseFloat(e.target.value) || 100)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                )}
+              </KeyframableProperty>
+            </div>
+
+            {/* Feathering - Per Side */}
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Feather (per side)</label>
+              <div className="grid grid-cols-2 gap-2">
+                <KeyframableProperty
+                  title="Feather Top"
+                  propertyKey="screenMask_feather_top"
+                  elementId={element.id}
+                  selectedKeyframe={selectedKeyframe}
+                  currentAnimation={currentAnimation}
+                  currentValue={element.screenMask.feather?.top ?? 0}
+                  onChange={(value) => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        feather: {
+                          ...element.screenMask!.feather ?? { top: 0, right: 0, bottom: 0, left: 0 },
+                          top: Math.min(1000, Math.max(0, value as number)),
+                        },
+                      },
+                    });
+                  }}
+                  compact
+                >
+                  {(displayValue, onChange) => (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-muted-foreground">Top</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={displayValue as number}
+                          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                          className="h-6 w-16 text-[10px]"
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        value={displayValue as number}
+                        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                        className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-yellow-500"
+                      />
+                    </div>
+                  )}
+                </KeyframableProperty>
+                <KeyframableProperty
+                  title="Feather Right"
+                  propertyKey="screenMask_feather_right"
+                  elementId={element.id}
+                  selectedKeyframe={selectedKeyframe}
+                  currentAnimation={currentAnimation}
+                  currentValue={element.screenMask.feather?.right ?? 0}
+                  onChange={(value) => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        feather: {
+                          ...element.screenMask!.feather ?? { top: 0, right: 0, bottom: 0, left: 0 },
+                          right: Math.min(1000, Math.max(0, value as number)),
+                        },
+                      },
+                    });
+                  }}
+                  compact
+                >
+                  {(displayValue, onChange) => (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-muted-foreground">Right</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={displayValue as number}
+                          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                          className="h-6 w-16 text-[10px]"
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        value={displayValue as number}
+                        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                        className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-yellow-500"
+                      />
+                    </div>
+                  )}
+                </KeyframableProperty>
+                <KeyframableProperty
+                  title="Feather Bottom"
+                  propertyKey="screenMask_feather_bottom"
+                  elementId={element.id}
+                  selectedKeyframe={selectedKeyframe}
+                  currentAnimation={currentAnimation}
+                  currentValue={element.screenMask.feather?.bottom ?? 0}
+                  onChange={(value) => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        feather: {
+                          ...element.screenMask!.feather ?? { top: 0, right: 0, bottom: 0, left: 0 },
+                          bottom: Math.min(1000, Math.max(0, value as number)),
+                        },
+                      },
+                    });
+                  }}
+                  compact
+                >
+                  {(displayValue, onChange) => (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-muted-foreground">Bottom</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={displayValue as number}
+                          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                          className="h-6 w-16 text-[10px]"
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        value={displayValue as number}
+                        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                        className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-yellow-500"
+                      />
+                    </div>
+                  )}
+                </KeyframableProperty>
+                <KeyframableProperty
+                  title="Feather Left"
+                  propertyKey="screenMask_feather_left"
+                  elementId={element.id}
+                  selectedKeyframe={selectedKeyframe}
+                  currentAnimation={currentAnimation}
+                  currentValue={element.screenMask.feather?.left ?? 0}
+                  onChange={(value) => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        feather: {
+                          ...element.screenMask!.feather ?? { top: 0, right: 0, bottom: 0, left: 0 },
+                          left: Math.min(1000, Math.max(0, value as number)),
+                        },
+                      },
+                    });
+                  }}
+                  compact
+                >
+                  {(displayValue, onChange) => (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-muted-foreground">Left</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={displayValue as number}
+                          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                          className="h-6 w-16 text-[10px]"
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        value={displayValue as number}
+                        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                        className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-yellow-500"
+                      />
+                    </div>
+                  )}
+                </KeyframableProperty>
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Presets</label>
+              <div className="grid grid-cols-2 gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px]"
+                  onClick={() => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
+                      },
+                    });
+                  }}
+                >
+                  Full Screen
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px]"
+                  onClick={() => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        x: 0,
+                        y: 810,
+                        width: 1920,
+                        height: 270,
+                      },
+                    });
+                  }}
+                >
+                  Lower Third
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px]"
+                  onClick={() => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        x: 960,
+                        y: 0,
+                        width: 960,
+                        height: 1080,
+                      },
+                    });
+                  }}
+                >
+                  Right Half
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px]"
+                  onClick={() => {
+                    updateElement(element.id, {
+                      screenMask: {
+                        ...element.screenMask!,
+                        x: 0,
+                        y: 0,
+                        width: 960,
+                        height: 1080,
+                      },
+                    });
+                  }}
+                >
+                  Left Half
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </SearchableSection>
 
       <Separator />
 
       {/* Anchor Point */}
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Anchor Point
-        </div>
+      <SearchableSection title="Anchor Point">
         <div className="grid grid-cols-2 gap-2">
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground w-8">X</span>
@@ -4100,17 +5087,12 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             </Button>
           ))}
         </div>
-      </div>
+      </SearchableSection>
 
       <Separator />
 
       {/* Z-Order / Layering */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          <Layers className="w-3.5 h-3.5" />
-          Layer Order
-        </div>
-        
+      <SearchableSection title="Layer Order" icon={<Layers className="w-3.5 h-3.5" />}>
         {/* Z-Index input */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground w-16">Z-Index</span>
@@ -4193,7 +5175,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             </Tooltip>
           </TooltipProvider>
         </div>
-      </div>
+      </SearchableSection>
     </div>
   );
 }
@@ -4224,207 +5206,18 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
           />
         </PropertySection>
 
-        <Separator />
-
-        <PropertySection title="Animation">
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={animation.enabled || false}
-                onChange={(e) => updateContent({ 
-                  animation: { 
-                    ...animation, 
-                    enabled: e.target.checked,
-                    type: animation.type || 'fade',
-                    duration: animation.duration || 1,
-                    delay: animation.delay || 0,
-                    easing: animation.easing || 'ease-out',
-                    direction: animation.direction || 'in',
-                  } 
-                })}
-                className="rounded"
-              />
-              <span>Enable Animation</span>
-            </label>
-
-            {animation.enabled && (
-              <div className="space-y-3 pl-4 border-l-2 border-violet-500/30">
-                <KeyframableProperty
-                  title="Animation Type"
-                  propertyKey="textAnimationType"
-                  elementId={element.id}
-                  selectedKeyframe={selectedKeyframe}
-                  currentAnimation={currentAnimation}
-                  currentValue={animation.type || 'fade'}
-                  onChange={(value) => updateContent({
-                    animation: {
-                      ...animation,
-                      type: (value as 'typewriter' | 'wave' | 'fade' | 'slide' | 'scale' | 'blur' | 'glow' | 'bounce' | 'custom') || 'fade'
-                    }
-                  })}
-                >
-                  {(displayValue, onChange) => (
-                    <select
-                      value={(displayValue as string) || 'fade'}
-                      onChange={(e) => onChange(e.target.value)}
-                      className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
-                    >
-                      <option value="fade">Fade</option>
-                      <option value="slide">Slide</option>
-                      <option value="scale">Scale</option>
-                      <option value="blur">Blur</option>
-                      <option value="glow">Glow</option>
-                      <option value="typewriter">Typewriter</option>
-                      <option value="wave">Wave</option>
-                      <option value="bounce">Bounce</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  )}
-                </KeyframableProperty>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <KeyframableProperty
-                    title="Duration (s)"
-                    propertyKey="textAnimationDuration"
-                    elementId={element.id}
-                    selectedKeyframe={selectedKeyframe}
-                    currentAnimation={currentAnimation}
-                    currentValue={animation.duration || 1}
-                    onChange={(value) => updateContent({ 
-                      animation: { 
-                        ...animation, 
-                        duration: (value as number) || 1 
-                      } 
-                    })}
-                    compact
-                  >
-                    {(displayValue, onChange) => (
-                      <Input
-                        type="number"
-                        value={displayValue || 1}
-                        onChange={(e) => onChange(parseFloat(e.target.value) || 1)}
-                        min="0.1"
-                        max="10"
-                        step="0.1"
-                        className="h-6 text-[10px]"
-                      />
-                    )}
-                  </KeyframableProperty>
-                  <KeyframableProperty
-                    title="Delay (s)"
-                    propertyKey="textAnimationDelay"
-                    elementId={element.id}
-                    selectedKeyframe={selectedKeyframe}
-                    currentAnimation={currentAnimation}
-                    currentValue={animation.delay || 0}
-                    onChange={(value) => updateContent({ 
-                      animation: { 
-                        ...animation, 
-                        delay: (value as number) || 0 
-                      } 
-                    })}
-                    compact
-                  >
-                    {(displayValue, onChange) => (
-                      <Input
-                        type="number"
-                        value={displayValue || 0}
-                        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-                        min="0"
-                        max="5"
-                        step="0.1"
-                        className="h-6 text-[10px]"
-                      />
-                    )}
-                  </KeyframableProperty>
-                </div>
-
-                <KeyframableProperty
-                  title="Easing"
-                  propertyKey="textAnimationEasing"
-                  elementId={element.id}
-                  selectedKeyframe={selectedKeyframe}
-                  currentAnimation={currentAnimation}
-                  currentValue={animation.easing || 'ease-out'}
-                  onChange={(value) => updateContent({ 
-                    animation: { 
-                      ...animation, 
-                      easing: (value as string) || 'ease-out' 
-                    } 
-                  })}
-                >
-                  {(displayValue, onChange) => (
-                    <select
-                      value={(displayValue as string) || 'ease-out'}
-                      onChange={(e) => onChange(e.target.value)}
-                      className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
-                    >
-                      <option value="linear">Linear</option>
-                      <option value="ease-in">Ease In</option>
-                      <option value="ease-out">Ease Out</option>
-                      <option value="ease-in-out">Ease In Out</option>
-                      <option value="ease">Ease</option>
-                      <option value="cubic-bezier(0.68, -0.55, 0.265, 1.55)">Bounce</option>
-                    </select>
-                  )}
-                </KeyframableProperty>
-
-                <KeyframableProperty
-                  title="Direction"
-                  propertyKey="textAnimationDirection"
-                  elementId={element.id}
-                  selectedKeyframe={selectedKeyframe}
-                  currentAnimation={currentAnimation}
-                  currentValue={animation.direction || 'in'}
-                  onChange={(value) => updateContent({ 
-                    animation: { 
-                      ...animation, 
-                      direction: (value as string) as 'in' | 'out' | 'in-out' || 'in' 
-                    } 
-                  })}
-                >
-                  {(displayValue, onChange) => (
-                    <select
-                      value={(displayValue as string) || 'in'}
-                      onChange={(e) => onChange(e.target.value)}
-                      className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
-                    >
-                      <option value="in">In</option>
-                      <option value="out">Out</option>
-                      <option value="in-out">In-Out</option>
-                    </select>
-                  )}
-                </KeyframableProperty>
-
-                {animation.type === 'custom' && (
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Custom Properties (JSON)</label>
-                    <textarea
-                      value={JSON.stringify(animation.customProperties || {}, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const props = JSON.parse(e.target.value);
-                          updateContent({ 
-                            animation: { 
-                              ...animation, 
-                              customProperties: props 
-                            } 
-                          });
-                        } catch (err) {
-                          // Invalid JSON, ignore
-                        }
-                      }}
-                      className="w-full h-24 p-2 text-xs bg-muted border border-input rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
-                      placeholder='{"opacity": [0, 1], "x": [-100, 0]}'
-                    />
-                  </div>
-                )}
-
-              </div>
-            )}
-          </div>
+        <PropertySection title="Text Sizing">
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={textContent.maxSize || false}
+              onChange={(e) => updateContent({ maxSize: e.target.checked })}
+              className="rounded"
+            />
+            <span>Max Size (scale to fit, no wrap)</span>
+          </label>
         </PropertySection>
+
       </div>
     );
   }
@@ -4747,21 +5540,78 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 
   if (element.content.type === 'chart') {
     const chartContent = element.content;
+
+    // Determine current category based on chart type
+    const getChartCategory = (chartType: string) => {
+      if (['bar', 'horizontal-bar', 'line', 'area', 'pie', 'donut', 'gauge'].includes(chartType)) return 'basic';
+      if (['candlestick', 'index-chart'].includes(chartType)) return 'finance';
+      if (['parliament'].includes(chartType)) return 'election';
+      if (['soccer-field', 'basketball-court'].includes(chartType)) return 'sports';
+      return 'basic';
+    };
+
+    const currentCategory = getChartCategory(chartContent.chartType || 'bar');
+
+    // Chart types by category
+    const chartTypesByCategory = {
+      basic: [
+        { value: 'bar', label: 'Bar Chart' },
+        { value: 'horizontal-bar', label: 'Horizontal Bar' },
+        { value: 'line', label: 'Line Chart' },
+        { value: 'area', label: 'Area Chart' },
+        { value: 'pie', label: 'Pie Chart' },
+        { value: 'donut', label: 'Donut Chart' },
+        { value: 'gauge', label: 'Gauge' },
+      ],
+      finance: [
+        { value: 'candlestick', label: 'Candlestick' },
+        { value: 'index-chart', label: 'Index Chart' },
+      ],
+      election: [
+        { value: 'parliament', label: 'Parliament' },
+      ],
+      sports: [
+        { value: 'soccer-field', label: 'Soccer Field' },
+        { value: 'basketball-court', label: 'Basketball Court' },
+      ],
+    };
+
+    const categoryLabels = {
+      basic: 'Basic',
+      finance: 'Finance',
+      election: 'Election',
+      sports: 'Sports',
+    };
+
     return (
       <div className="space-y-2">
+        <PropertySection title="Chart Category">
+          <select
+            value={currentCategory}
+            onChange={(e) => {
+              const newCategory = e.target.value as keyof typeof chartTypesByCategory;
+              // Switch to the first chart type of the new category
+              const firstChartType = chartTypesByCategory[newCategory][0].value;
+              updateContent({ chartType: firstChartType as any });
+            }}
+            className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+          >
+            <option value="basic">Basic</option>
+            <option value="finance">Finance</option>
+            <option value="election">Election</option>
+            <option value="sports">Sports</option>
+          </select>
+        </PropertySection>
+
         <PropertySection title="Chart Type">
           <select
             value={chartContent.chartType || 'bar'}
             onChange={(e) => updateContent({ chartType: e.target.value as any })}
             className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
           >
-            <option value="bar">Bar Chart</option>
-            <option value="horizontal-bar">Horizontal Bar</option>
-            <option value="line">Line Chart</option>
-            <option value="area">Area Chart</option>
-            <option value="pie">Pie Chart</option>
-            <option value="donut">Donut Chart</option>
-            <option value="gauge">Gauge</option>
+            {chartTypesByCategory[currentCategory as keyof typeof chartTypesByCategory].map((type) => (
+              <option key={type.value} value={type.value}>{type.label}</option>
+            ))}
           </select>
         </PropertySection>
 
@@ -4845,44 +5695,1101 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
           </>
         )}
 
+        {/* Candlestick Chart Properties */}
+        {chartContent.chartType === 'candlestick' && (
+          <>
+            <PropertySection title="Candlestick Colors">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-16">Up Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.upColor || '#22C55E'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, upColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.upColor || '#22C55E'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, upColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-16">Down Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.downColor || '#EF4444'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, downColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.downColor || '#EF4444'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, downColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-16">Wick Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.wickColor || '#9CA3AF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, wickColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.wickColor || '#9CA3AF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, wickColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+              </div>
+            </PropertySection>
+            <PropertySection title="Grid">
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={chartContent.options?.showGrid !== false}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, showGrid: e.target.checked }
+                    })}
+                    className="rounded border-input"
+                  />
+                  Show Grid Lines
+                </label>
+                {chartContent.options?.showGrid !== false && (
+                  <div className="flex items-center gap-2 pl-4">
+                    <label className="text-[10px] text-muted-foreground">Grid Color</label>
+                    <input
+                      type="color"
+                      value={chartContent.options?.gridColor || '#333333'}
+                      onChange={(e) => updateContent({
+                        options: { ...chartContent.options, gridColor: e.target.value }
+                      })}
+                      className="w-6 h-6 rounded border border-input cursor-pointer"
+                    />
+                  </div>
+                )}
+              </div>
+            </PropertySection>
+          </>
+        )}
+
+        {/* Index Chart Properties */}
+        {chartContent.chartType === 'index-chart' && (
+          <>
+            <PropertySection title="Index Settings">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Base Value</label>
+                  <Input
+                    type="number"
+                    value={chartContent.options?.indexBaseValue || 100}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, indexBaseValue: parseFloat(e.target.value) || 100 }
+                    })}
+                    className="h-6 text-[10px]"
+                  />
+                </div>
+                <p className="text-[9px] text-muted-foreground">
+                  All series are normalized to this base value at their starting point.
+                </p>
+              </div>
+            </PropertySection>
+            <PropertySection title="Series Data">
+              <div className="space-y-2">
+                <p className="text-[9px] text-muted-foreground">
+                  Edit labels and add multiple datasets for comparison.
+                </p>
+              </div>
+            </PropertySection>
+          </>
+        )}
+
+        {/* Parliament Chart Properties */}
+        {chartContent.chartType === 'parliament' && (
+          <PropertySection title="Party Data Info">
+            <div className="space-y-2">
+              <p className="text-[9px] text-muted-foreground">
+                Labels = Party names, Values = Number of seats per party.
+              </p>
+              <p className="text-[9px] text-muted-foreground italic">
+                Styling options (seat size, row spacing) are in the Style tab.
+              </p>
+            </div>
+          </PropertySection>
+        )}
+
+        {/* Soccer Field Properties */}
+        {chartContent.chartType === 'soccer-field' && (
+          <>
+            <PropertySection title="Field Settings">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Theme</label>
+                  <select
+                    value={chartContent.options?.theme || 'dark'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, theme: e.target.value }
+                    })}
+                    className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                  >
+                    <option value="dark">Dark (Broadcast)</option>
+                    <option value="light">Light (Natural)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Field Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.fieldColor || '#1a472a'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, fieldColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.fieldColor || '#1a472a'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, fieldColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Line Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.lineColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, lineColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.lineColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, lineColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+              </div>
+            </PropertySection>
+            <PropertySection title="Data Points">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Point Style</label>
+                  <select
+                    value={chartContent.options?.pointStyle || 'circle'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointStyle: e.target.value }
+                    })}
+                    className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                  >
+                    <option value="circle">Circle</option>
+                    <option value="jersey">Jersey (with number)</option>
+                    <option value="dot">Dot (small)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Point Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.pointColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.pointColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Goalie Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.goalieColor || '#FFD700'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, goalieColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.goalieColor || '#FFD700'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, goalieColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Point Size</label>
+                  <Input
+                    type="number"
+                    value={chartContent.options?.pointSize || 12}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointSize: parseFloat(e.target.value) || 12 }
+                    })}
+                    min="4"
+                    max="30"
+                    className="h-6 text-[10px]"
+                  />
+                </div>
+                <label className="flex items-center gap-1.5 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={chartContent.options?.showPointLabels !== false}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, showPointLabels: e.target.checked }
+                    })}
+                    className="rounded border-input"
+                  />
+                  Show Labels
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={chartContent.options?.showPointNumbers !== false}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, showPointNumbers: e.target.checked }
+                    })}
+                    className="rounded border-input"
+                  />
+                  Show Numbers (Jersey style)
+                </label>
+              </div>
+            </PropertySection>
+            <PropertySection title="Test Data">
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    const sampleData = [
+                      { x: 15, y: 50, label: 'GK', number: 1, color: '#FFD700' },
+                      { x: 30, y: 20, label: 'LB', number: 3 },
+                      { x: 30, y: 40, label: 'CB', number: 4 },
+                      { x: 30, y: 60, label: 'CB', number: 5 },
+                      { x: 30, y: 80, label: 'RB', number: 2 },
+                      { x: 50, y: 30, label: 'CM', number: 6 },
+                      { x: 50, y: 50, label: 'CM', number: 8 },
+                      { x: 50, y: 70, label: 'CM', number: 10 },
+                      { x: 70, y: 25, label: 'LW', number: 11 },
+                      { x: 75, y: 50, label: 'ST', number: 9 },
+                      { x: 70, y: 75, label: 'RW', number: 7 },
+                    ];
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: sampleData,
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  Load Sample Formation (4-3-3)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: [],
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  Clear Data Points
+                </Button>
+              </div>
+            </PropertySection>
+            <PropertySection title="Edit Data Points">
+              <div className="space-y-2">
+                {(chartContent.data?.datasets?.[0]?.data as any[] || []).length === 0 ? (
+                  <p className="text-[9px] text-muted-foreground">No data points. Use "Load Sample Formation" above or add manually.</p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {(chartContent.data?.datasets?.[0]?.data as any[] || []).map((point: any, idx: number) => (
+                      <div key={idx} className="border border-input rounded p-2 space-y-1.5 bg-muted/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-medium">Point {idx + 1}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                              newData.splice(idx, 1);
+                              updateContent({
+                                data: {
+                                  ...chartContent.data,
+                                  datasets: [{
+                                    ...chartContent.data?.datasets?.[0],
+                                    data: newData,
+                                  }],
+                                }
+                              });
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">X (0-100)</label>
+                            <Input
+                              type="number"
+                              value={point.x || 0}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, x: parseFloat(e.target.value) || 0 };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Y (0-100)</label>
+                            <Input
+                              type="number"
+                              value={point.y || 0}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, y: parseFloat(e.target.value) || 0 };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Label</label>
+                            <Input
+                              value={point.label || ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, label: e.target.value };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="Label"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Number</label>
+                            <Input
+                              type="number"
+                              value={point.number ?? ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, number: e.target.value ? parseInt(e.target.value) : undefined };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="#"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Color</label>
+                            <div className="flex gap-1">
+                              <input
+                                type="color"
+                                value={point.color || '#000000'}
+                                onChange={(e) => {
+                                  const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                  newData[idx] = { ...point, color: e.target.value };
+                                  updateContent({
+                                    data: {
+                                      ...chartContent.data,
+                                      datasets: [{
+                                        ...chartContent.data?.datasets?.[0],
+                                        data: newData,
+                                      }],
+                                    }
+                                  });
+                                }}
+                                className="w-5 h-5 rounded border border-input cursor-pointer"
+                              />
+                              <Input
+                                value={point.color || ''}
+                                onChange={(e) => {
+                                  const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                  newData[idx] = { ...point, color: e.target.value || undefined };
+                                  updateContent({
+                                    data: {
+                                      ...chartContent.data,
+                                      datasets: [{
+                                        ...chartContent.data?.datasets?.[0],
+                                        data: newData,
+                                      }],
+                                    }
+                                  });
+                                }}
+                                placeholder="Default"
+                                className="flex-1 h-5 text-[9px] font-mono"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Size</label>
+                            <Input
+                              type="number"
+                              value={point.size ?? ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, size: e.target.value ? parseFloat(e.target.value) : undefined };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="Default"
+                              min="4"
+                              max="50"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                    newData.push({ x: 50, y: 50, label: '', number: undefined, color: undefined, size: undefined });
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: newData,
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  + Add Point
+                </Button>
+              </div>
+            </PropertySection>
+            <PropertySection title="Payload Example">
+              <div className="space-y-2">
+                <pre className="text-[9px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono">
+{`{
+  "datasets": [{
+    "data": [
+      {
+        "x": 50,      // 0-100 (left to right)
+        "y": 50,      // 0-100 (top to bottom)
+        "label": "ST", // optional label
+        "number": 9,   // jersey number
+        "color": "#FF0000", // optional
+        "size": 15     // optional
+      }
+    ]
+  }]
+}`}
+                </pre>
+                <p className="text-[9px] text-muted-foreground">
+                  x: 0 = left goal line, 100 = right goal line<br/>
+                  y: 0 = top sideline, 100 = bottom sideline
+                </p>
+              </div>
+            </PropertySection>
+          </>
+        )}
+
+        {/* Basketball Court Properties */}
+        {chartContent.chartType === 'basketball-court' && (
+          <>
+            <PropertySection title="Court Settings">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Theme</label>
+                  <select
+                    value={chartContent.options?.theme || 'dark'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, theme: e.target.value }
+                    })}
+                    className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                  >
+                    <option value="dark">Dark (Broadcast)</option>
+                    <option value="light">Light (Natural)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Court Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.fieldColor || '#2a1810'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, fieldColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.fieldColor || '#2a1810'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, fieldColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Line Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.lineColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, lineColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.lineColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, lineColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+              </div>
+            </PropertySection>
+            <PropertySection title="Data Points">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Point Style</label>
+                  <select
+                    value={chartContent.options?.pointStyle || 'circle'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointStyle: e.target.value }
+                    })}
+                    className="w-full h-6 text-[10px] bg-muted border border-input rounded-md px-1.5 cursor-pointer"
+                  >
+                    <option value="circle">Circle</option>
+                    <option value="jersey">Jersey (with number)</option>
+                    <option value="dot">Dot (small)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Point Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.pointColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.pointColor || '#FFFFFF'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] text-muted-foreground w-20">Center Color</label>
+                  <input
+                    type="color"
+                    value={chartContent.options?.centerColor || '#FFD700'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, centerColor: e.target.value }
+                    })}
+                    className="w-6 h-6 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={chartContent.options?.centerColor || '#FFD700'}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, centerColor: e.target.value }
+                    })}
+                    className="flex-1 h-5 text-[10px] px-1.5 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Point Size</label>
+                  <Input
+                    type="number"
+                    value={chartContent.options?.pointSize || 12}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, pointSize: parseFloat(e.target.value) || 12 }
+                    })}
+                    min="4"
+                    max="30"
+                    className="h-6 text-[10px]"
+                  />
+                </div>
+                <label className="flex items-center gap-1.5 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={chartContent.options?.showPointLabels !== false}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, showPointLabels: e.target.checked }
+                    })}
+                    className="rounded border-input"
+                  />
+                  Show Labels
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={chartContent.options?.showPointNumbers !== false}
+                    onChange={(e) => updateContent({
+                      options: { ...chartContent.options, showPointNumbers: e.target.checked }
+                    })}
+                    className="rounded border-input"
+                  />
+                  Show Numbers (Jersey style)
+                </label>
+              </div>
+            </PropertySection>
+            <PropertySection title="Test Data">
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    // Standard 5-man starting lineup positions (half court offense)
+                    const sampleData = [
+                      { x: 15, y: 50, label: 'C', number: 5 }, // Center near basket
+                      { x: 30, y: 25, label: 'PF', number: 4 }, // Power Forward
+                      { x: 30, y: 75, label: 'SF', number: 3 }, // Small Forward
+                      { x: 55, y: 20, label: 'SG', number: 2 }, // Shooting Guard
+                      { x: 55, y: 80, label: 'PG', number: 1 }, // Point Guard
+                    ];
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: sampleData,
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  Load Sample Lineup (5-man)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    // Shot chart sample data
+                    const shotData = [
+                      { x: 10, y: 50, label: 'Made', color: '#22C55E', size: 8 },
+                      { x: 15, y: 35, label: 'Made', color: '#22C55E', size: 8 },
+                      { x: 15, y: 65, label: 'Missed', color: '#EF4444', size: 8 },
+                      { x: 25, y: 20, label: 'Made', color: '#22C55E', size: 8 },
+                      { x: 25, y: 80, label: 'Made', color: '#22C55E', size: 8 },
+                      { x: 35, y: 50, label: 'Missed', color: '#EF4444', size: 8 },
+                      { x: 50, y: 15, label: '3PT', color: '#3B82F6', size: 8 },
+                      { x: 50, y: 85, label: '3PT', color: '#3B82F6', size: 8 },
+                      { x: 55, y: 50, label: '3PT', color: '#3B82F6', size: 8 },
+                    ];
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: shotData,
+                        }],
+                      },
+                      options: {
+                        ...chartContent.options,
+                        pointStyle: 'dot',
+                        showPointLabels: true,
+                        showPointNumbers: false,
+                      }
+                    });
+                  }}
+                >
+                  Load Sample Shot Chart
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: [],
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  Clear Data Points
+                </Button>
+              </div>
+            </PropertySection>
+            <PropertySection title="Edit Data Points">
+              <div className="space-y-2">
+                {(chartContent.data?.datasets?.[0]?.data as any[] || []).length === 0 ? (
+                  <p className="text-[9px] text-muted-foreground">No data points. Use "Load Sample" buttons above or add manually.</p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {(chartContent.data?.datasets?.[0]?.data as any[] || []).map((point: any, idx: number) => (
+                      <div key={idx} className="border border-input rounded p-2 space-y-1.5 bg-muted/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-medium">Point {idx + 1}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                              newData.splice(idx, 1);
+                              updateContent({
+                                data: {
+                                  ...chartContent.data,
+                                  datasets: [{
+                                    ...chartContent.data?.datasets?.[0],
+                                    data: newData,
+                                  }],
+                                }
+                              });
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">X (0-100)</label>
+                            <Input
+                              type="number"
+                              value={point.x || 0}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, x: parseFloat(e.target.value) || 0 };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Y (0-100)</label>
+                            <Input
+                              type="number"
+                              value={point.y || 0}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, y: parseFloat(e.target.value) || 0 };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Label</label>
+                            <Input
+                              value={point.label || ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, label: e.target.value };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="Label"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Number</label>
+                            <Input
+                              type="number"
+                              value={point.number ?? ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, number: e.target.value ? parseInt(e.target.value) : undefined };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="#"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Color</label>
+                            <div className="flex gap-1">
+                              <input
+                                type="color"
+                                value={point.color || '#000000'}
+                                onChange={(e) => {
+                                  const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                  newData[idx] = { ...point, color: e.target.value };
+                                  updateContent({
+                                    data: {
+                                      ...chartContent.data,
+                                      datasets: [{
+                                        ...chartContent.data?.datasets?.[0],
+                                        data: newData,
+                                      }],
+                                    }
+                                  });
+                                }}
+                                className="w-5 h-5 rounded border border-input cursor-pointer"
+                              />
+                              <Input
+                                value={point.color || ''}
+                                onChange={(e) => {
+                                  const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                  newData[idx] = { ...point, color: e.target.value || undefined };
+                                  updateContent({
+                                    data: {
+                                      ...chartContent.data,
+                                      datasets: [{
+                                        ...chartContent.data?.datasets?.[0],
+                                        data: newData,
+                                      }],
+                                    }
+                                  });
+                                }}
+                                placeholder="Default"
+                                className="flex-1 h-5 text-[9px] font-mono"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-muted-foreground">Size</label>
+                            <Input
+                              type="number"
+                              value={point.size ?? ''}
+                              onChange={(e) => {
+                                const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                                newData[idx] = { ...point, size: e.target.value ? parseFloat(e.target.value) : undefined };
+                                updateContent({
+                                  data: {
+                                    ...chartContent.data,
+                                    datasets: [{
+                                      ...chartContent.data?.datasets?.[0],
+                                      data: newData,
+                                    }],
+                                  }
+                                });
+                              }}
+                              placeholder="Default"
+                              min="4"
+                              max="50"
+                              className="h-5 text-[9px]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-6 text-[10px]"
+                  onClick={() => {
+                    const newData = [...(chartContent.data?.datasets?.[0]?.data as any[] || [])];
+                    newData.push({ x: 50, y: 50, label: '', number: undefined, color: undefined, size: undefined });
+                    updateContent({
+                      data: {
+                        ...chartContent.data,
+                        datasets: [{
+                          ...chartContent.data?.datasets?.[0],
+                          data: newData,
+                        }],
+                      }
+                    });
+                  }}
+                >
+                  + Add Point
+                </Button>
+              </div>
+            </PropertySection>
+            <PropertySection title="Payload Example">
+              <div className="space-y-2">
+                <pre className="text-[9px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono">
+{`{
+  "datasets": [{
+    "data": [
+      {
+        "x": 50,      // 0-100 (baseline to mid)
+        "y": 50,      // 0-100 (sideline to sideline)
+        "label": "PG", // position label
+        "number": 1,   // jersey number
+        "color": "#FF0000", // optional
+        "size": 15     // optional
+      }
+    ]
+  }]
+}`}
+                </pre>
+                <p className="text-[9px] text-muted-foreground">
+                  x: 0 = baseline (basket), 100 = half-court line<br/>
+                  y: 0 = left sideline, 100 = right sideline
+                </p>
+              </div>
+            </PropertySection>
+          </>
+        )}
+
         <Separator />
 
-        <PropertySection title="Data (Labels)">
-          <Input
-            value={chartContent.data?.labels?.join(', ') || ''}
-            onChange={(e) => updateContent({
-              data: { 
-                ...chartContent.data, 
-                labels: e.target.value.split(',').map(s => s.trim()) 
-              }
-            })}
-            placeholder="Label 1, Label 2, Label 3..."
-            className="h-6 text-[10px]"
-          />
-        </PropertySection>
+        {/* Data sections - show for basic charts and parliament/index */}
+        {['bar', 'horizontal-bar', 'line', 'area', 'pie', 'donut', 'gauge', 'parliament', 'index-chart'].includes(chartContent.chartType || 'bar') && (
+          <>
+            <PropertySection title="Data (Labels)">
+              <Input
+                value={chartContent.data?.labels?.join(', ') || ''}
+                onChange={(e) => updateContent({
+                  data: {
+                    ...chartContent.data,
+                    labels: e.target.value.split(',').map(s => s.trim())
+                  }
+                })}
+                placeholder="Label 1, Label 2, Label 3..."
+                className="h-6 text-[10px]"
+              />
+            </PropertySection>
 
-        <PropertySection title="Data (Values)">
-          <Input
-            value={chartContent.data?.datasets?.[0]?.data?.join(', ') || ''}
-            onChange={(e) => {
-              const values = e.target.value.split(',').map(s => parseFloat(s.trim()) || 0).filter(v => !isNaN(v));
-              updateContent({
-                data: {
-                  ...chartContent.data,
-                  datasets: [{
-                    ...chartContent.data?.datasets?.[0],
-                    data: values,
-                  }],
-                }
-              });
-            }}
-            placeholder="10, 20, 30..."
-            className="h-6 text-[10px]"
-          />
-        </PropertySection>
+            <PropertySection title="Data (Values)">
+              <Input
+                value={chartContent.data?.datasets?.[0]?.data?.join(', ') || ''}
+                onChange={(e) => {
+                  const values = e.target.value.split(',').map(s => parseFloat(s.trim()) || 0).filter(v => !isNaN(v));
+                  updateContent({
+                    data: {
+                      ...chartContent.data,
+                      datasets: [{
+                        ...chartContent.data?.datasets?.[0],
+                        data: values,
+                      }],
+                    }
+                  });
+                }}
+                placeholder="10, 20, 30..."
+                className="h-6 text-[10px]"
+              />
+            </PropertySection>
+          </>
+        )}
 
-        {chartContent.options?.animated !== false && (
-          <PropertySection title="Animation">
+        {chartContent.options?.animated !== false && ['bar', 'horizontal-bar', 'line', 'area', 'pie', 'donut', 'gauge'].includes(chartContent.chartType || 'bar') && (
+          <PropertySection title="Chart.js Animation">
             <div className="space-y-1.5">
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Animation Duration (ms)</label>
@@ -4916,12 +6823,126 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
             </div>
           </PropertySection>
         )}
+
+        <Separator />
+
+        {/* Timeline Keyframe Animation Properties */}
+        <PropertySection title="Timeline Animation">
+          <div className="space-y-2">
+            <p className="text-[9px] text-muted-foreground">
+              Use these properties with keyframes to animate chart values over time.
+            </p>
+
+            {/* Chart Progress - animates reveal of all data */}
+            <KeyframableProperty
+              title="Chart Progress"
+              propertyKey="chartProgress"
+              elementId={element.id}
+              selectedKeyframe={selectedKeyframe}
+              currentAnimation={currentAnimation}
+              currentValue={chartContent.options?.chartProgress ?? 1}
+              onChange={(value) => updateContent({
+                options: { ...chartContent.options, chartProgress: value as number }
+              })}
+            >
+              {(displayValue, onChange) => (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={typeof displayValue === 'number' ? displayValue : 1}
+                    onChange={(e) => onChange(parseFloat(e.target.value))}
+                    className="flex-1 h-1.5 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-[10px] text-muted-foreground w-10 text-right">
+                    {Math.round((typeof displayValue === 'number' ? displayValue : 1) * 100)}%
+                  </span>
+                </div>
+              )}
+            </KeyframableProperty>
+
+            {/* Gauge-specific: animate the gauge value */}
+            {chartContent.chartType === 'gauge' && (
+              <KeyframableProperty
+                title="Gauge Value"
+                propertyKey="gaugeValue"
+                elementId={element.id}
+                selectedKeyframe={selectedKeyframe}
+                currentAnimation={currentAnimation}
+                currentValue={chartContent.options?.gaugeValue ?? chartContent.data?.datasets?.[0]?.data?.[0] ?? 0}
+                onChange={(value) => updateContent({
+                  options: { ...chartContent.options, gaugeValue: value as number }
+                })}
+              >
+                {(displayValue, onChange) => (
+                  <Input
+                    type="number"
+                    value={typeof displayValue === 'number' ? displayValue : 0}
+                    onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                    className="h-5 text-[10px] px-1.5"
+                  />
+                )}
+              </KeyframableProperty>
+            )}
+
+            {/* Individual data point animation (for bar, line, area, pie, donut) */}
+            {['bar', 'horizontal-bar', 'line', 'area', 'pie', 'donut'].includes(chartContent.chartType || 'bar') && (
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground block">Data Values</label>
+                <div className="grid grid-cols-2 gap-1">
+                  {(chartContent.data?.datasets?.[0]?.data as number[] || []).slice(0, 8).map((value, index) => (
+                    <KeyframableProperty
+                      key={index}
+                      title={chartContent.data?.labels?.[index] || `Value ${index + 1}`}
+                      propertyKey={`chartData_${index}`}
+                      elementId={element.id}
+                      selectedKeyframe={selectedKeyframe}
+                      currentAnimation={currentAnimation}
+                      currentValue={typeof value === 'number' ? value : 0}
+                      onChange={(newValue) => {
+                        const newData = [...(chartContent.data?.datasets?.[0]?.data as number[] || [])];
+                        newData[index] = newValue as number;
+                        updateContent({
+                          data: {
+                            ...chartContent.data,
+                            datasets: [{
+                              ...chartContent.data?.datasets?.[0],
+                              data: newData,
+                            }],
+                          }
+                        });
+                      }}
+                      compact
+                    >
+                      {(displayValue, onChange) => (
+                        <Input
+                          type="number"
+                          value={typeof displayValue === 'number' ? displayValue : 0}
+                          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                          className="h-5 text-[10px] px-1.5"
+                          title={chartContent.data?.labels?.[index] || `Value ${index + 1}`}
+                        />
+                      )}
+                    </KeyframableProperty>
+                  ))}
+                </div>
+                {(chartContent.data?.datasets?.[0]?.data?.length || 0) > 8 && (
+                  <p className="text-[9px] text-muted-foreground italic">
+                    Showing first 8 values. Edit raw data above for more.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </PropertySection>
       </div>
     );
   }
 
   // Chart styling is now in ChartStyleEditor (Style tab)
-  // Content tab only has: Chart Type, Title, Options, Data, Gauge values
+  // Content tab only has: Chart Type, Title, Options, Data, Gauge values, Timeline animation
 
   if (element.content.type === 'map') {
     return (
@@ -6074,11 +8095,106 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 
 // Property section without keyframe button
 function PropertySection({ title, children }: { title: string; children: React.ReactNode }) {
+  const searchFilter = usePropertySearch();
+  const parentMatches = useParentMatch();
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  // Check if this section title matches the search
+  const normalizedSearch = searchFilter?.toLowerCase().trim() || '';
+  const normalizedTitle = title.toLowerCase();
+  const titleMatches = normalizedSearch ? normalizedTitle.includes(normalizedSearch) : false;
+
+  // Scroll to this section when it matches the search
+  useEffect(() => {
+    if (titleMatches && sectionRef.current) {
+      setTimeout(() => {
+        sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }, [titleMatches, searchFilter]);
+
+  // If there's a search filter, check if this section title matches
+  if (searchFilter && searchFilter.trim() !== '') {
+    // If title matches, wrap children in ParentMatchContext so they all show
+    // If parent already matches, keep showing
+    const shouldShowAll = titleMatches || parentMatches;
+
+    return (
+      <div ref={sectionRef}>
+        <label className={cn(
+          "text-[10px] font-medium uppercase tracking-wide mb-1 block",
+          titleMatches ? "text-emerald-400 bg-emerald-500/20 px-1 rounded" : "text-muted-foreground"
+        )}>
+          {title}
+        </label>
+        <ParentMatchContext.Provider value={shouldShowAll}>
+          {children}
+        </ParentMatchContext.Provider>
+      </div>
+    );
+  }
+
   return (
     <div>
       <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">
         {title}
       </label>
+      {children}
+    </div>
+  );
+}
+
+// Searchable section for Layout editor - wraps a section and hides it if search doesn't match
+function SearchableSection({ title, children, icon }: { title: string; children: React.ReactNode; icon?: React.ReactNode }) {
+  const searchFilter = usePropertySearch();
+  const parentMatches = useParentMatch();
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  // Check if this section title matches the search
+  const normalizedSearch = searchFilter?.toLowerCase().trim() || '';
+  const normalizedTitle = title.toLowerCase();
+  const titleMatches = normalizedSearch ? normalizedTitle.includes(normalizedSearch) : false;
+
+  // Scroll to this section when it matches the search
+  useEffect(() => {
+    if (titleMatches && sectionRef.current) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }, [titleMatches, searchFilter]);
+
+  // If there's a search filter, check if this section title matches
+  if (searchFilter && searchFilter.trim() !== '') {
+    // If neither title nor parent matches, hide the entire section
+    if (!titleMatches && !parentMatches) {
+      return null;
+    }
+
+    // If title matches, show with highlight and provide context to children
+    return (
+      <div ref={sectionRef} className="space-y-2">
+        <div className={cn(
+          "text-xs font-medium uppercase tracking-wide flex items-center gap-2",
+          titleMatches ? "text-emerald-400" : "text-muted-foreground"
+        )}>
+          {icon}
+          {title}
+        </div>
+        <ParentMatchContext.Provider value={titleMatches || parentMatches}>
+          {children}
+        </ParentMatchContext.Provider>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+        {icon}
+        {title}
+      </div>
       {children}
     </div>
   );
@@ -6114,6 +8230,10 @@ export function KeyframableProperty({
   children: (displayValue: string | number | null, onChange: (value: string | number | null) => void) => React.ReactNode;
   compact?: boolean;
 }) {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  const searchFilter = usePropertySearch();
+  const parentMatches = useParentMatch();
+
   const {
     keyframes,
     animations,
@@ -6330,6 +8450,18 @@ export function KeyframableProperty({
     }
   }, [elementId, propertyKey, currentValue]);
 
+  // Search filter check - MUST be after all hooks
+  // Track if this property matches the search
+  const searchMatch = searchFilter && searchFilter.trim() !== ''
+    ? title.toLowerCase().includes(searchFilter.toLowerCase().trim())
+    : false;
+
+  // If there's a search filter and this property doesn't match AND parent doesn't match, hide it
+  // If parent matches (e.g., "Font Family" section matches "font"), show all children
+  if (searchFilter && searchFilter.trim() !== '' && !searchMatch && !parentMatches) {
+    return null;
+  }
+
   // Compact mode: just the input with a small keyframe button
   if (compact) {
     return (
@@ -6373,6 +8505,7 @@ export function KeyframableProperty({
       <div className="flex items-center justify-between mb-1">
         <label className={cn(
           "text-[10px] font-medium uppercase tracking-wide",
+          searchMatch ? "text-emerald-400 bg-emerald-500/20 px-1 rounded" :
           diamondState === 'selected' ? "text-amber-400" :
           diamondState === 'at-playhead' ? "text-emerald-400" :
           diamondState === 'exists' ? "text-violet-400" : "text-muted-foreground"

@@ -350,6 +350,89 @@ Keyframes can animate these properties:
 - **Consistent Timing**: Keep similar elements in sync
 - **Document Complex**: Note complex animation sequences
 
+## Curve Graph Editor
+
+The Curve Graph Editor provides visual editing of animation curves, showing how property values change over time.
+
+### Opening the Curves Panel
+
+1. Select an element with keyframes
+2. Click the **Curves** button in the timeline toolbar
+3. The curves panel appears below the timeline
+
+### Interface
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ Position X  ●  │                                                   │
+│ Position Y  ●  │        ╭─────────────────────╮                   │
+│ Opacity     ●  │       ╱                       ╲                  │
+│ Rotation    ○  │      ╱                         ╲                 │
+│                │     ╱                           ╲                │
+│                │────╱─────────────────────────────╲───────────────│
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Property Colors
+
+Each property type has a distinct color:
+
+| Property | Color |
+|----------|-------|
+| Position X | Red |
+| Position Y | Green |
+| Rotation | Blue |
+| Scale X | Amber |
+| Scale Y | Violet |
+| Opacity | Pink |
+| Filter Blur | Cyan |
+| Filter Brightness | Orange |
+
+### Visibility Toggle
+
+- Click the eye icon next to a property to show/hide its curve
+- Hidden curves don't affect playback, just the display
+
+### Editing Curves
+
+#### Adjusting Values
+
+1. Click and drag a keyframe diamond vertically
+2. The value updates in real-time
+3. Changes apply immediately to the animation
+
+#### Editing Bezier Handles
+
+1. Click on a curve segment to select it
+2. Bezier control handles appear
+3. Drag handles to adjust the easing curve
+4. The curve shape determines how values interpolate
+
+### Curve Shapes and Easing
+
+The shape of the curve reflects the easing function:
+
+| Curve Shape | Easing |
+|-------------|--------|
+| Straight diagonal | Linear |
+| S-curve | Ease-in-out |
+| Steep start, gentle end | Ease-out |
+| Gentle start, steep end | Ease-in |
+| Overshoot | Elastic |
+
+### Playhead
+
+- Red vertical line shows current playback position
+- Curves display the interpolated value at any time
+- Scrub through to see how values change
+
+### Use Cases
+
+- **Fine-tune easing**: Visually adjust the "feel" of animations
+- **Compare properties**: See how multiple properties animate together
+- **Debug animations**: Identify unexpected value changes
+- **Precise timing**: See exactly when values reach specific points
+
 ## Related Features
 
 - [Animation Phases](/docs/animation/phases) - Phase details

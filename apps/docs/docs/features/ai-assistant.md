@@ -14,7 +14,10 @@ The AI Assistant provides:
 - **Smart Modifications**: Ask for changes in plain English
 - **Animation Generation**: Describe movement, get keyframes
 - **Context Awareness**: AI understands your current canvas and project
+- **Multi-Model Support**: Choose from Gemini or Claude models
+- **AI Image Generation**: Generate images or fetch from Pexels
 - **Voice Input**: Speak your instructions
+- **Real-Time Streaming**: See AI responses as they're generated
 
 ## Chat Panel Interface
 
@@ -295,6 +298,91 @@ AI: Creates comprehensive layout:
 | Changes not applying | Click "Apply Changes" button |
 | Voice not working | Check browser permissions |
 | Slow response | Check AI configuration settings |
+
+## AI Models
+
+Nova GFX supports multiple AI models. Select your preferred model in the settings:
+
+### Available Models
+
+| Model | Provider | Description |
+|-------|----------|-------------|
+| **Gemini 2.5 Pro** | Google | Latest multimodal model, excellent for visual tasks |
+| **Gemini 2.0 Flash** | Google | Fast responses, good for simple tasks |
+| **Claude 3.5 Sonnet** | Anthropic | Excellent reasoning and code generation |
+| **Claude 3 Opus** | Anthropic | Most capable Claude model |
+| **Claude 3 Haiku** | Anthropic | Fast, cost-effective responses |
+
+### Model Selection
+
+1. Click the **⚙️** settings icon in the chat panel
+2. Select your preferred model from the dropdown
+3. Model selection persists across sessions
+
+:::tip Model Recommendations
+- **Complex graphics**: Use Gemini 2.5 Pro or Claude 3.5 Sonnet
+- **Quick edits**: Use Gemini 2.0 Flash or Claude 3 Haiku
+- **Image understanding**: Use Gemini models for best image analysis
+:::
+
+## AI Image Generation
+
+The AI can generate or source images for your graphics:
+
+### Image Sources
+
+| Type | How It Works |
+|------|--------------|
+| **AI Generated** | AI generates images using Imagen or similar services |
+| **Pexels Stock** | AI searches Pexels for relevant stock photos |
+| **Sports Logos** | Pre-integrated database of sports team/league logos |
+| **Custom URLs** | Provide your own image URLs |
+
+### Placeholder System
+
+When creating graphics, use these placeholder types:
+
+```
+LOGO: Team logo or brand logo
+PEXELS: Stock photo from Pexels
+GENERATE: AI-generated image
+```
+
+Example prompt:
+```
+"Create a sports graphic with LOGO for the Patriots and a
+PEXELS background image of a football stadium"
+```
+
+### Image Resolution
+
+AI images are generated at appropriate resolutions for broadcast:
+- Full-screen backgrounds: 1920x1080
+- Element images: Sized to fit element bounds
+- Logos: Preserved aspect ratio with transparency
+
+## Processing Phases
+
+When generating graphics, the AI displays its progress through phases:
+
+| Phase | Icon | Description |
+|-------|------|-------------|
+| **Thinking** | 🤔 | AI processing your request |
+| **Designing** | 🎨 | Creating element structure |
+| **Generating** | ⚙️ | Building JSON response |
+| **Parsing** | 📝 | Validating and parsing response |
+| **Images** | 🖼️ | Fetching or generating images |
+| **Applying** | ✓ | Applying changes to canvas |
+| **Animating** | 🎬 | Creating animation keyframes |
+
+## Documentation Mode
+
+Access the **Docs** tab in the chat panel for:
+
+- Learning Nova GFX concepts
+- Understanding templates, layers, and bindings
+- Getting help with specific features
+- No changes applied to canvas in this mode
 
 ## Related Features
 

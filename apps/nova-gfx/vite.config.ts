@@ -20,6 +20,16 @@ export default defineConfig(({ mode }) => {
     server: {
       port: parseInt(env.VITE_NOVA_GFX_PORT || '3003'),
       strictPort: true,
+      proxy: {
+        '/api/anthropic': {
+          target: 'https://api.anthropic.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/anthropic/, ''),
+          headers: {
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+        },
+      },
     },
   };
 });

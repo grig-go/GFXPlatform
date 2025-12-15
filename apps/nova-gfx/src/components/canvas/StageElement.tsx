@@ -272,16 +272,49 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
   // Calculate animated properties (debug when playing to see animation values)
   const baseAnimatedProps = useMemo(() => {
-    // Only enable debug for selected elements to reduce console spam
-    const debug = isPlaying && isSelected;
-    // Don't pass phase duration - let animation use its own duration for correct playback speed
-    // The phase duration is for timeline display, but animation timing should use anim.duration
-    return getAnimatedProperties(element, animations, keyframes, playheadPosition, currentPhase, debug);
-  }, [element, animations, keyframes, playheadPosition, currentPhase, isPlaying, isSelected]);
+    // Debug for text elements to diagnose char animation issue
+    const isTextElement = element.content.type === 'text';
+    const debug = (isPlaying && isSelected) || isTextElement;
+    // Pass phase duration so keyframe positions are calculated relative to the timeline
+    const phaseDuration = phaseDurations[currentPhase];
+    const result = getAnimatedProperties(element, animations, keyframes, playheadPosition, currentPhase, debug, phaseDuration);
+
+    if (isTextElement) {
+      console.log('[StageElement] baseAnimatedProps calculated for text:', {
+        elementId: element.id,
+        playheadPosition,
+        currentPhase,
+        phaseDuration,
+        resultKeys: Object.keys(result),
+        charAnimProgress: result.charAnimation_progress
+      });
+    }
+
+    return result;
+  }, [element, animations, keyframes, playheadPosition, currentPhase, isPlaying, isSelected, phaseDurations]);
 
   // When a keyframe is selected for this element, show keyframe values instead of interpolated
+  // BUT only when the playhead is close to that keyframe's position (for editing purposes)
   const animatedProps = useMemo(() => {
+    // Debug: log what baseAnimatedProps contains for charAnimation_progress
+    if (baseAnimatedProps.charAnimation_progress !== undefined) {
+      console.log('[StageElement] baseAnimatedProps.charAnimation_progress:', baseAnimatedProps.charAnimation_progress, 'element:', element.id);
+    }
+
     if (!selectedKeyframeForElement) return baseAnimatedProps;
+
+    // Calculate if playhead is close to the selected keyframe's position
+    // Keyframe position is 0-100, playhead is in ms, need to convert
+    const phaseDuration = phaseDurations[currentPhase];
+    const keyframeTimeMs = (selectedKeyframeForElement.position / 100) * phaseDuration;
+    const tolerance = 50; // 50ms tolerance for "at keyframe"
+    const isPlayheadAtKeyframe = Math.abs(playheadPosition - keyframeTimeMs) <= tolerance;
+
+    // Only override with keyframe values when playhead is AT the keyframe
+    // This allows scrubbing to show interpolated values while still supporting editing
+    if (!isPlayheadAtKeyframe) {
+      return baseAnimatedProps;
+    }
 
     // Override with selected keyframe properties
     const result = { ...baseAnimatedProps };
@@ -290,8 +323,9 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         result[key] = value;
       }
     });
+
     return result;
-  }, [baseAnimatedProps, selectedKeyframeForElement]);
+  }, [baseAnimatedProps, selectedKeyframeForElement, playheadPosition, phaseDurations, currentPhase]);
 
   // Get children sorted by z_index for proper layering within the group
   const children = allElements
@@ -346,17 +380,10 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     ? Number(animatedProps.opacity)
     : (element.opacity ?? 1);
 
-  // Debug: Log opacity values for shapes to trace animation issues
-  if (element.content.type === 'shape' && element.name?.toLowerCase().includes('background')) {
-    console.log('[StageElement Opacity Debug]', element.name, {
-      'animatedProps.opacity': animatedProps.opacity,
-      'element.opacity': element.opacity,
-      'final animatedOpacity': animatedOpacity,
-      'element.styles?.opacity': element.styles?.opacity,
-      'isPlaying': isPlaying,
-      'playheadPosition': playheadPosition,
-    });
-  }
+  // Check if character animation is enabled (for text elements)
+  // Character animation handles its own opacity per-character, so we don't want container opacity
+  const hasCharAnimation = element.content.type === 'text' &&
+    (element.content as { charAnimation?: { enabled?: boolean } }).charAnimation?.enabled;
 
   // Check if this is a glass-enabled shape element
   // Glass effect uses backdrop-filter which doesn't work with opacity: 0
@@ -428,10 +455,168 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     return undefined;
   })();
 
+  // Calculate screen mask styles if enabled
+  // Screen mask clips element to specific screen coordinates (not element-relative)
+  // Supports per-side feathering via CSS mask-image gradients
+  // Also supports keyframe animation for all mask properties
+  const screenMaskStyles = useMemo((): React.CSSProperties => {
+    if (!element.screenMask?.enabled) return {};
+
+    const baseMask = element.screenMask;
+    const baseFeather = baseMask.feather ?? { top: 0, right: 0, bottom: 0, left: 0 };
+
+    // Get animated screen mask values, falling back to element values
+    const maskX = animatedProps.screenMask_x !== undefined
+      ? Number(animatedProps.screenMask_x)
+      : baseMask.x;
+    const maskY = animatedProps.screenMask_y !== undefined
+      ? Number(animatedProps.screenMask_y)
+      : baseMask.y;
+    const maskWidth = animatedProps.screenMask_width !== undefined
+      ? Number(animatedProps.screenMask_width)
+      : baseMask.width;
+    const maskHeight = animatedProps.screenMask_height !== undefined
+      ? Number(animatedProps.screenMask_height)
+      : baseMask.height;
+
+    // Get animated feather values
+    const feather = {
+      top: animatedProps.screenMask_feather_top !== undefined
+        ? Number(animatedProps.screenMask_feather_top)
+        : baseFeather.top,
+      right: animatedProps.screenMask_feather_right !== undefined
+        ? Number(animatedProps.screenMask_feather_right)
+        : baseFeather.right,
+      bottom: animatedProps.screenMask_feather_bottom !== undefined
+        ? Number(animatedProps.screenMask_feather_bottom)
+        : baseFeather.bottom,
+      left: animatedProps.screenMask_feather_left !== undefined
+        ? Number(animatedProps.screenMask_feather_left)
+        : baseFeather.left,
+    };
+
+    const elemX = animatedX;
+    const elemY = animatedY;
+    const elemWidth = animatedWidth ?? element.width ?? 100;
+    const elemHeight = animatedHeight ?? element.height ?? 100;
+
+    // Calculate inset values (how much to clip from each edge)
+    const topInset = Math.max(0, maskY - elemY);
+    const leftInset = Math.max(0, maskX - elemX);
+    const elemBottom = elemY + elemHeight;
+    const maskBottom = maskY + maskHeight;
+    const bottomInset = Math.max(0, elemBottom - maskBottom);
+    const elemRight = elemX + elemWidth;
+    const maskRight = maskX + maskWidth;
+    const rightInset = Math.max(0, elemRight - maskRight);
+
+    // Check if any feathering is applied
+    const hasFeather = feather.top > 0 || feather.right > 0 || feather.bottom > 0 || feather.left > 0;
+
+    // If no feathering, use simple clip-path (better performance)
+    if (!hasFeather) {
+      const clipPath = `inset(${topInset}px ${rightInset}px ${bottomInset}px ${leftInset}px)`;
+      return {
+        clipPath,
+        WebkitClipPath: clipPath,
+      };
+    }
+
+    // With feathering, use mask-image with linear gradients for soft edges
+    // Each edge gets a gradient from transparent to black
+    const gradients: string[] = [];
+
+    // Top edge gradient
+    if (topInset > 0 || feather.top > 0) {
+      gradients.push(`linear-gradient(to bottom, transparent ${topInset}px, black ${topInset + feather.top}px)`);
+    }
+
+    // Bottom edge gradient
+    if (bottomInset > 0 || feather.bottom > 0) {
+      gradients.push(`linear-gradient(to top, transparent ${bottomInset}px, black ${bottomInset + feather.bottom}px)`);
+    }
+
+    // Left edge gradient
+    if (leftInset > 0 || feather.left > 0) {
+      gradients.push(`linear-gradient(to right, transparent ${leftInset}px, black ${leftInset + feather.left}px)`);
+    }
+
+    // Right edge gradient
+    if (rightInset > 0 || feather.right > 0) {
+      gradients.push(`linear-gradient(to left, transparent ${rightInset}px, black ${rightInset + feather.right}px)`);
+    }
+
+    // If no gradients needed, return empty
+    if (gradients.length === 0) return {};
+
+    // Combine all gradients with mask-composite: intersect
+    const maskImage = gradients.join(', ');
+
+    return {
+      maskImage,
+      WebkitMaskImage: maskImage,
+      maskComposite: 'intersect',
+      WebkitMaskComposite: 'source-in', // Safari equivalent
+    };
+  }, [element.screenMask, animatedProps, animatedX, animatedY, animatedWidth, animatedHeight, element.width, element.height]);
+
+  // Calculate Auto Follow position if enabled
+  const autoFollowPosition = useMemo(() => {
+    if (!element.autoFollow?.enabled || !element.autoFollow?.targetElementId) {
+      return { x: animatedX, y: animatedY };
+    }
+
+    const targetElement = allElements.find(e => e.id === element.autoFollow!.targetElementId);
+    if (!targetElement) {
+      return { x: animatedX, y: animatedY };
+    }
+
+    const padding = element.autoFollow.padding || 0;
+    const offsetX = element.autoFollow.offsetX || 0;
+    const offsetY = element.autoFollow.offsetY || 0;
+    const targetX = targetElement.position_x;
+    const targetY = targetElement.position_y;
+    const targetWidth = targetElement.width ?? 0;
+    const targetHeight = targetElement.height ?? 0;
+    const thisWidth = animatedWidth ?? 0;
+    const thisHeight = animatedHeight ?? 0;
+
+    let newX = animatedX;
+    let newY = animatedY;
+
+    switch (element.autoFollow.side) {
+      case 'right':
+        // Position to the right of target
+        newX = targetX + targetWidth + padding;
+        newY = targetY + offsetY; // Align tops + vertical offset
+        break;
+      case 'left':
+        // Position to the left of target
+        newX = targetX - thisWidth - padding;
+        newY = targetY + offsetY; // Align tops + vertical offset
+        break;
+      case 'bottom':
+        // Position below target
+        newX = targetX + offsetX; // Align lefts + horizontal offset
+        newY = targetY + targetHeight + padding;
+        break;
+      case 'top':
+        // Position above target
+        newX = targetX + offsetX; // Align lefts + horizontal offset
+        newY = targetY - thisHeight - padding;
+        break;
+    }
+
+    return { x: newX, y: newY };
+  }, [element.autoFollow, animatedX, animatedY, animatedWidth, animatedHeight, allElements]);
+
+  const finalX = autoFollowPosition.x;
+  const finalY = autoFollowPosition.y;
+
   const transformStyle: React.CSSProperties = {
     position: 'absolute',
-    left: animatedX,
-    top: animatedY,
+    left: finalX,
+    top: finalY,
     width: animatedWidth ?? 'auto',
     height: animatedHeight ?? 'auto',
     transform: animatedTransform,
@@ -454,12 +639,14 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       )
     ),
     // Master opacity always takes precedence - applied last to ensure it's not overridden
-    // EXCEPTION: For glass elements, we don't apply opacity at container level
-    // because backdrop-filter doesn't work with opacity: 0. Instead, opacity is
-    // applied to the backgroundColor alpha within the shape rendering.
-    opacity: isGlassElement ? 1 : animatedOpacity,
+    // EXCEPTIONS:
+    // 1. Glass elements - backdrop-filter doesn't work with opacity: 0
+    // 2. Character animation - each character handles its own opacity
+    opacity: (isGlassElement || hasCharAnimation) ? 1 : animatedOpacity,
     // Apply blend mode at container level so it blends with elements behind
     ...(contentBlendMode && contentBlendMode !== 'normal' ? { mixBlendMode: contentBlendMode as React.CSSProperties['mixBlendMode'] } : {}),
+    // Apply screen mask styles (clip-path or mask-image with feathering)
+    ...screenMaskStyles,
   };
 
   // Render content based on type
@@ -474,11 +661,16 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           middle: 'center',
           bottom: 'flex-end',
         };
-        
+
         // Build text style with proper flex alignment for vertical positioning
         const textAlign = element.styles?.textAlign || 'left';
-        const { verticalAlign: _, textAlign: __, ...otherStyles } = element.styles || {};
-        
+        // Destructure to optionally exclude opacity when character animation is enabled
+        const { verticalAlign: _, textAlign: __, opacity: styleOpacity, ...baseOtherStyles } = element.styles || {};
+        // When character animation is enabled, exclude opacity from text styles - each char handles its own
+        const textStylesWithoutOpacity = textContent.charAnimation?.enabled
+          ? baseOtherStyles
+          : { ...baseOtherStyles, opacity: styleOpacity };
+
         const textStyle: React.CSSProperties = {
           whiteSpace: 'pre-wrap',
           width: '100%',
@@ -489,8 +681,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           // But textAlign will be applied to the inner span for justify to work
           justifyContent: textAlign === 'center' ? 'center' :
                          textAlign === 'right' ? 'flex-end' : 'flex-start',
-          // Apply all other text-related styles
-          ...otherStyles,
+          // Apply all other text-related styles (opacity excluded for char animation)
+          ...textStylesWithoutOpacity,
           // Ensure lineHeight is applied (can be unitless or with units)
           lineHeight: element.styles?.lineHeight || '1.2',
           // Pass textAlign to inner span (needed for justify to work)
@@ -517,11 +709,15 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           <TextElement
             text={textContent.text || ''}
             animation={mergedAnimation}
+            charAnimation={textContent.charAnimation}
             style={textStyle}
             isPlaying={isPlaying}
             playheadPosition={playheadPosition}
             animationDuration={animationDuration}
             animatedProps={animatedProps}
+            maxSize={textContent.maxSize}
+            containerWidth={animatedWidth ?? element.width}
+            containerHeight={animatedHeight ?? element.height}
           />
         );
 
@@ -809,10 +1005,18 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         // The gradient goes on the outer div, and glass (with backdrop-filter) goes on an inner div
         // This allows backdrop-filter to blur the gradient behind it
         const clipPath = getClipPath(shapeContent.shape);
+        // Ellipse uses 50% border-radius for circular/elliptical shape
+        // Rhombus and parallelogram use clip-path so no border-radius
+        // Other shapes use cornerRadius
+        const getBorderRadius = (): string | number => {
+          if (shapeContent.shape === 'ellipse') return '50%';
+          if (shapeContent.shape === 'rhombus' || shapeContent.shape === 'parallelogram') return 0;
+          return shapeContent.cornerRadius || 0;
+        };
         const baseStyle: React.CSSProperties = {
           width: '100%',
           height: '100%',
-          borderRadius: (shapeContent.shape === 'rhombus' || shapeContent.shape === 'parallelogram') ? 0 : shapeContent.cornerRadius || 0,
+          borderRadius: getBorderRadius(),
           clipPath: clipPath,
           WebkitClipPath: clipPath,
         };
@@ -928,11 +1132,16 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
         // If texture is enabled, render with texture background
         if (texture?.enabled && texture.url) {
+          // For blend mode "normal", the texture should be the only visible background
+          // For other blend modes (multiply, screen, overlay, etc.), the fill color should show through
+          const textureBlendMode = texture.blendMode || 'normal';
+          const textureBaseBgColor = textureBlendMode === 'normal' ? 'transparent' : bgColorValue;
+
           const textureBaseStyle: React.CSSProperties = {
             ...baseStyle,
             position: 'relative',
             overflow: 'hidden',
-            backgroundColor: bgColorValue,
+            backgroundColor: textureBaseBgColor,
             // Regular border
             ...(shapeContent.stroke && shapeContent.strokeWidth && shapeContent.strokeWidth > 0 ? {
               border: `${shapeContent.strokeWidth}px solid ${shapeContent.stroke}`,
