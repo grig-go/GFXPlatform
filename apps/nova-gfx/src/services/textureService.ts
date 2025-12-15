@@ -1,4 +1,4 @@
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, ensureFreshConnection, markSupabaseSuccess } from '@emergent-platform/supabase-client';
 
 // Storage bucket name for textures
 // Note: The bucket in Supabase is named "Texures" (without the second 't')
@@ -263,6 +263,9 @@ export async function fetchOrganizationTextures(
 ): Promise<TextureListResult> {
   const { limit = 50, offset = 0, type, search, tags } = options;
 
+  // Ensure connection is fresh before querying
+  await ensureFreshConnection();
+
   let query = supabase
     .from('organization_textures')
     .select('*', { count: 'exact' })
@@ -282,12 +285,19 @@ export async function fetchOrganizationTextures(
     query = query.contains('tags', tags);
   }
 
-  const { data, error, count } = await query;
+  // Add timeout to prevent hanging
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Query timeout after 10s')), 10000);
+  });
+
+  const { data, error, count } = await Promise.race([query, timeoutPromise]);
 
   if (error) {
     console.error('Error fetching textures:', error);
     throw new Error(`Failed to fetch textures: ${error.message}`);
   }
+
+  markSupabaseSuccess();
 
   return {
     data: (data || []).map(mapRowToTexture),
@@ -601,6 +611,110 @@ export async function uploadAIGeneratedTexture(
 
   console.log('✅ AI-generated texture saved:', fileUrl);
   return mapRowToTexture(textureData);
+}
+
+/**
+ * Batch update tags for multiple textures
+ */
+export async function batchUpdateTextureTags(
+  textureIds: string[],
+  tags: string[],
+  mode: 'set' | 'add' | 'remove' = 'set'
+): Promise<void> {
+  if (textureIds.length === 0) return;
+
+  if (mode === 'set') {
+    // Set tags directly (replace all)
+    const { error } = await supabase
+      .from('organization_textures')
+      .update({ tags })
+      .in('id', textureIds);
+
+    if (error) {
+      throw new Error(`Failed to update texture tags: ${error.message}`);
+    }
+  } else {
+    // For add/remove, we need to fetch current tags and update individually
+    const { data: textures, error: fetchError } = await supabase
+      .from('organization_textures')
+      .select('id, tags')
+      .in('id', textureIds);
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch textures: ${fetchError.message}`);
+    }
+
+    // Update each texture
+    const updates = (textures || []).map((texture) => {
+      const currentTags = (texture.tags as string[]) || [];
+      let newTags: string[];
+
+      if (mode === 'add') {
+        newTags = [...new Set([...currentTags, ...tags])];
+      } else {
+        newTags = currentTags.filter((t) => !tags.includes(t));
+      }
+
+      return supabase
+        .from('organization_textures')
+        .update({ tags: newTags })
+        .eq('id', texture.id);
+    });
+
+    const results = await Promise.all(updates);
+    const errors = results.filter((r) => r.error);
+    if (errors.length > 0) {
+      throw new Error(`Failed to update ${errors.length} textures`);
+    }
+  }
+}
+
+/**
+ * Batch delete multiple textures
+ */
+export async function batchDeleteTextures(textureIds: string[]): Promise<void> {
+  if (textureIds.length === 0) return;
+
+  // First get all texture storage paths
+  const { data: textures, error: fetchError } = await supabase
+    .from('organization_textures')
+    .select('id, storage_path, thumbnail_url')
+    .in('id', textureIds);
+
+  if (fetchError) {
+    throw new Error(`Failed to fetch textures: ${fetchError.message}`);
+  }
+
+  // Collect all paths to delete
+  const pathsToDelete: string[] = [];
+  for (const texture of textures || []) {
+    pathsToDelete.push(texture.storage_path);
+    if (texture.thumbnail_url) {
+      const thumbPath = texture.storage_path.replace(/([^/]+)$/, 'thumbnails/$1.jpg');
+      pathsToDelete.push(thumbPath);
+    }
+  }
+
+  // Delete from storage
+  if (pathsToDelete.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from(TEXTURES_BUCKET)
+      .remove(pathsToDelete);
+
+    if (storageError) {
+      console.warn('Failed to delete some texture files:', storageError);
+    }
+  }
+
+  // Delete database records
+  const { error: dbError } = await supabase
+    .from('organization_textures')
+    .delete()
+    .in('id', textureIds);
+
+  if (dbError) {
+    throw new Error(`Failed to delete texture records: ${dbError.message}`);
+  }
 }
 
 /**

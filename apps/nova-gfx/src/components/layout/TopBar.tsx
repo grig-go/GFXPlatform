@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect } from 'react';
 import {
   Play, Settings, HelpCircle, Cpu, Palette,
   ChevronDown, Grid3X3, Wrench, FolderOpen, Sparkles,
-  ExternalLink, Copy, Check, Monitor, Keyboard, Send,
+  ExternalLink, Copy, Check, Monitor, Keyboard, Send, Layers,
 } from 'lucide-react';
 import {
   Button,
@@ -19,6 +19,7 @@ import { useAIPreferenceStore } from '@/stores/aiPreferenceStore';
 import { PublishModal } from '@/components/dialogs/PublishModal';
 import { ChannelsModal } from '@/components/dialogs/ChannelsModal';
 import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
+import { TexturesDialog } from '@/components/dialogs/TexturesDialog';
 import { UserMenu } from '@/components/auth';
 
 interface TopBarProps {
@@ -43,6 +44,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showChannelsModal, setShowChannelsModal] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [showTexturesDialog, setShowTexturesDialog] = useState(false);
 
   // Sync showPublishModal with external prop
   useEffect(() => {
@@ -192,6 +194,10 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
             <DropdownMenuItem onClick={() => setShowChannelsModal(true)}>
               <Monitor className="mr-2 h-4 w-4" />
               Channels
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowTexturesDialog(true)}>
+              <Layers className="mr-2 h-4 w-4" />
+              Textures
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -377,6 +383,12 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       <SupportRequestDialog
         open={showSupportDialog}
         onOpenChange={setShowSupportDialog}
+      />
+
+      {/* Textures Dialog */}
+      <TexturesDialog
+        open={showTexturesDialog}
+        onOpenChange={setShowTexturesDialog}
       />
     </div>
   );

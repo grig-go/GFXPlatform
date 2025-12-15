@@ -31,6 +31,7 @@ import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
+  Checkbox,
   cn,
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -69,7 +70,8 @@ const CONTENT_PROPERTIES = [
 const STYLE_PROPERTIES = [
   'style', 'color', 'background', 'fill', 'stroke', 'border', 'opacity', 'shadow',
   'font', 'size', 'weight', 'family', 'align', 'spacing', 'radius', 'blur',
-  'line', 'dash', 'arrow', 'cap', 'join', 'gradient', 'filter', 'blend'
+  'line', 'dash', 'arrow', 'cap', 'join', 'gradient', 'filter', 'blend',
+  'outline', 'text-shadow', 'textshadow'
 ];
 
 const LAYOUT_PROPERTIES = [
@@ -1364,6 +1366,296 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               />
             )}
           </KeyframableProperty>
+
+          {/* 5.5 Text Outline - For character outline/stroke effect */}
+          <PropertySection title="Text Outline">
+            {(() => {
+              // Parse existing textShadow to detect outline
+              const currentShadow = getStyle('textShadow', 'none');
+              const shadowParts = currentShadow !== 'none' && currentShadow !== ''
+                ? currentShadow.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+                : [];
+              const shadowCount = shadowParts.length;
+
+              // Outline exists if 8 shadows (outline only) or 9+ shadows (outline + drop shadow)
+              const hasOutline = shadowCount === 8 || shadowCount >= 9;
+              const hasShadow = shadowCount === 1 || shadowCount >= 9;
+
+              // Default values
+              let outlineColor = '#000000';
+              let outlineWidth = 2;
+              let outlineBlur = 0;
+              let shadowColor = '#000000';
+              let shadowOffsetX = 3;
+              let shadowOffsetY = 3;
+              let shadowBlur = 6;
+
+              // Parse outline values (first 8 shadows)
+              if (hasOutline && shadowParts.length >= 1) {
+                const match = shadowParts[0].match(/(-?\d+)px\s+(-?\d+)px\s+(\d+)px\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/);
+                if (match) {
+                  outlineWidth = Math.max(Math.abs(parseInt(match[1])), Math.abs(parseInt(match[2]))) || 2;
+                  outlineBlur = parseInt(match[3]);
+                  outlineColor = match[4];
+                }
+              }
+
+              // Parse shadow values (last shadow if outline exists, or first if shadow only)
+              if (hasShadow) {
+                const shadowIdx = shadowCount >= 9 ? 8 : 0;
+                const match = shadowParts[shadowIdx]?.match(/(-?\d+)px\s+(-?\d+)px\s+(\d+)px\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/);
+                if (match) {
+                  shadowOffsetX = parseInt(match[1]);
+                  shadowOffsetY = parseInt(match[2]);
+                  shadowBlur = parseInt(match[3]);
+                  shadowColor = match[4];
+                }
+              }
+
+              // Generate outline shadow (8 directions for smooth outline)
+              const generateOutlineShadow = (width: number, blur: number, color: string) => {
+                const shadows = [];
+                for (let angle = 0; angle < 360; angle += 45) {
+                  const rad = (angle * Math.PI) / 180;
+                  const x = Math.round(Math.cos(rad) * width);
+                  const y = Math.round(Math.sin(rad) * width);
+                  shadows.push(`${x}px ${y}px ${blur}px ${color}`);
+                }
+                return shadows;
+              };
+
+              // Rebuild textShadow based on enabled states
+              const rebuildTextShadow = (
+                enableOutline: boolean,
+                enableShadow: boolean,
+                oColor: string,
+                oWidth: number,
+                oBlur: number,
+                sColor: string,
+                sX: number,
+                sY: number,
+                sBlur: number
+              ) => {
+                const parts: string[] = [];
+                if (enableOutline) {
+                  parts.push(...generateOutlineShadow(oWidth, oBlur, oColor));
+                }
+                if (enableShadow) {
+                  parts.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
+                }
+                updateStyle('textShadow', parts.length > 0 ? parts.join(', ') : 'none');
+              };
+
+              const toggleOutline = (enabled: boolean) => {
+                rebuildTextShadow(enabled, hasShadow, outlineColor, outlineWidth, outlineBlur, shadowColor, shadowOffsetX, shadowOffsetY, shadowBlur);
+              };
+
+              const updateOutline = (updates: { color?: string; width?: number; blur?: number }) => {
+                const oColor = updates.color ?? outlineColor;
+                const oWidth = updates.width ?? outlineWidth;
+                const oBlur = updates.blur ?? outlineBlur;
+                rebuildTextShadow(true, hasShadow, oColor, oWidth, oBlur, shadowColor, shadowOffsetX, shadowOffsetY, shadowBlur);
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="enable-outline"
+                      checked={hasOutline}
+                      onCheckedChange={(checked) => toggleOutline(checked === true)}
+                    />
+                    <label htmlFor="enable-outline" className="text-[10px] text-muted-foreground cursor-pointer">
+                      Enable Outline
+                    </label>
+                  </div>
+
+                  {hasOutline && (
+                    <div className="space-y-1.5 p-2 bg-muted/50 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">Color</span>
+                        <ColorInput
+                          value={outlineColor}
+                          onChange={(c) => updateOutline({ color: c })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">Width</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={outlineWidth}
+                          onChange={(e) => updateOutline({ width: parseInt(e.target.value) || 1 })}
+                          className="h-6 text-[10px] flex-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground">px</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">Blur</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={outlineBlur}
+                          onChange={(e) => updateOutline({ blur: parseInt(e.target.value) || 0 })}
+                          className="h-6 text-[10px] flex-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground">px</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </PropertySection>
+
+          {/* 5.6 Text Shadow - For drop shadow effect */}
+          <PropertySection title="Text Shadow">
+            {(() => {
+              // Parse existing textShadow to detect shadow
+              const currentShadow = getStyle('textShadow', 'none');
+              const shadowParts = currentShadow !== 'none' && currentShadow !== ''
+                ? currentShadow.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+                : [];
+              const shadowCount = shadowParts.length;
+
+              // Outline exists if 8 shadows (outline only) or 9+ shadows (outline + drop shadow)
+              const hasOutline = shadowCount === 8 || shadowCount >= 9;
+              const hasShadow = shadowCount === 1 || shadowCount >= 9;
+
+              // Default values
+              let outlineColor = '#000000';
+              let outlineWidth = 2;
+              let outlineBlur = 0;
+              let shadowColor = '#000000';
+              let shadowOffsetX = 3;
+              let shadowOffsetY = 3;
+              let shadowBlur = 6;
+
+              // Parse outline values (first 8 shadows)
+              if (hasOutline && shadowParts.length >= 1) {
+                const match = shadowParts[0].match(/(-?\d+)px\s+(-?\d+)px\s+(\d+)px\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/);
+                if (match) {
+                  outlineWidth = Math.max(Math.abs(parseInt(match[1])), Math.abs(parseInt(match[2]))) || 2;
+                  outlineBlur = parseInt(match[3]);
+                  outlineColor = match[4];
+                }
+              }
+
+              // Parse shadow values (last shadow if outline exists, or first if shadow only)
+              if (hasShadow) {
+                const shadowIdx = shadowCount >= 9 ? 8 : 0;
+                const match = shadowParts[shadowIdx]?.match(/(-?\d+)px\s+(-?\d+)px\s+(\d+)px\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/);
+                if (match) {
+                  shadowOffsetX = parseInt(match[1]);
+                  shadowOffsetY = parseInt(match[2]);
+                  shadowBlur = parseInt(match[3]);
+                  shadowColor = match[4];
+                }
+              }
+
+              // Generate outline shadow (8 directions for smooth outline)
+              const generateOutlineShadow = (width: number, blur: number, color: string) => {
+                const shadows = [];
+                for (let angle = 0; angle < 360; angle += 45) {
+                  const rad = (angle * Math.PI) / 180;
+                  const x = Math.round(Math.cos(rad) * width);
+                  const y = Math.round(Math.sin(rad) * width);
+                  shadows.push(`${x}px ${y}px ${blur}px ${color}`);
+                }
+                return shadows;
+              };
+
+              // Rebuild textShadow based on enabled states
+              const rebuildTextShadow = (
+                enableOutline: boolean,
+                enableShadow: boolean,
+                oColor: string,
+                oWidth: number,
+                oBlur: number,
+                sColor: string,
+                sX: number,
+                sY: number,
+                sBlur: number
+              ) => {
+                const parts: string[] = [];
+                if (enableOutline) {
+                  parts.push(...generateOutlineShadow(oWidth, oBlur, oColor));
+                }
+                if (enableShadow) {
+                  parts.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
+                }
+                updateStyle('textShadow', parts.length > 0 ? parts.join(', ') : 'none');
+              };
+
+              const toggleShadow = (enabled: boolean) => {
+                rebuildTextShadow(hasOutline, enabled, outlineColor, outlineWidth, outlineBlur, shadowColor, shadowOffsetX, shadowOffsetY, shadowBlur);
+              };
+
+              const updateShadow = (updates: { color?: string; x?: number; y?: number; blur?: number }) => {
+                const sColor = updates.color ?? shadowColor;
+                const sX = updates.x ?? shadowOffsetX;
+                const sY = updates.y ?? shadowOffsetY;
+                const sBlur = updates.blur ?? shadowBlur;
+                rebuildTextShadow(hasOutline, true, outlineColor, outlineWidth, outlineBlur, sColor, sX, sY, sBlur);
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="enable-shadow"
+                      checked={hasShadow}
+                      onCheckedChange={(checked) => toggleShadow(checked === true)}
+                    />
+                    <label htmlFor="enable-shadow" className="text-[10px] text-muted-foreground cursor-pointer">
+                      Enable Shadow
+                    </label>
+                  </div>
+
+                  {hasShadow && (
+                    <div className="space-y-1.5 p-2 bg-muted/50 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">Color</span>
+                        <ColorInput
+                          value={shadowColor}
+                          onChange={(c) => updateShadow({ color: c })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">X</span>
+                        <Input
+                          type="number"
+                          value={shadowOffsetX}
+                          onChange={(e) => updateShadow({ x: parseInt(e.target.value) || 0 })}
+                          className="h-6 text-[10px] flex-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground w-10">Y</span>
+                        <Input
+                          type="number"
+                          value={shadowOffsetY}
+                          onChange={(e) => updateShadow({ y: parseInt(e.target.value) || 0 })}
+                          className="h-6 text-[10px] flex-1"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10">Blur</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={shadowBlur}
+                          onChange={(e) => updateShadow({ blur: parseInt(e.target.value) || 0 })}
+                          className="h-6 text-[10px] flex-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground">px</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </PropertySection>
 
           {/* 6. Vertical Align - Less commonly used */}
           <PropertySection title="Vertical Align">
@@ -2802,8 +3094,9 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
                 </div>
               </div>
             </div>
-          ) : !shapeContent.glass?.enabled ? (
+          ) : (
             <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Fill Color</label>
               <input
                 type="color"
                 value={shapeContent.fill || '#3B82F6'}
@@ -2811,10 +3104,6 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
                 className="h-8 w-full cursor-pointer rounded border border-input"
               />
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">
-              Glass effect is active. Disable glass to use solid fill.
-            </p>
           )}
         </div>
       </PropertySection>

@@ -1259,10 +1259,10 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           if (thumbnailDataUrl && isValidUUID && projectId !== 'demo') {
             try {
-              // Use 30s timeout for thumbnail upload (network can be slow)
+              // Use 5s timeout for thumbnail upload - don't block save on slow uploads
               const uploadedUrl = await withTimeout(
                 uploadThumbnailToStorage(projectId, thumbnailDataUrl),
-                30000,
+                5000,
                 'Upload thumbnail'
               );
               if (uploadedUrl) {
