@@ -1465,11 +1465,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 6. Save keyframes (use properties JSONB column)
+            // NOTE: position is now stored as absolute milliseconds (not percentage 0-100)
             if (state.keyframes.length > 0) {
               const keyframesToSave = state.keyframes.map(k => ({
                 id: k.id,
                 animation_id: k.animation_id,
-                position: k.position,
+                name: k.name ?? null,
+                position: k.position, // Absolute milliseconds
                 easing: k.easing || 'linear',
                 properties: k.properties || {},
                 // Also save individual columns for backward compatibility

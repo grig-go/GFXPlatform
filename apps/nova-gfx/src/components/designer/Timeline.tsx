@@ -242,17 +242,19 @@ export function Timeline() {
   const sortedKeyframeTimes = useMemo(() => {
     const times = new Set<number>();
     times.add(0); // Always include start
-    
+
     currentAnimations.forEach((anim) => {
       const animKfs = keyframes.filter((kf) => kf.animation_id === anim.id);
       animKfs.forEach((kf) => {
-        const timeMs = anim.delay + (kf.position / 100) * anim.duration;
+        // Position is stored as absolute milliseconds relative to animation start
+        // Add animation delay to get absolute timeline position
+        const timeMs = anim.delay + kf.position;
         times.add(Math.round(timeMs));
       });
     });
-    
+
     return Array.from(times).sort((a, b) => a - b);
-  }, [currentAnimations, keyframes]);
+  }, [currentAnimations, keyframes, phaseDuration]);
 
   // Navigation functions
   const goToStart = useCallback(() => {
@@ -367,13 +369,52 @@ export function Timeline() {
         // Sort keyframes by position
         const sortedKfs = [...animKeyframes].sort((a, b) => a.position - b.position);
 
+        // Add delay indicator bar if animation has a delay
+        if (anim.delay > 0) {
+          groups.push({
+            keyframes: [
+              {
+                val: 0,
+                draggable: false,
+                selectable: false,
+                data: { animationId: anim.id, isDelayStart: true },
+                style: {
+                  shape: 'none', // Invisible start marker
+                  width: 0,
+                  height: 0,
+                },
+              },
+              {
+                val: anim.delay,
+                draggable: true,
+                selectable: true,
+                data: { animationId: anim.id, isDelayEnd: true, delay: anim.delay },
+                style: {
+                  shape: 'rect',
+                  width: 8,
+                  height: 16,
+                  fillColor: '#64748B', // Slate color for delay handle
+                  strokeColor: '#94A3B8',
+                  strokeThickness: 1,
+                },
+              },
+            ],
+            style: {
+              fillColor: '#47556920', // Very transparent slate for delay bar
+              strokeColor: '#475569',
+              strokeDashArray: '4 2', // Dashed line to distinguish from animation
+              height: 4, // Thinner than animation bar
+            },
+          });
+        }
+
         if (sortedKfs.length > 0) {
           // Create keyframes for this group with visual state based on selection
           // Note: Using 'any' type due to animation-timeline-js library type limitations
           const groupKeyframes = sortedKfs.map((kf) => {
-            // Position = animation delay + (keyframe position % * animation duration)
-            // This properly accounts for staggered animations with different delays
-            const timeMs = anim.delay + (kf.position / 100) * anim.duration;
+            // Position is stored as absolute milliseconds relative to animation start
+            // Add animation delay to get absolute timeline position
+            const timeMs = anim.delay + kf.position;
             const isSelected = selectedKeyframeIds.includes(kf.id);
             const propertyCount = Object.keys(kf.properties).length;
 
@@ -408,6 +449,7 @@ export function Timeline() {
                 keyframeId: kf.id,
                 animationId: anim.id,
                 position: kf.position,
+                delay: anim.delay,
                 properties: kf.properties,
                 propertyCount,
                 isSelected,
@@ -576,10 +618,10 @@ export function Timeline() {
 
       elementAnimations.forEach(anim => {
         const animKeyframes = store.keyframes.filter(kf => kf.animation_id === anim.id);
-        const phaseDur = store.phaseDurations[store.currentPhase];
 
         animKeyframes.forEach(kf => {
-          const kfTime = (kf.position / 100) * phaseDur;
+          // Position is stored relative to animation start, add delay for absolute timeline position
+          const kfTime = anim.delay + kf.position;
           const kfX = tl.valToPx(kfTime);
           const distance = Math.abs(kfX - clickX);
 
@@ -659,13 +701,9 @@ export function Timeline() {
       store.setAnimations([...store.animations, anim]);
     }
 
-    // Calculate position as percentage within the animation's duration (accounting for delay)
+    // Store position as absolute milliseconds (clamped to phase duration)
     // timeMs is the absolute position on the timeline
-    // We need to convert to a 0-100 position within the animation
-    const relativeTime = timeMs - anim.delay;
-    const position = anim.duration > 0
-      ? Math.max(0, Math.min(100, (relativeTime / anim.duration) * 100))
-      : 0;
+    const position = Math.max(0, Math.min(phaseDuration, timeMs));
 
     // Create new keyframe
     const newKeyframe: StoreKeyframe = {
@@ -679,9 +717,9 @@ export function Timeline() {
     store.setKeyframes([...store.keyframes, newKeyframe]);
     store.selectKeyframes([newKeyframe.id]);
 
-    console.log('[Timeline] Added keyframe at', Math.round(position) + '%', 'for element', targetElementId);
+    console.log('[Timeline] Added keyframe at', Math.round(position) + 'ms', 'for element', targetElementId);
     closeContextMenu();
-  }, [currentTemplateId, currentPhase, closeContextMenu]);
+  }, [currentTemplateId, currentPhase, phaseDuration, closeContextMenu]);
 
   // Initialize and reinitialize timeline when phase changes
   useEffect(() => {
@@ -801,7 +839,7 @@ export function Timeline() {
         }
       });
 
-      // Drag finished - save keyframe positions
+      // Drag finished - save keyframe positions or delay changes
       timeline.onDragFinished((event: TimelineDragEvent) => {
         if (event.elements && event.elements.length > 0) {
           const store = useDesignerStore.getState();
@@ -809,36 +847,50 @@ export function Timeline() {
           const currentAnimations = store.animations;
 
           const updatedKeyframes = [...currentKeyframes];
+          const updatedAnimations = [...currentAnimations];
+          let animationsUpdated = false;
 
           event.elements.forEach((draggedEl) => {
             const data = draggedEl.keyframe?.data;
-            if (data?.keyframeId && !data?.isPlaceholder) {
+
+            // Handle delay end marker drag - updates animation delay
+            if (data?.isDelayEnd && data?.animationId) {
+              const newDelay = Math.max(0, Math.round(draggedEl.keyframe?.val || 0));
+              const animIndex = updatedAnimations.findIndex((a) => a.id === data.animationId);
+              if (animIndex !== -1) {
+                updatedAnimations[animIndex] = {
+                  ...updatedAnimations[animIndex],
+                  delay: newDelay,
+                };
+                animationsUpdated = true;
+              }
+            }
+            // Handle regular keyframe drag
+            else if (data?.keyframeId && !data?.isPlaceholder) {
               const newTimeMs = draggedEl.keyframe?.val || 0;
+              const animDelay = data?.delay || 0;
 
-              // Find the animation to get its delay and duration
-              const anim = currentAnimations.find(a => a.id === data.animationId);
-              if (anim) {
-                // Convert timeline position back to 0-100 position within the animation
-                // timeMs = anim.delay + (position / 100) * anim.duration
-                // So: position = ((timeMs - anim.delay) / anim.duration) * 100
-                const relativeTime = newTimeMs - anim.delay;
-                const newPosition = anim.duration > 0
-                  ? Math.max(0, Math.min(100, (relativeTime / anim.duration) * 100))
-                  : 0;
+              // Timeline shows keyframe at delay + position, so subtract delay to get relative position
+              // Store position as milliseconds relative to animation start (clamped to valid range)
+              const relativePosition = newTimeMs - animDelay;
+              const newPosition = Math.max(0, Math.min(phaseDuration - animDelay, relativePosition));
 
-                const kfIndex = updatedKeyframes.findIndex((kf) => kf.id === data.keyframeId);
-                if (kfIndex !== -1) {
-                  updatedKeyframes[kfIndex] = {
-                    ...updatedKeyframes[kfIndex],
-                    position: Math.round(newPosition),
-                  };
-                }
+              const kfIndex = updatedKeyframes.findIndex((kf) => kf.id === data.keyframeId);
+              if (kfIndex !== -1) {
+                updatedKeyframes[kfIndex] = {
+                  ...updatedKeyframes[kfIndex],
+                  position: Math.round(newPosition),
+                };
               }
             }
           });
 
           // Set flag to skip the next model update (prevents snap-back)
           skipNextModelUpdateRef.current = true;
+
+          if (animationsUpdated) {
+            store.setAnimations(updatedAnimations);
+          }
           store.setKeyframes(updatedKeyframes);
         }
       });
@@ -988,8 +1040,8 @@ export function Timeline() {
             const animKeyframes = storeKeyframes.filter(kf => kf.animation_id === anim.id);
 
             animKeyframes.forEach(kf => {
-              // Use phase duration for time calculation (same as buildTimelineModel)
-              const kfTime = (kf.position / 100) * phaseDur;
+              // Position is stored relative to animation start, add delay for absolute timeline position
+              const kfTime = anim.delay + kf.position;
               const kfX = tl.valToPx(kfTime);
               const distance = Math.abs(kfX - clickX);
 
@@ -1311,10 +1363,13 @@ export function Timeline() {
 
     const animId = crypto.randomUUID();
     const newAnim = { ...animation, id: animId };
+    // Convert keyframe positions from percentage (0-100) to absolute milliseconds
+    const animDuration = animation.duration;
     const newKeyframes: StoreKeyframe[] = kfs.map((kf) => ({
       ...kf,
       id: crypto.randomUUID(),
       animation_id: animId,
+      position: Math.round((kf.position / 100) * animDuration),  // Convert to ms
       properties: kf.properties || {},
     }));
 
@@ -1917,13 +1972,14 @@ export function Timeline() {
         );
 
         // Also check if we have selected keyframes - get their animations
+        // Filter to only include animations from the current phase
         const keyframeAnims = selectedKeyframeIds.length > 0
           ? [...new Set(
               keyframes
                 .filter(kf => selectedKeyframeIds.includes(kf.id))
                 .map(kf => animations.find(a => a.id === kf.animation_id))
-                .filter(Boolean)
-            )] as typeof animations
+                .filter((a): a is typeof animations[0] => a !== undefined && a.phase === currentPhase)
+            )]
           : [];
 
         // Combine and dedupe animations
@@ -1931,13 +1987,31 @@ export function Timeline() {
 
         if (allAnims.length === 0) return null;
 
-        // Get the first animation
-        const firstAnim = allAnims[0];
+        // Get the first animation - prioritize animations from the current phase
+        const currentPhaseAnims = allAnims.filter(a => a.phase === currentPhase);
+        const firstAnim = currentPhaseAnims.length > 0 ? currentPhaseAnims[0] : allAnims[0];
+
+        // If the animation is from a different phase, don't show the curve editor
+        // as it would have mismatched timeline duration
+        if (firstAnim.phase !== currentPhase) {
+          console.log('[CurveEditor] Skipping - animation phase mismatch:', firstAnim.phase, 'vs', currentPhase);
+          return null;
+        }
 
         // Handler to update keyframe property value
         const handleKeyframeUpdate = (keyframeId: string, property: string, value: number) => {
-          const kf = keyframes.find(k => k.id === keyframeId);
-          if (!kf) return;
+          console.log('[handleKeyframeUpdate] Called with:', { keyframeId, property, value });
+
+          // IMPORTANT: Get the LATEST keyframe from the store, not from the closure
+          // This prevents stale data during rapid drag updates
+          const currentKeyframes = useDesignerStore.getState().keyframes;
+          const kf = currentKeyframes.find(k => k.id === keyframeId);
+          if (!kf) {
+            console.log('[handleKeyframeUpdate] Keyframe not found:', keyframeId);
+            return;
+          }
+
+          console.log('[handleKeyframeUpdate] Found keyframe:', kf.id, 'properties:', kf.properties);
 
           // Update the specific property
           const updates: Partial<StoreKeyframe> = {};
@@ -1951,12 +2025,53 @@ export function Timeline() {
           else if (property === 'opacity') updates.opacity = value;
           else if (property === 'filter_blur') updates.filter_blur = value;
           else if (property === 'filter_brightness') updates.filter_brightness = value;
+          // Handle transform-derived properties by updating the transform string
+          else if (['translateX', 'translateY', 'scale', 'scaleX', 'scaleY', 'rotate'].includes(property)) {
+            const currentTransform = (kf.properties.transform as string) || '';
+            let newTransform = currentTransform;
+
+            // Helper to update or add a transform function
+            const updateTransformFn = (fnName: string, newVal: string, regex: RegExp) => {
+              if (regex.test(newTransform)) {
+                newTransform = newTransform.replace(regex, `${fnName}(${newVal})`);
+              } else {
+                newTransform = newTransform ? `${newTransform} ${fnName}(${newVal})` : `${fnName}(${newVal})`;
+              }
+            };
+
+            if (property === 'translateX') {
+              updateTransformFn('translateX', `${value}px`, /translateX\s*\([^)]*\)/i);
+            } else if (property === 'translateY') {
+              updateTransformFn('translateY', `${value}px`, /translateY\s*\([^)]*\)/i);
+            } else if (property === 'scale') {
+              // Use negative lookbehind/lookahead to avoid matching scaleX/scaleY
+              // Match 'scale(' but not preceded by another letter and not followed by X/Y
+              updateTransformFn('scale', `${value}`, /(?<![a-zA-Z])scale\s*\([^)]*\)(?![XY])/i);
+            } else if (property === 'scaleX') {
+              updateTransformFn('scaleX', `${value}`, /scaleX\s*\([^)]*\)/i);
+            } else if (property === 'scaleY') {
+              updateTransformFn('scaleY', `${value}`, /scaleY\s*\([^)]*\)/i);
+            } else if (property === 'rotate') {
+              // Use negative lookbehind to avoid matching rotateX/rotateY/rotateZ
+              updateTransformFn('rotate', `${value}deg`, /(?<![a-zA-Z])rotate\s*\([^)]*\)(?![XYZ])/i);
+            }
+
+            updates.properties = { ...(kf.properties || {}), transform: newTransform };
+          }
           else {
             // Update in properties object
-            updates.properties = { ...kf.properties, [property]: value };
+            updates.properties = { ...(kf.properties || {}), [property]: value };
           }
 
+          // Ensure we have something to update
+          if (Object.keys(updates).length === 0) {
+            console.log('[handleKeyframeUpdate] WARNING: No updates generated for property:', property);
+            return;
+          }
+
+          console.log('[handleKeyframeUpdate] Updates to apply:', updates);
           updateKeyframe(keyframeId, updates);
+          console.log('[handleKeyframeUpdate] updateKeyframe called');
         };
 
         // Handler to update keyframe easing
@@ -1964,12 +2079,30 @@ export function Timeline() {
           updateKeyframe(keyframeId, { easing });
         };
 
+        // Always use the current phase duration to match the main timeline width
+        // This ensures the curve editor width aligns with the timeline above
+        // DEBUG: Log all relevant values
+        console.log('[CurveEditor] DEBUG:', {
+          currentPhase,
+          phaseDurations,
+          'firstAnim.phase': firstAnim.phase,
+          'firstAnim.id': firstAnim.id,
+          'selectedElementIds': selectedElementIds,
+          'selectedKeyframeIds': selectedKeyframeIds,
+          'selectedAnims.length': selectedAnims.length,
+          'keyframeAnims.length': keyframeAnims.length,
+          'allAnims.length': allAnims.length,
+        });
+
+        // Use currentPhase duration - but if animation is from different phase, we need to handle that
+        const timelineDuration = phaseDurations[currentPhase];
+
         return (
           <div className="border-t border-border">
             <CurveGraphEditor
               animation={firstAnim}
               keyframes={keyframes}
-              phaseDuration={phaseDurations[currentPhase]}
+              phaseDuration={timelineDuration}
               zoom={zoom}
               playheadPosition={playheadPosition}
               onKeyframeUpdate={handleKeyframeUpdate}
@@ -2229,7 +2362,7 @@ export function Timeline() {
           ? animations.find(a => a.id === selectedKf.animation_id)
           : null;
         const selectedKfTimeMs = selectedKf && selectedKfAnim
-          ? selectedKfAnim.delay + (selectedKf.position / 100) * selectedKfAnim.duration
+          ? selectedKfAnim.delay + selectedKf.position  // Absolute timeline position = delay + relative position
           : 0;
         const selectedKfPropCount = selectedKf
           ? Object.keys(selectedKf.properties).length
@@ -2416,7 +2549,8 @@ export function Timeline() {
                   className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-muted/50 transition-colors"
                   onClick={() => {
                     // Create a duplicate keyframe at a slightly different position
-                    const newPosition = Math.min(100, selectedKf.position + 10);
+                    // Duplicate keyframe 100ms after the original, clamped to phase duration
+                    const newPosition = Math.min(phaseDuration, selectedKf.position + 100);
                     const newKeyframe = {
                       id: crypto.randomUUID(),
                       animation_id: selectedKf.animation_id,

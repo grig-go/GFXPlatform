@@ -1310,34 +1310,37 @@ export function ChatPanel() {
                 }
               }
 
-              // Validate position (0-100)
-              let position = typeof kfData.position === 'number' ? kfData.position : 0;
-              if (isNaN(position) || position < 0) position = 0;
-              if (position > 100) position = 100;
+              // Validate position (0-100 from AI) and convert to absolute milliseconds
+              let positionPercent = typeof kfData.position === 'number' ? kfData.position : 0;
+              if (isNaN(positionPercent) || positionPercent < 0) positionPercent = 0;
+              if (positionPercent > 100) positionPercent = 100;
+
+              // Convert percentage to absolute milliseconds based on animation duration
+              const positionMs = Math.round((positionPercent / 100) * duration);
 
               const keyframe = {
                 id: crypto.randomUUID(),
                 animation_id: animId,
                 name: `${cleanElementName}_${phase}_key_${kfIndex + 1}`,
-                position,
+                position: positionMs,
                 properties: kfProperties,
               };
               newKeyframes.push(keyframe);
             });
           } else {
-            // Create default keyframes (fade in)
+            // Create default keyframes (fade in) - positions are in absolute milliseconds
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
               name: `${cleanElementName}_${phase}_key_1`,
-              position: 0,
+              position: 0,  // Start of animation (0ms)
               properties: { opacity: 0 },
             });
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
               name: `${cleanElementName}_${phase}_key_2`,
-              position: 100,
+              position: duration,  // End of animation (duration in ms)
               properties: { opacity: 1 },
             });
           }
@@ -1379,7 +1382,8 @@ export function ChatPanel() {
                 created_at: new Date().toISOString(),
               });
 
-              // Reverse the keyframes (swap 0 and 100 positions)
+              // Reverse the keyframes - out animation duration is different from in
+              const outDuration = Math.min(inAnim.duration, 400); // Matches the duration above
               const reversedKeyframes = [...inKeyframes].sort((a, b) => b.position - a.position);
               // Get element name for keyframe naming
               const outElement = currentStore.elements.find(e => e.id === elementId);
@@ -1392,7 +1396,8 @@ export function ChatPanel() {
                   id: crypto.randomUUID(),
                   animation_id: outAnimId,
                   name: `${outElementName}_out_key_${index + 1}`,
-                  position: index === 0 ? 0 : 100,
+                  // Position in absolute milliseconds: start=0, end=outDuration
+                  position: index === 0 ? 0 : outDuration,
                   properties: { ...kf.properties },
                 });
               });
@@ -1405,7 +1410,7 @@ export function ChatPanel() {
         newAnimations.forEach(anim => {
           const animKfs = newKeyframes.filter(kf => kf.animation_id === anim.id);
 
-          // If animation has only 1 keyframe at position 0, add a keyframe at position 100
+          // If animation has only 1 keyframe at position 0, add a keyframe at the end (duration ms)
           if (animKfs.length === 1 && animKfs[0].position === 0) {
             const startKf = animKfs[0];
             console.log(`⚠️ Fixing incomplete animation ${anim.id} - adding end keyframe`);
@@ -1445,7 +1450,7 @@ export function ChatPanel() {
               id: crypto.randomUUID(),
               animation_id: anim.id,
               name: `${fixElementName}_${anim.phase}_key_2`,
-              position: 100,
+              position: anim.duration,  // End position in absolute milliseconds
               properties: endProperties,
             });
           }
@@ -1491,7 +1496,8 @@ export function ChatPanel() {
             .replace(/_+/g, '_')
             .substring(0, 20);
 
-          // IN Keyframes
+          // IN Keyframes - position in absolute milliseconds
+          const inDuration = 500; // Matches duration above
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: inAnimId,
@@ -1503,11 +1509,12 @@ export function ChatPanel() {
             id: crypto.randomUUID(),
             animation_id: inAnimId,
             name: `${autoGenElementName}_in_key_2`,
-            position: 100,
+            position: inDuration,  // End of animation (500ms)
             properties: { opacity: 1, transform: 'translateX(0)' },
           });
 
           // OUT Animation (slide to left + fade)
+          const outDuration = 400;
           const outAnimId = crypto.randomUUID();
           newAnimations.push({
             id: outAnimId,
@@ -1515,7 +1522,7 @@ export function ChatPanel() {
             element_id: elementId,
             phase: 'out',
             delay: 0,
-            duration: 400,
+            duration: outDuration,
             iterations: 1,
             direction: 'normal' as const,
             easing: 'ease-in',
@@ -1523,7 +1530,7 @@ export function ChatPanel() {
             created_at: new Date().toISOString(),
           });
 
-          // OUT Keyframes
+          // OUT Keyframes - position in absolute milliseconds
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: outAnimId,
@@ -1535,7 +1542,7 @@ export function ChatPanel() {
             id: crypto.randomUUID(),
             animation_id: outAnimId,
             name: `${autoGenElementName}_out_key_2`,
-            position: 100,
+            position: outDuration,  // End of animation (400ms)
             properties: { opacity: 0, transform: 'translateX(-50px)' },
           });
 

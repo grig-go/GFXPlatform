@@ -37,9 +37,10 @@ export function useOnAirAnimation() {
   // Apply animated styles to elements
   const applyStyles = useCallback((templateId: string, phase: AnimationPhase, time: number) => {
     const templateElements = getTemplateElements(templateId);
-    
+    const phaseDuration = phaseDurations[phase];
+
     templateElements.forEach(element => {
-      const animatedProps = getAnimatedProperties(element, animations, keyframes, time, phase);
+      const animatedProps = getAnimatedProperties(element, animations, keyframes, time, phase, false, phaseDuration);
       
       // Store for rendering
       elementStyles.current.set(element.id, animatedProps);

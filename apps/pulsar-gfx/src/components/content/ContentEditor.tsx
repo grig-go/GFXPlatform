@@ -61,7 +61,7 @@ interface LocationKeyframe {
 interface FieldConfig {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select' | 'ticker';
+  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select' | 'ticker' | 'background';
   placeholder?: string;
   defaultValue?: string | number;
   options?: { value: string; label: string }[];
@@ -69,6 +69,13 @@ interface FieldConfig {
   locationKeyframes?: LocationKeyframe[];
   // For ticker fields
   tickerItems?: TickerItem[];
+  // For background fields (shape textures)
+  textureUrl?: string;
+  textureMediaType?: 'image' | 'video';
+  // Element reference for grouping
+  elementId?: string;
+  elementName?: string;
+  elementType?: string;
 }
 
 // Icon libraries available
@@ -86,7 +93,10 @@ function getElementsFromLocalStorage(templateId: string): any[] {
     if (previewDataStr) {
       const previewData = JSON.parse(previewDataStr);
       if (previewData.elements && Array.isArray(previewData.elements)) {
-        return previewData.elements.filter((e: any) => e.template_id === templateId);
+        // Filter by template and sort by sort_order (element order in the layers panel)
+        return previewData.elements
+          .filter((e: any) => e.template_id === templateId)
+          .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       }
     }
   } catch (e) {
@@ -105,8 +115,13 @@ export function ContentEditor() {
   // Use previewStore as source of truth for what we're editing
   // This ensures ContentEditor stays in sync with PreviewPanel
   const previewPage = useMemo(() => {
-    if (!selectedPageId) return null;
-    return pages.find(p => p.id === selectedPageId) || null;
+    if (!selectedPageId) {
+      console.log('[ContentEditor] previewPage: no selectedPageId');
+      return null;
+    }
+    const found = pages.find(p => p.id === selectedPageId) || null;
+    console.log('[ContentEditor] previewPage:', found ? `found (${found.id})` : 'NOT FOUND', 'selectedPageId:', selectedPageId, 'pages.length:', pages.length);
+    return found;
   }, [selectedPageId, pages]);
 
   // Only use template if no page is being previewed
@@ -131,6 +146,7 @@ export function ContentEditor() {
   const [iconSearchQuery, setIconSearchQuery] = useState('');
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [mediaPickerFieldId, setMediaPickerFieldId] = useState<string | null>(null);
+  const [mediaPickerType, setMediaPickerType] = useState<'image' | 'all'>('image');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [locationPickerFieldId, setLocationPickerFieldId] = useState<string | null>(null);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
@@ -296,11 +312,12 @@ export function ContentEditor() {
 
   // Sync local state when selected page or template changes
   useEffect(() => {
+    console.log('[ContentEditor] useEffect triggered - previewPage?.id:', previewPage?.id, 'selectedTemplateId:', selectedTemplateId);
     if (previewPage) {
-      // For pages, also include keyframes from template elements
+      // For pages, also include keyframes and texture URLs from template elements
       const payload = { ...(previewPage.payload || {}) };
 
-      // Get template elements to extract keyframes
+      // Get template elements to extract default values
       const pageTemplateElements = previewPage.templateId
         ? getElementsFromLocalStorage(previewPage.templateId)
         : [];
@@ -308,10 +325,25 @@ export function ContentEditor() {
       pageTemplateElements.forEach((el: any) => {
         const elType = el.elementType || el.element_type;
         const isMap = elType === 'map' || el.content?.type === 'map';
+        const isShape = elType === 'shape' || el.content?.type === 'shape';
+
         if (isMap && el.content?.locationKeyframes?.length > 0) {
           // Initialize keyframes in payload if not already present
           if (!payload[`${el.id}_keyframes`]) {
             payload[`${el.id}_keyframes`] = el.content.locationKeyframes;
+          }
+        }
+
+        // For shapes with textures, initialize texture URL if not in payload
+        if (isShape) {
+          const hasTexture = el.content?.texture?.enabled && el.content?.texture?.url;
+          const isBackgroundElement = el.name?.toLowerCase().includes('background') ||
+                                      el.name?.toLowerCase().includes('bg') ||
+                                      el.name?.toLowerCase().includes('texture');
+
+          if ((hasTexture || isBackgroundElement) && !payload[el.id]) {
+            // Initialize with texture URL from element
+            payload[el.id] = el.content?.texture?.url || '';
           }
         }
       });
@@ -350,7 +382,17 @@ export function ContentEditor() {
               defaultPayload[el.id] = el.content?.src || el.content?.url || '';
             }
           } else if (isShape) {
-            if (el.content?.fill || el.name.toLowerCase().includes('color')) {
+            // Check if shape has texture or is a background element
+            const hasTexture = el.content?.texture?.enabled && el.content?.texture?.url;
+            const isBackgroundElement = el.name?.toLowerCase().includes('background') ||
+                                        el.name?.toLowerCase().includes('bg') ||
+                                        el.name?.toLowerCase().includes('texture');
+
+            if (hasTexture || isBackgroundElement) {
+              // Initialize with texture URL
+              defaultPayload[el.id] = el.content?.texture?.url || '';
+            } else if (el.content?.fill || el.name?.toLowerCase().includes('color')) {
+              // Initialize with fill color
               defaultPayload[el.id] = el.content?.fill || '#000000';
             }
           }
@@ -407,18 +449,18 @@ export function ContentEditor() {
         ? getElementsFromLocalStorage(previewPage.templateId)
         : [];
 
-      // Build a map of element ID -> element for quick lookup
+      // Build a map of element ID -> element for quick lookup (includes sort_order)
       const elementMap = new Map<string, any>();
-      pageTemplateElements.forEach((el: any) => {
-        elementMap.set(el.id, el);
+      pageTemplateElements.forEach((el: any, index: number) => {
+        elementMap.set(el.id, { ...el, _sortIndex: index });
       });
 
       // Infer from page payload keys, but use template element info when available
       const payload = previewPage.payload || {};
 
       // First, add ticker fields for all ticker elements in the template (even if not in payload)
-      const tickerFields: FieldConfig[] = [];
-      pageTemplateElements.forEach((el: any) => {
+      const tickerFields: (FieldConfig & { _sortIndex?: number })[] = [];
+      pageTemplateElements.forEach((el: any, index: number) => {
         const elType = el.elementType || el.element_type;
         const isTicker = elType === 'ticker' || el.content?.type === 'ticker';
         if (isTicker) {
@@ -426,9 +468,13 @@ export function ContentEditor() {
           const tickerItems = payload[itemsKey] || el.content?.items || [];
           tickerFields.push({
             id: el.id,
-            label: el.name || 'Ticker',
+            label: 'Ticker',
             type: 'ticker' as const,
             tickerItems: tickerItems,
+            elementId: el.id,
+            elementName: el.name || 'Ticker',
+            elementType: 'ticker',
+            _sortIndex: index,
           });
         }
       });
@@ -456,6 +502,7 @@ export function ContentEditor() {
           const isMap = elType === 'map' || element.content?.type === 'map';
           const isImage = elType === 'image' || element.content?.type === 'image';
           const isText = elType === 'text' || element.content?.type === 'text';
+          const isShape = elType === 'shape' || element.content?.type === 'shape';
 
           if (isMap) {
             // Get keyframes from page payload first, then fall back to template element
@@ -463,25 +510,68 @@ export function ContentEditor() {
             const keyframes = payload[keyframesKey] || element.content?.locationKeyframes || [];
             return {
               id: key,
-              label: element.name || formatLabel(key),
+              label: 'Location',
               type: 'map' as const,
               defaultValue: value ?? undefined,
               locationKeyframes: keyframes,
+              elementId: element.id,
+              elementName: element.name || 'Map',
+              elementType: 'map',
+              _sortIndex: element._sortIndex,
             };
           } else if (isImage) {
             return {
               id: key,
-              label: element.name || formatLabel(key),
+              label: 'Image',
               type: 'image' as const,
               defaultValue: value ?? undefined,
+              elementId: element.id,
+              elementName: element.name || 'Image',
+              elementType: 'image',
+              _sortIndex: element._sortIndex,
             };
           } else if (isText) {
             return {
               id: key,
-              label: element.name || formatLabel(key),
+              label: 'Text',
               type: 'text' as const,
               defaultValue: value ?? undefined,
+              elementId: element.id,
+              elementName: element.name || 'Text',
+              elementType: 'text',
+              _sortIndex: element._sortIndex,
             };
+          } else if (isShape) {
+            // Shape elements may have texture or color
+            const hasTexture = element.content?.texture?.enabled && element.content?.texture?.url;
+
+            if (hasTexture) {
+              return {
+                id: key,
+                label: 'Background',
+                type: 'background' as const,
+                textureUrl: element.content?.texture?.url || '',
+                textureMediaType: element.content?.texture?.mediaType || 'image',
+                defaultValue: value ?? element.content?.texture?.url ?? '',
+                elementId: element.id,
+                elementName: element.name || 'Shape',
+                elementType: 'shape',
+                _sortIndex: element._sortIndex,
+              };
+            } else if (element.content?.fill && element.content?.fill !== 'transparent') {
+              return {
+                id: key,
+                label: 'Fill Color',
+                type: 'color' as const,
+                defaultValue: value ?? element.content?.fill ?? '#000000',
+                elementId: element.id,
+                elementName: element.name || 'Shape',
+                elementType: 'shape',
+                _sortIndex: element._sortIndex,
+              };
+            }
+            // Don't return fields for shapes without texture or meaningful fill
+            return null;
           }
         }
 
@@ -495,10 +585,12 @@ export function ContentEditor() {
           defaultValue: value ?? undefined,
           options: type === 'icon' ? ICON_LIBRARIES : undefined,
         };
-      });
+      }).filter((field): field is NonNullable<typeof field> => field !== null) as (FieldConfig & { _sortIndex?: number })[];
 
-      // Combine ticker fields with payload fields
-      return [...tickerFields, ...payloadFields];
+      // Combine ticker fields with payload fields and sort by element order
+      const allFields = [...tickerFields, ...payloadFields];
+      allFields.sort((a, b) => (a._sortIndex ?? 999) - (b._sortIndex ?? 999));
+      return allFields as FieldConfig[];
     }
 
     // Check if template has elements with content (use localStorage elements)
@@ -526,58 +618,96 @@ export function ContentEditor() {
             label: el.name,
             type: 'ticker' as const,
             tickerItems: el.content?.items || [],
+            elementId: el.id,
+            elementName: el.name,
+            elementType: 'ticker',
           });
         } else if (isMap) {
           // Map element - add location field with keyframes if available
           fields.push({
             id: el.id,
-            label: el.name,
+            label: 'Location',
             type: 'map' as const,
             defaultValue: el.content?.center ? `${el.content.center[1]}, ${el.content.center[0]}` : '',
             locationKeyframes: el.content?.locationKeyframes || [],
+            elementId: el.id,
+            elementName: el.name,
+            elementType: 'map',
           });
         } else if (isText) {
           fields.push({
             id: el.id,
-            label: el.name,
+            label: 'Text',
             type: 'text' as const,
             defaultValue: el.content?.text || '',
+            elementId: el.id,
+            elementName: el.name,
+            elementType: 'text',
           });
         } else if (isImage) {
           // Check if it's an icon or regular image
           if (el.name.toLowerCase().includes('icon')) {
             fields.push({
               id: `${el.id}_library`,
-              label: 'Icon Library',
+              label: 'Library',
               type: 'icon' as const,
               defaultValue: el.content?.iconLibrary || 'lucide',
               options: ICON_LIBRARIES,
+              elementId: el.id,
+              elementName: el.name,
+              elementType: 'image',
             });
             fields.push({
               id: el.id,
               label: 'Icon',
               type: 'icon-picker' as const,
               defaultValue: el.content?.icon || el.content?.text || 'Star',
+              elementId: el.id,
+              elementName: el.name,
+              elementType: 'image',
             });
           } else {
             fields.push({
               id: el.id,
-              label: el.name,
+              label: 'Image',
               type: 'image' as const,
               defaultValue: el.content?.src || el.content?.url || '',
               placeholder: 'Image URL...',
+              elementId: el.id,
+              elementName: el.name,
+              elementType: 'image',
             });
           }
         } else if (isShape) {
-          // Shape elements may have color
-          if (el.content?.fill || el.name.toLowerCase().includes('color')) {
+          // Shape elements - only add field if has texture with URL OR has fill color
+          const hasTexture = el.content?.texture?.enabled && el.content?.texture?.url;
+
+          if (hasTexture) {
+            // Has actual texture - show background picker
             fields.push({
               id: el.id,
-              label: el.name,
+              label: 'Background',
+              type: 'background' as const,
+              textureUrl: el.content?.texture?.url || '',
+              textureMediaType: el.content?.texture?.mediaType || 'image',
+              defaultValue: el.content?.texture?.url || '',
+              elementId: el.id,
+              elementName: el.name,
+              elementType: 'shape',
+            });
+          } else if (el.content?.fill && el.content?.fill !== 'transparent') {
+            // Has fill color - show color picker
+            fields.push({
+              id: el.id,
+              label: 'Fill Color',
               type: 'color' as const,
               defaultValue: el.content?.fill || '#000000',
+              elementId: el.id,
+              elementName: el.name,
+              elementType: 'shape',
             });
           }
+          // Don't add fields for shapes without texture or fill
         }
       });
 
@@ -608,15 +738,20 @@ export function ContentEditor() {
 
   const handleSave = async () => {
     if (previewPage && hasChanges) {
+      console.log('[ContentEditor] handleSave - saving page:', previewPage.id);
+      console.log('[ContentEditor] handleSave - payload:', localPayload);
       setIsSaving(true);
       try {
         await updatePagePayload(previewPage.id, localPayload);
+        console.log('[ContentEditor] handleSave - save successful');
         setHasChanges(false);
       } catch (error) {
-        console.error('Failed to save page:', error);
+        console.error('[ContentEditor] handleSave - Failed to save page:', error);
       } finally {
         setIsSaving(false);
       }
+    } else {
+      console.log('[ContentEditor] handleSave - skipped:', { hasPage: !!previewPage, hasChanges });
     }
     // For templates, no save needed - preview is live
   };
@@ -730,6 +865,8 @@ export function ContentEditor() {
         return <MapPin className="w-3.5 h-3.5" />;
       case 'ticker':
         return <ScrollText className="w-3.5 h-3.5" />;
+      case 'background':
+        return <Image className="w-3.5 h-3.5" />;
       default:
         return <Type className="w-3.5 h-3.5" />;
     }
@@ -854,12 +991,35 @@ export function ContentEditor() {
             )}
           </div>
         ) : (
-          fields.map((field) => (
-            <div key={field.id} className={cn("space-y-1", field.type === 'ticker' && "flex-1 flex flex-col min-h-0")}>
-              <Label className="text-[10px] sm:text-xs flex items-center gap-1.5 text-muted-foreground">
-                {getFieldIcon(field.type)}
-                {field.label}
-              </Label>
+          (() => {
+            // Group fields by elementName for section headers
+            const groupedFields: { elementName: string; fields: FieldConfig[] }[] = [];
+            let currentGroup: { elementName: string; fields: FieldConfig[] } | null = null;
+
+            fields.forEach((field) => {
+              const elementName = field.elementName || 'Properties';
+              if (!currentGroup || currentGroup.elementName !== elementName) {
+                currentGroup = { elementName, fields: [field] };
+                groupedFields.push(currentGroup);
+              } else {
+                currentGroup.fields.push(field);
+              }
+            });
+
+            return groupedFields.map((group, groupIndex) => (
+              <div key={`group-${groupIndex}-${group.elementName}`} className="space-y-2">
+                {/* Section header - Nova GFX PropertySection style */}
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block">
+                  {group.elementName}
+                </label>
+
+                {/* Fields in this group */}
+                {group.fields.map((field) => (
+                  <div key={field.id} className={cn("space-y-1.5", field.type === 'ticker' && "flex-1 flex flex-col min-h-0")}>
+                    <Label className="text-[10px] sm:text-xs flex items-center gap-1.5 text-muted-foreground">
+                      {getFieldIcon(field.type)}
+                      {field.label}
+                    </Label>
 
               {field.type === 'textarea' ? (
                 <Textarea
@@ -900,6 +1060,7 @@ export function ContentEditor() {
                   )}
                   onClick={() => {
                     setMediaPickerFieldId(field.id);
+                    setMediaPickerType('image'); // Only images for regular image fields
                     setShowMediaPicker(true);
                   }}
                 >
@@ -940,6 +1101,51 @@ export function ContentEditor() {
                     placeholder="#000000"
                     className="h-7 sm:h-8 text-xs sm:text-sm flex-1"
                   />
+                </div>
+              ) : field.type === 'background' ? (
+                <div
+                  className={cn(
+                    'w-full rounded overflow-hidden cursor-pointer group relative border border-border',
+                    (localPayload[field.id] || field.textureUrl) ? 'h-32 bg-black/50' : 'h-24 bg-muted/50'
+                  )}
+                  onClick={() => {
+                    setMediaPickerFieldId(field.id);
+                    setMediaPickerType('all'); // Allow both images and videos for background
+                    setShowMediaPicker(true);
+                  }}
+                >
+                  {(localPayload[field.id] || field.textureUrl) ? (
+                    <>
+                      {(field.textureMediaType === 'video' || (localPayload[field.id] || '').match(/\.(mp4|webm|mov)$/i)) ? (
+                        <video
+                          src={localPayload[field.id] || field.textureUrl}
+                          className="w-full h-full object-cover"
+                          muted
+                          loop
+                          autoPlay
+                          playsInline
+                        />
+                      ) : (
+                        <img
+                          src={localPayload[field.id] || field.textureUrl}
+                          alt={field.label}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <ImagePlus className="w-6 h-6 text-white mr-2" />
+                        <span className="text-white text-sm font-medium">Change Background</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center gap-2">
+                      <ImagePlus className="w-8 h-8 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Select Background</span>
+                    </div>
+                  )}
                 </div>
               ) : field.type === 'icon-picker' ? (
                 <Button
@@ -1161,8 +1367,11 @@ export function ContentEditor() {
                   className="h-7 sm:h-8 text-xs sm:text-sm"
                 />
               )}
-            </div>
-          ))
+                  </div>
+                ))}
+              </div>
+            ));
+          })()
         )}
       </div>
 
@@ -1242,9 +1451,10 @@ export function ContentEditor() {
           }
           setShowMediaPicker(false);
           setMediaPickerFieldId(null);
+          setMediaPickerType('image'); // Reset to default
         }}
-        mediaType="image"
-        title="Select Image"
+        mediaType={mediaPickerType}
+        title={mediaPickerType === 'all' ? 'Select Background Media' : 'Select Image'}
       />
 
       {/* Location Picker Dialog */}

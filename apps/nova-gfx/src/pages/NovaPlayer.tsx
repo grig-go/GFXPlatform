@@ -189,6 +189,13 @@ export function NovaPlayer() {
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
 
+  // Phase durations from project settings (with defaults)
+  const phaseDurations = useMemo<Record<AnimationPhase, number>>(() => {
+    const projectSettings = localStorageData?.project?.settings as Record<string, unknown> | undefined;
+    const savedDurations = projectSettings?.phaseDurations as Record<AnimationPhase, number> | undefined;
+    return savedDurations || { in: 1500, loop: 3000, out: 1500 };
+  }, [localStorageData?.project?.settings]);
+
   // Window size for scaling
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -1402,6 +1409,7 @@ export function NovaPlayer() {
               currentPhase="loop"
               isPlaying={isPlaying}
               isAlwaysOn={true}
+              phaseDuration={phaseDurations.loop}
             />
           ))}
 
@@ -1429,6 +1437,7 @@ export function NovaPlayer() {
                 currentPhase={instance.phase}
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
+                phaseDuration={phaseDurations[instance.phase]}
               />
             ));
         })}
@@ -1449,6 +1458,7 @@ export function NovaPlayer() {
                 currentPhase={currentPhase}
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
+                phaseDuration={phaseDurations[currentPhase]}
               />
             ))
         )}
@@ -1468,6 +1478,7 @@ interface PlayerElementProps {
   currentPhase: AnimationPhase;
   isPlaying: boolean;
   isAlwaysOn?: boolean;
+  phaseDuration: number;
 }
 
 function PlayerElement({
@@ -1479,14 +1490,15 @@ function PlayerElement({
   currentPhase,
   isPlaying,
   isAlwaysOn = false,
+  phaseDuration,
 }: PlayerElementProps) {
   // For always-on elements, use 'loop' phase at position 0 (static display)
   const effectivePhase = isAlwaysOn ? 'loop' : currentPhase;
   const effectivePosition = isAlwaysOn ? 0 : playheadPosition;
 
   const animatedProps = useMemo(() => {
-    return getAnimatedProperties(element, animations, keyframes, effectivePosition, effectivePhase);
-  }, [element, animations, keyframes, effectivePosition, effectivePhase]);
+    return getAnimatedProperties(element, animations, keyframes, effectivePosition, effectivePhase, false, phaseDuration);
+  }, [element, animations, keyframes, effectivePosition, effectivePhase, phaseDuration]);
 
   // Check if this element has explicit OUT animations
   const hasOutAnimations = useMemo(() => {
@@ -1607,6 +1619,7 @@ function PlayerElement({
           <TextElement
             text={textContent.text || ''}
             animation={mergedAnimation as Parameters<typeof TextElement>[0]['animation']}
+            charAnimation={textContent.charAnimation}
             style={textStyle}
             isPlaying={isPlaying}
             playheadPosition={playheadPosition}
@@ -1953,6 +1966,7 @@ function PlayerElement({
           currentPhase={currentPhase}
           isPlaying={isPlaying}
           isAlwaysOn={isAlwaysOn}
+          phaseDuration={phaseDuration}
         />
       ))}
     </div>

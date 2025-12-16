@@ -274,19 +274,6 @@ export function getAnimatedProperties(
 
   const phaseAnimations = animations.filter((a) => a.element_id === element.id && a.phase === phase);
 
-  // Always log for text elements to debug char animation
-  if (element.content?.type === 'text') {
-    const allElementAnims = animations.filter((a) => a.element_id === element.id);
-    console.log('[Animation] Text element lookup:', {
-      elementId: element.id,
-      requestedPhase: phase,
-      foundInPhase: phaseAnimations.length,
-      totalAnimations: allElementAnims.length,
-      availablePhases: allElementAnims.map(a => a.phase),
-      time: time
-    });
-  }
-
   if (phaseAnimations.length === 0) {
     if (shouldDebug) console.log('[Animation] No animations for element', element.id, 'in phase', phase);
     return {};
@@ -298,12 +285,6 @@ export function getAnimatedProperties(
     const animKeyframes = keyframes
       .filter((k) => k.animation_id === anim.id)
       .sort((a, b) => a.position - b.position);
-
-    // Always log keyframes for debugging - show full details including property values
-    console.log('[Animation] Keyframes for', element.id, ':', animKeyframes.map(kf => ({
-      pos: kf.position,
-      props: JSON.stringify(kf.properties)
-    })));
 
     // If no keyframes, nothing to animate
     if (animKeyframes.length === 0) return;
@@ -319,13 +300,11 @@ export function getAnimatedProperties(
       return;
     }
 
-    // IMPORTANT: Always use anim.duration because keyframe positions are stored as percentages
-    // of anim.duration (see Timeline.tsx handleAddKeyframeAtTime). phaseDuration is only used
-    // for timeline visual display, not for keyframe interpolation.
-    const effectiveDuration = anim.duration;
+    // Use phaseDuration for loop handling
+    const effectiveDuration = phaseDuration || anim.duration;
 
-    // Calculate progress within this animation
-    const localTime = time - anim.delay;
+    // Calculate time within this animation (accounting for delay)
+    let localTime = time - anim.delay;
     if (localTime < 0) {
       // Before animation starts - use first keyframe values
       const firstKf = animKeyframes[0];
@@ -336,40 +315,23 @@ export function getAnimatedProperties(
       return;
     }
 
-    let progress = localTime / effectiveDuration;
-    if (shouldDebug) {
-      console.log('[Animation] time:', time, 'delay:', anim.delay, 'effectiveDuration:', effectiveDuration, 'localTime:', localTime, 'progress:', progress);
-    }
-
-    // Handle loop
-    if (phase === 'loop' && progress > 1) {
-      progress = progress % 1; // Loop back
+    // Handle loop - localTime can exceed effectiveDuration, so wrap it
+    if (phase === 'loop' && localTime > effectiveDuration) {
+      localTime = localTime % effectiveDuration;
     } else {
-      progress = Math.min(progress, 1);
+      localTime = Math.min(localTime, effectiveDuration);
     }
 
-    // Find the two keyframes we're between (0-100% scale)
-    // IMPORTANT: Use raw progress (not eased) to find keyframe positions
+    // Find the two keyframes we're between
+    // Keyframe positions are now stored as absolute milliseconds
+    // IMPORTANT: Use raw time (not eased) to find keyframe positions
     // Easing should only affect interpolation BETWEEN keyframes, not when we reach them
-    const keyframeProgress = progress * 100;
+    const keyframeTime = localTime; // Time in ms
     const firstKf = animKeyframes[0];
     const lastKf = animKeyframes[animKeyframes.length - 1];
 
-    // DEBUG: Log keyframe progress comparison
-    console.log('[Animation] Keyframe timing:', {
-      time,
-      animDuration: anim.duration,
-      progress: progress.toFixed(4),
-      keyframeProgress: keyframeProgress.toFixed(4),
-      firstKfPos: firstKf.position,
-      lastKfPos: lastKf.position,
-      isBeforeFirst: keyframeProgress < firstKf.position,
-      isAfterLast: keyframeProgress >= lastKf.position,
-      numKeyframes: animKeyframes.length
-    });
-
     // BEFORE first keyframe - use first keyframe values (no animation yet)
-    if (keyframeProgress < firstKf.position) {
+    if (keyframeTime < firstKf.position) {
       Object.keys(firstKf.properties).forEach((prop) => {
         const cssProperty = propertyToCSSMap[prop] || prop;
         result[cssProperty] = firstKf.properties[prop] as string | number;
@@ -378,7 +340,7 @@ export function getAnimatedProperties(
     }
 
     // AFTER last keyframe - use last keyframe values (animation complete)
-    if (keyframeProgress >= lastKf.position) {
+    if (keyframeTime >= lastKf.position) {
       Object.keys(lastKf.properties).forEach((prop) => {
         const cssProperty = propertyToCSSMap[prop] || prop;
         result[cssProperty] = lastKf.properties[prop] as string | number;
@@ -391,7 +353,7 @@ export function getAnimatedProperties(
     let toKf = lastKf;
 
     for (let i = 0; i < animKeyframes.length - 1; i++) {
-      if (keyframeProgress >= animKeyframes[i].position && keyframeProgress < animKeyframes[i + 1].position) {
+      if (keyframeTime >= animKeyframes[i].position && keyframeTime < animKeyframes[i + 1].position) {
         fromKf = animKeyframes[i];
         toKf = animKeyframes[i + 1];
         break;
@@ -399,8 +361,9 @@ export function getAnimatedProperties(
     }
 
     // Interpolate between keyframes
+    // Position is in milliseconds, so kfRange is in ms and kfProgress is 0-1
     const kfRange = toKf.position - fromKf.position;
-    let kfProgress = kfRange > 0 ? (keyframeProgress - fromKf.position) / kfRange : 0;
+    let kfProgress = kfRange > 0 ? (keyframeTime - fromKf.position) / kfRange : 0;
     // Clamp kfProgress to 0-1 to prevent extrapolation beyond keyframes
     kfProgress = Math.max(0, Math.min(1, kfProgress));
     // Apply easing to the interpolation between keyframes

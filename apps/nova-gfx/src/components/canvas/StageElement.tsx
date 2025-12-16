@@ -303,10 +303,13 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
     if (!selectedKeyframeForElement) return baseAnimatedProps;
 
-    // Calculate if playhead is close to the selected keyframe's position
-    // Keyframe position is 0-100, playhead is in ms, need to convert
-    const phaseDuration = phaseDurations[currentPhase];
-    const keyframeTimeMs = (selectedKeyframeForElement.position / 100) * phaseDuration;
+    // Find the animation for this keyframe to get its delay
+    const keyframeAnim = animations.find(a => a.id === selectedKeyframeForElement.animation_id);
+    const animDelay = keyframeAnim?.delay || 0;
+
+    // Calculate if playhead is close to the selected keyframe's absolute timeline position
+    // Keyframe position is relative to animation start, add delay for absolute timeline position
+    const keyframeTimeMs = animDelay + selectedKeyframeForElement.position;
     const tolerance = 50; // 50ms tolerance for "at keyframe"
     const isPlayheadAtKeyframe = Math.abs(playheadPosition - keyframeTimeMs) <= tolerance;
 
@@ -688,9 +691,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           // Pass textAlign to inner span (needed for justify to work)
           textAlign: textAlign as any,
         };
-        // Calculate animation duration from keyframes or default
+        // Calculate animation duration from animations or use default
         const elementAnimations = animations.filter(a => a.element_id === element.id);
-        // Keyframes use position (0-100) not time, so calculate max duration from animations
         const animationDuration = elementAnimations.reduce((max, a) => Math.max(max, (a.duration || 1000)), 1000);
 
         // Merge keyframe animation properties into animation object
