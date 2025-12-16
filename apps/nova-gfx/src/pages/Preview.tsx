@@ -1467,13 +1467,16 @@ function PreviewElement({
         })();
 
         // Calculate glow style
+        // Multiply glow intensity by animated opacity so glow fades with element
         const glowStyle: React.CSSProperties = (() => {
           if (!glow?.enabled) return {};
 
           const glowColor = glow.color || shapeContent.fill || '#8B5CF6';
           const blur = glow.blur ?? 20;
           const spread = glow.spread ?? 0;
-          const intensity = glow.intensity ?? 0.6;
+          const baseIntensity = glow.intensity ?? 0.6;
+          // Apply animated opacity to glow intensity for proper fade in/out
+          const intensity = baseIntensity * (animatedOpacity ?? 1);
 
           // Convert color to rgba with intensity
           let colorWithAlpha = glowColor;

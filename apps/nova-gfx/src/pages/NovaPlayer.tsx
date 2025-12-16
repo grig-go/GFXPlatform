@@ -174,8 +174,9 @@ export function NovaPlayer() {
 
   // Current state
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
-  // Per-template content overrides - Map<templateId, overrides>
-  const [templateOverrides, setTemplateOverrides] = useState<Map<string, Record<string, string | null>>>(new Map());
+  // Per-instance content overrides - Map<instanceId, overrides>
+  // Using instanceId (not templateId) allows same template with different payloads during transitions
+  const [instanceOverrides, setInstanceOverrides] = useState<Map<string, Record<string, string | null>>>(new Map());
   const [isOnAir, setIsOnAir] = useState(false);
 
   // Per-layer template state for animated switching
@@ -190,11 +191,29 @@ export function NovaPlayer() {
   const lastTimeRef = useRef<number>(0);
 
   // Phase durations from project settings (with defaults)
+  // Priority: DB project settings > localStorage settings > defaults
   const phaseDurations = useMemo<Record<AnimationPhase, number>>(() => {
-    const projectSettings = localStorageData?.project?.settings as Record<string, unknown> | undefined;
-    const savedDurations = projectSettings?.phaseDurations as Record<AnimationPhase, number> | undefined;
-    return savedDurations || { in: 1500, loop: 3000, out: 1500 };
-  }, [localStorageData?.project?.settings]);
+    // First try DB project settings
+    const dbSettings = project?.settings as Record<string, unknown> | undefined;
+    const dbDurations = dbSettings?.phaseDurations as Record<AnimationPhase, number> | undefined;
+    if (dbDurations) {
+      console.log('[Nova Player] Using phaseDurations from DB project:', dbDurations);
+      return dbDurations;
+    }
+
+    // Fall back to localStorage project settings
+    const localSettings = localStorageData?.project?.settings as Record<string, unknown> | undefined;
+    const localDurations = localSettings?.phaseDurations as Record<AnimationPhase, number> | undefined;
+    if (localDurations) {
+      console.log('[Nova Player] Using phaseDurations from localStorage:', localDurations);
+      return localDurations;
+    }
+
+    // Default durations
+    const defaults = { in: 1500, loop: 3000, out: 1500 };
+    console.log('[Nova Player] Using default phaseDurations:', defaults);
+    return defaults;
+  }, [project?.settings, localStorageData?.project?.settings]);
 
   // Window size for scaling
   const [windowSize, setWindowSize] = useState({
@@ -524,11 +543,12 @@ export function NovaPlayer() {
 
           setCurrentTemplateId(templateId);
 
-          // Store payload per-template (only affects elements of this specific template)
+          // Store payload per-instance (using instanceId, not templateId)
+          // This allows same template with different payloads during transitions
           if (cmd.payload) {
-            setTemplateOverrides(prev => {
+            setInstanceOverrides(prev => {
               const next = new Map(prev);
-              next.set(templateId, cmd.payload!);
+              next.set(newInstanceId, cmd.payload!);
               return next;
             });
           }
@@ -547,11 +567,12 @@ export function NovaPlayer() {
             await loadProject(cmd.template.projectId);
           }
           setCurrentTemplateId(cmd.template.id);
-          // Store payload per-template
+          // Store payload per-instance (generate instanceId for load command)
           if (cmd.payload) {
-            setTemplateOverrides(prev => {
+            const loadInstanceId = crypto.randomUUID();
+            setInstanceOverrides(prev => {
               const next = new Map(prev);
-              next.set(cmd.template!.id, cmd.payload!);
+              next.set(loadInstanceId, cmd.payload!);
               return next;
             });
           }
@@ -563,25 +584,34 @@ export function NovaPlayer() {
         setPlayheadPosition(0);
         break;
 
-      case 'update':
-        // Update requires a template reference to know which template's elements to update
-        if (cmd.payload && cmd.template?.id) {
-          setTemplateOverrides(prev => {
-            const next = new Map(prev);
-            const existing = next.get(cmd.template!.id) || {};
-            next.set(cmd.template!.id, { ...existing, ...cmd.payload });
-            return next;
-          });
-        } else if (cmd.payload && currentTemplateId) {
-          // Fallback to current template if no template specified
-          setTemplateOverrides(prev => {
-            const next = new Map(prev);
-            const existing = next.get(currentTemplateId!) || {};
-            next.set(currentTemplateId!, { ...existing, ...cmd.payload });
-            return next;
-          });
+      case 'update': {
+        // Update requires finding the active instance for the template
+        // Updates should only affect the non-outgoing instance (the one currently playing)
+        if (cmd.payload) {
+          const targetTemplateId = cmd.template?.id || currentTemplateId;
+          if (targetTemplateId) {
+            // Find the active (non-outgoing) instance for this template
+            let targetInstanceId: string | null = null;
+            for (const states of layerTemplates.values()) {
+              const activeInstance = states.find(s => s.templateId === targetTemplateId && !s.isOutgoing);
+              if (activeInstance) {
+                targetInstanceId = activeInstance.instanceId;
+                break;
+              }
+            }
+
+            if (targetInstanceId) {
+              setInstanceOverrides(prev => {
+                const next = new Map(prev);
+                const existing = next.get(targetInstanceId!) || {};
+                next.set(targetInstanceId!, { ...existing, ...cmd.payload });
+                return next;
+              });
+            }
+          }
         }
         break;
+      }
 
       case 'stop': {
         // Play OUT animation - if layerId/layerIndex specified, only target that layer
@@ -654,7 +684,7 @@ export function NovaPlayer() {
         setIsOnAir(false);
         setIsPlaying(false);
         setCurrentTemplateId(null);
-        setTemplateOverrides(new Map());
+        setInstanceOverrides(new Map());
         setCurrentPhase('in');
         setPlayheadPosition(0);
         setLayerTemplates(new Map());
@@ -665,7 +695,7 @@ export function NovaPlayer() {
         setIsOnAir(false);
         setIsPlaying(false);
         setCurrentTemplateId(null);
-        setTemplateOverrides(new Map());
+        setInstanceOverrides(new Map());
         setCurrentPhase('in');
         setPlayheadPosition(0);
         setLayerTemplates(new Map());
@@ -691,7 +721,10 @@ export function NovaPlayer() {
 
   // Subscribe to channel commands and load initial project
   useEffect(() => {
+    console.log(`[Nova Player] useEffect triggered - channelId: ${channelId}, supabase configured: ${!!supabase}`);
+
     if (!channelId || !supabase) {
+      console.error(`[Nova Player] Missing required config - channelId: ${channelId}, supabase: ${!!supabase}`);
       setConnectionStatus('error');
       return;
     }
@@ -699,9 +732,15 @@ export function NovaPlayer() {
     console.log(`[Nova Player] Subscribing to channel: ${channelId}`);
     setConnectionStatus('connecting');
 
+    // Track last processed command ID to prevent duplicate processing
+    // Using command ID instead of sequence because sequence comparison fails on initial load
+    let lastProcessedCommandId: string | null = null;
+
     // Note: We no longer call ensureFreshConnection() here since it was causing issues.
     // The realtime subscription will establish its own WebSocket connection.
     // Initial data loading uses direct REST API which bypasses the Supabase client.
+
+    console.log(`[Nova Player] Creating realtime subscription for table: pulsar_channel_state, filter: channel_id=eq.${channelId}`);
 
     const channel = supabase
       .channel(`nova-player:${channelId}`)
@@ -714,16 +753,26 @@ export function NovaPlayer() {
           filter: `channel_id=eq.${channelId}`,
         },
         (realtimePayload: { new: ChannelState }) => {
+          console.log(`[Nova Player] Realtime event received:`, realtimePayload);
           const state = realtimePayload.new;
           if (state?.pending_command) {
-            console.log(`[Nova Player] Received command:`, state.pending_command.type);
+            const cmdId = (state.pending_command as PlayerCommand & { id?: string }).id;
+            // Skip if we already processed this command
+            if (cmdId && cmdId === lastProcessedCommandId) {
+              console.log(`[Nova Player] Realtime: skipping already processed command ${cmdId}`);
+              return;
+            }
+            console.log(`[Nova Player] Received command via realtime:`, state.pending_command.type, state.pending_command);
+            if (cmdId) lastProcessedCommandId = cmdId;
             // Use ref to always call the latest handleCommand (avoids stale closure)
             handleCommandRef.current(state.pending_command);
+          } else {
+            console.log(`[Nova Player] Received update but no pending_command in payload`);
           }
         }
       )
-      .subscribe(async (status: string) => {
-        console.log(`[Nova Player] Subscription status:`, status);
+      .subscribe(async (status: string, err?: Error) => {
+        console.log(`[Nova Player] Subscription status:`, status, err ? `Error: ${err.message}` : '');
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           setIsReady(true);
@@ -740,17 +789,69 @@ export function NovaPlayer() {
             { column: 'id', value: channelId },
             5000
           );
-        } else if (status === 'CHANNEL_ERROR') {
-          setConnectionStatus('error');
-          // Update player_status to 'error'
-          await directRestUpdate(
-            'pulsar_channels',
-            { player_status: 'error' },
-            { column: 'id', value: channelId },
-            5000
-          );
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`[Nova Player] Realtime subscription ${status} - will rely on polling fallback`);
+          if (status === 'CHANNEL_ERROR') {
+            setConnectionStatus('error');
+            // Update player_status to 'error'
+            await directRestUpdate(
+              'pulsar_channels',
+              { player_status: 'error' },
+              { column: 'id', value: channelId },
+              5000
+            );
+          }
         }
       });
+
+    // Polling - check for new commands every 500ms
+    // This is the PRIMARY method for receiving commands (realtime is unreliable)
+    // Uses command ID to prevent duplicate processing instead of sequence numbers
+    let pollCount = 0;
+    const pollForCommands = async () => {
+      pollCount++;
+
+      try {
+        const stateResult = await directRestSelect<{
+          pending_command: (PlayerCommand & { id?: string }) | null;
+        }>(
+          'pulsar_channel_state',
+          'pending_command',
+          { column: 'channel_id', value: channelId },
+          3000
+        );
+
+        if (stateResult.error || !stateResult.data?.[0]) {
+          if (pollCount % 20 === 0) {
+            console.log(`[Nova Player] Poll #${pollCount}: no data or error`);
+          }
+          return;
+        }
+
+        const state = stateResult.data[0];
+        const cmd = state.pending_command;
+
+        // Log every 20th poll to show we're checking
+        if (pollCount % 20 === 0) {
+          console.log(`[Nova Player] Poll #${pollCount}: hasCmd=${!!cmd}, cmdId=${cmd?.id?.slice(0, 8) || 'none'}, lastId=${lastProcessedCommandId?.slice(0, 8) || 'none'}`);
+        }
+
+        // Process if there's a command with a different ID than what we last processed
+        if (cmd && cmd.id && cmd.id !== lastProcessedCommandId) {
+          console.log(`[Nova Player] Command received via polling (id: ${cmd.id.slice(0, 8)}):`, cmd.type);
+          lastProcessedCommandId = cmd.id;
+          handleCommandRef.current(cmd);
+        }
+      } catch (err) {
+        // Silently ignore polling errors to avoid console spam
+      }
+    };
+
+    // Start polling interval (500ms for responsive command handling)
+    const pollInterval = setInterval(pollForCommands, 500);
+
+    // Also poll immediately (but after a short delay to let initial load run first)
+    setTimeout(() => pollForCommands(), 100);
 
     // Load channel state using DIRECT REST API
     // Skip project loading here - commands contain embedded data for real-time playback
@@ -760,7 +861,10 @@ export function NovaPlayer() {
       const startTime = Date.now();
       try {
         // Check for any pending command using direct REST
-        const stateResult = await directRestSelect<{ pending_command: PlayerCommand | null; last_command: PlayerCommand | null }>(
+        const stateResult = await directRestSelect<{
+          pending_command: (PlayerCommand & { id?: string }) | null;
+          last_command: (PlayerCommand & { id?: string }) | null;
+        }>(
           'pulsar_channel_state',
           'pending_command,last_command',
           { column: 'channel_id', value: channelId },
@@ -776,12 +880,19 @@ export function NovaPlayer() {
         console.log(`[Nova Player] Channel state loaded (${Date.now() - startTime}ms):`, {
           hasPendingCommand: !!stateData?.pending_command,
           hasLastCommand: !!stateData?.last_command,
+          pendingCmdId: stateData?.pending_command?.id?.slice(0, 8) || 'none',
         });
 
-        // Execute pending command - the command handler will use embedded data
+        // Process pending command on initial load
+        // Track the command ID so polling doesn't re-process it
         if (stateData?.pending_command) {
+          const cmdId = stateData.pending_command.id;
+          console.log(`[Nova Player] Processing initial pending command (id: ${cmdId?.slice(0, 8)}):`, stateData.pending_command.type);
+          if (cmdId) lastProcessedCommandId = cmdId;
           handleCommandRef.current(stateData.pending_command);
         }
+
+        console.log(`[Nova Player] Initial channel state loaded`);
       } catch (err) {
         console.error(`[Nova Player] Error loading initial state after ${Date.now() - startTime}ms:`, err);
       }
@@ -807,6 +918,9 @@ export function NovaPlayer() {
 
       // Remove beforeunload listener
       window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Clear polling interval
+      clearInterval(pollInterval);
 
       // Unsubscribe from realtime channel
       supabase.removeChannel(channel);
@@ -981,19 +1095,15 @@ export function NovaPlayer() {
     }
   }, [mergedElements]);
 
-  // Apply content overrides to elements - per-template basis
-  const elementsWithOverrides = useMemo((): Element[] => {
-    if (templateOverrides.size === 0) {
-      return mergedElements;
+  // Apply content overrides to elements for a specific instance
+  // This function allows each instance to have its own payload data
+  const applyInstanceOverrides = useCallback((elements: Element[], instanceId: string): Element[] => {
+    const overrides = instanceOverrides.get(instanceId);
+    if (!overrides || Object.keys(overrides).length === 0) {
+      return elements;
     }
 
-    return mergedElements.map(element => {
-      // Get overrides for this element's template
-      const overrides = templateOverrides.get(element.template_id);
-      if (!overrides || Object.keys(overrides).length === 0) {
-        return element;
-      }
-
+    return elements.map(element => {
       let updatedElement = element;
 
       // Check by ID
@@ -1007,8 +1117,8 @@ export function NovaPlayer() {
         } else if (element.content?.type === 'image') {
           updatedElement = {
             ...updatedElement,
-            content: { ...updatedElement.content, src: override, url: override },
-          } as Element;
+            content: { ...updatedElement.content, src: override ?? undefined, url: override ?? undefined },
+          } as unknown as Element;
         }
       }
 
@@ -1044,15 +1154,18 @@ export function NovaPlayer() {
           } else if (updatedElement.content?.type === 'image') {
             updatedElement = {
               ...updatedElement,
-              content: { ...updatedElement.content, src: value, url: value },
-            } as Element;
+              content: { ...updatedElement.content, src: value ?? undefined, url: value ?? undefined },
+            } as unknown as Element;
           }
         }
       }
 
       return updatedElement;
     });
-  }, [mergedElements, templateOverrides]);
+  }, [instanceOverrides]);
+
+  // For backwards compatibility and always-on elements (no instance context)
+  const elementsWithOverrides = mergedElements;
 
   // Get always-on layer IDs
   const alwaysOnLayerIds = useMemo(() => {
@@ -1151,28 +1264,35 @@ export function NovaPlayer() {
     );
   }, [mergedAnimations, currentPhase, visibleElements, elementsWithOverrides]);
 
-  // Calculate max duration
+  // Calculate max duration - use phase duration from settings (matches Preview.tsx)
   const maxDuration = useMemo(() => {
+    // Primary: Use the phase duration from project settings
+    const phaseDuration = phaseDurations[currentPhase] || 1500;
+
+    // Get max from animations (for reference, but phase duration takes priority)
     const maxAnim = Math.max(0, ...currentAnimations.map((a) => a.delay + a.duration));
-    return Math.max(1000, maxAnim);
-  }, [currentAnimations]);
+
+    // Use phase duration from settings, but ensure it's at least as long as any animation
+    return Math.max(phaseDuration, maxAnim);
+  }, [currentAnimations, currentPhase, phaseDurations]);
 
   // Get max duration for a specific template's animations
   const getMaxDurationForTemplate = useCallback((templateId: string, phase: AnimationPhase): number => {
+    // Primary: Use the phase duration from project settings (matches Preview.tsx behavior)
+    const phaseDuration = phaseDurations[phase] || (phase === 'out' ? 500 : 1500);
+
     const templateAnimations = mergedAnimations.filter(
       a => a.phase === phase && mergedElements.some(e => e.id === a.element_id && e.template_id === templateId)
     );
 
-    // If no animations found for this phase
-    if (templateAnimations.length === 0) {
-      // For OUT phase, use fallback fade duration (500ms)
-      // For other phases, use default 1000ms
-      return phase === 'out' ? 500 : 1000;
-    }
+    // Get max from animations
+    const maxAnim = templateAnimations.length > 0
+      ? Math.max(0, ...templateAnimations.map(a => a.delay + a.duration))
+      : 0;
 
-    const maxAnim = Math.max(0, ...templateAnimations.map(a => a.delay + a.duration));
-    return Math.max(phase === 'out' ? 500 : 1000, maxAnim);
-  }, [mergedAnimations, mergedElements]);
+    // Use phase duration from settings, but ensure it's at least as long as any animation
+    return Math.max(phaseDuration, maxAnim);
+  }, [mergedAnimations, mergedElements, phaseDurations]);
 
   // Ref to track current getMaxDurationForTemplate to avoid stale closures
   const getMaxDurationForTemplateRef = useRef(getMaxDurationForTemplate);
@@ -1220,6 +1340,9 @@ export function NovaPlayer() {
       });
 
       // Update per-layer template animations
+      // Track instances that finished their OUT animation for cleanup
+      const finishedInstanceIds: string[] = [];
+
       setLayerTemplates(prev => {
         if (prev.size === 0) return prev;
 
@@ -1260,7 +1383,9 @@ export function NovaPlayer() {
               } else if (state.phase === 'out' || state.isOutgoing) {
                 // OUT complete - remove this template from the layer
                 hasChanges = true;
-                console.log(`[Nova Player] Template ${state.templateId} finished OUT animation on layer ${layerId}`);
+                console.log(`[Nova Player] Template ${state.templateId} (instance ${state.instanceId}) finished OUT animation on layer ${layerId}`);
+                // Track for payload cleanup
+                finishedInstanceIds.push(state.instanceId);
                 // Don't add to updatedStates - effectively removes it
               }
             } else {
@@ -1295,6 +1420,19 @@ export function NovaPlayer() {
 
         return hasChanges ? next : prev;
       });
+
+      // Clean up payload overrides for instances that finished OUT animation
+      // This prevents memory leaks from accumulating old instance payloads
+      if (finishedInstanceIds.length > 0) {
+        setInstanceOverrides(prev => {
+          const next = new Map(prev);
+          for (const instanceId of finishedInstanceIds) {
+            next.delete(instanceId);
+            console.log(`[Nova Player] Cleaned up payload for finished instance: ${instanceId}`);
+          }
+          return next;
+        });
+      }
 
       if (isRunning) {
         animationFrameRef.current = requestAnimationFrame(animate);
@@ -1415,14 +1553,19 @@ export function NovaPlayer() {
 
         {/* Render each active instance's elements - crucial for animated switching */}
         {/* This renders BOTH outgoing (animating OUT) and incoming (animating IN) instances */}
+        {/* Each instance gets its own payload overrides applied - critical for same template back-to-back */}
         {activeInstances.map((instance) => {
-          // Get elements for this template
-          const instanceElements = elementsWithOverrides.filter(
+          // Get elements for this template and apply instance-specific overrides
+          const templateElements = mergedElements.filter(
             e => e.template_id === instance.templateId &&
                  !alwaysOnTemplateIds.has(e.template_id) &&
                  e.visible !== false &&
                  !e.parent_element_id
           );
+          // Apply this instance's payload overrides (each instance has its own payload data)
+          const instanceElements = applyInstanceOverrides(templateElements, instance.instanceId);
+          // Also apply overrides to allElements for child element lookups
+          const allElementsForInstance = applyInstanceOverrides(mergedElements, instance.instanceId);
 
           return instanceElements
             .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
@@ -1430,7 +1573,7 @@ export function NovaPlayer() {
               <PlayerElement
                 key={`${instance.instanceId}-${element.id}`}
                 element={element}
-                allElements={elementsWithOverrides}
+                allElements={allElementsForInstance}
                 animations={mergedAnimations}
                 keyframes={mergedKeyframes}
                 playheadPosition={instance.playheadPosition}
@@ -1645,6 +1788,7 @@ function PlayerElement({
 
       case 'shape': {
         const animatedBgColor = animatedProps.backgroundColor;
+        // Cast to extended type that includes glow and texture
         const shapeContent = element.content as typeof element.content & {
           glow?: {
             enabled: boolean;
@@ -1653,10 +1797,26 @@ function PlayerElement({
             spread?: number;
             intensity?: number;
           };
+          texture?: {
+            enabled: boolean;
+            url: string;
+            thumbnailUrl?: string;
+            mediaType?: 'image' | 'video';
+            fit?: 'cover' | 'contain' | 'fill' | 'tile';
+            position?: { x: number; y: number };
+            scale?: number;
+            rotation?: number;
+            opacity?: number;
+            blur?: number;
+            blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
+            playbackMode?: 'loop' | 'pingpong' | 'once';
+            playbackSpeed?: number;
+          };
         };
         const glass = shapeContent.glass;
         const gradient = shapeContent.gradient;
         const glow = shapeContent.glow;
+        const texture = shapeContent.texture;
 
         const gradientValue = (() => {
           if (!gradient?.enabled || !gradient.colors || gradient.colors.length < 2) {
@@ -1708,13 +1868,16 @@ function PlayerElement({
           };
         })();
 
+        // Multiply glow intensity by animated opacity so glow fades with element
         const glowStyle: React.CSSProperties = (() => {
           if (!glow?.enabled) return {};
 
           const glowColor = glow.color || shapeContent.fill || '#8B5CF6';
           const blur = glow.blur ?? 20;
           const spread = glow.spread ?? 0;
-          const intensity = glow.intensity ?? 0.6;
+          const baseIntensity = glow.intensity ?? 0.6;
+          // Apply animated opacity to glow intensity for proper fade in/out
+          const intensity = baseIntensity * (animatedOpacity ?? 1);
 
           let colorWithAlpha = glowColor;
           if (glowColor.startsWith('#')) {
@@ -1767,6 +1930,111 @@ function PlayerElement({
 
         if (gradientValue) {
           return <div style={{ ...baseStyle, background: gradientValue, ...glowStyle, ...(element.styles || {}) }} />;
+        }
+
+        // If texture is enabled, render with texture background
+        if (texture?.enabled && texture.url) {
+          // For blend mode "normal", the texture should be the only visible background
+          // For other blend modes (multiply, screen, overlay, etc.), the fill color should show through
+          const textureBlendMode = texture.blendMode || 'normal';
+          const textureBaseBgColor = textureBlendMode === 'normal' ? 'transparent' : bgColorValue;
+
+          // Calculate texture background styles
+          const scale = texture.scale ?? 1;
+          const posX = texture.position?.x ?? 0;
+          const posY = texture.position?.y ?? 0;
+          const rotation = texture.rotation ?? 0;
+          const opacity = texture.opacity ?? 1;
+          const blur = texture.blur ?? 0;
+          const blendMode = texture.blendMode || 'normal';
+
+          // Map fit mode to background-size
+          const backgroundSize = (() => {
+            switch (texture.fit) {
+              case 'contain': return 'contain';
+              case 'fill': return '100% 100%';
+              case 'tile': return 'auto';
+              default: return 'cover'; // 'cover' is default
+            }
+          })();
+
+          // Calculate background position with offset
+          const bgPosX = 50 + posX;
+          const bgPosY = 50 + posY;
+
+          // For tile mode, use repeat; otherwise no-repeat
+          const backgroundRepeat = texture.fit === 'tile' ? 'repeat' : 'no-repeat';
+
+          // Scale up when blur is applied to hide soft edges
+          const blurScale = blur > 0 ? 1 + (blur * 0.04) : 1;
+
+          const textureBaseStyle: React.CSSProperties = {
+            ...baseStyle,
+            position: 'relative',
+            overflow: 'hidden',
+            backgroundColor: textureBaseBgColor,
+            ...(shapeContent.stroke && shapeContent.strokeWidth && shapeContent.strokeWidth > 0 ? {
+              border: `${shapeContent.strokeWidth}px solid ${shapeContent.stroke}`,
+            } : {}),
+            ...glowStyle,
+            ...(element.styles || {}),
+          };
+
+          const textureLayerStyle: React.CSSProperties = {
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${texture.url})`,
+            backgroundSize,
+            backgroundPosition: `${bgPosX}% ${bgPosY}%`,
+            backgroundRepeat,
+            opacity,
+            mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
+            filter: blur > 0 ? `blur(${blur}px)` : undefined,
+            transform: [
+              scale !== 1 || blurScale !== 1 ? `scale(${scale * blurScale})` : '',
+              rotation !== 0 ? `rotate(${rotation}deg)` : '',
+            ].filter(Boolean).join(' ') || undefined,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+          };
+
+          // If texture is a video, render video element
+          if (texture.mediaType === 'video') {
+            const videoStyle: React.CSSProperties = {
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: (texture.fit === 'cover' ? 'cover' : texture.fit === 'contain' ? 'contain' : 'fill') as React.CSSProperties['objectFit'],
+              objectPosition: `${bgPosX}% ${bgPosY}%`,
+              opacity,
+              mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
+              transform: rotation !== 0 || scale !== 1 ? `scale(${scale * blurScale}) rotate(${rotation}deg)` : undefined,
+              filter: blur > 0 ? `blur(${blur}px)` : undefined,
+              borderRadius: 'inherit',
+              pointerEvents: 'none',
+            };
+
+            return (
+              <div style={textureBaseStyle}>
+                <video
+                  src={texture.url}
+                  style={videoStyle}
+                  autoPlay
+                  loop={texture.playbackMode !== 'once'}
+                  muted
+                  playsInline
+                />
+              </div>
+            );
+          }
+
+          // For images, use background-image approach
+          return (
+            <div style={textureBaseStyle}>
+              <div style={textureLayerStyle} />
+            </div>
+          );
         }
 
         return <div style={{

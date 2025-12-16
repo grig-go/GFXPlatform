@@ -440,7 +440,13 @@ export function PlaylistPanel() {
   };
 
   const handleChannelChange = async (pageId: string, channelId: string | null) => {
-    await updatePageChannel(pageId, channelId);
+    try {
+      console.log('[PlaylistPanel] Changing channel for page:', pageId, 'to:', channelId);
+      await updatePageChannel(pageId, channelId);
+      console.log('[PlaylistPanel] Channel updated successfully');
+    } catch (error) {
+      console.error('[PlaylistPanel] Failed to update page channel:', error);
+    }
   };
 
   // Helper to get animations and keyframes from localStorage for a template
@@ -2135,21 +2141,23 @@ function SortablePageRow({
       </div>
 
       {/* Channel */}
-      <div className="w-20 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div className="w-20 shrink-0" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
         <Select
+          key={`channel-select-${page.id}-${page.channelId || 'none'}`}
           value={page.channelId || '__none__'}
-          onValueChange={(value) => onChannelChange(value === '__none__' ? null : value)}
+          onValueChange={(value) => {
+            console.log('[PageRow] Channel select changed:', value);
+            onChannelChange(value === '__none__' ? null : value);
+          }}
         >
           <SelectTrigger className="h-6 text-[10px] px-1.5 border-border/50 bg-transparent">
-            <SelectValue placeholder="--">
-              {channel ? channel.channelCode : '--'}
-            </SelectValue>
+            <SelectValue placeholder="--" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="z-[100]">
             <SelectItem value="__none__">--</SelectItem>
             {channels.map((ch) => (
               <SelectItem key={ch.id} value={ch.id}>
-                {ch.channelCode} - {ch.name}
+                {ch.channelCode}
               </SelectItem>
             ))}
           </SelectContent>

@@ -1,4 +1,4 @@
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, directRestSelect } from '@emergent-platform/supabase-client';
 import type {
   Project, Layer, Template, Element,
   Animation, Keyframe, Binding,
@@ -9,17 +9,19 @@ import type {
 // ============================================
 
 export async function fetchProject(projectId: string): Promise<Project | null> {
-  const { data, error } = await supabase
-    .from('gfx_projects')
-    .select('*')
-    .eq('id', projectId)
-    .single();
+  // Use direct REST API for reliable project loading
+  const result = await directRestSelect<Project>(
+    'gfx_projects',
+    '*',
+    { column: 'id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching project:', error);
+  if (result.error || !result.data?.[0]) {
+    console.error('Error fetching project:', result.error);
     return null;
   }
-  return data;
+  return result.data[0];
 }
 
 export async function fetchProjects(organizationId?: string): Promise<Project[]> {
@@ -474,23 +476,27 @@ export async function duplicateProject(projectId: string): Promise<Project | nul
 // ============================================
 
 export async function fetchLayers(projectId: string): Promise<Layer[]> {
-  const { data, error } = await supabase
-    .from('gfx_layers')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('z_index', { ascending: true });
+  // Use direct REST API for reliable layer loading
+  const result = await directRestSelect<Layer>(
+    'gfx_layers',
+    '*',
+    { column: 'project_id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching layers:', error);
+  if (result.error) {
+    console.error('Error fetching layers:', result.error);
     return [];
   }
-  
-  // Apply defaults for properties that may not exist in older records
-  return (data || []).map((layer) => ({
-    ...layer,
-    enabled: layer.enabled ?? true,
-    locked: layer.locked ?? false,
-  }));
+
+  // Sort by z_index and apply defaults
+  return (result.data || [])
+    .sort((a, b) => (a.z_index ?? 0) - (b.z_index ?? 0))
+    .map((layer) => ({
+      ...layer,
+      enabled: layer.enabled ?? true,
+      locked: layer.locked ?? false,
+    }));
 }
 
 export async function createLayer(layer: Partial<Layer>): Promise<Layer | null> {
@@ -512,38 +518,45 @@ export async function createLayer(layer: Partial<Layer>): Promise<Layer | null> 
 // ============================================
 
 export async function fetchTemplates(projectId: string): Promise<Template[]> {
-  const { data, error } = await supabase
-    .from('gfx_templates')
-    .select('*')
-    .eq('project_id', projectId)
-    .eq('archived', false)
-    .order('sort_order', { ascending: true });
+  // Use direct REST API for reliable template loading
+  // Note: directRestSelect doesn't support multiple filters, so we filter archived in JS
+  const result = await directRestSelect<Template>(
+    'gfx_templates',
+    '*',
+    { column: 'project_id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching templates:', error);
+  if (result.error) {
+    console.error('Error fetching templates:', result.error);
     return [];
   }
-  
-  // Apply defaults for properties that may not exist in older records
-  return (data || []).map((template) => ({
-    ...template,
-    enabled: template.enabled ?? true,
-    locked: template.locked ?? false,
-  }));
+
+  // Filter out archived and sort by sort_order, apply defaults
+  return (result.data || [])
+    .filter((t) => !t.archived)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((template) => ({
+      ...template,
+      enabled: template.enabled ?? true,
+      locked: template.locked ?? false,
+    }));
 }
 
 export async function fetchTemplate(templateId: string): Promise<Template | null> {
-  const { data, error } = await supabase
-    .from('gfx_templates')
-    .select('*')
-    .eq('id', templateId)
-    .single();
+  // Use direct REST API for reliable template loading
+  const result = await directRestSelect<Template>(
+    'gfx_templates',
+    '*',
+    { column: 'id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching template:', error);
+  if (result.error || !result.data?.[0]) {
+    console.error('Error fetching template:', result.error);
     return null;
   }
-  return data;
+  return result.data[0];
 }
 
 export async function createTemplate(template: Partial<Template>): Promise<Template | null> {
@@ -666,17 +679,21 @@ export async function duplicateTemplate(templateId: string): Promise<Template | 
 // ============================================
 
 export async function fetchElements(templateId: string): Promise<Element[]> {
-  const { data, error } = await supabase
-    .from('gfx_elements')
-    .select('*')
-    .eq('template_id', templateId)
-    .order('sort_order', { ascending: true });
+  // Use direct REST API for reliable element loading
+  const result = await directRestSelect<Element>(
+    'gfx_elements',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching elements:', error);
+  if (result.error) {
+    console.error('Error fetching elements:', result.error);
     return [];
   }
-  return data || [];
+
+  // Sort by sort_order
+  return (result.data || []).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
 export async function createElement(element: Partial<Element>): Promise<Element | null> {
@@ -724,16 +741,19 @@ export async function deleteElement(elementId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchAnimations(templateId: string): Promise<Animation[]> {
-  const { data, error } = await supabase
-    .from('gfx_animations')
-    .select('*')
-    .eq('template_id', templateId);
+  // Use direct REST API for reliable animation loading
+  const result = await directRestSelect<Animation>(
+    'gfx_animations',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching animations:', error);
+  if (result.error) {
+    console.error('Error fetching animations:', result.error);
     return [];
   }
-  return data || [];
+  return result.data || [];
 }
 
 export async function createAnimation(animation: Partial<Animation>): Promise<Animation | null> {
@@ -781,20 +801,24 @@ export async function deleteAnimation(animationId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchKeyframes(animationId: string): Promise<Keyframe[]> {
-  const { data, error } = await supabase
-    .from('gfx_keyframes')
-    .select('*')
-    .eq('animation_id', animationId)
-    .order('position', { ascending: true });
+  // Use direct REST API for reliable keyframe loading
+  const result = await directRestSelect<any>(
+    'gfx_keyframes',
+    '*',
+    { column: 'animation_id', value: animationId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching keyframes:', error);
+  if (result.error) {
+    console.error('Error fetching keyframes:', result.error);
     return [];
   }
 
-  // Ensure properties object is populated - merge individual columns if properties is empty
+  // Sort by position and ensure properties object is populated
   // This handles backward compatibility with keyframes that have data in individual columns
-  return (data || []).map((kf: any) => {
+  return (result.data || [])
+    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+    .map((kf: any) => {
     const properties = kf.properties && Object.keys(kf.properties).length > 0
       ? kf.properties
       : {};
@@ -891,16 +915,19 @@ export async function deleteKeyframe(keyframeId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchBindings(templateId: string): Promise<Binding[]> {
-  const { data, error } = await supabase
-    .from('gfx_bindings')
-    .select('*')
-    .eq('template_id', templateId);
+  // Use direct REST API for reliable binding loading
+  const result = await directRestSelect<Binding>(
+    'gfx_bindings',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching bindings:', error);
+  if (result.error) {
+    console.error('Error fetching bindings:', result.error);
     return [];
   }
-  return data || [];
+  return result.data || [];
 }
 
 export async function createBinding(binding: Partial<Binding>): Promise<Binding | null> {

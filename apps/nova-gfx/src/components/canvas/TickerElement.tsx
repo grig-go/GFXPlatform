@@ -217,9 +217,11 @@ function ScrollTicker({ items, config, className, style, onItemClick }: TickerMo
       <div
         className="inline-flex items-center h-full whitespace-nowrap will-change-transform"
         style={{
-          animation: translateAmount > 0
-            ? `ticker-scroll-px ${duration}s linear ${config.loop ? 'infinite' : '1'}`
-            : 'none',
+          // Use individual animation properties to avoid conflict with animationPlayState
+          animationName: translateAmount > 0 ? 'ticker-scroll-px' : 'none',
+          animationDuration: `${duration}s`,
+          animationTimingFunction: 'linear',
+          animationIterationCount: config.loop ? 'infinite' : '1',
           animationPlayState: isPaused ? 'paused' : 'running',
           '--ticker-translate': `-${translateAmount}px`,
         } as React.CSSProperties}

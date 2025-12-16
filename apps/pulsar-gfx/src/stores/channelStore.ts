@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, directRestUpdate, directRestSelect } from '@emergent-platform/supabase-client';
 import { useUIPreferencesStore } from './uiPreferencesStore';
 import { usePageStore } from './pageStore';
 import { usePlayoutLogStore } from './playoutLogStore';
@@ -187,14 +187,22 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   loadChannels: async () => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase
-        .from('pulsar_channels')
-        .select('*')
-        .order('channel_code');
+      // Use direct REST API for reliable channel loading
+      const channelsResult = await directRestSelect<any>(
+        'pulsar_channels',
+        '*',
+        undefined, // No filter - get all channels
+        5000
+      );
 
-      if (error) throw error;
+      if (channelsResult.error) throw new Error(channelsResult.error);
 
-      const channels: Channel[] = (data || []).map((c: any) => ({
+      // Sort by channel_code
+      const data = (channelsResult.data || []).sort((a: any, b: any) =>
+        (a.channel_code || '').localeCompare(b.channel_code || '')
+      );
+
+      const channels: Channel[] = data.map((c: any) => ({
         id: c.id,
         organizationId: c.organization_id,
         name: c.name,
@@ -238,15 +246,17 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         prefs.setSelectedChannelId(channels[0].id);
       }
 
-      // Load channel states
-      for (const channel of channels) {
-        const { data: stateData } = await supabase
-          .from('pulsar_channel_state')
-          .select('*')
-          .eq('channel_id', channel.id)
-          .single();
+      // Load channel states (in parallel for better performance)
+      const statePromises = channels.map(async (channel) => {
+        const stateResult = await directRestSelect<any>(
+          'pulsar_channel_state',
+          '*',
+          { column: 'channel_id', value: channel.id },
+          3000
+        );
 
-        if (stateData) {
+        if (stateResult.data?.[0]) {
+          const stateData = stateResult.data[0];
           const state: ChannelState = {
             id: stateData.id,
             channelId: stateData.channel_id,
@@ -262,7 +272,9 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
           };
           get().channelStates.set(channel.id, state);
         }
-      }
+      });
+
+      await Promise.all(statePromises);
     } catch (error) {
       console.error('Failed to load channels:', error);
       set({ error: 'Failed to load channels', isLoading: false });
@@ -278,21 +290,23 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   initializeChannel: async (channelId, projectId, force = false) => {
-    await get().sendCommand({
+    await get().sendCommandToChannel(channelId, {
       type: 'initialize',
-      channelId,
       projectId,
       forceReload: force,
     });
 
-    // Update loaded project
-    await supabase
-      .from('pulsar_channels')
-      .update({
+    // Update loaded project using direct REST API
+    await directRestUpdate(
+      'pulsar_channels',
+      {
         loaded_project_id: projectId,
         last_initialized: new Date().toISOString(),
-      })
-      .eq('id', channelId);
+        updated_at: new Date().toISOString(),
+      },
+      { column: 'id', value: channelId },
+      5000
+    );
   },
 
   sendCommand: async (command) => {
@@ -307,35 +321,48 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       channelId: command.channelId || channel.id,
     };
 
-    // First get current state to increment sequence
-    const { data: currentState, error: fetchError } = await supabase
-      .from('pulsar_channel_state')
-      .select('command_sequence')
-      .eq('channel_id', channel.id)
-      .single();
+    console.log('[channelStore] sendCommand:', fullCommand.type, 'id:', fullCommand.id.slice(0, 8));
 
-    if (fetchError) {
-      console.error('Failed to fetch channel state:', fetchError);
-      throw fetchError;
+    // Use direct REST API for reliable command delivery
+    // Step 1: Get current sequence
+    const stateResult = await directRestSelect<{ command_sequence: number }>(
+      'pulsar_channel_state',
+      'command_sequence',
+      { column: 'channel_id', value: channel.id },
+      5000
+    );
+
+    if (stateResult.error) {
+      console.error('[channelStore] Failed to fetch channel state:', stateResult.error);
+      throw new Error(stateResult.error);
     }
 
-    const newSequence = (currentState?.command_sequence || 0) + 1;
+    const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+    const newSequence = currentSequence + 1;
 
-    // Write to channel state (Nova Player picks up via realtime)
-    const { error } = await supabase
-      .from('pulsar_channel_state')
-      .update({
+    // Step 2: Send command via direct REST
+    const updateResult = await directRestUpdate(
+      'pulsar_channel_state',
+      {
         pending_command: fullCommand,
         command_sequence: newSequence,
         last_command: fullCommand,
         last_command_at: fullCommand.timestamp,
-      })
-      .eq('channel_id', channel.id);
+        updated_at: new Date().toISOString(),
+      },
+      { column: 'channel_id', value: channel.id },
+      5000
+    );
 
-    if (error) throw error;
+    if (!updateResult.success) {
+      console.error('[channelStore] Failed to send command:', updateResult.error);
+      throw new Error(updateResult.error || 'Command send failed');
+    }
 
-    // Log command
-    await supabase.from('pulsar_command_log').insert({
+    console.log('[channelStore] Command sent successfully, id:', fullCommand.id.slice(0, 8), 'seq:', newSequence);
+
+    // Log command (fire and forget - don't block on this)
+    supabase.from('pulsar_command_log').insert({
       organization_id: channel.organizationId,
       channel_id: channel.id,
       command_type: command.type,
@@ -343,6 +370,8 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       page_id: command.pageId,
       payload: command.payload,
       trigger_source: 'manual',
+    }).then(({ error }) => {
+      if (error) console.warn('Failed to log command:', error);
     });
   },
 
@@ -402,61 +431,49 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       ...command,
     };
 
-    console.log('Sending command to channel:', channelId, fullCommand);
+    console.log('[channelStore] Sending command to channel:', channelId, fullCommand.type, 'id:', fullCommand.id.slice(0, 8));
 
-    // First get current state to increment sequence
-    const { data: currentState, error: fetchError } = await supabase
-      .from('pulsar_channel_state')
-      .select('command_sequence')
-      .eq('channel_id', channelId)
-      .single();
+    // Use direct REST API for reliable command delivery
+    // Step 1: Get current sequence
+    const stateResult = await directRestSelect<{ command_sequence: number }>(
+      'pulsar_channel_state',
+      'command_sequence',
+      { column: 'channel_id', value: channelId },
+      5000
+    );
 
-    if (fetchError) {
-      console.error('Failed to fetch channel state:', fetchError);
-      // Channel state might not exist, try to create it
-      if (fetchError.code === 'PGRST116') {
-        console.log('Channel state not found, creating...');
-        const { error: insertError } = await supabase
-          .from('pulsar_channel_state')
-          .insert({
-            channel_id: channelId,
-            pending_command: fullCommand,
-            command_sequence: 1,
-            last_command: fullCommand,
-            last_command_at: fullCommand.timestamp,
-          });
-        if (insertError) {
-          console.error('Failed to create channel state:', insertError);
-          throw insertError;
-        }
-        console.log('Channel state created with command');
-        return;
-      }
-      throw fetchError;
+    if (stateResult.error) {
+      console.error('[channelStore] Failed to fetch channel state:', stateResult.error);
+      throw new Error(stateResult.error);
     }
 
-    const newSequence = (currentState?.command_sequence || 0) + 1;
+    const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+    const newSequence = currentSequence + 1;
+    console.log('[channelStore] Current sequence:', currentSequence, 'New sequence:', newSequence);
 
-    // Write to channel state (Nova Player picks up via realtime)
-    const { error } = await supabase
-      .from('pulsar_channel_state')
-      .update({
+    // Step 2: Send command via direct REST
+    const updateResult = await directRestUpdate(
+      'pulsar_channel_state',
+      {
         pending_command: fullCommand,
         command_sequence: newSequence,
         last_command: fullCommand,
         last_command_at: fullCommand.timestamp,
-      })
-      .eq('channel_id', channelId);
+        updated_at: new Date().toISOString(),
+      },
+      { column: 'channel_id', value: channelId },
+      5000
+    );
 
-    if (error) {
-      console.error('Failed to update channel state:', error);
-      throw error;
+    if (!updateResult.success) {
+      console.error('[channelStore] Failed to send command:', updateResult.error);
+      throw new Error(updateResult.error || 'Command send failed');
     }
 
-    console.log('Command sent successfully, sequence:', newSequence);
+    console.log('[channelStore] Command sent successfully, id:', fullCommand.id.slice(0, 8), 'seq:', newSequence);
 
-    // Log command (don't throw on error, just log)
-    const { error: logError } = await supabase.from('pulsar_command_log').insert({
+    // Log command (fire and forget - don't block on this)
+    supabase.from('pulsar_command_log').insert({
       organization_id: channel.organizationId,
       channel_id: channelId,
       command_type: command.type,
@@ -464,11 +481,9 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       page_id: command.pageId,
       payload: command.payload,
       trigger_source: 'manual',
+    }).then(({ error }) => {
+      if (error) console.warn('Failed to log command:', error);
     });
-
-    if (logError) {
-      console.warn('Failed to log command:', logError);
-    }
   },
 
   playOnChannel: async (channelId, pageId, layerIndex, template, payload, pageName?: string, projectName?: string) => {
@@ -585,6 +600,8 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   subscribeToChannelStatus: () => {
+    console.log('[channelStore] Setting up channel status subscription...');
+
     // Subscribe to all channel status changes (player_status updates)
     const subscription = supabase
       .channel('channel-status-updates')
@@ -596,8 +613,17 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
           table: 'pulsar_channels',
         },
         (payload: any) => {
+          console.log('[channelStore] Received channel update event:', payload);
           const newData = payload.new as any;
           const oldData = payload.old as any;
+
+          console.log('[channelStore] Channel status change:', {
+            channelId: newData.id,
+            channelCode: newData.channel_code,
+            oldStatus: oldData?.player_status,
+            newStatus: newData.player_status,
+            loadedProjectId: newData.loaded_project_id,
+          });
 
           // Check if player_status changed to 'disconnected'
           if (newData.player_status === 'disconnected' && oldData?.player_status !== 'disconnected') {
@@ -649,9 +675,19 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('[channelStore] Subscription status:', status, err ? `Error: ${err.message}` : '');
+        if (status === 'SUBSCRIBED') {
+          console.log('[channelStore] ✓ Successfully subscribed to channel status updates');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[channelStore] ⚠ Subscription timed out - Realtime may not be enabled for pulsar_channels table');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[channelStore] ✗ Subscription error - check if Realtime is enabled in Supabase dashboard');
+        }
+      });
 
     return () => {
+      console.log('[channelStore] Unsubscribing from channel status updates');
       subscription.unsubscribe();
     };
   },

@@ -2079,6 +2079,14 @@ export function Timeline() {
           updateKeyframe(keyframeId, { easing });
         };
 
+        // Handler to delete a property curve (removes that property from all keyframes)
+        const handleDeletePropertyCurve = (property: string, keyframeIds: string[]) => {
+          console.log('[Timeline] Deleting property curve:', property, 'from keyframes:', keyframeIds);
+          keyframeIds.forEach(kfId => {
+            removeKeyframeProperty(kfId, property);
+          });
+        };
+
         // Always use the current phase duration to match the main timeline width
         // This ensures the curve editor width aligns with the timeline above
         // DEBUG: Log all relevant values
@@ -2107,6 +2115,7 @@ export function Timeline() {
               playheadPosition={playheadPosition}
               onKeyframeUpdate={handleKeyframeUpdate}
               onEasingUpdate={handleEasingUpdate}
+              onDeletePropertyCurve={handleDeletePropertyCurve}
             />
           </div>
         );

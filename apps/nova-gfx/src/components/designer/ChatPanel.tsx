@@ -397,6 +397,15 @@ export function ChatPanel() {
   const skipImagesRef = useRef(false); // Flag to skip remaining image generation
   const [isSkippingImages, setIsSkippingImages] = useState(false); // UI state for skip button visibility
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
+  // Track last failed request for auto-retry on duplicate message
+  const lastFailedRequestRef = useRef<{
+    input: string;
+    attachments: Attachment[];
+    timestamp: number;
+  } | null>(null);
+  // Track auto-retry attempts for image requests (reset on success)
+  const autoRetryCountRef = useRef(0);
+  const MAX_AUTO_RETRIES = 1; // Auto-retry once for image requests
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1644,20 +1653,36 @@ export function ChatPanel() {
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image') => {
+    console.log('📁 [ChatPanel] handleFileChange called, type:', type);
     const files = e.target.files;
-    if (!files) return;
+    if (!files) {
+      console.log('  - No files selected');
+      return;
+    }
+    console.log('  - Files selected:', files.length);
 
     Array.from(files).forEach((file) => {
+      console.log('  - Processing file:', file.name, 'size:', file.size, 'type:', file.type);
       const reader = new FileReader();
       reader.onload = () => {
+        const dataUrl = reader.result as string;
+        console.log('  - File loaded, data URL length:', dataUrl?.length || 0);
+        console.log('  - Data URL prefix:', dataUrl?.substring(0, 50));
         const attachment: Attachment = {
           id: crypto.randomUUID(),
           type: type,
           name: file.name,
-          data: reader.result as string,
-          preview: type === 'image' ? reader.result as string : undefined,
+          data: dataUrl,
+          preview: type === 'image' ? dataUrl : undefined,
         };
-        setAttachments((prev) => [...prev, attachment]);
+        console.log('  - Adding attachment:', attachment.id, attachment.name);
+        setAttachments((prev) => {
+          console.log('  - Previous attachments count:', prev.length);
+          return [...prev, attachment];
+        });
+      };
+      reader.onerror = (err) => {
+        console.error('  - FileReader error:', err);
       };
       reader.readAsDataURL(file);
     });
@@ -1725,7 +1750,18 @@ export function ChatPanel() {
   const isAIAvailable = aiAvailability.available;
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    console.log('🚀 [ChatPanel] handleSend called');
+    console.log('  - input:', input.trim() ? `"${input.trim().substring(0, 50)}..."` : '(empty)');
+    console.log('  - attachments:', attachments.length);
+    console.log('  - isLoading:', isLoading);
+
+    // Allow sending if there's text OR attachments
+    if ((!input.trim() && attachments.length === 0) || isLoading) {
+      console.log('  - BLOCKED: no input and no attachments, or already loading');
+      return;
+    }
+
+    console.log('🔍 [ChatPanel] Passed initial check, continuing...');
 
     // Stop speech recognition when sending
     if (isListening && recognitionRef.current) {
@@ -1736,7 +1772,9 @@ export function ChatPanel() {
     }
 
     // Check if AI is available
+    console.log('🔍 [ChatPanel] Checking AI availability:', isAIAvailable);
     if (!isAIAvailable) {
+      console.log('  - AI NOT available, reason:', aiAvailability.reason);
       await addChatMessage({
         role: 'assistant',
         content: `**AI Not Available**
@@ -1754,12 +1792,24 @@ Alternatively, configure your API key in Settings (⚙️).`,
       });
       return;
     }
-    
+    console.log('  - AI is available, continuing...');
+
+    // Check if this is a retry of a failed request (same message sent within 60 seconds)
+    const isRetry = lastFailedRequestRef.current &&
+      lastFailedRequestRef.current.input === input.trim() &&
+      Date.now() - lastFailedRequestRef.current.timestamp < 60000;
+
+    if (isRetry) {
+      console.log('🔄 Detected retry of failed request - will use fresh connection');
+      // Clear the failed request ref since we're retrying
+      lastFailedRequestRef.current = null;
+    }
+
     // Note: Template selection is NOT required - AI will determine the correct layer
     // and create/select templates as needed
-    
+
     // Convert attachments to storage format
-    const chatAttachments: ChatAttachment[] | undefined = attachments.length > 0 
+    const chatAttachments: ChatAttachment[] | undefined = attachments.length > 0
       ? attachments.map((a) => ({
           id: a.id,
           type: a.type,
@@ -1769,20 +1819,39 @@ Alternatively, configure your API key in Settings (⚙️).`,
         }))
       : undefined;
 
-    // Add user message to store (persists to DB)
-    await addChatMessage({
-      role: 'user',
-      content: input,
-      attachments: chatAttachments,
-    });
-    
+    // Store the current request details in case it fails (for retry detection)
+    const currentRequestDetails = {
+      input: input.trim(),
+      attachments: [...attachments],
+      timestamp: Date.now(),
+    };
+
+    // Only add user message if this is NOT a retry (to avoid duplicate messages)
+    console.log('🔍 [ChatPanel] isRetry:', isRetry);
+    if (!isRetry) {
+      // Add user message to store (persists to DB)
+      console.log('🔍 [ChatPanel] Adding user message to store...');
+      await addChatMessage({
+        role: 'user',
+        content: input,
+        attachments: chatAttachments,
+      });
+      console.log('🔍 [ChatPanel] User message added');
+    } else {
+      // For retries, show a status message
+      console.log('🔄 Retrying previous request...');
+    }
+
     const userInput = input;
     const userAttachments = [...attachments];
     setInput('');
     setAttachments([]);
     setIsLoading(true);
-    
-    // Create AbortController for this request
+
+    // Create a fresh AbortController for this request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     abortControllerRef.current = new AbortController();
 
     try {
@@ -1796,11 +1865,24 @@ Alternatively, configure your API key in Settings (⚙️).`,
       let fullMessage = userInput;
       const imageAttachments: { data: string; mimeType: string }[] = [];
 
+      // Debug: Log user attachments
+      console.log('🔍 [ChatPanel] userAttachments count:', userAttachments.length);
+      userAttachments.forEach((a, i) => {
+        console.log(`  Attachment ${i + 1}:`, {
+          type: a.type,
+          name: a.name,
+          hasData: !!a.data,
+          dataLength: a.data?.length || 0,
+          dataPrefix: a.data?.substring(0, 50) || 'N/A',
+        });
+      });
+
       if (userAttachments.length > 0) {
         userAttachments.forEach((a) => {
           if ((a.type === 'image' || a.type === 'screenshot') && a.data) {
             // Extract base64 data and mime type
             const matches = a.data.match(/^data:([^;]+);base64,(.+)$/);
+            console.log(`  Regex match for ${a.name}:`, !!matches, matches ? `mimeType=${matches[1]}` : 'no match');
             if (matches) {
               imageAttachments.push({
                 mimeType: matches[1],
@@ -1823,6 +1905,9 @@ Alternatively, configure your API key in Settings (⚙️).`,
         fullMessage = `${attachmentDescriptions}\n\n${userInput}`;
       }
 
+      // Debug: Log final image attachments array
+      console.log('🔍 [ChatPanel] Final imageAttachments count:', imageAttachments.length);
+
       history.push({ role: 'user', content: fullMessage });
 
       // Documentation mode - simple Q&A about Nova/Pulsar GFX
@@ -1834,6 +1919,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
           role: 'assistant',
           content: responseText,
         });
+
+        // Clear failed request ref and reset auto-retry count on success
+        lastFailedRequestRef.current = null;
+        autoRetryCountRef.current = 0;
       } else {
         // Design mode - full AI assistant with canvas manipulation
         const context = buildContext();
@@ -1859,6 +1948,17 @@ Alternatively, configure your API key in Settings (⚙️).`,
 
         // Show initial thinking state
         setCreationProgress({ phase: 'thinking', message: 'Thinking...' });
+
+        // Debug: Log what we're sending to the AI
+        console.log('🔍 [ChatPanel] Preparing to send to AI:');
+        console.log('  - History messages:', history.length);
+        console.log('  - Image attachments:', imageAttachments.length);
+        if (imageAttachments.length > 0) {
+          imageAttachments.forEach((img, i) => {
+            console.log(`    Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+          });
+        }
+        console.log('  - AbortController active:', !!abortControllerRef.current);
 
         // Use streaming API for real-time progress
         const response = await sendChatMessageStreaming(
@@ -1936,6 +2036,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
         setCreationProgress({ phase: 'idle', message: '' });
         setActiveMessageId(null);
 
+        // Clear failed request ref and reset auto-retry count on success
+        lastFailedRequestRef.current = null;
+        autoRetryCountRef.current = 0;
+
         // Check if there are changes to apply - do this asynchronously
         const shouldAutoApply = response.changes && !isDrasticChange(response.changes);
         console.log('📋 AI response check:', { hasChanges: !!response.changes, shouldAutoApply, elementCount: response.changes?.elements?.length || 0 });
@@ -1985,8 +2089,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
           content: 'Request cancelled.',
           error: false,
         });
+        // Don't store cancelled requests for retry
       } else {
         console.error('Chat error:', error);
+
         // Add error message to store with more details
         const errorMessage = error instanceof Error
           ? error.message
@@ -1994,11 +2100,50 @@ Alternatively, configure your API key in Settings (⚙️).`,
           ? error
           : 'Unknown error occurred';
 
+        // Check if it's a timeout error
+        const isTimeout = errorMessage.includes('timed out') || errorMessage.includes('timeout') || errorMessage.includes('TimeoutError');
+
+        // Check if request had images attached
+        const hasImages = currentRequestDetails.attachments.some(a => a.type === 'image' || a.type === 'screenshot');
+
+        // Auto-retry for image requests that timed out (once)
+        if (isTimeout && hasImages && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+          autoRetryCountRef.current++;
+          console.log(`🔄 Auto-retrying image request (attempt ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES})...`);
+
+          // Store for manual retry detection (won't add duplicate user message)
+          lastFailedRequestRef.current = currentRequestDetails;
+
+          // Restore the input and attachments for retry
+          setInput(currentRequestDetails.input);
+          setAttachments(currentRequestDetails.attachments);
+
+          // Wait for cleanup then trigger retry with fresh connection
+          setTimeout(() => {
+            // Show reconnecting message
+            setCreationProgress({ phase: 'thinking', message: 'Reconnecting...' });
+            handleSend();
+          }, 1500);
+          return;
+        }
+
+        // Store the failed request details for retry detection
+        // This allows users to simply send the same message again to retry
+        lastFailedRequestRef.current = currentRequestDetails;
+        console.log('💾 Stored failed request for potential retry');
+
         await addChatMessage({
           role: 'assistant',
-          content: `Sorry, I encountered an error: ${errorMessage}. Please check your API key configuration and try again.`,
+          content: isTimeout
+            ? hasImages
+              ? `Request timed out after auto-retry. **Send the same message again to retry** with a fresh connection.`
+              : `Request timed out. **Send the same message again to retry** with a fresh connection.`
+            : `Sorry, I encountered an error: ${errorMessage}. Please check your API key configuration and try again.`,
           error: true,
         });
+
+        // Reset auto-retry count when showing error (so next attempt gets fresh retries)
+        autoRetryCountRef.current = 0;
       }
     } finally {
       setIsLoading(false);

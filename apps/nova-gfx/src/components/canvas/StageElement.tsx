@@ -896,13 +896,17 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         }, [glass?.enabled, glass?.opacity, glass?.blur, glass?.saturation, glass?.borderWidth, glass?.borderColor, shapeContent.fill, animatedOpacity]);
 
         // Compute glow box-shadow style
+        // IMPORTANT: For glass elements, container opacity is 1, so we must incorporate
+        // animatedOpacity into the glow intensity for proper fade in/out
         const glowStyle = useMemo((): React.CSSProperties => {
           if (!glow?.enabled) return {};
 
           const glowColor = glow.color || shapeContent.fill || '#8B5CF6';
           const blur = glow.blur ?? 20;
           const spread = glow.spread ?? 0;
-          const intensity = glow.intensity ?? 0.6;
+          const baseIntensity = glow.intensity ?? 0.6;
+          // Multiply glow intensity by animated opacity so glow fades with element
+          const intensity = baseIntensity * animatedOpacity;
 
           // Convert color to rgba with intensity
           let colorWithAlpha = glowColor;
@@ -922,7 +926,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           return {
             boxShadow: `0 0 ${blur}px ${spread}px ${colorWithAlpha}`,
           };
-        }, [glow?.enabled, glow?.color, glow?.blur, glow?.spread, glow?.intensity, shapeContent.fill]);
+        }, [glow?.enabled, glow?.color, glow?.blur, glow?.spread, glow?.intensity, shapeContent.fill, animatedOpacity]);
 
         // Compute texture style for background-image
         const textureStyle = useMemo((): React.CSSProperties => {

@@ -124,6 +124,7 @@ interface CurveGraphEditorProps {
   onKeyframeUpdate?: (keyframeId: string, property: string, value: number) => void;
   onEasingUpdate?: (keyframeId: string, easing: string) => void;
   onScrollChange?: (scrollLeft: number) => void;
+  onDeletePropertyCurve?: (property: string, keyframeIds: string[]) => void;
   className?: string;
 }
 
@@ -137,6 +138,7 @@ export function CurveGraphEditor({
   onKeyframeUpdate,
   onEasingUpdate,
   onScrollChange,
+  onDeletePropertyCurve,
   className,
 }: CurveGraphEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -148,6 +150,7 @@ export function CurveGraphEditor({
   const [selectedSegment, setSelectedSegment] = useState<{ prop: string; segmentIdx: number } | null>(null);
   const [hoveredHandle, setHoveredHandle] = useState<HandleId | null>(null);
   const [draggingHandle, setDraggingHandle] = useState<HandleId | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; property: string } | null>(null);
 
   // Height for the graph area
   const GRAPH_HEIGHT = 150;
@@ -413,6 +416,34 @@ export function CurveGraphEditor({
       return next;
     });
   }, []);
+
+  // Handle right-click context menu on property
+  const handlePropertyContextMenu = useCallback((e: React.MouseEvent, prop: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, property: prop });
+  }, []);
+
+  // Handle delete property curve
+  const handleDeletePropertyCurve = useCallback(() => {
+    if (!contextMenu || !onDeletePropertyCurve) return;
+
+    const curve = curveData.find(c => c.property === contextMenu.property);
+    if (curve) {
+      const keyframeIds = curve.keyframes.map(kf => kf.keyframeId);
+      onDeletePropertyCurve(contextMenu.property, keyframeIds);
+    }
+    setContextMenu(null);
+  }, [contextMenu, curveData, onDeletePropertyCurve]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   // Sync scroll position when scrollLeft prop changes
   useEffect(() => {
@@ -965,6 +996,7 @@ export function CurveGraphEditor({
             <button
               key={curve.property}
               onClick={() => toggleProperty(curve.property)}
+              onContextMenu={(e) => handlePropertyContextMenu(e, curve.property)}
               className={cn(
                 "flex items-center gap-2 w-full px-2 py-1 rounded hover:bg-muted/50 transition-colors",
                 !curve.visible && "opacity-40"
@@ -1006,6 +1038,26 @@ export function CurveGraphEditor({
           )}
         />
       </div>
+
+      {/* Context menu for property curves */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2 text-destructive"
+            onClick={handleDeletePropertyCurve}
+            disabled={!onDeletePropertyCurve}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete "{formatPropertyName(contextMenu.property)}" curve
+          </button>
+        </div>
+      )}
     </div>
   );
 }

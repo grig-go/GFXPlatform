@@ -160,8 +160,6 @@ export async function directRestSelect<T = any>(
       url += `&${filter.column}=eq.${filter.value}`;
     }
 
-    console.log(`[Supabase REST] GET ${table}`);
-
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -184,7 +182,6 @@ export async function directRestSelect<T = any>(
     }
 
     const data = await response.json();
-    console.log(`[Supabase REST] Success, ${data.length} rows`);
     markSupabaseSuccess();
     return { data };
   } catch (err: any) {

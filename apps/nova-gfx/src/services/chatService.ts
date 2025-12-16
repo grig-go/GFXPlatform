@@ -93,6 +93,17 @@ export async function saveChatMessage(
   // Get current user for user_id
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Strip large base64 data from attachments before saving to database
+  // We only store metadata (id, type, name) to avoid payload size limits
+  const sanitizedAttachments = message.attachments?.map(att => ({
+    id: att.id,
+    type: att.type,
+    name: att.name,
+    // Don't store full base64 data in DB - just store a flag that data existed
+    data: att.data ? '[IMAGE_DATA_STRIPPED]' : '',
+    preview: undefined, // Don't store preview either
+  })) || [];
+
   const { data, error } = await supabase
     .from('gfx_chat_messages')
     .insert({
@@ -100,7 +111,7 @@ export async function saveChatMessage(
       user_id: user?.id || null,
       role: message.role,
       content: message.content,
-      attachments: message.attachments || [],
+      attachments: sanitizedAttachments,
       changes_applied: message.changes_applied || null,
       error: message.error || false,
       context_template_id: message.context_template_id || null,

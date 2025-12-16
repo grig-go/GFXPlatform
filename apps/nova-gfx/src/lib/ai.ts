@@ -1646,6 +1646,52 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Default timeout for AI requests (2 minutes - AI calls can take a while)
+const AI_REQUEST_TIMEOUT_MS = 120000;
+// Extended timeout for requests with images (3 minutes - image analysis takes longer)
+const AI_REQUEST_WITH_IMAGES_TIMEOUT_MS = 180000;
+
+/**
+ * Helper: Wrap a fetch with timeout to prevent indefinite hangs
+ * Returns an AbortController that can be used to cancel the request
+ */
+function createTimeoutSignal(timeoutMs: number, existingSignal?: AbortSignal): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  console.log(`⏱️ [AI] Setting request timeout to ${timeoutMs / 1000} seconds`);
+
+  // Set up timeout
+  timeoutId = setTimeout(() => {
+    console.warn(`⏱️ [AI] Request timed out after ${timeoutMs / 1000} seconds`);
+    controller.abort(new DOMException('Request timed out after ' + (timeoutMs / 1000) + ' seconds', 'TimeoutError'));
+  }, timeoutMs);
+
+  // If there's an existing signal, listen for its abort
+  if (existingSignal) {
+    if (existingSignal.aborted) {
+      controller.abort(existingSignal.reason);
+    } else {
+      existingSignal.addEventListener('abort', () => {
+        controller.abort(existingSignal.reason);
+      }, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    },
+  };
+}
+
 // Send message to Gemini API with retry logic
 async function sendGeminiMessage(
   messages: ChatMessage[],
@@ -1709,6 +1755,9 @@ async function sendGeminiMessage(
     });
   }
 
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
+
   try {
     let response;
 
@@ -1726,7 +1775,7 @@ async function sendGeminiMessage(
           maxTokens: 16384,
           temperature: 0.7,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     } else {
       // Direct API call with user-supplied key
@@ -1750,7 +1799,7 @@ async function sendGeminiMessage(
               { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
             ],
           }),
-          signal,
+          signal: timeoutSignal,
         }
       );
     }
@@ -1781,14 +1830,26 @@ async function sendGeminiMessage(
     const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     return {
       message: responseText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
     // Preserve AbortError for proper cancellation handling
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+
+    // Handle timeout errors
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Gemini] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
 
     // Check if it's a network error that might be retryable
@@ -1867,6 +1928,9 @@ async function sendClaudeMessage(
     });
   }
 
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
+
   try {
     let response;
 
@@ -1884,7 +1948,7 @@ async function sendClaudeMessage(
           systemPrompt: systemPrompt,
           maxTokens: 16384,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     } else {
       // Direct API call with user-supplied key
@@ -1902,7 +1966,7 @@ async function sendClaudeMessage(
           system: systemPrompt,
           messages: apiMessages,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     }
 
@@ -1918,15 +1982,28 @@ async function sendClaudeMessage(
     const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     return {
       message: responseText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
     // Preserve AbortError for proper cancellation handling
     if (fetchError.name === 'AbortError') {
       throw fetchError;
     }
+
+    // Handle timeout errors
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Claude] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
+    }
+
     console.error('Claude API call failed:', fetchError);
     throw new Error(fetchError.message || 'Failed to connect to Claude. Please try again.');
   }
@@ -3458,120 +3535,143 @@ export async function sendDocsChatMessage(
   const modelConfig = AI_MODELS[modelId];
   const provider = modelConfig.provider;
 
-  if (provider === 'gemini') {
-    const geminiApiKey = getGeminiApiKey();
-    const useProxy = shouldUseBackendProxy('gemini');
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
 
-    if (!useProxy && !geminiApiKey) {
-      throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
-    }
+  try {
+    if (provider === 'gemini') {
+      const geminiApiKey = getGeminiApiKey();
+      const useProxy = shouldUseBackendProxy('gemini');
 
-    // Build Gemini-format messages with docs system prompt
-    const geminiContents: any[] = [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
-      { role: 'model', parts: [{ text: 'I understand. I am a documentation assistant for Nova GFX and Pulsar GFX. How can I help you?' }] },
-      ...messages.map((m) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      })),
-    ];
+      if (!useProxy && !geminiApiKey) {
+        throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
+      }
 
-    let response;
-    if (useProxy) {
-      response = await fetch('/.netlify/functions/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'gemini',
-          model: modelConfig.apiModel,
-          messages: geminiContents,
-          maxTokens: 16384,
-          temperature: 0.7,
-        }),
-        signal,
-      });
-    } else {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
-        {
+      // Build Gemini-format messages with docs system prompt
+      const geminiContents: any[] = [
+        { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
+        { role: 'model', parts: [{ text: 'I understand. I am a documentation assistant for Nova GFX and Pulsar GFX. How can I help you?' }] },
+        ...messages.map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        })),
+      ];
+
+      let response;
+      if (useProxy) {
+        response = await fetch('/.netlify/functions/ai-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: geminiContents,
-            generationConfig: { maxOutputTokens: 16384, temperature: 0.7 },
+            provider: 'gemini',
+            model: modelConfig.apiModel,
+            messages: geminiContents,
+            maxTokens: 16384,
+            temperature: 0.7,
           }),
-          signal,
-        }
-      );
-    }
+          signal: timeoutSignal,
+        });
+      } else {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: geminiContents,
+              generationConfig: { maxOutputTokens: 16384, temperature: 0.7 },
+            }),
+            signal: timeoutSignal,
+          }
+        );
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
-    }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+      }
 
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+      const data = await response.json();
+      cleanupTimeout();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
 
-  } else {
-    // Claude
-    const claudeApiKey = getClaudeApiKey();
-    const useProxy = shouldUseBackendProxy('claude');
-
-    if (!useProxy && !claudeApiKey) {
-      throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
-    }
-
-    const apiMessages = messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
-
-    let response;
-    if (useProxy) {
-      response = await fetch('/.netlify/functions/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'claude',
-          model: modelConfig.apiModel,
-          systemPrompt,
-          messages: apiMessages,
-          maxTokens: 16384,
-          temperature: 0.7,
-        }),
-        signal,
-      });
     } else {
-      // Use Vite proxy in development to avoid CORS issues
-      const apiUrl = import.meta.env.DEV
-        ? '/api/anthropic/v1/messages'
-        : 'https://api.anthropic.com/v1/messages';
+      // Claude
+      const claudeApiKey = getClaudeApiKey();
+      const useProxy = shouldUseBackendProxy('claude');
 
-      response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': claudeApiKey!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: modelConfig.apiModel,
-          max_tokens: 16384,
-          system: systemPrompt,
-          messages: apiMessages,
-        }),
-        signal,
-      });
+      if (!useProxy && !claudeApiKey) {
+        throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
+      }
+
+      const apiMessages = messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      let response;
+      if (useProxy) {
+        response = await fetch('/.netlify/functions/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'claude',
+            model: modelConfig.apiModel,
+            systemPrompt,
+            messages: apiMessages,
+            maxTokens: 16384,
+            temperature: 0.7,
+          }),
+          signal: timeoutSignal,
+        });
+      } else {
+        // Use Vite proxy in development to avoid CORS issues
+        const apiUrl = import.meta.env.DEV
+          ? '/api/anthropic/v1/messages'
+          : 'https://api.anthropic.com/v1/messages';
+
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': claudeApiKey!,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: modelConfig.apiModel,
+            max_tokens: 16384,
+            system: systemPrompt,
+            messages: apiMessages,
+          }),
+          signal: timeoutSignal,
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      cleanupTimeout();
+      return data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+    }
+  } catch (error: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Preserve AbortError for proper cancellation handling
+    if (error.name === 'AbortError') {
+      throw error;
     }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+    // Handle timeout errors
+    if (error.name === 'TimeoutError') {
+      console.error('❌ [Docs Chat] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
 
-    const data = await response.json();
-    return data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+    throw error;
   }
 }
 
@@ -3588,6 +3688,18 @@ export async function sendChatMessageStreaming(
   signal?: AbortSignal,
   onImageProgress?: ImageProgressCallback
 ): Promise<AIResponse> {
+  // Debug: Log incoming parameters
+  console.log('🔍 [sendChatMessageStreaming] Called with:');
+  console.log('  - messages:', messages.length);
+  console.log('  - images:', images?.length || 0);
+  console.log('  - modelId:', modelId);
+  console.log('  - signal:', !!signal);
+  if (images?.length) {
+    images.forEach((img, i) => {
+      console.log(`  - Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+    });
+  }
+
   // Get the user's latest message to detect intent
   const lastUserMessage = messages[messages.length - 1]?.content || '';
 
@@ -3701,9 +3813,13 @@ async function sendGeminiMessageStreaming(
     geminiContents.push({ role: 'user', parts });
   }
 
+  // Create timeout signal - use extended timeout when processing images
+  const timeoutMs = images && images.length > 0 ? AI_REQUEST_WITH_IMAGES_TIMEOUT_MS : AI_REQUEST_TIMEOUT_MS;
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(timeoutMs, signal);
+
   try {
     // Use streamGenerateContent endpoint for streaming
-    console.log('🔄 [Gemini Streaming] Starting stream with model:', modelConfig.apiModel);
+    console.log('🔄 [Gemini Streaming] Starting stream with model:', modelConfig.apiModel, images?.length ? `(with ${images.length} images)` : '');
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:streamGenerateContent?key=${geminiApiKey}&alt=sse`,
       {
@@ -3724,7 +3840,7 @@ async function sendGeminiMessageStreaming(
             { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
           ],
         }),
-        signal,
+        signal: timeoutSignal,
       }
     );
 
@@ -3769,6 +3885,9 @@ async function sendGeminiMessageStreaming(
       }
     }
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
     const changes = parseChangesFromResponse(fullText);
     return {
@@ -3776,8 +3895,16 @@ async function sendGeminiMessageStreaming(
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Handle abort and timeout errors
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Gemini Streaming] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
     console.error('❌ [Gemini Streaming] API call failed:', fetchError);
     console.log('⚠️ [Gemini Streaming] Falling back to non-streaming mode');
@@ -3840,7 +3967,20 @@ async function sendClaudeMessageStreaming(
     }
   }
 
+  // Create timeout signal - use extended timeout when processing images
+  const timeoutMs = images && images.length > 0 ? AI_REQUEST_WITH_IMAGES_TIMEOUT_MS : AI_REQUEST_TIMEOUT_MS;
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(timeoutMs, signal);
+
   try {
+    console.log('🔄 [Claude Streaming] Starting stream with model:', modelConfig.apiModel, images?.length ? `(with ${images.length} images)` : '');
+    console.log('🔄 [Claude Streaming] Message count:', apiMessages.length);
+    console.log('🔄 [Claude Streaming] Last message type:', typeof apiMessages[apiMessages.length - 1]?.content);
+    if (images?.length) {
+      console.log('🔄 [Claude Streaming] Image details:');
+      images.forEach((img, i) => {
+        console.log(`   Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+      });
+    }
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -3856,7 +3996,7 @@ async function sendClaudeMessageStreaming(
         messages: apiMessages,
         stream: true,
       }),
-      signal,
+      signal: timeoutSignal,
     });
 
     if (!response.ok) {
@@ -3900,6 +4040,9 @@ async function sendClaudeMessageStreaming(
       }
     }
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
     const changes = parseChangesFromResponse(fullText);
     return {
@@ -3907,8 +4050,16 @@ async function sendClaudeMessageStreaming(
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Handle abort and timeout errors
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Claude Streaming] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
     console.error('Claude streaming API call failed:', fetchError);
     // Fall back to non-streaming
