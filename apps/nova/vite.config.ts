@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { projectId, publicAnonKey } from './src/utils/supabase/info';
 
 export default defineConfig(({ mode }) => {
   // Load env from both current dir and monorepo root
@@ -11,6 +10,11 @@ export default defineConfig(({ mode }) => {
   const localEnv = loadEnv(mode, process.cwd(), '');
   // Merge environments (local takes precedence)
   const env = { ...rootEnv, ...localEnv };
+
+  // Extract Supabase info from environment (instead of importing from info.tsx which uses import.meta.env)
+  const supabaseUrl = env.VITE_SUPABASE_URL || '';
+  const projectId = supabaseUrl.replace('https://', '').replace('http://', '').replace('.supabase.co', '').split(':')[0];
+  const publicAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
 
   return {
     plugins: [
