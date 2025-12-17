@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export interface DailyForecast {
   date: string;
@@ -79,7 +80,7 @@ export async function fetchWeatherLocations(bounds?: MapBounds): Promise<Weather
     }
     
     // Build URL with bounds query params if provided
-    let url = `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`;
+    let url = `${supabaseUrl}/functions/v1/weather_dashboard/weather-data`;
     if (bounds) {
       const params = new URLSearchParams({
         north: bounds.north.toString(),
@@ -247,7 +248,7 @@ export async function fetchRadarFrames(): Promise<RadarFrame[]> {
     console.log('🌧️ Fetching radar frames via backend proxy...');
     
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/weather/radar`,
+      `${supabaseUrl}/functions/v1/map_data/weather/radar`,
       {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,

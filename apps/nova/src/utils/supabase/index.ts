@@ -17,6 +17,3 @@ export {
   getSupabaseHeaders,
 } from './config';
 
-// Legacy exports (for backwards compatibility)
-// These come from info.tsx and are hardcoded
-export { projectId, publicAnonKey } from './info';

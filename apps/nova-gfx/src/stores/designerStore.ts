@@ -73,8 +73,8 @@ async function directRestDelete(
     return { success: true };
   }
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { success: false, error: 'Supabase not configured' };
@@ -120,8 +120,8 @@ async function directRestUpsert(
   data: Record<string, unknown> | Record<string, unknown>[],
   timeoutMs: number = 15000
 ): Promise<{ success: boolean; error?: string }> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { success: false, error: 'Supabase not configured' };

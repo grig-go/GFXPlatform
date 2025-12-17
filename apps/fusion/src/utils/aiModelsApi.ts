@@ -1,11 +1,13 @@
 // AI Models API - for fetching and storing model lists
 
-import { projectId, publicAnonKey } from './supabase/info';
 import { fetchOpenAIModels } from './openaiApi';
 import { fetchGeminiModels } from './geminiApi';
 import type { AIProvider } from './aiProviderSettings';
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/map_data`;
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const API_URL = `${supabaseUrl}/functions/v1/map_data`;
 
 /**
  * Fetch models from the AI provider and save to backend

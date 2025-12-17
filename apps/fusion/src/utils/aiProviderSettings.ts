@@ -1,6 +1,7 @@
 // AI Provider Settings Management
 
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export type AIProvider = 'openai' | 'gemini';
 
@@ -12,7 +13,7 @@ export interface AIProviderSettings {
 }
 
 const STORAGE_KEY = 'fusion-ai-provider-settings';
-const API_URL = `https://${projectId}.supabase.co/functions/v1/map_data`;
+const API_URL = `${supabaseUrl}/functions/v1/map_data`;
 
 // Available models for each provider
 export const OPENAI_MODELS = [

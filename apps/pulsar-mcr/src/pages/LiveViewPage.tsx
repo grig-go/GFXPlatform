@@ -29,7 +29,7 @@ import { useChannelMSE } from '../hooks/useChannelMSE';
 import { isScheduleActive } from '../components/ScheduleCellRenderer';
 import { useGridExpandedRows, useGridColumnState } from '../contexts/GridStateContext';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
 
 // Types for the hierarchy
 interface ElementField {

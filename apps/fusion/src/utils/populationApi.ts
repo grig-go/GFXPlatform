@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export interface PopulationFeature {
   type: 'Feature';
@@ -24,7 +25,7 @@ export async function fetchPopulationData(): Promise<PopulationData | null> {
     console.log('Fetching population data from server...');
     
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/population`,
+      `${supabaseUrl}/functions/v1/map_data/population`,
       {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
@@ -57,7 +58,7 @@ export async function initializePopulationData(): Promise<PopulationData | null>
     
     // Try to fetch full Census data first
     const fetchResponse = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/population/fetch`,
+      `${supabaseUrl}/functions/v1/map_data/population/fetch`,
       {
         method: 'POST',
         headers: {
@@ -76,7 +77,7 @@ export async function initializePopulationData(): Promise<PopulationData | null>
     // If Census API fails, fall back to sample data
     console.log('Census API failed, falling back to sample data...');
     const seedResponse = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/population/seed`,
+      `${supabaseUrl}/functions/v1/map_data/population/seed`,
       {
         method: 'POST',
         headers: {

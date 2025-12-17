@@ -11,10 +11,11 @@ export default defineConfig(({ mode }) => {
   // Merge environments (local takes precedence)
   const env = { ...rootEnv, ...localEnv };
 
-  // Extract Supabase info from environment (instead of importing from info.tsx which uses import.meta.env)
-  const supabaseUrl = env.VITE_SUPABASE_URL || '';
-  const projectId = supabaseUrl.replace('https://', '').replace('http://', '').replace('.supabase.co', '').split(':')[0];
-  const publicAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
+  // Extract Supabase info from environment (app-specific with fallback)
+  const supabaseUrl = env.VITE_NOVA_SUPABASE_URL || env.VITE_SUPABASE_URL || '';
+  const publicAnonKey = env.VITE_NOVA_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '';
+  // Separate URL for edge functions (allows local edge functions with remote Supabase)
+  const edgeFunctionsUrl = env.VITE_NOVA_EDGE_FUNCTIONS_URL || supabaseUrl;
 
   return {
     plugins: [
@@ -32,17 +33,14 @@ export default defineConfig(({ mode }) => {
               console.log('Query string:', queryString);
 
               try {
-                // Use Supabase credentials from info file
-                const supabaseUrl = `https://${projectId}.supabase.co`;
-
                 // Create headers object
                 const headers: Record<string, string> = {
                   'Authorization': `Bearer ${publicAnonKey}`,
                   'Accept': req.headers.accept || '*/*',
                 };
 
-                // Construct the full URL
-                const targetUrl = `${supabaseUrl}/functions/v1/nova-election${queryString ? '?' + queryString : ''}`;
+                // Construct the full URL (use edgeFunctionsUrl for proxy)
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/nova-election${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function
@@ -106,17 +104,14 @@ export default defineConfig(({ mode }) => {
               console.log('Query string:', queryString);
 
               try {
-                // Use Supabase credentials from info file
-                const supabaseUrl = `https://${projectId}.supabase.co`;
-
                 // Create headers object
                 const headers: Record<string, string> = {
                   'Authorization': `Bearer ${publicAnonKey}`,
                   'Accept': req.headers.accept || '*/*',
                 };
 
-                // Construct the full URL
-                const targetUrl = `${supabaseUrl}/functions/v1/nova-weather${queryString ? '?' + queryString : ''}`;
+                // Construct the full URL (use edgeFunctionsUrl for proxy)
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/weather_dashboard${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function
@@ -182,7 +177,7 @@ export default defineConfig(({ mode }) => {
 
               try {
                 // Use Supabase credentials from info file
-                const supabaseUrl = `https://${projectId}.supabase.co`;
+                // supabaseUrl is already defined at the top level
 
                 // Create headers object
                 const headers: Record<string, string> = {
@@ -190,8 +185,8 @@ export default defineConfig(({ mode }) => {
                   'Accept': req.headers.accept || '*/*',
                 };
 
-                // Construct the full URL
-                const targetUrl = `${supabaseUrl}/functions/v1/nova-finance${queryString ? '?' + queryString : ''}`;
+                // Construct the full URL (use edgeFunctionsUrl for proxy)
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/nova-finance${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function
@@ -257,7 +252,7 @@ export default defineConfig(({ mode }) => {
 
               try {
                 // Use Supabase credentials from info file
-                const supabaseUrl = `https://${projectId}.supabase.co`;
+                // supabaseUrl is already defined at the top level
 
                 // Create headers object
                 const headers: Record<string, string> = {
@@ -265,8 +260,8 @@ export default defineConfig(({ mode }) => {
                   'Accept': req.headers.accept || '*/*',
                 };
 
-                // Construct the full URL
-                const targetUrl = `${supabaseUrl}/functions/v1/nova-sports${queryString ? '?' + queryString : ''}`;
+                // Construct the full URL (use edgeFunctionsUrl for proxy)
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/nova-sports${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function
@@ -331,7 +326,7 @@ export default defineConfig(({ mode }) => {
 
               try {
                 // Use Supabase credentials from info file
-                const supabaseUrl = `https://${projectId}.supabase.co`;
+                // supabaseUrl is already defined at the top level
 
                 // Create headers object
                 const headers: Record<string, string> = {
@@ -365,8 +360,8 @@ export default defineConfig(({ mode }) => {
                   }
                 }
 
-                // Construct the full URL
-                const targetUrl = `${supabaseUrl}/functions/v1/api-endpoints/${slug}${queryString ? '?' + queryString : ''}`;
+                // Construct the full URL (use edgeFunctionsUrl for proxy)
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/api-endpoints/${slug}${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function

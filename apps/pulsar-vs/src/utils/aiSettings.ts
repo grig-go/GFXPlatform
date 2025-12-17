@@ -1,4 +1,4 @@
-import { projectId } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
 
 export const GEMINI_MODELS = [
   'gemini-2.5-flash-lite',
@@ -87,7 +87,7 @@ export const callGoogleAPIViaProxy = async (url: string, method: string, headers
         throw new Error('Not authenticated');
     }
 
-    const proxyUrl = `https://${projectId}.supabase.co/functions/v1/make-server-58b4ce0e/fetch-proxy`;
+    const proxyUrl = `${supabaseUrl}/functions/v1/make-server-58b4ce0e/fetch-proxy`;
     
     const response = await fetch(proxyUrl, {
         method: 'POST',

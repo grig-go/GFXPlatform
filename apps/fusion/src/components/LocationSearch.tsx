@@ -4,7 +4,9 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Search, MapPin, ThermometerSun, Users, AlertCircle } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function LocationSearch() {
   const [searchTerm, setSearchTerm] = useState('Mustang');
@@ -22,7 +24,7 @@ export function LocationSearch() {
     try {
       // Search in population data
       const populationResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/map_data/population`,
+        `${supabaseUrl}/functions/v1/map_data/population`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -43,7 +45,7 @@ export function LocationSearch() {
 
       // Search in weather data
       const weatherResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
+        `${supabaseUrl}/functions/v1/weather_dashboard/weather-data`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -81,7 +83,7 @@ export function LocationSearch() {
 
       // Get AI infrastructure data
       const aiInfraResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/map_data/ai-infra`,
+        `${supabaseUrl}/functions/v1/map_data/ai-infra`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,

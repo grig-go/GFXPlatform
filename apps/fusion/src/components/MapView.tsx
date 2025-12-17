@@ -1735,8 +1735,8 @@ export function MapView({ selectedChambers, selectedDataOptions, sidebarPosition
   useEffect(() => {
     const loadMediaAssets = async () => {
       try {
-        const { projectId, publicAnonKey } = await import('../utils/supabase/info');
-        const supabaseUrl = `https://${projectId}.supabase.co`;
+        const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+        const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
         // Request with high limit to get all media assets
         // The edge function defaults to limit=24, we need to override this

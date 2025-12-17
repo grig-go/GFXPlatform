@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase URL and public anon key
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Supabase URL and public anon key (app-specific with fallback)
+const supabaseUrl = import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_PULSAR_MCR_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Missing Supabase environment variables. Check your .env file');

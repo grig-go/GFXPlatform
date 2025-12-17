@@ -62,10 +62,10 @@ export function SystemLocked({ appName = 'Nova' }: SystemLockedProps) {
                 To create a superuser:
               </h4>
               <div className="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                <code>npm run create-superuser</code>
+                <code>npm run --prefix apps/nova create-superuser</code>
               </div>
               <p className="text-sm text-muted-foreground">
-                Run this command in the project directory. You'll be prompted to enter an email address and password for the superuser account.
+                Run this command from the project root directory. You'll be prompted to enter an email address and password for the superuser account.
               </p>
             </div>
 

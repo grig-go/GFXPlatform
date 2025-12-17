@@ -67,10 +67,10 @@ export const SystemLocked: React.FC = () => {
               fontFamily: 'monospace',
             }}
           >
-            <Code>npm run create-superuser</Code>
+            <Code>npm run --prefix apps/nova create-superuser</Code>
           </div>
           <p style={{ color: '#a7b6c2', fontSize: '13px', marginTop: '10px' }}>
-            Run this command in the project directory. You'll be prompted to enter an email address
+            Run this command from the project root directory. You'll be prompted to enter an email address
             and password for the superuser account.
           </p>
         </div>

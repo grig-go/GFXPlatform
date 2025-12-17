@@ -1,7 +1,9 @@
-import { projectId, publicAnonKey } from './supabase/info';
 import { supabase } from '../supabaseClient';
 
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/map_settings`;
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const BASE_URL = `${supabaseUrl}/functions/v1/map_settings`;
 
 export interface MapSettings {
   map_style?: string;

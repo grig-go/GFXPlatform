@@ -349,8 +349,9 @@ export const generateImageWithImagen = async (
       if (config.storage.enabled) {
         // Upload via media-library edge function instead of direct storage
         try {
-          const { projectId, publicAnonKey } = await import('../utils/supabase/info');
-          
+          const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+          const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
           // Convert base64 to blob
           const base64Response = await fetch(`data:image/png;base64,${base64Image}`);
           const imageBlob = await base64Response.blob();
@@ -367,7 +368,7 @@ export const generateImageWithImagen = async (
 
           // Upload via edge function
           const uploadResponse = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/media-library`,
+            `${supabaseUrl}/functions/v1/media-library`,
             {
               method: 'POST',
               headers: {
@@ -511,7 +512,8 @@ export const editImageWithImagen = async (
     // Upload to storage if enabled
     if (config.storage.enabled) {
       try {
-        const { projectId, publicAnonKey } = await import('../utils/supabase/info');
+        const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+        const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
         const base64Response = await fetch(`data:image/png;base64,${base64Image}`);
         const imageBlob = await base64Response.blob();
@@ -526,7 +528,7 @@ export const editImageWithImagen = async (
         formData.append('tags', JSON.stringify(['virtual-set', 'backdrop', 'ai-edited']));
 
         const uploadResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/media-library`,
+          `${supabaseUrl}/functions/v1/media-library`,
           {
             method: 'POST',
             headers: {

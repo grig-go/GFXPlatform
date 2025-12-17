@@ -11,15 +11,17 @@ import {
 } from './ui/select';
 import { Badge } from './ui/badge';
 import { Skeleton } from './ui/skeleton';
-import { 
-  AlertCircle, 
-  Database, 
-  RefreshCw, 
+import {
+  AlertCircle,
+  Database,
+  RefreshCw,
   Table as TableIcon,
   ChevronDown,
   ChevronRight
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 interface TableInfo {
   name: string;
@@ -41,7 +43,7 @@ export function TableViewer() {
     const fetchTables = async () => {
       try {
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/map_data/tables`,
+          `${supabaseUrl}/functions/v1/map_data/tables`,
           {
             headers: {
               'Authorization': `Bearer ${publicAnonKey}`,
@@ -77,7 +79,7 @@ export function TableViewer() {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/table/${tableName}`,
+        `${supabaseUrl}/functions/v1/table/${tableName}`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,

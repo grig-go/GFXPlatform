@@ -56,11 +56,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
-import {
-  projectId,
-  publicAnonKey,
-} from "../utils/supabase/info";
 import { useProject } from "./ProjectContext";
+
+const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 import { ProjectSelector } from "./ProjectSelector";
 import { ProjectManagementModal } from "./ProjectManagementModal";
 import {
@@ -1159,7 +1158,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       console.log("[VirtualSetPage] Loading channels from edge function...");
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/channels?type=Unreal`,
+        `${supabaseUrl}/functions/v1/channels?type=Unreal`,
         {
           method: "GET",
           headers: {
@@ -1362,7 +1361,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       if (searchQuery.trim()) params.append("search", searchQuery.trim());
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/media-library?${params.toString()}`,
+        `${supabaseUrl}/functions/v1/media-library?${params.toString()}`,
         {
           method: "GET",
           headers: {
@@ -1757,7 +1756,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         if (!isEditMode) {
           try {
             const response = await fetch(
-              `https://${projectId}.supabase.co/functions/v1/media-library`,
+              `${supabaseUrl}/functions/v1/media-library`,
               {
                 method: "POST",
                 headers: {

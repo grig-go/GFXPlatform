@@ -379,7 +379,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Project URL</span>
                     <code className="text-xs bg-background px-2 py-0.5 rounded font-mono">
-                      {import.meta.env.VITE_SUPABASE_URL || 'Not configured'}
+                      {import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || 'Not configured'}
                     </code>
                   </div>
                   <div className="flex items-center justify-between">

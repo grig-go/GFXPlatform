@@ -1,50 +1,36 @@
-import { projectId, publicAnonKey } from './info';
+const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 /**
- * Get Supabase URL from environment variables or fallback to info.tsx
+ * Get Supabase URL from environment variables
  */
 export function getSupabaseUrl(): string {
-  // Check if import.meta.env exists (Vite environment)
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) {
-    return import.meta.env.VITE_SUPABASE_URL;
-  }
-  
-  // Fallback to projectId from info.tsx
-  return `https://${projectId}.supabase.co`;
+  return supabaseUrl;
 }
 
 /**
- * Get Supabase Anon Key from environment variables or fallback to info.tsx
+ * Get Supabase Anon Key from environment variables
  */
 export function getSupabaseAnonKey(): string {
-  // Check if import.meta.env exists (Vite environment)
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    return import.meta.env.VITE_SUPABASE_ANON_KEY;
-  }
-  
-  // Fallback to publicAnonKey from info.tsx
   return publicAnonKey;
 }
 
 /**
- * Get the project ID (extracted from URL or from info.tsx)
+ * Get the project ID (extracted from URL)
  */
 export function getProjectId(): string {
-  const url = getSupabaseUrl();
-  
-  // If it's a local URL, return the fallback projectId
-  if (url.includes('localhost') || url.includes('127.0.0.1')) {
-    return projectId;
+  // If it's a local URL, return the host:port
+  if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1') || supabaseUrl.match(/192\.168\./)) {
+    return supabaseUrl.replace('https://', '').replace('http://', '');
   }
-  
+
   // Extract project ID from URL: https://project-id.supabase.co
-  const match = url.match(/https?:\/\/([^.]+)\.supabase\.co/);
+  const match = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/);
   if (match && match[1]) {
     return match[1];
   }
-  
-  // Fallback
-  return projectId;
+
+  return supabaseUrl.replace('https://', '').replace('http://', '');
 }
 
 /**
@@ -53,9 +39,8 @@ export function getProjectId(): string {
  * @returns Full URL to the edge function
  */
 export function getEdgeFunctionUrl(path: string): string {
-  const baseUrl = getSupabaseUrl();
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${baseUrl}/functions/v1/${cleanPath}`;
+  return `${supabaseUrl}/functions/v1/${cleanPath}`;
 }
 
 /**
@@ -64,9 +49,8 @@ export function getEdgeFunctionUrl(path: string): string {
  * @returns Full URL to the REST endpoint
  */
 export function getRestUrl(path: string): string {
-  const baseUrl = getSupabaseUrl();
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${baseUrl}/rest/v1/${cleanPath}`;
+  return `${supabaseUrl}/rest/v1/${cleanPath}`;
 }
 
 /**
@@ -74,10 +58,9 @@ export function getRestUrl(path: string): string {
  * @param additionalHeaders - Optional additional headers to merge
  */
 export function getSupabaseHeaders(additionalHeaders?: Record<string, string>): Record<string, string> {
-  const anonKey = getSupabaseAnonKey();
   return {
-    'Authorization': `Bearer ${anonKey}`,
-    'apikey': anonKey,
+    'Authorization': `Bearer ${publicAnonKey}`,
+    'apikey': publicAnonKey,
     'Content-Type': 'application/json',
     ...additionalHeaders,
   };

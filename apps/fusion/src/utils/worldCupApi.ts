@@ -1,6 +1,7 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/map_data`;
+const SERVER_URL = `${supabaseUrl}/functions/v1/map_data`;
 
 export interface WorldCupStadium {
   name: string;

@@ -1,6 +1,7 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/map_data`;
+const BASE_URL = `${supabaseUrl}/functions/v1/map_data`;
 
 export async function fetchAgeData(chamber: 'house' | 'senate') {
   const response = await fetch(`${BASE_URL}/demographics/age/${chamber}`, {

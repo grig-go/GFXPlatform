@@ -11,7 +11,8 @@ import { ChevronDown, ChevronUp, Trash2, Plus, Play, Info, ArrowRight } from 'lu
 import { supabase } from '../../utils/supabase/client';
 import { useToast } from '../ui/use-toast';
 import { isDevelopment, SKIP_AUTH_IN_DEV } from '../../utils/constants';
-import { publicAnonKey } from '../../utils/supabase/info';
+
+const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 interface AITransformationOptionsProps {
   prompt: string;

@@ -173,7 +173,7 @@ export const callGoogleAPIViaProxy = async (
   }
 
   // Call fetch-proxy
-  const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-proxy`;
+  const proxyUrl = `${import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-proxy`;
   const response = await fetch(proxyUrl, {
     method: 'POST',
     headers: {

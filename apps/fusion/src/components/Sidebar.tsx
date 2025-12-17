@@ -599,8 +599,8 @@ export function Sidebar({
   const fetchMediaAssets = async () => {
     setIsLoadingMedia(true);
     try {
-      const { projectId, publicAnonKey } = await import('../utils/supabase/info');
-      const supabaseUrl = `https://${projectId}.supabase.co`;
+      const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+      const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
       const response = await fetch(`${supabaseUrl}/functions/v1/media-library?limit=1000`, {
         method: 'GET',
@@ -664,8 +664,8 @@ export function Sidebar({
     
     // Update backend
     try {
-      const { projectId, publicAnonKey } = await import('../utils/supabase/info');
-      const supabaseUrl = `https://${projectId}.supabase.co`;
+      const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+      const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
       
       const formData = new FormData();
       formData.append('id', mediaId);

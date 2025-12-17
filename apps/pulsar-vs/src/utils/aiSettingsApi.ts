@@ -1,5 +1,4 @@
 import { supabase } from '../lib/supabase';
-import { projectId, publicAnonKey } from './supabase/info';
 
 export interface AIPromptInjector {
   id?: string;

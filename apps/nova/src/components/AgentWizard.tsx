@@ -20,7 +20,9 @@ import {
 import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+
+const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
@@ -158,7 +160,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       try {
         // Load providers
         const providersResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
+          `${supabaseUrl}/functions/v1/weather_dashboard/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -172,7 +174,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Load weather data first to get states and channel IDs
         const weatherResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
+          `${supabaseUrl}/functions/v1/weather_dashboard/weather-data`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -208,7 +210,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Load channels and filter to only those with locations assigned
         const channelsResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          `${supabaseUrl}/functions/v1/weather_dashboard/channels`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -248,7 +250,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       try {
         // Load stocks/crypto from finance dashboard
         const stocksResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
+          `${supabaseUrl}/functions/v1/finance_dashboard/stocks`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -301,7 +303,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Load providers from data_providers_public view (category = sports)
         const providersResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
+          `${supabaseUrl}/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,

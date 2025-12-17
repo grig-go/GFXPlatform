@@ -3,9 +3,9 @@
  * Connects to Nova's media-library edge function for browsing and searching media
  */
 
-// Use environment variables - no hardcoded fallbacks
-const NOVA_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const NOVA_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Use environment variables - app-specific with fallback to shared
+const NOVA_SUPABASE_URL = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const NOVA_ANON_KEY = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const MEDIA_LIBRARY_URL = `${NOVA_SUPABASE_URL}/functions/v1/media-library`;
 
 export interface NovaMediaAsset {

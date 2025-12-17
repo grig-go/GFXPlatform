@@ -27,7 +27,7 @@ const PLACEHOLDER_PATH = 'do-no-delete/placeholder.png';
  * This ensures the URL is always correct regardless of which Supabase project is configured
  */
 export function getFallbackPlaceholderUrl(): string {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
   if (!supabaseUrl) {
     // Fallback to a generic placeholder
     return '';
@@ -128,8 +128,8 @@ async function findExistingGeneratedImage(
 ): Promise<string | null> {
   try {
     // Get Supabase config from env
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn('⚠️ Cache lookup: Missing Supabase env config');
@@ -303,8 +303,8 @@ async function uploadGeneratedImage(
     const thumbnailUrl: string | null = null;
 
     // Get Supabase URL and anon key from env
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error('❌ [Upload] Missing Supabase URL or anon key');

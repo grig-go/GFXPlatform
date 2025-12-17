@@ -9,13 +9,22 @@
  */
 
 import { createClient } from '@jsr/supabase__supabase-js';
-import { projectId2 as projectId, publicAnonKey2 as publicAnonKey } from '../../utils/supabase/info';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from 'dotenv';
 
-// Load environment variables from .env file
+// Load environment variables from .env file (root and local)
+config({ path: path.resolve(__dirname, '../../.env') });
 config();
+
+// Get Supabase config from environment variables
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !publicAnonKey) {
+  console.error('❌ ERROR: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in environment variables.');
+  process.exit(1);
+}
 
 // Use service role key from environment variable for full database access
 const serviceRoleKey = process.env.SERVICE_ROLE_KEY;
@@ -26,8 +35,6 @@ if (!serviceRoleKey) {
   console.warn('⚠️  Using anon key - some tables may not be accessible due to RLS policies.');
   console.warn('⚠️  Set SERVICE_ROLE_KEY in .env for full access.\n');
 }
-
-const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabase = createClient(supabaseUrl, apiKey, {
   auth: {
     autoRefreshToken: false,
@@ -216,7 +223,7 @@ async function main() {
   console.log('========================================');
   console.log('Supabase Seed Data Extraction');
   console.log('========================================');
-  console.log(`Project: ${projectId}`);
+  console.log(`Project: ${supabaseUrl}`);
   console.log(`Auth: ${serviceRoleKey ? '✓ SERVICE ROLE KEY (full access)' : '✗ ANON KEY (limited access)'}`);
   console.log(`Tables: ${TABLES.map(t => t.name).join(', ')}`);
   console.log('========================================');
@@ -227,7 +234,7 @@ async function main() {
   allSQL.push(`-- ============================================================`);
   allSQL.push(`-- SUPABASE SEED DATA`);
   allSQL.push(`-- Generated: ${new Date().toISOString()}`);
-  allSQL.push(`-- Project: ${projectId}`);
+  allSQL.push(`-- Project: ${supabaseUrl}`);
   allSQL.push(`-- ============================================================`);
   allSQL.push(`-- Tables included:`);
   TABLES.forEach(t => allSQL.push(`--   - ${t.name}`));

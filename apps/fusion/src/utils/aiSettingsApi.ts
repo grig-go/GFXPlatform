@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export type AIFeature = 'outliers' | 'summary' | 'correlation' | 'sentiment' | 'fullscreen';
 
@@ -11,9 +12,8 @@ export interface AIPromptSettings {
   version: number;
 }
 
-const SUPABASE_URL = `https://${projectId}.supabase.co`;
-const REST_API_URL = `${SUPABASE_URL}/rest/v1`;
-const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+const REST_API_URL = `${supabaseUrl}/rest/v1`;
+const FUNCTIONS_URL = `${supabaseUrl}/functions/v1`;
 
 /**
  * Read all AI prompt settings from the database via Supabase REST API (anon key)

@@ -122,15 +122,14 @@ import type { Channel } from '../types/channels';
 import { PlaylistCalendar } from './PlaylistCalendar';
 import { createLocalSamplePlaylist, createSampleScheduledPlaylist } from '../services/samplePlaylistService';
 import {
-  projectId,
-  publicAnonKey,
-} from '../utils/supabase/info';
-import {
   loadAIImageGenSettings,
   callGoogleAPIViaProxy,
   generateWithGemini,
   DEFAULT_AI_SETTINGS,
 } from '../types/aiImageGen';
+
+const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // Item type icon component
 function ItemTypeIcon({ type, className = "h-4 w-4" }: { type: PlaylistItemType; className?: string }) {
@@ -409,7 +408,7 @@ export default function PlaylistPage() {
   const loadChannels = useCallback(async () => {
     setIsLoadingChannels(true);
     try {
-      const supabaseUrl = `https://${projectId}.supabase.co`;
+      // supabaseUrl is defined at the top of the file
       const response = await fetch(`${supabaseUrl}/functions/v1/channels`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -460,7 +459,7 @@ export default function PlaylistPage() {
   const loadMedia = useCallback(async () => {
     setIsLoadingMedia(true);
     try {
-      const supabaseUrl = `https://${projectId}.supabase.co`;
+      // supabaseUrl is defined at the top of the file
       const response = await fetch(
         `${supabaseUrl}/functions/v1/media-library?limit=100&search=${encodeURIComponent(addItemSearch)}`,
         {
@@ -484,7 +483,7 @@ export default function PlaylistPage() {
   const loadReplaceMedia = useCallback(async () => {
     setIsLoadingReplaceMedia(true);
     try {
-      const supabaseUrl = `https://${projectId}.supabase.co`;
+      // supabaseUrl is defined at the top of the file
       const response = await fetch(
         `${supabaseUrl}/functions/v1/media-library?limit=100&search=${encodeURIComponent(replaceMediaSearch)}`,
         {

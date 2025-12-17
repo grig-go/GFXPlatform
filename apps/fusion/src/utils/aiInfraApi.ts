@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export interface AIInfraFeature {
   type: 'Feature';
@@ -387,7 +388,7 @@ export async function seedAIInfraData(): Promise<void> {
     console.log('[aiInfraApi] Number of features to seed:', AI_INFRA_DATA.features.length);
     console.log('[aiInfraApi] First feature:', AI_INFRA_DATA.features[0]);
     
-    const url = `https://${projectId}.supabase.co/functions/v1/map_data/ai-infra/seed`;
+    const url = `${supabaseUrl}/functions/v1/map_data/ai-infra/seed`;
     console.log('[aiInfraApi] Seed URL:', url);
     
     const response = await fetch(url, {
@@ -420,7 +421,7 @@ export async function seedAIInfraData(): Promise<void> {
 export async function fetchAIInfraData(): Promise<AIInfraCollection> {
   try {
     console.log('[aiInfraApi] Fetching AI infrastructure data from backend...');
-    const url = `https://${projectId}.supabase.co/functions/v1/map_data/ai-infra`;
+    const url = `${supabaseUrl}/functions/v1/map_data/ai-infra`;
     console.log('[aiInfraApi] URL:', url);
     
     const response = await fetch(url, {

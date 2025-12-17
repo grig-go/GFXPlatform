@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { supabase } from '../utils/supabase/client';
-import { projectId } from '../utils/supabase/info';
 import { isDevelopment, SKIP_AUTH_IN_DEV } from '../utils/constants';
+
+const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
 
 interface FetchProxyOptions {
   method?: string;
@@ -141,7 +142,6 @@ export const useFetchProxy = () => {
       }
 
       // Construct the proxy URL based on environment
-      const supabaseUrl = `https://${projectId}.supabase.co`;
       const proxyUrl = `${supabaseUrl}/functions/v1/fetch-proxy`;
 
       console.log('Using proxy URL:', proxyUrl);

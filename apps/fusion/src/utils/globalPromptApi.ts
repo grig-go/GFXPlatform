@@ -1,8 +1,8 @@
 // Global Prompt API - uses KV store for persistence
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-const SUPABASE_URL = `https://${projectId}.supabase.co`;
-const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+const FUNCTIONS_URL = `${supabaseUrl}/functions/v1`;
 const GLOBAL_PROMPT_KEY = 'fusion:ai:global-prompt';
 
 /**

@@ -18,7 +18,7 @@ export const analyzeColumnsWithClaude = async (
   }
 
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-csv-columns`,
+    `${import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-csv-columns`,
     {
       method: 'POST',
       headers: {
@@ -62,7 +62,7 @@ export const detectFileFormatWithClaude = async (
   const sample = fileContent.substring(0, 1000);
 
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-file-format`,
+    `${import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-file-format`,
     {
       method: 'POST',
       headers: {

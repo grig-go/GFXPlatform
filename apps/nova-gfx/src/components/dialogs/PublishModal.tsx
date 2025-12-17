@@ -189,8 +189,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       // Helper to load channels with retry - ALWAYS uses direct REST API
       // This completely bypasses the Supabase client to avoid stale connection issues
       const loadChannelsWithRetry = async (retries = 3): Promise<typeof channels> => {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
           throw new Error('Supabase configuration missing');
@@ -276,8 +276,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
     // Load projects using direct REST API
     const loadProjectsWithRetry = async () => {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       if (!supabaseUrl || !supabaseKey) return;
 

@@ -1,5 +1,6 @@
 // Layer Descriptions API - for managing descriptions of map layers
-import { projectId, publicAnonKey } from './supabase/info';
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export interface LayerDescriptions {
   elections: string;
@@ -18,7 +19,7 @@ const KV_KEY_PREFIX = 'layer_description_';
 export async function loadLayerDescriptions(): Promise<LayerDescriptions> {
   try {
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/layer-descriptions`,
+      `${supabaseUrl}/functions/v1/map_data/layer-descriptions`,
       {
         method: 'GET',
         headers: {
@@ -62,7 +63,7 @@ export async function loadLayerDescriptions(): Promise<LayerDescriptions> {
 export async function saveLayerDescriptions(descriptions: LayerDescriptions): Promise<void> {
   try {
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/map_data/layer-descriptions`,
+      `${supabaseUrl}/functions/v1/map_data/layer-descriptions`,
       {
         method: 'POST',
         headers: {

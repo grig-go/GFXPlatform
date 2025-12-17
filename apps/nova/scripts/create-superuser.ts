@@ -15,19 +15,21 @@ import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Load environment variables
+// Load environment variables (check both app-local and root .env)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+// Load root .env first, then app-local .env (app-local takes precedence)
+dotenv.config({ path: join(__dirname, '..', '..', '..', '.env') });
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
-// Supabase configuration - require environment variables
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+// Supabase configuration - require environment variables (app-specific with fallback)
+const SUPABASE_URL = process.env.VITE_NOVA_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('Error: VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+  console.error('Error: VITE_SUPABASE_URL (or VITE_NOVA_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
   console.error('Make sure your .env file is configured with:');
-  console.error('  VITE_SUPABASE_URL=http://localhost:54321');
+  console.error('  VITE_SUPABASE_URL=http://localhost:54321  (or VITE_NOVA_SUPABASE_URL for Nova-specific)');
   console.error('  SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>');
   process.exit(1);
 }

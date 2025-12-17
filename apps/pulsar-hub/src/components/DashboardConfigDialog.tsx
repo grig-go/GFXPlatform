@@ -25,7 +25,7 @@ import {
   LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from "@/lib/supabase";
+import { supabaseUrl, publicAnonKey } from "@/lib/supabase";
 
 export interface DashboardConfig {
   id: string;
@@ -107,7 +107,7 @@ export function DashboardConfigDialog({
     try {
       setLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/dashboard_config?dashboard_type=pulsar`,
+        `${supabaseUrl}/functions/v1/dashboard_config?dashboard_type=pulsar`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -242,7 +242,7 @@ export function DashboardConfigDialog({
       }
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/dashboard_config/update`,
+        `${supabaseUrl}/functions/v1/dashboard_config/update`,
         {
           method: "PATCH",
           headers: {

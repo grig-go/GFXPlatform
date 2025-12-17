@@ -5,8 +5,10 @@ import { Skeleton } from './ui/skeleton';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { AlertCircle, RefreshCw, Search, Database, Table, Sparkles, MapPin } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { LocationSearch } from './LocationSearch';
+
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 import { TableViewer } from './TableViewer';
 import AISettingsPanel from './AISettingsPanel';
 
@@ -33,7 +35,7 @@ export function BackendDataViewer({
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
+        `${supabaseUrl}/functions/v1/weather_dashboard/weather-data`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -60,7 +62,7 @@ export function BackendDataViewer({
     setSchemaLoading(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations`,
+        `${supabaseUrl}/functions/v1/weather_dashboard/locations`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
