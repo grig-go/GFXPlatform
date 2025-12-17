@@ -281,8 +281,13 @@ export function AgentsDashboardWithSupabase({
 
   // Load agents from database
   const loadAgents = async () => {
+    const startTime = performance.now();
+    console.log('[loadAgents] 🚀 Starting agents load...');
+
     try {
       setLoading(true);
+
+      const queryStart = performance.now();
       const { data, error } = await supabase
         .from('api_endpoints')
         .select(`
@@ -294,8 +299,11 @@ export function AgentsDashboardWithSupabase({
         `)
         .order('created_at', { ascending: false });
 
+      const queryDuration = performance.now() - queryStart;
+      console.log(`[loadAgents] 📥 Supabase query completed in ${queryDuration.toFixed(0)}ms`);
+
       if (error) {
-        console.error('Failed to load agents:', error);
+        console.error(`[loadAgents] ❌ Query failed after ${queryDuration.toFixed(0)}ms:`, error);
         toast({
           title: "Error",
           description: "Failed to load agents from database",
@@ -304,14 +312,29 @@ export function AgentsDashboardWithSupabase({
         return;
       }
 
+      console.log(`[loadAgents] 📊 Received ${data?.length || 0} agents from database`);
+
       // Convert APIEndpoint to Agent format for UI
+      const convertStart = performance.now();
       const convertedAgents = (data || []).map(convertAPIEndpointToAgent);
+      const convertDuration = performance.now() - convertStart;
+      console.log(`[loadAgents] 🔄 Converted agents in ${convertDuration.toFixed(0)}ms`);
+
       setAgents(convertedAgents);
 
       // Clean up unused Nova Weather sources after loading agents
+      const cleanupStart = performance.now();
       await cleanupUnusedNovaSources();
+      const cleanupDuration = performance.now() - cleanupStart;
+      console.log(`[loadAgents] 🧹 Cleanup completed in ${cleanupDuration.toFixed(0)}ms`);
+
+      const totalDuration = performance.now() - startTime;
+      console.log(`[loadAgents] ✅ Agents loaded successfully in ${totalDuration.toFixed(0)}ms`, {
+        count: convertedAgents.length,
+      });
     } catch (error) {
-      console.error('Failed to load agents:', error);
+      const errorDuration = performance.now() - startTime;
+      console.error(`[loadAgents] ❌ Failed after ${errorDuration.toFixed(0)}ms:`, error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
