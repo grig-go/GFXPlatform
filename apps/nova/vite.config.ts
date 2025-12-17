@@ -472,6 +472,7 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    envDir: '../../', // Load .env from root
     build: {
       target: 'esnext',
       outDir: 'build',
