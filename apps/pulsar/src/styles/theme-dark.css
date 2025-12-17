@@ -1,0 +1,1658 @@
+/* ============================================
+   DARK MODE THEME VARIABLES
+   ============================================ */
+
+   [data-theme="dark"] {
+    /* Primary Colors - vibrant blue (matching Novadevgrig) */
+    --primary-blue: #5b7cff;
+    --primary-blue-hover: #4a6bef;
+    --primary-blue-light: #8098ff;
+    --primary-blue-bg: #1c2850;
+
+    /* Background Colors - deep blue-gray tint */
+    --bg-white: #0f1419;
+    --bg-light-gray: #1c2333;
+    --bg-medium-gray: #151b26;
+
+    /* Border Colors - subtle blue-gray */
+    --border-gray: #2a3040;
+    --border-light: #232a38;
+
+    /* Text Colors - bright with blue undertone */
+    --text-primary: #e4e8f0;
+    --text-secondary: #a8b0c0;
+    --text-icon: #8a92a8;
+    --text-disabled: #4a5568;
+    --text-muted: #6b7280;
+    --text-danger: #f87171;
+
+    /* Tab Colors */
+    --tab-inactive-bg: #1c2333;
+    --tab-inactive-hover: #2a3040;
+    --tab-active-bg: #ffffff;
+    --tab-active-text: #0f1419;
+
+    /* Focus & States - vibrant purple-blue */
+    --focus-shadow: rgba(91, 124, 255, 0.4);
+    --drag-overlay: rgba(91, 124, 255, 0.2);
+    --drag-ghost: rgba(91, 124, 255, 0.95);
+
+    /* Icon Colors (bright versions for dark mode) */
+    --icon-primary: #5b7cff;
+    --icon-secondary: #ce93d8;
+    --icon-warning: #ffb74d;
+    --icon-success: #81c784;
+    --icon-info: #4fc3f7;
+
+    /* Form.io custom component colors (dark mode) */
+    --formio-bg-light: #1c2333;
+    --formio-bg-lighter: #151b26;
+    --formio-bg-card: #232a38;
+    --formio-border: #2a3040;
+    --formio-border-input: #3a4050;
+    --formio-text: #a8b0c0;
+    --formio-text-muted: #6b7280;
+    --formio-text-dark: #e4e8f0;
+    --formio-btn-primary: #5b7cff;
+    --formio-btn-primary-hover: #4a6bef;
+
+    /* Scrollbar colors (dark mode) */
+    --scrollbar-thumb: #3a4050;
+    --scrollbar-thumb-hover: #4a5568;
+    --scrollbar-track: transparent;
+
+    /* Note/Info box colors (dark mode) */
+    --note-bg: #1c2a3a;
+    --note-text: #90caf9;
+    --note-border: #2a4a6a;
+  }
+  
+  /* Dark mode body */
+  [data-theme="dark"] body {
+    background-color: var(--bg-white);
+    color: var(--text-primary);
+  }
+  
+  /* ============================================
+     BLUEPRINT V5 NAVBAR DARK MODE
+     ============================================ */
+  
+  [data-theme="dark"] .bp5-navbar {
+    background-color: var(--bg-medium-gray) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+  
+  /* Navbar logo - switch to white version in dark mode */
+  [data-theme="dark"] .navbar-logo {
+    content: url('/assets/EMERGENT_White_Alpha.png');
+  }
+  
+  /* Navbar project name - white text in dark mode */
+  [data-theme="dark"] .navbar-project-name {
+    color: #ffffff !important;
+  }
+  
+  /* Navbar buttons - white text and icons in dark mode */
+  [data-theme="dark"] .bp5-navbar .bp5-button {
+    color: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-button:hover {
+    background-color: var(--bg-light-gray) !important;
+    color: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-button-text {
+    color: #ffffff !important;
+  }
+  
+  /* Target Blueprint icons directly */
+  [data-theme="dark"] .bp5-navbar .bp5-icon {
+    color: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-icon svg {
+    fill: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-icon svg path {
+    fill: #ffffff !important;
+  }
+  
+  /* Make sure button group buttons also have white icons */
+  [data-theme="dark"] .bp5-navbar .bp5-button-group .bp5-button {
+    color: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-button-group .bp5-button .bp5-icon {
+    color: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-button-group .bp5-icon svg {
+    fill: #ffffff !important;
+  }
+  
+  [data-theme="dark"] .bp5-navbar .bp5-button-group .bp5-icon svg path {
+    fill: #ffffff !important;
+  }
+  
+  /* Blueprint Menu Dark Mode */
+  [data-theme="dark"] .bp5-menu {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .bp5-menu-item {
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .bp5-menu-item:hover {
+    background-color: var(--bg-medium-gray) !important;
+  }
+  
+  [data-theme="dark"] .bp5-menu-item.bp5-disabled {
+    color: var(--text-disabled) !important;
+  }
+  
+  [data-theme="dark"] .bp5-menu-divider {
+    border-top-color: var(--border-gray) !important;
+  }
+  
+  /* ============================================
+     MUI TOOLBAR DARK MODE
+     ============================================ */
+  
+  [data-theme="dark"] .toolbar {
+    background-color: var(--bg-light-gray) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+  
+  /* MUI IconButton dark mode */
+  [data-theme="dark"] .MuiIconButton-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-root:hover {
+    background-color: rgba(91, 124, 255, 0.15) !important;
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-root:hover .MuiSvgIcon-root {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-root.Mui-disabled {
+    color: var(--text-disabled) !important;
+  }
+
+  /* MUI Icon colors - base (skip icons with inline style) */
+  [data-theme="dark"] .MuiSvgIcon-root:not([style]) {
+    color: var(--text-secondary);
+  }
+
+  [data-theme="dark"] .MuiIconButton-colorPrimary {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-colorPrimary .MuiSvgIcon-root {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-colorError .MuiSvgIcon-root {
+    color: #f87171 !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-colorSuccess .MuiSvgIcon-root {
+    color: #4ade80 !important;
+  }
+
+  [data-theme="dark"] .MuiIconButton-colorWarning .MuiSvgIcon-root {
+    color: #fbbf24 !important;
+  }
+
+  /* Vibrant icon colors - only for action icons, not row type icons */
+
+  /* Warning icons - amber */
+  [data-theme="dark"] .MuiSvgIcon-root[data-testid="WarningIcon"],
+  [data-theme="dark"] .MuiSvgIcon-root[data-testid="ReportProblemIcon"] {
+    color: #fbbf24 !important;
+  }
+
+  /* Check/Done icons - green */
+  [data-theme="dark"] .MuiSvgIcon-root[data-testid="CheckIcon"],
+  [data-theme="dark"] .MuiSvgIcon-root[data-testid="CheckCircleIcon"],
+  [data-theme="dark"] .MuiSvgIcon-root[data-testid="DoneIcon"] {
+    color: #4ade80 !important;
+  }
+  
+  /* Tooltip dark mode */
+  [data-theme="dark"] .MuiTooltip-tooltip {
+    background-color: #1c2333 !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .MuiTooltip-arrow::before {
+    background-color: #1c2333 !important;
+    border: 1px solid var(--border-gray) !important;
+  }
+  
+  /* ============================================
+     AG GRID DARK MODE
+     ============================================ */
+  
+  [data-theme="dark"] .ag-theme-alpine {
+    --ag-background-color: var(--bg-white) !important;
+    --ag-foreground-color: var(--text-primary) !important;
+    --ag-border-color: var(--border-gray) !important;
+    --ag-secondary-border-color: var(--border-light) !important;
+    --ag-header-background-color: var(--bg-light-gray) !important;
+    --ag-odd-row-background-color: var(--bg-white) !important;
+    --ag-row-hover-color: var(--bg-light-gray) !important;
+    --ag-selected-row-background-color: var(--primary-blue-bg) !important;
+    --ag-header-foreground-color: var(--text-primary) !important;
+    --ag-input-focus-border-color: var(--primary-blue) !important;
+  }
+  
+  [data-theme="dark"] .ag-theme-alpine .ag-root-wrapper {
+    background-color: var(--bg-white) !important;
+  }
+  
+  [data-theme="dark"] .ag-theme-alpine .ag-header {
+    background-color: var(--bg-light-gray) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+  
+  [data-theme="dark"] .ag-theme-alpine .ag-cell {
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .ag-theme-alpine .ag-row {
+    background-color: var(--bg-white) !important;
+    border-bottom-color: var(--border-light) !important;
+  }
+  
+  [data-theme="dark"] .ag-theme-alpine .ag-row:hover {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  /* AG-Grid native checkbox styling */
+  [data-theme="dark"] .ag-theme-alpine input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--text-secondary);
+    border-radius: 3px;
+    background-color: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine input[type="checkbox"]:hover {
+    border-color: var(--primary-blue);
+    background-color: rgba(91, 124, 255, 0.1);
+  }
+
+  [data-theme="dark"] .ag-theme-alpine input[type="checkbox"]:checked {
+    background-color: var(--primary-blue);
+    border-color: var(--primary-blue);
+  }
+
+  [data-theme="dark"] .ag-theme-alpine input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  /* Hover edit button in AG-Grid */
+  [data-theme="dark"] .hover-edit-button {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .hover-edit-button:hover {
+    color: var(--primary-blue-light) !important;
+  }
+
+  /* Font Awesome icons in AG-Grid */
+  [data-theme="dark"] .ag-theme-alpine .fa,
+  [data-theme="dark"] .ag-theme-alpine .fas,
+  [data-theme="dark"] .ag-theme-alpine .far {
+    color: var(--text-secondary);
+  }
+
+  /* FA Edit icons - primary blue for hover edit button */
+  [data-theme="dark"] .ag-theme-alpine .fa-edit,
+  [data-theme="dark"] .ag-theme-alpine .fa-pencil,
+  [data-theme="dark"] .ag-theme-alpine .fa-pen {
+    color: var(--primary-blue);
+  }
+
+  /* FA Check icons - green */
+  [data-theme="dark"] .ag-theme-alpine .fa-check,
+  [data-theme="dark"] .ag-theme-alpine .fa-check-circle {
+    color: #4ade80;
+  }
+
+  /* FA Warning icons - amber */
+  [data-theme="dark"] .ag-theme-alpine .fa-exclamation-triangle,
+  [data-theme="dark"] .ag-theme-alpine .fa-warning {
+    color: #fbbf24;
+  }
+
+  /* AG-Grid checkbox selection */
+  [data-theme="dark"] .ag-theme-alpine .ag-checkbox-input-wrapper {
+    background-color: transparent;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-checkbox-input-wrapper::after {
+    color: var(--text-secondary);
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-checkbox-input-wrapper.ag-checked::after {
+    color: var(--primary-blue);
+  }
+
+  /* AG-Grid Popup Menus (Context Menu & Column Menu) */
+  [data-theme="dark"] .ag-theme-alpine .ag-popup,
+  [data-theme="dark"] .ag-popup {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu,
+  [data-theme="dark"] .ag-menu {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu-option,
+  [data-theme="dark"] .ag-menu-option {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu-option-active,
+  [data-theme="dark"] .ag-menu-option-active {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu-option-disabled,
+  [data-theme="dark"] .ag-menu-option-disabled {
+    color: var(--text-disabled) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu-separator,
+  [data-theme="dark"] .ag-menu-separator {
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-menu-option-icon,
+  [data-theme="dark"] .ag-menu-option-icon {
+    color: var(--text-secondary) !important;
+  }
+
+  /* AG-Grid Column Menu */
+  [data-theme="dark"] .ag-theme-alpine .ag-column-menu,
+  [data-theme="dark"] .ag-column-menu {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-tabs-header,
+  [data-theme="dark"] .ag-tabs-header {
+    background-color: var(--bg-medium-gray) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-tab,
+  [data-theme="dark"] .ag-tab {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-tab-selected,
+  [data-theme="dark"] .ag-tab-selected {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-bottom-color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-tabs-body,
+  [data-theme="dark"] .ag-tabs-body {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  /* AG-Grid Filter in Column Menu */
+  [data-theme="dark"] .ag-theme-alpine .ag-filter,
+  [data-theme="dark"] .ag-filter {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-filter-toolpanel-header,
+  [data-theme="dark"] .ag-filter-toolpanel-header {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-mini-filter,
+  [data-theme="dark"] .ag-mini-filter {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-mini-filter input,
+  [data-theme="dark"] .ag-mini-filter input {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-virtual-list-item,
+  [data-theme="dark"] .ag-virtual-list-item {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-set-filter-item,
+  [data-theme="dark"] .ag-set-filter-item {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-set-filter-item:hover,
+  [data-theme="dark"] .ag-set-filter-item:hover {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* AG-Grid Column Picker */
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select,
+  [data-theme="dark"] .ag-column-select {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select-header,
+  [data-theme="dark"] .ag-column-select-header {
+    background-color: var(--bg-medium-gray) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select-list,
+  [data-theme="dark"] .ag-column-select-list {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select-column,
+  [data-theme="dark"] .ag-column-select-column,
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select-column-group,
+  [data-theme="dark"] .ag-column-select-column-group {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-column-select-column:hover,
+  [data-theme="dark"] .ag-column-select-column:hover {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* AG-Grid Tool Panel */
+  [data-theme="dark"] .ag-theme-alpine .ag-tool-panel-wrapper,
+  [data-theme="dark"] .ag-tool-panel-wrapper {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-side-bar,
+  [data-theme="dark"] .ag-side-bar {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-side-buttons,
+  [data-theme="dark"] .ag-side-buttons {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-side-button-button,
+  [data-theme="dark"] .ag-side-button-button {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-side-button-button:hover,
+  [data-theme="dark"] .ag-side-button-button:hover {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .ag-theme-alpine .ag-selected .ag-side-button-button,
+  [data-theme="dark"] .ag-selected .ag-side-button-button {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--primary-blue) !important;
+  }
+
+  /* AG-Grid Tooltip */
+  [data-theme="dark"] .ag-theme-alpine .ag-tooltip,
+  [data-theme="dark"] .ag-tooltip {
+    background-color: #1c2333 !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-gray) !important;
+    border-radius: 4px !important;
+  }
+
+  /* ============================================
+     FLEXLAYOUT DARK MODE
+     ============================================ */
+  
+  [data-theme="dark"] .flexlayout__tabset {
+    background-color: var(--bg-light-gray) !important;
+  }
+  
+  [data-theme="dark"] .flexlayout__tabset_tabbar_outer {
+    background-color: var(--bg-white) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+  
+  [data-theme="dark"] .flexlayout__tabset_content {
+    background-color: var(--bg-white) !important;
+  }
+  
+  [data-theme="dark"] .flexlayout__tab_button {
+    background-color: var(--tab-inactive-bg) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .flexlayout__tab_button--selected {
+    background-color: var(--tab-active-bg) !important;
+    color: var(--tab-active-text) !important;
+  }
+  
+  [data-theme="dark"] .flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover {
+    background-color: var(--tab-inactive-hover) !important;
+  }
+  
+  /* ============================================
+     MUI COMPONENTS DARK MODE
+     ============================================ */
+  
+  [data-theme="dark"] .MuiPaper-root {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .MuiDialog-paper {
+    background-color: var(--bg-light-gray) !important;
+  }
+  
+  [data-theme="dark"] .MuiDialogTitle-root {
+    color: var(--text-primary) !important;
+    border-bottom: 1px solid var(--border-gray) !important;
+  }
+  
+  [data-theme="dark"] .MuiDialogContent-root {
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .MuiTextField-root input {
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .MuiTextField-root label {
+    color: var(--text-secondary) !important;
+  }
+  
+  [data-theme="dark"] .MuiOutlinedInput-notchedOutline {
+    border-color: var(--border-gray) !important;
+  }
+  
+  [data-theme="dark"] .MuiButton-root {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-root:hover {
+    background-color: rgba(91, 124, 255, 0.1) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-containedPrimary {
+    background-color: var(--primary-blue) !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .MuiButton-containedPrimary:hover {
+    background-color: var(--primary-blue-hover) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-outlinedPrimary {
+    border-color: var(--primary-blue) !important;
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-outlinedPrimary:hover {
+    background-color: rgba(91, 124, 255, 0.1) !important;
+    border-color: var(--primary-blue-light) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-textPrimary {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiButton-textPrimary:hover {
+    background-color: rgba(91, 124, 255, 0.1) !important;
+  }
+  
+  [data-theme="dark"] .MuiTypography-root {
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .MuiDivider-root {
+    border-color: var(--border-gray) !important;
+  }
+  
+  [data-theme="dark"] .MuiChip-root {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  [data-theme="dark"] .MuiAlert-root {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  /* CircularProgress in dark mode */
+  [data-theme="dark"] .MuiCircularProgress-root {
+    color: var(--primary-blue) !important;
+  }
+
+  /* ============================================
+     GENERAL TEXT COLOR INVERSIONS FOR DARK MODE
+     ============================================ */
+
+  /* Fix hardcoded dark grays that are invisible in dark mode */
+  [data-theme="dark"] [style*="color: #5c7080"],
+  [data-theme="dark"] [style*="color: #5C7080"],
+  [data-theme="dark"] [style*="color:#5c7080"],
+  [data-theme="dark"] [style*="color:#5C7080"] {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #495057"],
+  [data-theme="dark"] [style*="color:#495057"] {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #212529"],
+  [data-theme="dark"] [style*="color:#212529"] {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #333"],
+  [data-theme="dark"] [style*="color:#333"] {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #666"],
+  [data-theme="dark"] [style*="color:#666"] {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #999"],
+  [data-theme="dark"] [style*="color:#999"] {
+    color: var(--text-muted) !important;
+  }
+
+  [data-theme="dark"] [style*="color: #6c757d"],
+  [data-theme="dark"] [style*="color:#6c757d"] {
+    color: var(--text-secondary) !important;
+  }
+
+  /* MUI text.secondary and grey palette colors */
+  [data-theme="dark"] .MuiTypography-colorTextSecondary {
+    color: var(--text-secondary) !important;
+  }
+
+  /* MUI grey backgrounds that should be darker in dark mode */
+  [data-theme="dark"] .MuiBox-root[style*="background-color: rgb(245, 245, 245)"],
+  [data-theme="dark"] [style*="backgroundColor: grey.50"],
+  [data-theme="dark"] [style*="background-color: #f5f5f5"] {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* MUI Card with grey background */
+  [data-theme="dark"] .MuiCard-root {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* MUI Select and inputs */
+  [data-theme="dark"] .MuiSelect-select {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiInputBase-input {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiInputLabel-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiFormHelperText-root {
+    color: var(--text-muted) !important;
+  }
+
+  /* MUI ListItem and Menu items */
+  [data-theme="dark"] .MuiListItem-root {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiListItemText-primary {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiListItemText-secondary {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiMenuItem-root {
+    color: var(--text-primary) !important;
+  }
+
+  /* MUI Table */
+  [data-theme="dark"] .MuiTableCell-root {
+    color: var(--text-primary) !important;
+    border-bottom-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .MuiTableCell-head {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* MUI Tabs */
+  [data-theme="dark"] .MuiTab-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiTab-root.Mui-selected {
+    color: var(--primary-blue) !important;
+  }
+
+  /* MUI Accordion */
+  [data-theme="dark"] .MuiAccordion-root {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiAccordionSummary-root {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiAccordionDetails-root {
+    color: var(--text-primary) !important;
+  }
+
+  /* MUI Checkbox and Radio */
+  [data-theme="dark"] .MuiCheckbox-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiCheckbox-root:hover {
+    background-color: rgba(91, 124, 255, 0.1) !important;
+  }
+
+  [data-theme="dark"] .MuiCheckbox-root.Mui-checked {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiCheckbox-root.Mui-checked .MuiSvgIcon-root {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiRadio-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiRadio-root:hover {
+    background-color: rgba(91, 124, 255, 0.1) !important;
+  }
+
+  [data-theme="dark"] .MuiRadio-root.Mui-checked {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiRadio-root.Mui-checked .MuiSvgIcon-root {
+    color: var(--primary-blue) !important;
+  }
+
+  /* MUI FormControlLabel */
+  [data-theme="dark"] .MuiFormControlLabel-label {
+    color: var(--text-primary) !important;
+  }
+
+  /* MUI Breadcrumbs */
+  [data-theme="dark"] .MuiBreadcrumbs-root {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .MuiBreadcrumbs-li {
+    color: var(--text-secondary) !important;
+  }
+
+  /* MUI Stepper */
+  [data-theme="dark"] .MuiStepLabel-label {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiStepLabel-label.Mui-disabled {
+    color: var(--text-disabled) !important;
+  }
+
+  /* MUI Autocomplete */
+  [data-theme="dark"] .MuiAutocomplete-paper {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .MuiAutocomplete-option {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .MuiAutocomplete-noOptions {
+    color: var(--text-secondary) !important;
+  }
+
+  /* MUI Popover and Popper */
+  [data-theme="dark"] .MuiPopover-paper {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  /* MUI Switch */
+  [data-theme="dark"] .MuiSwitch-track {
+    background-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .MuiSwitch-root .Mui-checked + .MuiSwitch-track {
+    background-color: var(--primary-blue) !important;
+    opacity: 0.6 !important;
+  }
+
+  [data-theme="dark"] .MuiSwitch-root .Mui-checked .MuiSwitch-thumb {
+    background-color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .MuiSwitch-thumb {
+    background-color: var(--text-secondary) !important;
+  }
+
+  /* MUI Slider */
+  [data-theme="dark"] .MuiSlider-markLabel {
+    color: var(--text-secondary) !important;
+  }
+
+  /* MUI Badge */
+  [data-theme="dark"] .MuiBadge-badge {
+    color: white !important;
+  }
+
+  /* MUI Skeleton placeholder */
+  [data-theme="dark"] .MuiSkeleton-root {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* Fix grey backgrounds that appear in MUI components */
+  [data-theme="dark"] [class*="grey-50"],
+  [data-theme="dark"] [class*="grey.50"] {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] [class*="grey-100"],
+  [data-theme="dark"] [class*="grey.100"] {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] [class*="grey-200"],
+  [data-theme="dark"] [class*="grey.200"] {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  /* ============================================
+     FORM.IO BUILDER DARK MODE
+     ============================================ */
+
+  /* Bootstrap card - general dark mode */
+  [data-theme="dark"] .card {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .card-header {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .card-body {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .card-footer {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Main builder container */
+  [data-theme="dark"] .formbuilder,
+  [data-theme="dark"] .formio-builder {
+    color: var(--text-primary);
+  }
+
+  /* Components sidebar */
+  [data-theme="dark"] .formcomponents {
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Builder sidebar search input */
+  [data-theme="dark"] .builder-sidebar_search {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .builder-sidebar_search::placeholder {
+    color: var(--text-muted) !important;
+  }
+
+  [data-theme="dark"] .builder-sidebar_search:focus {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--primary-blue) !important;
+    box-shadow: 0 0 0 2px var(--focus-shadow) !important;
+  }
+
+  /* Component groups/accordion headers */
+  [data-theme="dark"] .formcomponents .card,
+  [data-theme="dark"] .formcomponents .card-header,
+  [data-theme="dark"] .builder-sidebar .card,
+  [data-theme="dark"] .builder-sidebar .card-header {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formcomponents .card-header button,
+  [data-theme="dark"] .builder-group-button {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formcomponents .card-header button:hover,
+  [data-theme="dark"] .builder-group-button:hover {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* Draggable component items in sidebar */
+  [data-theme="dark"] .formcomponent,
+  [data-theme="dark"] .formio-component-btn {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formcomponent:hover,
+  [data-theme="dark"] .formio-component-btn:hover {
+    background-color: var(--primary-blue-bg) !important;
+    border-color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .formcomponent span,
+  [data-theme="dark"] .formio-component-btn span {
+    color: var(--text-primary) !important;
+  }
+
+  /* Form building area */
+  [data-theme="dark"] .formarea,
+  [data-theme="dark"] .formio-drop-zone,
+  [data-theme="dark"] .drag-container {
+    border-color: var(--border-gray) !important;
+    background: var(--bg-medium-gray);
+  }
+
+  /* Dropped components in the form area */
+  [data-theme="dark"] .formio-component {
+    background-color: transparent;
+    color: var(--text-primary);
+  }
+
+  [data-theme="dark"] .formio-component label {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formio-component .form-text,
+  [data-theme="dark"] .formio-component .text-muted {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Form inputs */
+  [data-theme="dark"] .formio-component input,
+  [data-theme="dark"] .formio-component textarea,
+  [data-theme="dark"] .formio-component select,
+  [data-theme="dark"] .formio-component .form-control {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component input::placeholder,
+  [data-theme="dark"] .formio-component textarea::placeholder {
+    color: var(--text-muted) !important;
+  }
+
+  [data-theme="dark"] .formio-component input:focus,
+  [data-theme="dark"] .formio-component textarea:focus,
+  [data-theme="dark"] .formio-component select:focus,
+  [data-theme="dark"] .formio-component .form-control:focus {
+    border-color: var(--primary-blue) !important;
+    box-shadow: 0 0 0 2px var(--focus-shadow) !important;
+  }
+
+  /* Component hover/edit buttons */
+  [data-theme="dark"] .component-btn-group,
+  [data-theme="dark"] .formio-component-btn-group {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .component-btn-group .btn,
+  [data-theme="dark"] .formio-component-btn-group .btn {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .component-btn-group .btn:hover,
+  [data-theme="dark"] .formio-component-btn-group .btn:hover {
+    background-color: var(--primary-blue-bg) !important;
+  }
+
+  /* Component settings modal/dialog */
+  [data-theme="dark"] .formio-dialog,
+  [data-theme="dark"] .formio-dialog-content {
+    background-color: var(--bg-white) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .nav-tabs,
+  [data-theme="dark"] .formio-dialog .nav-link {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .nav-link.active {
+    background-color: var(--bg-white) !important;
+    color: var(--text-primary) !important;
+    border-bottom-color: var(--bg-white) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .tab-content {
+    background-color: var(--bg-white) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .modal-header,
+  [data-theme="dark"] .formio-dialog .modal-footer {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .modal-title {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .close {
+    color: var(--text-primary) !important;
+  }
+
+  /* Buttons in dialogs */
+  [data-theme="dark"] .formio-dialog .btn-primary {
+    background-color: var(--primary-blue) !important;
+    border-color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .btn-secondary,
+  [data-theme="dark"] .formio-dialog .btn-default {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-dialog .btn-danger {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+  }
+
+  /* Drag and drop states */
+  [data-theme="dark"] .formio-builder-drop,
+  [data-theme="dark"] .drag-and-drop-alert {
+    background-color: var(--primary-blue-bg) !important;
+    border-color: var(--primary-blue) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Panel component */
+  [data-theme="dark"] .formio-component-panel .card {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-panel .card-header {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-panel .card-body {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* Table component */
+  [data-theme="dark"] .formio-component-table table {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formio-component-table th,
+  [data-theme="dark"] .formio-component-table td {
+    border-color: var(--border-gray) !important;
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  /* Tabs component */
+  [data-theme="dark"] .formio-component-tabs .nav-tabs {
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-tabs .nav-link {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-tabs .nav-link.active {
+    background-color: var(--bg-white) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Datagrid component */
+  [data-theme="dark"] .formio-component-datagrid table {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-datagrid th,
+  [data-theme="dark"] .formio-component-datagrid td {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Select/dropdown */
+  [data-theme="dark"] .formio-component-select .choices,
+  [data-theme="dark"] .formio-component-select .choices__inner {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-select .choices__list--dropdown {
+    background-color: var(--bg-light-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .formio-component-select .choices__item {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .formio-component-select .choices__item--selectable.is-highlighted {
+    background-color: var(--primary-blue-bg) !important;
+  }
+
+  /* Checkbox and radio */
+  [data-theme="dark"] .formio-component-checkbox label,
+  [data-theme="dark"] .formio-component-radio label {
+    color: var(--text-primary) !important;
+  }
+
+  /* Alerts and errors */
+  [data-theme="dark"] .formio-errors .error,
+  [data-theme="dark"] .formio-component .has-error .form-control {
+    border-color: #f87171 !important;
+  }
+
+  [data-theme="dark"] .formio-errors .error {
+    color: #f87171 !important;
+  }
+
+  /* Bootstrap Tooltip */
+  [data-theme="dark"] .tooltip-inner {
+    background-color: #1c2333 !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .tooltip .tooltip-arrow::before,
+  [data-theme="dark"] .bs-tooltip-top .tooltip-arrow::before,
+  [data-theme="dark"] .bs-tooltip-bottom .tooltip-arrow::before,
+  [data-theme="dark"] .bs-tooltip-start .tooltip-arrow::before,
+  [data-theme="dark"] .bs-tooltip-end .tooltip-arrow::before {
+    border-top-color: #1c2333 !important;
+    border-bottom-color: #1c2333 !important;
+    border-left-color: #1c2333 !important;
+    border-right-color: #1c2333 !important;
+  }
+
+  /* Ace editor (code editor in settings) */
+  [data-theme="dark"] .ace_editor {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .ace_gutter {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  /* JSON editor */
+  [data-theme="dark"] .jsoneditor,
+  [data-theme="dark"] .jsoneditor-menu {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .jsoneditor-tree {
+    background-color: var(--bg-white) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* ============================================
+     BLUEPRINT V5 DIALOG DARK MODE
+     ============================================ */
+
+  /* Dialog overlay */
+  [data-theme="dark"] .bp5-dialog {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-header {
+    background-color: var(--bg-medium-gray) !important;
+    border-bottom: 1px solid var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-header .bp5-heading {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-header .bp5-icon {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-body {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-footer {
+    background-color: var(--bg-medium-gray) !important;
+    border-top: 1px solid var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-footer-actions .bp5-button {
+    color: var(--text-primary) !important;
+  }
+
+  /* MultistepDialog specific */
+  [data-theme="dark"] .bp5-multistep-dialog-panels {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-multistep-dialog-left-panel {
+    background-color: var(--bg-medium-gray) !important;
+    border-right: 1px solid var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-multistep-dialog-right-panel {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step-container {
+    background-color: transparent !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step {
+    background-color: transparent !important;
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step:hover {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step.bp5-dialog-step-viewed {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step-title {
+    color: inherit !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step-icon {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step.bp5-active .bp5-dialog-step-icon {
+    background-color: var(--primary-blue) !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .bp5-dialog-step.bp5-dialog-step-viewed .bp5-dialog-step-icon {
+    background-color: var(--primary-blue) !important;
+    color: white !important;
+  }
+
+  /* Blueprint Form inputs in dialogs */
+  [data-theme="dark"] .bp5-input {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-input::placeholder {
+    color: var(--text-muted) !important;
+  }
+
+  [data-theme="dark"] .bp5-input:focus {
+    border-color: var(--primary-blue) !important;
+    box-shadow: 0 0 0 1px var(--primary-blue), 0 0 0 3px var(--focus-shadow) !important;
+  }
+
+  [data-theme="dark"] .bp5-input-group .bp5-icon {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Blueprint HTML Select */
+  [data-theme="dark"] .bp5-html-select select {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-html-select .bp5-icon {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Blueprint FormGroup */
+  [data-theme="dark"] .bp5-form-group label.bp5-label {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-form-group .bp5-form-helper-text {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Blueprint RadioGroup */
+  [data-theme="dark"] .bp5-radio {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-control.bp5-radio input:checked ~ .bp5-control-indicator {
+    background-color: var(--primary-blue) !important;
+  }
+
+  /* Blueprint Callout */
+  [data-theme="dark"] .bp5-callout {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-callout.bp5-intent-primary {
+    background-color: rgba(91, 124, 255, 0.15) !important;
+  }
+
+  [data-theme="dark"] .bp5-callout.bp5-intent-success {
+    background-color: rgba(129, 199, 132, 0.15) !important;
+  }
+
+  [data-theme="dark"] .bp5-callout.bp5-intent-warning {
+    background-color: rgba(255, 183, 77, 0.15) !important;
+  }
+
+  [data-theme="dark"] .bp5-callout.bp5-intent-danger {
+    background-color: rgba(248, 113, 113, 0.15) !important;
+  }
+
+  [data-theme="dark"] .bp5-callout .bp5-heading {
+    color: var(--text-primary) !important;
+  }
+
+  /* Blueprint Card */
+  [data-theme="dark"] .bp5-card {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Blueprint FileInput */
+  [data-theme="dark"] .bp5-file-input {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-file-input .bp5-file-upload-input {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-file-input .bp5-file-upload-input::after {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Blueprint Checkbox */
+  [data-theme="dark"] .bp5-control.bp5-checkbox {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-control.bp5-checkbox .bp5-control-indicator {
+    background-color: var(--bg-medium-gray) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-control.bp5-checkbox input:checked ~ .bp5-control-indicator {
+    background-color: var(--primary-blue) !important;
+  }
+
+  /* Blueprint Spinner */
+  [data-theme="dark"] .bp5-spinner .bp5-spinner-track {
+    stroke: var(--border-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-spinner .bp5-spinner-head {
+    stroke: var(--primary-blue) !important;
+  }
+
+  /* Blueprint Tag */
+  [data-theme="dark"] .bp5-tag {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-tag.bp5-intent-primary {
+    background-color: var(--primary-blue) !important;
+    color: white !important;
+  }
+
+  /* Blueprint Tabs */
+  [data-theme="dark"] .bp5-tabs .bp5-tab {
+    color: var(--text-secondary) !important;
+  }
+
+  [data-theme="dark"] .bp5-tabs .bp5-tab[aria-selected="true"] {
+    color: var(--primary-blue) !important;
+  }
+
+  [data-theme="dark"] .bp5-tabs .bp5-tab-indicator {
+    background-color: var(--primary-blue) !important;
+  }
+
+  /* Blueprint Switch */
+  [data-theme="dark"] .bp5-control.bp5-switch {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-control.bp5-switch .bp5-control-indicator {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-control.bp5-switch input:checked ~ .bp5-control-indicator {
+    background-color: var(--primary-blue) !important;
+  }
+
+  /* Blueprint TextArea */
+  [data-theme="dark"] .bp5-input.bp5-text-area {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Blueprint Divider */
+  [data-theme="dark"] .bp5-divider {
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Blueprint NumericInput */
+  [data-theme="dark"] .bp5-numeric-input .bp5-input {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-numeric-input .bp5-button-group .bp5-button {
+    background-color: var(--bg-light-gray) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Blueprint Tooltip/Popover */
+  [data-theme="dark"] .bp5-tooltip2 .bp5-popover2-content,
+  [data-theme="dark"] .bp5-tooltip .bp5-popover-content,
+  [data-theme="dark"] .bp5-popover2 .bp5-popover2-content,
+  [data-theme="dark"] .bp5-popover .bp5-popover-content {
+    background-color: #1c2333 !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-tooltip2 .bp5-popover2-arrow-fill,
+  [data-theme="dark"] .bp5-tooltip .bp5-popover-arrow-fill,
+  [data-theme="dark"] .bp5-popover2 .bp5-popover2-arrow-fill,
+  [data-theme="dark"] .bp5-popover .bp5-popover-arrow-fill {
+    fill: #1c2333 !important;
+  }
+
+  /* ============================================
+     BLUEPRINT V5 BUTTONS DARK MODE
+     ============================================ */
+
+  /* Default button */
+  [data-theme="dark"] .bp5-button:not(.bp5-intent-primary):not(.bp5-intent-success):not(.bp5-intent-warning):not(.bp5-intent-danger):not(.bp5-minimal) {
+    background-color: var(--bg-medium-gray) !important;
+    background-image: none !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-gray) !important;
+    box-shadow: none !important;
+  }
+
+  [data-theme="dark"] .bp5-button:not(.bp5-intent-primary):not(.bp5-intent-success):not(.bp5-intent-warning):not(.bp5-intent-danger):not(.bp5-minimal):hover {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-button:not(.bp5-intent-primary):not(.bp5-intent-success):not(.bp5-intent-warning):not(.bp5-intent-danger):not(.bp5-minimal):active {
+    background-color: var(--border-gray) !important;
+  }
+
+  /* Minimal button */
+  [data-theme="dark"] .bp5-button.bp5-minimal {
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-minimal:hover {
+    background-color: var(--bg-medium-gray) !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-minimal:active {
+    background-color: var(--bg-light-gray) !important;
+  }
+
+  /* Primary intent button */
+  [data-theme="dark"] .bp5-button.bp5-intent-primary {
+    background-color: var(--primary-blue) !important;
+    background-image: none !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-intent-primary:hover {
+    background-color: var(--primary-blue-hover) !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-intent-primary:active {
+    background-color: #3a5bc7 !important;
+  }
+
+  /* Success intent button */
+  [data-theme="dark"] .bp5-button.bp5-intent-success {
+    background-color: #2e7d32 !important;
+    background-image: none !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-intent-success:hover {
+    background-color: #1b5e20 !important;
+  }
+
+  /* Warning intent button */
+  [data-theme="dark"] .bp5-button.bp5-intent-warning {
+    background-color: #ed6c02 !important;
+    background-image: none !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-intent-warning:hover {
+    background-color: #e65100 !important;
+  }
+
+  /* Danger intent button */
+  [data-theme="dark"] .bp5-button.bp5-intent-danger {
+    background-color: #d32f2f !important;
+    background-image: none !important;
+    color: white !important;
+  }
+
+  [data-theme="dark"] .bp5-button.bp5-intent-danger:hover {
+    background-color: #c62828 !important;
+  }
+
+  /* Disabled button */
+  [data-theme="dark"] .bp5-button.bp5-disabled,
+  [data-theme="dark"] .bp5-button:disabled {
+    background-color: var(--bg-medium-gray) !important;
+    color: var(--text-disabled) !important;
+    border-color: var(--border-gray) !important;
+  }
+
+  /* Button icons */
+  [data-theme="dark"] .bp5-button .bp5-icon {
+    color: inherit !important;
+  }
+
+  /* Button group */
+  [data-theme="dark"] .bp5-button-group .bp5-button {
+    border-color: var(--border-gray) !important;
+  }
+

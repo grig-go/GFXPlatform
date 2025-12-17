@@ -1,0 +1,82 @@
+    console.log(`Using geographic data from: ${geoSource}`);
+    console.log(`GeoData type: ${geoData.type}, features: ${geoData.features?.length || 0}`);
+    
+    // Build features by matching GEOIDs
+    console.log('Matching population data with geographic data...');
+    
+    // Create lookup map for faster matching
+    const geoByFips = new Map();
+    if (geoData.features) {
+      for (const feature of geoData.features) {
+        const fips = feature.properties?.GEO_ID?.slice(-5) || 
+                     feature.properties?.GEOID || 
+                     feature.properties?.id ||
+                     feature.id;
+        if (fips) {
+          geoByFips.set(String(fips).padStart(5, '0'), feature);
+        }
+      }
+    }
+    console.log(`Built geo lookup with ${geoByFips.size} counties`);
+    
+    // Match with population data
+    const features = [];
+    let matched = 0;
+    let skippedNoGeo = 0;
+    let skippedNoCentroid = 0;
+    
+    for (const [GEOID, rec] of demoByGeo.entries()) {
+      const geoFeature = geoByFips.get(GEOID);
+      if (!geoFeature) {
+        skippedNoGeo++;
+        continue;
+      }
+      
+      // Calculate centroid from geometry
+      let lon, lat;
+      if (geoFeature.geometry.type === 'Point') {
+        [lon, lat] = geoFeature.geometry.coordinates;
+      } else if (geoFeature.geometry.type === 'Polygon') {
+        // Calculate centroid from polygon
+        const coords = geoFeature.geometry.coordinates[0];
+        if (coords && coords.length > 0) {
+          let sumLon = 0, sumLat = 0;
+          for (const coord of coords) {
+            sumLon += coord[0];
+            sumLat += coord[1];
+          }
+          lon = sumLon / coords.length;
+          lat = sumLat / coords.length;
+        }
+      } else if (geoFeature.geometry.type === 'MultiPolygon') {
+        // Use first polygon for centroid
+        const coords = geoFeature.geometry.coordinates[0][0];
+        if (coords && coords.length > 0) {
+          let sumLon = 0, sumLat = 0;
+          for (const coord of coords) {
+            sumLon += coord[0];
+            sumLat += coord[1];
+          }
+          lon = sumLon / coords.length;
+          lat = sumLat / coords.length;
+        }
+      }
+      
+      if (!lon || !lat || Number.isNaN(lon) || Number.isNaN(lat)) {
+        skippedNoCentroid++;
+        continue;
+      }
+      
+      matched++;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lon, lat] },
+        properties: {
+          GEOID,
+          name: rec.name,
+          POP: rec.pop
+        }
+      });
+    }
+    
+    console.log(`Join results: ${matched} matched, ${skippedNoGeo} no geo data, ${skippedNoCentroid} no centroid`);

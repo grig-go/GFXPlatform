@@ -1,0 +1,124 @@
+/* ===== CORE GRID SETUP ===== */
+.ag-theme-alpine {
+  height: 100% !important;
+  font-family: var(--font-family);
+  --ag-font-size: var(--font-size-base);
+  --ag-background-color: var(--bg-white);
+  --ag-odd-row-background-color: var(--bg-white);
+  --ag-selected-row-background-color: var(--primary-blue-bg);
+  --ag-row-hover-color: var(--bg-light-gray);
+}
+
+
+/* ===== CUT/COPY/PASTE STYLES ===== */
+
+/* Row styling for cut operations */
+.row-cut {
+  opacity: 0.5;
+  background-color: rgba(255, 255, 0, 0.1) !important;
+}
+
+/* ===== SCHEDULE CELL STYLES ===== */
+
+.schedule-cell {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Schedule cells with content */
+.schedule-cell:not(:empty) {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Empty/invalid schedule cells */
+.schedule-cell:empty,
+.schedule-cell[data-invalid="true"] {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Disabled schedule cells (channels) */
+.schedule-disabled {
+  color: var(--text-disabled);
+  font-style: normal;
+  cursor: default;
+}
+
+/* Hover effect for editable schedule cells */
+.ag-row:not(.ag-row-selected) .ag-cell[col-id="schedule"]:hover {
+  background-color: var(--bg-light-gray);
+}
+
+/* No hover for non-editable schedule cells */
+.ag-cell[col-id="schedule"]:has(.schedule-disabled):hover {
+  background-color: transparent;
+  cursor: default;
+}
+
+/* ===== HOVER EDIT BUTTON ===== */
+
+/* Hover edit button base style */
+.hover-edit-button {
+  color: var(--primary-blue);
+}
+
+.hover-edit-button:hover {
+  color: var(--primary-blue-hover);
+}
+
+/* ===== ANIMATIONS ===== */
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulse animation for playing indicator */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ===== LIVE/PLAYING ROW STYLES ===== */
+
+/* Row styling for currently playing elements - light mode */
+.row-playing {
+  background-color: rgba(76, 175, 80, 0.12) !important;
+}
+
+.row-playing:hover {
+  background-color: rgba(76, 175, 80, 0.18) !important;
+}
+
+.row-playing.ag-row-selected {
+  background-color: rgba(76, 175, 80, 0.25) !important;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .row-playing {
+  background-color: rgba(76, 175, 80, 0.15) !important;
+}
+
+[data-theme="dark"] .row-playing:hover {
+  background-color: rgba(76, 175, 80, 0.22) !important;
+}
+
+[data-theme="dark"] .row-playing.ag-row-selected {
+  background-color: rgba(76, 175, 80, 0.30) !important;
+}

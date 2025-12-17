@@ -1,0 +1,156 @@
+/* ============================================
+   THEME VARIABLES
+   ============================================ */
+
+   :root {
+    /* Primary Colors */
+    --primary-blue: #1976d2;
+    --primary-blue-hover: #1565c0;
+    --primary-blue-light: #2196f3;
+    --primary-blue-bg: #bbdefb;
+    
+    /* Background Colors */
+    --bg-white: #ffffff;
+    --bg-light-gray: #f5f5f5;
+    --bg-medium-gray: #f0f0f0;
+    
+    /* Border Colors */
+    --border-gray: #ddd;
+    --border-light: #e0e0e0;
+    
+    /* Text Colors */
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-icon: #444;
+    --text-disabled: #ccc;
+    --text-muted: #999;
+    --text-danger: #d13913;
+    
+    /* Focus & States */
+    --focus-shadow: rgba(25, 118, 210, 0.2);
+    --drag-overlay: rgba(33, 150, 243, 0.1);
+    --drag-ghost: rgba(33, 150, 243, 0.95);
+
+    /* Icon Colors (MUI theme equivalents) */
+    --icon-primary: #1976d2;
+    --icon-secondary: #9c27b0;
+    --icon-warning: #ed6c02;
+    --icon-success: #2e7d32;
+    --icon-info: #0288d1;
+    
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 10px;
+    --spacing-lg: 15px;
+    --spacing-xl: 16px;
+    
+    /* Font - matching Novadevgrig */
+    --font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-size-sm: 12px;
+    --font-size-md: 13px;
+    --font-size-base: 14px;
+    --font-size-lg: 16px;
+
+    /* Tab-specific colors */
+    --tab-inactive-bg: #f5f5f5;
+    --tab-inactive-hover: #e8e8e8;
+    --tab-active-bg: #000000;
+    --tab-active-text: #ffffff;
+    --tab-border-radius: 8px;
+
+    /* Form.io custom component colors */
+    --formio-bg-light: #f8f9fa;
+    --formio-bg-lighter: #fafafa;
+    --formio-bg-card: #ffffff;
+    --formio-border: #dee2e6;
+    --formio-border-input: #ced4da;
+    --formio-text: #495057;
+    --formio-text-muted: #6c757d;
+    --formio-text-dark: #212529;
+    --formio-btn-primary: #007bff;
+    --formio-btn-primary-hover: #0056b3;
+
+    /* Scrollbar colors */
+    --scrollbar-thumb: #c1c1c1;
+    --scrollbar-thumb-hover: #a8a8a8;
+    --scrollbar-track: transparent;
+
+    /* Note/Info box colors */
+    --note-bg: #e3f2fd;
+    --note-text: #1565c0;
+    --note-border: #90caf9;
+  }
+  
+  /* ============================================
+     GLOBAL STYLES
+     ============================================ */
+  
+  body {
+    font-family: var(--font-family);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ============================================
+     SCROLLBAR STYLES
+     ============================================ */
+
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* ============================================
+     BUTTON STYLES
+     ============================================ */
+  
+  .bp5-button {
+    font-family: var(--font-family);
+  }
+  
+  .bp5-button.bp5-intent-primary {
+    background-color: var(--primary-blue);
+  }
+  
+  .bp5-button.bp5-intent-primary:hover {
+    background-color: var(--primary-blue-hover);
+  }
+  
+  /* ============================================
+     ICON COLORS
+     ============================================ */
+  
+  .bp5-icon {
+    color: var(--text-icon);
+  }
+  
+  .bp5-button.bp5-intent-primary .bp5-icon {
+    color: white;
+  }

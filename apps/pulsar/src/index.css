@@ -1,0 +1,32 @@
+@import '@blueprintjs/core/lib/css/blueprint.css';
+
+/* Import AG Grid styles */
+@import 'ag-grid-community/styles/ag-grid.css';
+@import 'ag-grid-community/styles/ag-theme-alpine.css';
+
+/* Import the official FormIO CSS */
+@import url('https://cdn.form.io/formiojs/formio.full.min.css');
+
+/* Import Bootstrap (required by FormIO) */
+@import url('https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css');
+
+/* Base Layout */
+@import 'styles/layout.css';
+
+/* Theme Variables */
+@import 'styles/theme.css';
+@import 'styles/theme-dark.css';
+
+/* Grid Components */
+@import 'styles/ag-grid.css';
+@import 'styles/ag-grid-dd.css';
+@import 'styles/toolbar.css';
+
+/* FormIO Components */
+@import 'styles/formio-base.css';
+@import 'styles/formio-builder.css';
+@import 'styles/formio-dialog.css';
+@import 'styles/formio-component-editor.css';
+@import 'styles/formio-inline-editor.css';
+@import 'styles/formio-tab-hiding.css';
+@import 'styles/formio-builder-customization.css';

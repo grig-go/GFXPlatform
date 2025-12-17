@@ -31,11 +31,15 @@ Thumbs.db
 *.swo
 
 # Logs
+logs/
 *.log
+*.pid
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+logrotate.conf
+logrotate.state
 
 # Testing
 coverage

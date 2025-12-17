@@ -1,0 +1,8 @@
+Add this before the final </div> closing tag in SportsDashboard.tsx (line ~1473):
+
+      {/* Venue Details Modal */}
+      <VenueDetailsModal
+        venueId={selectedVenueId}
+        open={isVenueModalOpen}
+        onOpenChange={setIsVenueModalOpen}
+      />

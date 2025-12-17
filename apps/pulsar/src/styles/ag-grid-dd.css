@@ -1,0 +1,173 @@
+
+/* Drag handle appearance */
+.ag-theme-alpine .ag-row-drag {
+  cursor: grab !important;
+  padding: 0 6px !important;
+  opacity: 0.4 !important;
+  transition: opacity 0.2s ease !important;
+  color: #666 !important;
+}
+
+.ag-theme-alpine .ag-row:hover .ag-row-drag {
+  opacity: 0.8 !important;
+}
+
+.ag-theme-alpine .ag-row-drag:active {
+  cursor: grabbing !important;
+  opacity: 1 !important;
+}
+
+/* Ghost element styling */
+.ag-dnd-ghost {
+  background-color: #ffffff !important;
+  border: 1px solid #2196f3 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #333 !important;
+  min-width: 120px !important;
+  max-width: 300px !important;
+  height: auto !important;
+  transform: none !important;
+}
+
+.ag-dnd-ghost-icon {
+  display: none !important;
+}
+
+.ag-dnd-ghost-label {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Rows being dragged */
+.ag-theme-alpine .ag-row.ag-row-dragging {
+  opacity: 0.6 !important;
+  background-color: rgba(33, 150, 243, 0.1) !important;
+}
+
+/* Disable row animations during drag operations */
+.ag-theme-alpine .ag-row-dragging,
+.ag-theme-alpine.ag-row-animation .ag-row {
+  transition: none !important;
+}
+
+/* Force disable all row animations when any drag is active */
+.ag-theme-alpine:has(.ag-row-dragging) .ag-row,
+.ag-theme-alpine:has(.ag-dnd-ghost) .ag-row {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Hide AG Grid's default full-height drop indicators */
+.ag-theme-alpine .ag-row-drag-line,
+.ag-theme-alpine .ag-full-width-row.ag-row-drag-line,
+.ag-theme-alpine .ag-row-drop-indicator,
+.ag-theme-alpine .ag-row-drop-zone,
+.ag-theme-alpine .ag-drop-target-indicator,
+.ag-theme-alpine .ag-dnd-drop-target,
+.ag-theme-alpine .ag-row-animation-drop-target {
+  display: none !important;
+}
+
+/* Remove any border/outline that appears during row dragging */
+.ag-theme-alpine .ag-row.ag-row-dragging,
+.ag-theme-alpine .ag-row.ag-row-focus,
+.ag-theme-alpine .ag-row.ag-row-selected {
+  outline: none !important;
+}
+
+/* Disable AG Grid's row drag highlighting CSS variable */
+.ag-theme-alpine {
+  --ag-row-drag-highlight-color: transparent !important;
+  --ag-row-drag-hovered-over-color: transparent !important;
+  --ag-range-selection-border-color: transparent !important;
+}
+
+/* Remove any vertical indicator lines on cells - but keep horizontal borders */
+.ag-theme-alpine .ag-cell {
+  border-left: none !important;
+  border-right: none !important;
+}
+
+/* Hide full-height containers that AG Grid might use */
+.ag-theme-alpine .ag-full-width-container,
+.ag-theme-alpine .ag-floating-top-full-width-container,
+.ag-theme-alpine .ag-floating-bottom-full-width-container {
+  display: none !important;
+}
+
+
+/* ===========================================
+   CUSTOM DRAG TARGET INDICATORS
+   These MUST come last to override any other rules
+   Applying border to cells within the target row for full coverage
+   =========================================== */
+
+/* Drop indicator line ABOVE target row - apply to all cells and wrappers */
+.ag-row-drag-target-above .ag-cell,
+.ag-row-drag-target-above .ag-cell-wrapper,
+.ag-row-drag-target-above .ag-group-value,
+.ag-row.ag-row-drag-target-above .ag-cell,
+.ag-row.ag-row-drag-target-above .ag-cell-wrapper,
+.ag-theme-alpine .ag-row.ag-row-drag-target-above .ag-cell,
+.ag-theme-alpine .ag-row.ag-row-drag-target-above .ag-cell-wrapper {
+  border-top: 3px solid #2196f3 !important;
+  margin-top: -3px !important;
+}
+
+/* Also apply to the row itself as a fallback */
+.ag-row-drag-target-above,
+.ag-row.ag-row-drag-target-above,
+.ag-theme-alpine .ag-row.ag-row-drag-target-above {
+  box-shadow: inset 0 3px 0 0 #2196f3 !important;
+}
+
+/* Drop indicator line BELOW target row - apply to all cells and wrappers */
+.ag-row-drag-target-below .ag-cell,
+.ag-row-drag-target-below .ag-cell-wrapper,
+.ag-row-drag-target-below .ag-group-value,
+.ag-row.ag-row-drag-target-below .ag-cell,
+.ag-row.ag-row-drag-target-below .ag-cell-wrapper,
+.ag-theme-alpine .ag-row.ag-row-drag-target-below .ag-cell,
+.ag-theme-alpine .ag-row.ag-row-drag-target-below .ag-cell-wrapper {
+  border-bottom: 3px solid #2196f3 !important;
+  margin-bottom: -3px !important;
+}
+
+/* Also apply to the row itself as a fallback */
+.ag-row-drag-target-below,
+.ag-row.ag-row-drag-target-below,
+.ag-theme-alpine .ag-row.ag-row-drag-target-below {
+  box-shadow: inset 0 -3px 0 0 #2196f3 !important;
+}
+
+/* ===========================================
+   CROSS-GRID DRAG AND DROP STYLES
+   Visual feedback when dragging from Content to Channel Schedules
+   =========================================== */
+
+/* Highlight the entire target grid container when dragging over it */
+.cross-grid-drag-over {
+  outline: 3px dashed #2196f3 !important;
+  outline-offset: -3px !important;
+  background-color: rgba(33, 150, 243, 0.05) !important;
+}
+
+.cross-grid-drag-over .ag-root-wrapper {
+  background-color: rgba(33, 150, 243, 0.05) !important;
+}
+
+/* Show a pulsing effect to indicate drop zone is active */
+@keyframes cross-grid-pulse {
+  0% { outline-color: #2196f3; }
+  50% { outline-color: #64b5f6; }
+  100% { outline-color: #2196f3; }
+}
+
+.cross-grid-drag-over {
+  animation: cross-grid-pulse 1s ease-in-out infinite !important;
+}

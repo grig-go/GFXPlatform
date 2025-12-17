@@ -1,0 +1,69 @@
+node_modules
+*_backup
+.env
+.zip
+seed.sql
+
+# Build and Distribution
+dist/
+build/
+*.local
+
+# Development and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and Temporary Files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime and Cache
+.pnp
+.pnp.js
+.eslintcache
+.stylelintcache
+
+# Supabase Specific
+.supabase/
+supabase/.temp/
+
+# Environment and Secrets
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+src/supabase/functions/.env
+
+# Supabase
+.temp/
+.branches/
+src/supabase/.temp/cli-latest
+
+# Docker volumes
+volumes/
+docker/volumes/
+
+# testing
+/coverage
+/out/
+
+# misc
+*.pem
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# Logs directory
+logs/
+

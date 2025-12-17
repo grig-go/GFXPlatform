@@ -1,0 +1,83 @@
+/* Component Editor Dialog */
+.formio-dialog.component-editor {
+  position: absolute !important;
+  background-color: var(--bg-white) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: auto !important;
+  z-index: 1000 !important;
+}
+
+/* Election Template Grid - Add spacing between rows and Add button */
+.election-template-grid button[ref*="addRow"] {
+  margin-top: 12px !important;
+}
+
+/* Election Template Grid - Make saved rows full width */
+.election-template-grid .list-group-item {
+  width: 100% !important;
+}
+
+/* Hide dialog overlay for component editor */
+.formio-dialog-overlay.component-editor-overlay {
+  opacity: 0 !important;
+  background-color: transparent !important;
+}
+
+/* Dialog header styling */
+.component-editor .formio-dialog-title {
+  background-color: var(--bg-light-gray) !important;
+  border-bottom: 1px solid var(--border-gray) !important;
+  padding: 10px 15px !important;
+  font-size: 16px !important;
+  font-weight: normal !important;
+  color: var(--text-primary) !important;
+  margin: 0 !important;
+}
+
+/* Dialog content styling */
+.component-editor .formio-dialog-content {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+  width: 100% !important;
+}
+
+/* Preview section styling */
+.component-editor .preview-panel {
+  background-color: var(--bg-white) !important;
+  border: 1px solid var(--border-gray) !important;
+  border-radius: 4px !important;
+  margin: 15px !important;
+  padding: 15px !important;
+}
+
+/* Form sections styling */
+.component-editor .tab-content > .tab-pane {
+  padding: 15px !important;
+}
+
+/* Form input styling */
+.component-editor input[type="text"],
+.component-editor textarea,
+.component-editor select {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Button styling */
+.component-editor .formio-dialog-buttons .btn {
+  margin: 0 5px !important;
+  padding: 8px 16px !important;
+  border-radius: 4px !important;
+}
+
+.component-editor .btn-success {
+  background-color: var(--primary-blue) !important;
+  border-color: var(--primary-blue) !important;
+}

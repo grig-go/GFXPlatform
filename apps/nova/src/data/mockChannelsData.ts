@@ -1,0 +1,68 @@
+import { Channel } from "../types/channels";
+
+export const mockChannelsData: Channel[] = [
+  {
+    id: "ch-1",
+    name: "Main Output A",
+    type: "Pixera",
+    description: "Primary broadcast output channel for studio A using Pixera media server",
+    createdAt: "2024-01-15T10:00:00Z",
+    updatedAt: "2024-01-15T10:00:00Z",
+  },
+  {
+    id: "ch-2",
+    name: "Graphics Engine 1",
+    type: "Vizrt",
+    description: "Real-time graphics rendering for lower thirds and overlays",
+    createdAt: "2024-01-16T11:30:00Z",
+    updatedAt: "2024-01-20T14:20:00Z",
+  },
+  {
+    id: "ch-3",
+    name: "Virtual Set Studio B",
+    type: "Unreal",
+    description: "Unreal Engine virtual production environment for studio B",
+    createdAt: "2024-01-18T09:15:00Z",
+    updatedAt: "2024-01-25T16:45:00Z",
+  },
+  {
+    id: "ch-4",
+    name: "Web Stream Primary",
+    type: "Web",
+    description: "Web-based streaming output for online broadcast",
+    createdAt: "2024-01-20T13:00:00Z",
+    updatedAt: "2024-01-22T10:30:00Z",
+  },
+  {
+    id: "ch-5",
+    name: "LED Wall Controller",
+    type: "Pixera",
+    description: "Pixera controller for LED wall content in studio C",
+    createdAt: "2024-01-22T08:45:00Z",
+    updatedAt: "2024-01-23T12:00:00Z",
+  },
+  {
+    id: "ch-6",
+    name: "AR Graphics Engine",
+    type: "Unreal",
+    description: "Augmented reality graphics using Unreal Engine for sports coverage",
+    createdAt: "2024-01-25T15:20:00Z",
+    updatedAt: "2024-01-26T09:10:00Z",
+  },
+  {
+    id: "ch-7",
+    name: "Social Media Feed",
+    type: "Web",
+    description: "Web-based social media integration and display",
+    createdAt: "2024-01-28T11:00:00Z",
+    updatedAt: "2024-01-28T11:00:00Z",
+  },
+  {
+    id: "ch-8",
+    name: "Ticker Graphics",
+    type: "Vizrt",
+    description: "Vizrt system for scrolling tickers and news updates",
+    createdAt: "2024-02-01T10:30:00Z",
+    updatedAt: "2024-02-03T14:15:00Z",
+  },
+];

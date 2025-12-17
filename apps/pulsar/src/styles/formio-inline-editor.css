@@ -1,0 +1,98 @@
+/* Ensure the inline editor is at the highest z-index */
+#inline-component-editor {
+  display: flex;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-color: var(--bg-white);
+  z-index: 10000 !important; /* Extremely high z-index */
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto !important; /* Ensure it accepts clicks */
+}
+
+/* Enable pointer events for all elements inside the editor */
+#inline-component-editor * {
+  pointer-events: auto !important;
+}
+
+/* Ensure the header is clickable */
+#inline-component-editor .header {
+  padding: 10px 15px;
+  background-color: var(--bg-light-gray);
+  border-bottom: 1px solid var(--border-gray);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}
+
+/* Make sure the close button is clickable */
+#inline-component-editor .inline-editor-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10002 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure content area accepts clicks */
+#inline-component-editor .content {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  max-height: calc(100% - 110px);
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure buttons are clickable */
+#inline-component-editor .footer {
+  padding: 10px 15px;
+  border-top: 1px solid var(--border-gray);
+  background-color: var(--bg-light-gray);
+  text-align: right;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}
+
+/* Make sure form controls accept user interaction */
+#inline-component-editor input,
+#inline-component-editor select,
+#inline-component-editor textarea,
+#inline-component-editor button,
+#inline-component-editor .btn {
+  pointer-events: auto !important;
+}
+
+/* Disable pointer events for the original dialog */
+.formio-dialog.hidden-by-inline {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Make sure any formio overlay is really hidden */
+.formio-dialog-overlay {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Target tab navigation specifically */
+#inline-component-editor .nav-tabs,
+#inline-component-editor .nav-item,
+#inline-component-editor .nav-link {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Style specific form components to ensure they're interactive */
+#inline-component-editor .form-control,
+#inline-component-editor .form-check,
+#inline-component-editor .form-check-input,
+#inline-component-editor .form-select {
+  pointer-events: auto !important;
+}

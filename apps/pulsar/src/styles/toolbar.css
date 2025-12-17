@@ -1,0 +1,46 @@
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) !important;
+  background-color: var(--bg-white) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.toolbar-button {
+  min-width: 40px;
+  height: 40px;
+  color: var(--text-icon);
+}
+
+.toolbar-button:hover {
+  background-color: var(--bg-medium-gray);
+}
+
+/* Tooltip styling */
+.toolbar-button[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--text-primary);
+  color: white;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  z-index: 1000;
+}

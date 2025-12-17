@@ -1,0 +1,61 @@
+/* Form.io Builder Layout */
+.formbuilder {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 600px !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.formbuilder > * {
+  box-sizing: border-box !important;
+}
+
+/* Components Panel (Left Side) */
+.formcomponents {
+  width: 300px !important;
+  min-width: 300px !important;
+  max-width: 300px !important;
+  overflow-y: auto !important;
+  height: 100% !important;
+}
+
+.formcomponent {
+  margin-top: .2rem !important;
+}
+
+/* Form Building Area (Right Side) */
+.formarea {
+  flex: 1 !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  padding: 10px !important;
+  border: 1px dashed var(--border-gray) !important;
+  position: relative !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.form-builder-group-header {
+  padding: 0 !important;
+}
+
+.form-builder-group-header::selection {
+  background: none !important;
+}
+
+.builder-group-button:focus {
+  box-shadow: none !important;
+}
+
+/* Component settings panel */
+.component-settings {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.spinning-icon {
+  animation: spin 1.5s linear infinite;
+}

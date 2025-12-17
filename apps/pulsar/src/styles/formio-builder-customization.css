@@ -1,0 +1,126 @@
+/* formio-builder-attribute-selectors.css */
+/* CSS using attribute selectors to avoid escaping issues */
+
+/* Display Tab Properties */
+[class*="formio-component-widget"] {
+  display: none !important;
+}
+
+[class*="formio-component-allowMultipleMasks"] {
+  display: none !important;
+}
+
+[class*="formio-component-inputMasks"] {
+  display: none !important;
+}
+
+[class*="formio-component-customClass"] {
+  display: none !important;
+}
+
+[class*="formio-component-modalEdit"] {
+  display: none !important;
+}
+
+[class*="formio-component-inputMask"] {
+  display: none !important;
+}
+
+[class*="formio-component-displayMask"] {
+  display: none !important;
+}
+
+[class*="formio-component-applyMaskOn"] {
+  display: none !important;
+}
+
+[class*="formio-component-inputMaskPlaceholderChar"] {
+  display: none !important;
+}
+
+/* Data Tab Properties */
+[class*="formio-component-multiple"] {
+  display: none !important;
+}
+
+[class*="formio-component-persistent"] {
+  display: none !important;
+}
+
+[class*="formio-component-inputFormat"] {
+  display: none !important;
+}
+
+[class*="formio-component-protected"] {
+  display: none !important;
+}
+
+[class*="formio-component-dbIndex"] {
+  display: none !important;
+}
+
+[class*="formio-component-redrawOn"] {
+  display: none !important;
+}
+
+[class*="formio-component-calculateServer"] {
+  display: none !important;
+}
+
+[class*="formio-component-allowCalculateOverride"] {
+  display: none !important;
+}
+
+/* Validation Tab Properties */
+[class*="formio-component-validateOn"] {
+  display: none !important;
+}
+
+[class*="formio-component-validate.required"] {
+  display: none !important;
+}
+
+[class*="formio-component-unique"] {
+  display: none !important;
+}
+
+[class*="formio-component-validateWhenHidden"] {
+  display: none !important;
+}
+
+[class*="formio-component-encrypted"] {
+  display: none !important;
+}
+
+[class*="formio-component-clearOnHide"] {
+  display: none !important;
+}
+
+[class*="formio-component-truncateMultipleSpaces"] {
+  display: none !important;
+}
+
+[class*="formio-component-customDefaultValuePanel"] {
+  display: none !important;
+}
+
+[class*="formio-component-calculateValuePanel"] {
+  display: none !important;
+}
+
+[class*="formio-component-tags"] {
+  display: none !important;
+}
+
+[class*="formio-component-datamap"] {
+  display: none !important;
+}
+
+/* Additional selectors for the Required checkbox */
+.tab-pane[ref="validate"] .form-check:first-child {
+  display: none !important;
+}
+
+.tab-pane[ref="validateTab"] .form-check:first-child {
+  display: none !important;
+}

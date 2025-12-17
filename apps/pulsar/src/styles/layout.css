@@ -1,0 +1,184 @@
+/* Import FlexLayout styles */
+@import 'flexlayout-react/style/light.css';
+
+/* FlexLayout customizations - Rounded Pill Tabs */
+.flexlayout__tab {
+  background-color: transparent;
+  border: none;
+  margin-right: 6px;
+}
+
+.flexlayout__tabset {
+  background-color: var(--bg-light-gray);
+  overflow: visible !important;
+}
+
+/* Allow AG-Grid context menus to escape FlexLayout containers */
+.flexlayout__layout {
+  overflow: visible !important;
+}
+
+.flexlayout__tab {
+  overflow: visible !important;
+}
+
+.flexlayout__tab_content {
+  overflow: visible !important;
+}
+
+.flexlayout__tabset_tabbar_outer {
+  background-color: var(--bg-white);
+  border-bottom: 1px solid var(--border-gray);
+  padding: 4px;
+}
+
+.flexlayout__tabset-selected {
+  background-color: var(--bg-white);
+}
+
+/* Tab button styling - Rounded Pills */
+.flexlayout__tab_button {
+  background-color: var(--tab-inactive-bg);
+  color: var(--text-primary);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 16px;
+  font-size: var(--font-size-base);
+  font-weight: 400;
+  font-family: var(--font-family);
+  transition: background-color 0.15s ease;
+}
+
+/* Selected/Active tab - Black pill */
+.flexlayout__tab_button--selected {
+  background-color: var(--tab-active-bg);
+  color: var(--tab-active-text);
+  font-weight: 500;
+}
+
+/* Hover state for inactive tabs */
+.flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover {
+  background-color: var(--tab-inactive-hover);
+}
+
+/* Close button styling */
+.flexlayout__tab_button_trailing {
+  opacity: 0.6;
+  margin-left: var(--spacing-sm);
+}
+
+.flexlayout__tab_button--selected .flexlayout__tab_button_trailing {
+  opacity: 0.8;
+  color: var(--tab-active-text);
+}
+
+.flexlayout__tab_button_trailing:hover {
+  opacity: 1;
+}
+
+.flexlayout__splitter {
+  background-color: var(--bg-white);
+}
+
+/* ============================================
+   NAVBAR CUSTOMIZATIONS
+   ============================================ */
+
+.bp5-navbar {
+  padding: 0 16px;
+  box-shadow: none;
+  border-bottom: 1px solid var(--border-gray);
+  background-color: var(--bg-white);
+  font-family: var(--font-family);
+  height: 50px;
+  overflow: hidden;
+}
+
+/* Remove dividers */
+.bp5-navbar-divider {
+  display: none;
+}
+
+.bp5-navbar .bp5-navbar-group {
+  height: 50px;
+}
+
+.bp5-navbar .bp5-navbar-heading {
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Logo image styling */
+.navbar-logo {
+  height: 30px;
+  width: auto;
+  margin-right: 12px;
+  object-fit: contain;
+}
+
+/* Gradient P icon */
+.navbar-project-icon {
+  height: 28px;
+  width: 28px;
+  border-radius: 10px;
+  background: linear-gradient(to bottom right, #ef4444, #e879f9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.navbar-project-icon-text {
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Project name text */
+.navbar-project-name {
+  font-weight: 700;
+  font-size: 20px;
+  margin-right: 24px;
+  color: var(--text-primary);
+}
+
+/* Navbar buttons */
+.bp5-navbar .bp5-button {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.bp5-navbar .bp5-button-text {
+  font-size: var(--font-size-base);
+  font-weight: 400;
+}
+
+.bp5-navbar .bp5-icon {
+  color: var(--text-icon);
+}
+
+.bp5-navbar .bp5-button:hover {
+  background-color: var(--bg-light-gray);
+}
+
+/* Button group spacing */
+.bp5-navbar .bp5-button-group.bp5-minimal .bp5-button {
+  margin-right: 0;
+}
+
+/* ============================================
+   LAYOUT STRUCTURE
+   ============================================ */
+
+html, body, #root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+}

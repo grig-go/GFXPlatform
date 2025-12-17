@@ -1,0 +1,57 @@
+/* Dialog Base Styling */
+.formio-dialog, 
+.formio-component-settings {
+  z-index: 9999 !important;
+}
+
+.formio-dialog {
+  position: fixed !important; /* Ensure it's positioned relative to viewport */
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important; /* Center both horizontally and vertically */
+  margin: 0 !important; /* Remove all margins since transform handles centering */
+  border-radius: 5px !important;
+  width: calc(100% - 64px) !important;
+  max-width: 1536px;
+  height: 90vh !important;
+  max-height: 900px !important;
+}
+
+.formio-dialog-content {
+  width: 100% !important;
+  z-index: 10000 !important;
+}
+
+/* Dialog Header */
+.formio-dialog-title {
+  background-color: var(--bg-light-gray) !important;
+  border-bottom: 1px solid var(--border-gray) !important;
+  color: var(--text-primary) !important;
+  margin: 0 !important;
+}
+
+/* Preview section in component dialog */
+.formio-dialog .preview-panel {
+  background-color: var(--bg-white) !important;
+  border: 1px solid var(--border-gray) !important;
+  border-radius: 4px !important;
+}
+
+/* Tab content panels */
+.formio-dialog .tab-content > .tab-pane {
+}
+
+/* Dialog Buttons */
+.formio-dialog .formio-dialog-buttons .btn {
+  border-radius: 4px !important;
+}
+
+.formio-dialog .formio-dialog-buttons .btn-success {
+  background-color: var(--primary-blue) !important;
+  border-color: var(--primary-blue) !important;
+}
+
+/* Dialog overlay */
+.formio-dialog-overlay {
+  z-index: 9998 !important;
+}

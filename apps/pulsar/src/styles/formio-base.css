@@ -1,0 +1,96 @@
+/* Basic Form.io form display styling */
+.formio-form {
+  font-family: inherit;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.formio-component {
+  margin-bottom: 1.5rem;
+  position: relative;
+  max-width: 100%;
+}
+
+.formio-component label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.formio-component input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-gray);
+  border-radius: 4px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.formio-component input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 2px var(--focus-shadow);
+}
+
+.formio-button-submit {
+  background-color: var(--primary-blue);
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.formio-button-submit:hover {
+  background-color: var(--primary-blue-hover);
+}
+
+/* Field wrapper customizations */
+.formio-field-wrapper {
+  position: relative;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.edit-field-btn {
+  position: absolute;
+  right: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+  z-index: 1000;
+}
+
+.edit-field-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
+}
+
+/* Character limit styling */
+.formio-component-textarea.has-char-limit,
+.formio-component-textfield.has-char-limit {
+  position: relative;
+}
+
+.formio-component-textarea.has-char-limit::before,
+.formio-component-textfield.has-char-limit::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background-color: rgba(255, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.has-char-limit::before {
+  left: var(--limit-position, 80%);
+}
