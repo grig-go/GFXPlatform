@@ -62,6 +62,8 @@ done
 
 # Fallback: kill any remaining vite processes for this project
 echo -e "${YELLOW}Cleaning up any remaining processes...${NC}"
+pkill -f "GFXPlatform/apps/.*/node_modules.*vite" 2>/dev/null || true
+pkill -f "GFXPlatform.*vite" 2>/dev/null || true
 pkill -f "vite.*GFXPlatform" 2>/dev/null || true
 pkill -f "supabase functions serve" 2>/dev/null || true
 

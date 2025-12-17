@@ -59,6 +59,8 @@ done
 # Fallback: kill any remaining serve processes for this project
 echo -e "${YELLOW}Cleaning up any remaining processes...${NC}"
 pkill -f "serve.*GFXPlatform" 2>/dev/null || true
+pkill -f "GFXPlatform/apps/.*/dist" 2>/dev/null || true
+pkill -f "serve -s.*/GFXPlatform" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
