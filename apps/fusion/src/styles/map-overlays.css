@@ -1,0 +1,19 @@
+/* Simple marker visibility fixes for Mapbox GL */
+
+/* Ensure Mapbox canvas stays at the back */
+.mapboxgl-canvas {
+  z-index: 0 !important;
+}
+
+/* Ensure markers are visible on top */
+.mapboxgl-marker {
+  z-index: 1 !important;
+}
+
+/* Ensure our custom marker elements are visible */
+.weather-card-marker,
+.stadium-marker,
+.ai-infra-marker,
+.media-marker {
+  z-index: 2 !important;
+}
