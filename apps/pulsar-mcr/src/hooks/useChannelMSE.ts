@@ -47,7 +47,13 @@ const parseVizChannelsFromXml = (xmlData: string): VizChannelInfo[] => {
   const results: VizChannelInfo[] = [];
 
   try {
-    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '');
+    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '').trim();
+
+    // Validate that we have actual XML content before parsing
+    if (!cleanXml || !cleanXml.startsWith('<')) {
+      return results;
+    }
+
     const parsed = xmlParser.parse(cleanXml);
 
     // Navigate to the channels entry - could be top-level or nested
@@ -141,7 +147,13 @@ const parseActiveCarouselsFromXml = (xmlData: string): ParsedActiveCarousel[] =>
   const results: ParsedActiveCarousel[] = [];
 
   try {
-    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '');
+    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '').trim();
+
+    // Validate that we have actual XML content before parsing
+    if (!cleanXml || !cleanXml.startsWith('<')) {
+      return results;
+    }
+
     const parsed = xmlParser.parse(cleanXml);
 
     // Recursive function to find playlists with active_* attributes
@@ -200,7 +212,12 @@ const parseElementsFromXml = (xmlData: string): ParsedMSEElement[] => {
 
   try {
     // Clean up the XML data - remove PlainTalk escapes like {N}
-    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '');
+    const cleanXml = xmlData.replace(/\{[0-9]+\}/g, '').trim();
+
+    // Validate that we have actual XML content before parsing
+    if (!cleanXml || !cleanXml.startsWith('<')) {
+      return results;
+    }
 
     // Try to parse the XML
     const parsed = xmlParser.parse(cleanXml);
