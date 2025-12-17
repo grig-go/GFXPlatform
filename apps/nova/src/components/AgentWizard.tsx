@@ -23,6 +23,7 @@ import { supabase } from "../utils/supabase/client";
 
 const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
 const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
@@ -712,55 +713,59 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         const convertedSources = novaSources.map((ds: AgentDataSource) => {
           // Parse Nova Weather or Nova Election filters from URL if not already present
           let api_config = ds.api_config;
-          if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaWeatherFilters: {
-                type: params.get('type') || 'current',
-                channel: params.get('channel') || 'all',
-                dataProvider: params.get('dataProvider') || 'all',
-                state: params.get('state') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Election' && api_config?.url && !api_config.novaElectionFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaElectionFilters: {
-                year: params.get('year') || currentElectionYear.toString(),
-                raceType: params.get('raceType') || 'presidential',
-                level: params.get('level') || 'state',
-                state: params.get('state') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Finance' && api_config?.url && !api_config.novaFinanceFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaFinanceFilters: {
-                type: params.get('type') || 'all',
-                change: params.get('change') || 'all',
-                symbol: params.get('symbol') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Sports' && api_config?.url && !api_config.novaSportsFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaSportsFilters: {
-                view: params.get('view') || 'teams',
-                league: params.get('league') || 'all',
-                provider: params.get('provider') || 'all',
-                position: params.get('position') || 'all',
-                status: params.get('status') || 'all',
-                season: params.get('season') || 'all'
-              }
-            };
+          try {
+            if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaWeatherFilters: {
+                  type: params.get('type') || 'current',
+                  channel: params.get('channel') || 'all',
+                  dataProvider: params.get('dataProvider') || 'all',
+                  state: params.get('state') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Election' && api_config?.url && !api_config.novaElectionFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaElectionFilters: {
+                  year: params.get('year') || currentElectionYear.toString(),
+                  raceType: params.get('raceType') || 'presidential',
+                  level: params.get('level') || 'state',
+                  state: params.get('state') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Finance' && api_config?.url && !api_config.novaFinanceFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaFinanceFilters: {
+                  type: params.get('type') || 'all',
+                  change: params.get('change') || 'all',
+                  symbol: params.get('symbol') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Sports' && api_config?.url && !api_config.novaSportsFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaSportsFilters: {
+                  view: params.get('view') || 'teams',
+                  league: params.get('league') || 'all',
+                  provider: params.get('provider') || 'all',
+                  position: params.get('position') || 'all',
+                  status: params.get('status') || 'all',
+                  season: params.get('season') || 'all'
+                }
+              };
+            }
+          } catch (e) {
+            console.warn('Failed to parse URL for data source:', ds.name, e);
           }
 
           return {
@@ -988,7 +993,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       if (selectedDataTypes.includes('Nova Weather')) {
         // Generate unique ID for Nova Weather
         const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
 
         // Create a Nova Weather data source with default filters
         const novaWeatherSource = {
@@ -996,7 +1000,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           type: 'api',
           category: 'Nova Weather',
           api_config: {
-            url: `${currentDomain}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
+            url: `${novaBaseUrl}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
             method: 'GET',
             headers: {},
             data_path: 'locations',  // Use data_path for the actual field
@@ -1022,7 +1026,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       if (selectedDataTypes.includes('Nova Election')) {
         // Generate unique ID for Nova Election
         const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
 
         // Create a Nova Election data source with default filters
         const novaElectionSource = {
@@ -1030,7 +1033,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           type: 'api',
           category: 'Nova Election',
           api_config: {
-            url: `${currentDomain}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
+            url: `${novaBaseUrl}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
             method: 'GET',
             headers: {},
             data_path: 'races',  // Use data_path for the actual field
@@ -1056,7 +1059,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       if (selectedDataTypes.includes('Nova Finance')) {
         // Generate unique ID for Nova Finance
         const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
 
         // Create a Nova Finance data source with default filters
         const novaFinanceSource = {
@@ -1064,7 +1066,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           type: 'api',
           category: 'Nova Finance',
           api_config: {
-            url: `${currentDomain}/nova/finance?type=all&change=all&symbol=all`,
+            url: `${novaBaseUrl}/nova/finance?type=all&change=all&symbol=all`,
             method: 'GET',
             headers: {},
             data_path: 'securities',  // Use data_path for the actual field
@@ -1089,7 +1091,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       if (selectedDataTypes.includes('Nova Sports')) {
         // Generate unique ID for Nova Sports
         const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
 
         // Create a Nova Sports data source with default filters
         const novaSportsSource = {
@@ -1097,7 +1098,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           type: 'api',
           category: 'Nova Sports',
           api_config: {
-            url: `${currentDomain}/nova/sports?view=teams&league=all&provider=all`,
+            url: `${novaBaseUrl}/nova/sports?view=teams&league=all&provider=all`,
             method: 'GET',
             headers: {},
             data_path: 'data',  // Use data_path for the actual field
@@ -1469,6 +1470,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
 
     setCurrentStep('basic');
+    setVisitedSteps(new Set<WizardStep>(['basic'])); // Reset visited steps
     setFormData({
       name: '',
       description: '',
