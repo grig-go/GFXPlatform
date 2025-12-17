@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { XMLParser } from 'fast-xml-parser';
 import { Channel } from './useChannels';
 
-// Default MSE Connection configuration
-const DEFAULT_MSE_PORT = parseInt(import.meta.env.VITE_MSE_WEBSOCKET_PORT || '8595', 10);
+// Default MSE port (host must be explicitly provided from channel config)
+const DEFAULT_MSE_PORT = 8595;
 
 // XML Parser configuration - preserves attributes and handles nested elements
 const xmlParser = new XMLParser({
