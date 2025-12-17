@@ -38,9 +38,10 @@ async function resolveImagePlaceholders(
     const authState = useAuthStore.getState();
     const organizationId = authState.user?.organizationId;
     const userId = authState.user?.id;
-    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8) });
+    const accessToken = authState.accessToken; // Get from store, not supabase.auth.getSession()
+    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8), hasToken: !!accessToken });
 
-    if (organizationId && userId) {
+    if (organizationId && userId && accessToken) {
       console.log('🖼️ Resolving GENERATE placeholders...');
 
       // Extract placeholders to get count and show progress
@@ -64,11 +65,11 @@ async function resolveImagePlaceholders(
         }
 
         // Resolve just this one placeholder
-        const singleResolved = await resolveGeneratePlaceholders(placeholderStr, organizationId, userId);
+        const singleResolved = await resolveGeneratePlaceholders(placeholderStr, organizationId, userId, accessToken);
         resolved = resolved.replace(placeholderStr, singleResolved);
       }
     } else {
-      console.warn('⚠️ Cannot generate images: no organization or user ID available');
+      console.warn('⚠️ Cannot generate images: missing org, user, or access token');
       // Replace GENERATE placeholders with fallback
       const fallbackUrl = getFallbackPlaceholderUrl();
       resolved = resolved.replace(/\{\{GENERATE:[^}]+\}\}/g, fallbackUrl);
@@ -1646,6 +1647,52 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Default timeout for AI requests (2 minutes - AI calls can take a while)
+const AI_REQUEST_TIMEOUT_MS = 120000;
+// Extended timeout for requests with images (3 minutes - image analysis takes longer)
+const AI_REQUEST_WITH_IMAGES_TIMEOUT_MS = 180000;
+
+/**
+ * Helper: Wrap a fetch with timeout to prevent indefinite hangs
+ * Returns an AbortController that can be used to cancel the request
+ */
+function createTimeoutSignal(timeoutMs: number, existingSignal?: AbortSignal): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  console.log(`⏱️ [AI] Setting request timeout to ${timeoutMs / 1000} seconds`);
+
+  // Set up timeout
+  timeoutId = setTimeout(() => {
+    console.warn(`⏱️ [AI] Request timed out after ${timeoutMs / 1000} seconds`);
+    controller.abort(new DOMException('Request timed out after ' + (timeoutMs / 1000) + ' seconds', 'TimeoutError'));
+  }, timeoutMs);
+
+  // If there's an existing signal, listen for its abort
+  if (existingSignal) {
+    if (existingSignal.aborted) {
+      controller.abort(existingSignal.reason);
+    } else {
+      existingSignal.addEventListener('abort', () => {
+        controller.abort(existingSignal.reason);
+      }, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    },
+  };
+}
+
 // Send message to Gemini API with retry logic
 async function sendGeminiMessage(
   messages: ChatMessage[],
@@ -1709,6 +1756,9 @@ async function sendGeminiMessage(
     });
   }
 
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
+
   try {
     let response;
 
@@ -1726,7 +1776,7 @@ async function sendGeminiMessage(
           maxTokens: 16384,
           temperature: 0.7,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     } else {
       // Direct API call with user-supplied key
@@ -1750,7 +1800,7 @@ async function sendGeminiMessage(
               { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
             ],
           }),
-          signal,
+          signal: timeoutSignal,
         }
       );
     }
@@ -1781,14 +1831,26 @@ async function sendGeminiMessage(
     const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     return {
       message: responseText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
     // Preserve AbortError for proper cancellation handling
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+
+    // Handle timeout errors
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Gemini] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
 
     // Check if it's a network error that might be retryable
@@ -1867,6 +1929,9 @@ async function sendClaudeMessage(
     });
   }
 
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
+
   try {
     let response;
 
@@ -1884,7 +1949,7 @@ async function sendClaudeMessage(
           systemPrompt: systemPrompt,
           maxTokens: 16384,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     } else {
       // Direct API call with user-supplied key
@@ -1902,7 +1967,7 @@ async function sendClaudeMessage(
           system: systemPrompt,
           messages: apiMessages,
         }),
-        signal,
+        signal: timeoutSignal,
       });
     }
 
@@ -1918,15 +1983,28 @@ async function sendClaudeMessage(
     const responseText = await resolveImagePlaceholders(rawText);
     const changes = parseChangesFromResponse(responseText);
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     return {
       message: responseText,
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
     // Preserve AbortError for proper cancellation handling
     if (fetchError.name === 'AbortError') {
       throw fetchError;
     }
+
+    // Handle timeout errors
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Claude] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
+    }
+
     console.error('Claude API call failed:', fetchError);
     throw new Error(fetchError.message || 'Failed to connect to Claude. Please try again.');
   }
@@ -2096,7 +2174,14 @@ function normalizeElement(el: any, index: number): any {
   const opacity = safeParseNumber(el.opacity, 1, 0, 1);
   const scaleX = safeParseNumber(el.scale_x ?? el.scaleX, 1, 0.01);
   const scaleY = safeParseNumber(el.scale_y ?? el.scaleY, 1, 0.01);
-  const zIndex = safeParseNumber(el.zIndex ?? el.z_index ?? el._zIndex, index);
+  let zIndex = safeParseNumber(el.zIndex ?? el.z_index ?? el._zIndex, index);
+
+  // Force z_index to 1 for background elements (so they appear behind other elements)
+  const nameLower = (el.name || '').toLowerCase();
+  if (nameLower.includes('background') || nameLower === 'bg') {
+    console.log(`🎯 Forcing z_index=1 for background element: "${el.name}"`);
+    zIndex = 1;
+  }
 
   // Normalize element type
   let elementType = el.element_type || el.type || 'shape';
@@ -2297,6 +2382,73 @@ function normalizeAnimation(anim: any, elementIdMap: Map<string, string>): any {
     easing,
     keyframes,
   };
+}
+
+/**
+ * Generate default fade-in/out animations for elements that don't have explicit animations.
+ * This ensures all elements have at least basic animations when the AI response is incomplete.
+ */
+function generateDefaultAnimationsForElements(
+  elements: any[],
+  existingAnimations: any[]
+): any[] {
+  // Build set of element names that already have animations (any phase)
+  const animatedElementNames = new Set<string>();
+  for (const anim of existingAnimations) {
+    if (anim?.element_name) {
+      animatedElementNames.add(anim.element_name);
+    }
+  }
+
+  const defaultAnimations: any[] = [];
+  const baseDelay = 200; // Base delay for staggered animations
+  let elementIndex = 0;
+
+  for (const element of elements) {
+    const elementName = element.name;
+    if (!elementName || animatedElementNames.has(elementName)) {
+      continue; // Skip if already has animation
+    }
+
+    // Calculate staggered delay based on element index (not counting already-animated elements)
+    const staggerDelay = Math.min(baseDelay + (elementIndex * 50), 800); // Cap at 800ms
+
+    // Create default IN animation (fade + slight scale)
+    defaultAnimations.push({
+      element_name: elementName,
+      phase: 'in',
+      delay: staggerDelay,
+      duration: 400,
+      iterations: 1,
+      easing: 'ease-out',
+      keyframes: [
+        { position: 0, properties: { opacity: 0, scale_x: 0.95, scale_y: 0.95 } },
+        { position: 100, properties: { opacity: 1, scale_x: 1, scale_y: 1 } },
+      ],
+    });
+
+    // Create default OUT animation (fade)
+    defaultAnimations.push({
+      element_name: elementName,
+      phase: 'out',
+      delay: 0,
+      duration: 300,
+      iterations: 1,
+      easing: 'ease-in',
+      keyframes: [
+        { position: 0, properties: { opacity: 1 } },
+        { position: 100, properties: { opacity: 0 } },
+      ],
+    });
+
+    elementIndex++;
+  }
+
+  if (defaultAnimations.length > 0) {
+    console.log(`🎬 Generated ${defaultAnimations.length / 2} default animation sets for elements without explicit animations`);
+  }
+
+  return defaultAnimations;
 }
 
 // Normalize animation for action-based format - similar to normalizeAnimation but for action format
@@ -2737,13 +2889,18 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           .map((anim: any) => normalizeAnimation(anim, elementIdMap))
           .filter((anim: any) => anim !== null);
 
-        console.log(`✅ Simplified format parsed: ${normalizedElements.length} elements, ${normalizedAnimations.length} animations`);
+        // Generate default animations for elements that don't have any
+        console.log(`🎬 [Pre-default] ${normalizedElements.length} elements, ${normalizedAnimations.length} parsed animations`);
+        const defaultAnimations = generateDefaultAnimationsForElements(normalizedElements, normalizedAnimations);
+        const finalAnimations = [...normalizedAnimations, ...defaultAnimations];
+
+        console.log(`✅ Simplified format parsed: ${normalizedElements.length} elements, ${finalAnimations.length} animations (${defaultAnimations.length} defaults added)`);
 
         return {
           type: 'create' as const,
           layerType: 'fullscreen',
           elements: normalizedElements,
-          animations: normalizedAnimations,
+          animations: finalAnimations,
           elementsToDelete: [],
           validationHints: hints.length > 0 ? hints : undefined,
           // Preserve dynamic_elements for template expansion
@@ -3000,6 +3157,11 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
             // Note: Group containers don't set backgroundColor in styles - they use content.fill
             const groupStyles = { ...el.styles };
             delete groupStyles.backgroundColor; // Remove to avoid conflicts with content.fill
+            // Force z_index to 1 for background groups
+            const groupName = (el.name || '').toLowerCase();
+            const isBackgroundGroup = groupName.includes('background') || groupName === 'bg';
+            const groupZIndex = isBackgroundGroup ? 1 : (el.z_index ?? el.zIndex ?? layerDefaults.z_index + result.length);
+
             result.push({
               name: el.name || 'Group',
               element_type: 'shape',
@@ -3014,7 +3176,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               styles: groupStyles,
               content: { type: 'shape', shape: 'rectangle', fill: 'transparent', opacity: 0 },
               _layerType: layerType,
-              _zIndex: layerDefaults.z_index + result.length,
+              _zIndex: groupZIndex,
             });
             
             // Recursively flatten child elements with parent offset
@@ -3032,6 +3194,11 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               }
             }
 
+            // Force z_index to 1 for background elements
+            const elName = (el.name || '').toLowerCase();
+            const isBackground = elName.includes('background') || elName === 'bg';
+            const zIndex = isBackground ? 1 : (el.z_index ?? el.zIndex ?? layerDefaults.z_index + result.length);
+
             result.push({
               // IMPORTANT: Preserve ID for update operations
               ...(el.id && { id: el.id }),
@@ -3048,7 +3215,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               styles: elementStyles,
               content: el.content || { type: 'shape', shape: 'rectangle', fill: '#3B82F6' },
               _layerType: layerType,
-              _zIndex: layerDefaults.z_index + result.length,
+              _zIndex: zIndex,
             });
           }
         });
@@ -3081,13 +3248,23 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
         const normalized = normalizeAnimationForAction(anim, anim.element_name, elementIdMapForAction);
         return normalized ? [normalized] : [];
       });
-      
-      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${processedAnimations.length}, layerType=${layerType}`);
+
+      // Generate default animations for elements that don't have any (only for create actions)
+      // This handles cases where AI response was truncated or incomplete
+      let finalAnimations = processedAnimations;
+      if (parsed.action === 'create') {
+        const defaultAnimations = generateDefaultAnimationsForElements(flatElements, processedAnimations);
+        if (defaultAnimations.length > 0) {
+          finalAnimations = [...processedAnimations, ...defaultAnimations];
+        }
+      }
+
+      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${finalAnimations.length}, layerType=${layerType}`);
       return {
         type: parsed.action as 'create' | 'update' | 'delete',
         layerType: layerType,
         elements: flatElements,
-        animations: processedAnimations,
+        animations: finalAnimations,
         elementsToDelete: parsed.elementsToDelete || [],
         // Preserve dynamic_elements for template expansion in ChatPanel
         ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
@@ -3393,18 +3570,22 @@ function convertBlueprintToChanges(blueprint: any): AIResponse['changes'] | null
       convertLayoutNode(blueprint.layout);
     }
     
-    console.log(`📊 Blueprint conversion complete: ${elements.length} elements, ${animations.length} animations`);
-    
+    // Generate default animations for elements that don't have any
+    const defaultAnimations = generateDefaultAnimationsForElements(elements, animations);
+    const finalAnimations = [...animations, ...defaultAnimations];
+
+    console.log(`📊 Blueprint conversion complete: ${elements.length} elements, ${finalAnimations.length} animations`);
+
     if (elements.length === 0) {
       console.warn('⚠️ No elements created from blueprint');
       return null;
     }
-    
+
     return {
       type: 'create',
       layerType,
       elements,
-      animations,
+      animations: finalAnimations,
       elementsToDelete: [],
     };
   } catch (error) {
@@ -3458,120 +3639,143 @@ export async function sendDocsChatMessage(
   const modelConfig = AI_MODELS[modelId];
   const provider = modelConfig.provider;
 
-  if (provider === 'gemini') {
-    const geminiApiKey = getGeminiApiKey();
-    const useProxy = shouldUseBackendProxy('gemini');
+  // Create timeout signal that also respects the user's abort signal
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
 
-    if (!useProxy && !geminiApiKey) {
-      throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
-    }
+  try {
+    if (provider === 'gemini') {
+      const geminiApiKey = getGeminiApiKey();
+      const useProxy = shouldUseBackendProxy('gemini');
 
-    // Build Gemini-format messages with docs system prompt
-    const geminiContents: any[] = [
-      { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
-      { role: 'model', parts: [{ text: 'I understand. I am a documentation assistant for Nova GFX and Pulsar GFX. How can I help you?' }] },
-      ...messages.map((m) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      })),
-    ];
+      if (!useProxy && !geminiApiKey) {
+        throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
+      }
 
-    let response;
-    if (useProxy) {
-      response = await fetch('/.netlify/functions/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'gemini',
-          model: modelConfig.apiModel,
-          messages: geminiContents,
-          maxTokens: 16384,
-          temperature: 0.7,
-        }),
-        signal,
-      });
-    } else {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
-        {
+      // Build Gemini-format messages with docs system prompt
+      const geminiContents: any[] = [
+        { role: 'user', parts: [{ text: `[System Instructions]\n${systemPrompt}` }] },
+        { role: 'model', parts: [{ text: 'I understand. I am a documentation assistant for Nova GFX and Pulsar GFX. How can I help you?' }] },
+        ...messages.map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        })),
+      ];
+
+      let response;
+      if (useProxy) {
+        response = await fetch('/.netlify/functions/ai-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: geminiContents,
-            generationConfig: { maxOutputTokens: 16384, temperature: 0.7 },
+            provider: 'gemini',
+            model: modelConfig.apiModel,
+            messages: geminiContents,
+            maxTokens: 16384,
+            temperature: 0.7,
           }),
-          signal,
-        }
-      );
-    }
+          signal: timeoutSignal,
+        });
+      } else {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: geminiContents,
+              generationConfig: { maxOutputTokens: 16384, temperature: 0.7 },
+            }),
+            signal: timeoutSignal,
+          }
+        );
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
-    }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+      }
 
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+      const data = await response.json();
+      cleanupTimeout();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
 
-  } else {
-    // Claude
-    const claudeApiKey = getClaudeApiKey();
-    const useProxy = shouldUseBackendProxy('claude');
-
-    if (!useProxy && !claudeApiKey) {
-      throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
-    }
-
-    const apiMessages = messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
-
-    let response;
-    if (useProxy) {
-      response = await fetch('/.netlify/functions/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'claude',
-          model: modelConfig.apiModel,
-          systemPrompt,
-          messages: apiMessages,
-          maxTokens: 16384,
-          temperature: 0.7,
-        }),
-        signal,
-      });
     } else {
-      // Use Vite proxy in development to avoid CORS issues
-      const apiUrl = import.meta.env.DEV
-        ? '/api/anthropic/v1/messages'
-        : 'https://api.anthropic.com/v1/messages';
+      // Claude
+      const claudeApiKey = getClaudeApiKey();
+      const useProxy = shouldUseBackendProxy('claude');
 
-      response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': claudeApiKey!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: modelConfig.apiModel,
-          max_tokens: 16384,
-          system: systemPrompt,
-          messages: apiMessages,
-        }),
-        signal,
-      });
+      if (!useProxy && !claudeApiKey) {
+        throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
+      }
+
+      const apiMessages = messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      let response;
+      if (useProxy) {
+        response = await fetch('/.netlify/functions/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'claude',
+            model: modelConfig.apiModel,
+            systemPrompt,
+            messages: apiMessages,
+            maxTokens: 16384,
+            temperature: 0.7,
+          }),
+          signal: timeoutSignal,
+        });
+      } else {
+        // Use Vite proxy in development to avoid CORS issues
+        const apiUrl = import.meta.env.DEV
+          ? '/api/anthropic/v1/messages'
+          : 'https://api.anthropic.com/v1/messages';
+
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': claudeApiKey!,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: modelConfig.apiModel,
+            max_tokens: 16384,
+            system: systemPrompt,
+            messages: apiMessages,
+          }),
+          signal: timeoutSignal,
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      cleanupTimeout();
+      return data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+    }
+  } catch (error: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Preserve AbortError for proper cancellation handling
+    if (error.name === 'AbortError') {
+      throw error;
     }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+    // Handle timeout errors
+    if (error.name === 'TimeoutError') {
+      console.error('❌ [Docs Chat] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
 
-    const data = await response.json();
-    return data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+    throw error;
   }
 }
 
@@ -3588,6 +3792,18 @@ export async function sendChatMessageStreaming(
   signal?: AbortSignal,
   onImageProgress?: ImageProgressCallback
 ): Promise<AIResponse> {
+  // Debug: Log incoming parameters
+  console.log('🔍 [sendChatMessageStreaming] Called with:');
+  console.log('  - messages:', messages.length);
+  console.log('  - images:', images?.length || 0);
+  console.log('  - modelId:', modelId);
+  console.log('  - signal:', !!signal);
+  if (images?.length) {
+    images.forEach((img, i) => {
+      console.log(`  - Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+    });
+  }
+
   // Get the user's latest message to detect intent
   const lastUserMessage = messages[messages.length - 1]?.content || '';
 
@@ -3701,9 +3917,13 @@ async function sendGeminiMessageStreaming(
     geminiContents.push({ role: 'user', parts });
   }
 
+  // Create timeout signal - use extended timeout when processing images
+  const timeoutMs = images && images.length > 0 ? AI_REQUEST_WITH_IMAGES_TIMEOUT_MS : AI_REQUEST_TIMEOUT_MS;
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(timeoutMs, signal);
+
   try {
     // Use streamGenerateContent endpoint for streaming
-    console.log('🔄 [Gemini Streaming] Starting stream with model:', modelConfig.apiModel);
+    console.log('🔄 [Gemini Streaming] Starting stream with model:', modelConfig.apiModel, images?.length ? `(with ${images.length} images)` : '');
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:streamGenerateContent?key=${geminiApiKey}&alt=sse`,
       {
@@ -3724,7 +3944,7 @@ async function sendGeminiMessageStreaming(
             { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
           ],
         }),
-        signal,
+        signal: timeoutSignal,
       }
     );
 
@@ -3769,6 +3989,9 @@ async function sendGeminiMessageStreaming(
       }
     }
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
     const changes = parseChangesFromResponse(fullText);
     return {
@@ -3776,8 +3999,16 @@ async function sendGeminiMessageStreaming(
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Handle abort and timeout errors
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Gemini Streaming] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
     console.error('❌ [Gemini Streaming] API call failed:', fetchError);
     console.log('⚠️ [Gemini Streaming] Falling back to non-streaming mode');
@@ -3840,7 +4071,20 @@ async function sendClaudeMessageStreaming(
     }
   }
 
+  // Create timeout signal - use extended timeout when processing images
+  const timeoutMs = images && images.length > 0 ? AI_REQUEST_WITH_IMAGES_TIMEOUT_MS : AI_REQUEST_TIMEOUT_MS;
+  const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(timeoutMs, signal);
+
   try {
+    console.log('🔄 [Claude Streaming] Starting stream with model:', modelConfig.apiModel, images?.length ? `(with ${images.length} images)` : '');
+    console.log('🔄 [Claude Streaming] Message count:', apiMessages.length);
+    console.log('🔄 [Claude Streaming] Last message type:', typeof apiMessages[apiMessages.length - 1]?.content);
+    if (images?.length) {
+      console.log('🔄 [Claude Streaming] Image details:');
+      images.forEach((img, i) => {
+        console.log(`   Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+      });
+    }
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -3856,7 +4100,7 @@ async function sendClaudeMessageStreaming(
         messages: apiMessages,
         stream: true,
       }),
-      signal,
+      signal: timeoutSignal,
     });
 
     if (!response.ok) {
@@ -3900,6 +4144,9 @@ async function sendClaudeMessageStreaming(
       }
     }
 
+    // Clean up timeout on success
+    cleanupTimeout();
+
     // Return raw text - image placeholders will be resolved in sendChatMessageStreaming with progress callback
     const changes = parseChangesFromResponse(fullText);
     return {
@@ -3907,8 +4154,16 @@ async function sendClaudeMessageStreaming(
       changes: changes || undefined,
     };
   } catch (fetchError: any) {
+    // Clean up timeout on error
+    cleanupTimeout();
+
+    // Handle abort and timeout errors
     if (fetchError.name === 'AbortError') {
       throw fetchError;
+    }
+    if (fetchError.name === 'TimeoutError') {
+      console.error('❌ [Claude Streaming] Request timed out');
+      throw new Error('AI request timed out. Please try again or check your internet connection.');
     }
     console.error('Claude streaming API call failed:', fetchError);
     // Fall back to non-streaming

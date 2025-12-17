@@ -273,15 +273,28 @@ export const usePageStore = create<PageStore>((set, get) => ({
   },
 
   updatePagePayload: async (pageId, payload) => {
-    const { error } = await supabase
+    console.log('[pageStore] updatePagePayload - pageId:', pageId);
+    console.log('[pageStore] updatePagePayload - payload:', payload);
+
+    const { data, error } = await supabase
       .from('pulsar_pages')
       .update({
         payload,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', pageId);
+      .eq('id', pageId)
+      .select();
 
-    if (error) throw error;
+    console.log('[pageStore] updatePagePayload - result:', { data, error });
+
+    if (error) {
+      console.error('[pageStore] updatePagePayload - Supabase error:', error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('[pageStore] updatePagePayload - No rows updated! Check RLS policies or pageId:', pageId);
+    }
 
     set({
       pages: get().pages.map((p) =>

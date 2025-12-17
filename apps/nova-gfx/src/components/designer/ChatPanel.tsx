@@ -235,11 +235,67 @@ function expandDynamicElements(changes: AIChanges): AIChanges {
     });
   }
 
+  // Generate default animations for expanded elements that don't have any
+  const animatedElementNames = new Set<string>();
+  for (const anim of expandedAnimations) {
+    if (anim?.element_name) {
+      animatedElementNames.add(anim.element_name);
+    }
+  }
+
+  const staticElementCount = changes.elements?.length || 0;
+  const dynamicExpandedElements = expandedElements.slice(staticElementCount);
+  let dynamicElementIndex = 0;
+
+  for (const element of dynamicExpandedElements) {
+    const elementName = element.name;
+    if (!elementName || animatedElementNames.has(elementName)) {
+      continue;
+    }
+
+    // Calculate staggered delay based on row index for coordinated appearance
+    const rowIndex = element._rowIndex ?? dynamicElementIndex;
+    const baseDelay = 600; // Start after static elements
+    const rowDelay = rowIndex * 80; // Stagger by row
+    const staggerDelay = Math.min(baseDelay + rowDelay, 1500); // Cap at 1.5s
+
+    // Create default IN animation (fade + slide)
+    expandedAnimations.push({
+      element_name: elementName,
+      phase: 'in',
+      delay: staggerDelay,
+      duration: 350,
+      iterations: 1,
+      easing: 'ease-out',
+      keyframes: [
+        { position: 0, properties: { opacity: 0, position_y: element.position_y + 20 } },
+        { position: 100, properties: { opacity: 1, position_y: element.position_y } },
+      ],
+    });
+
+    // Create default OUT animation (fade)
+    expandedAnimations.push({
+      element_name: elementName,
+      phase: 'out',
+      delay: 0,
+      duration: 250,
+      iterations: 1,
+      easing: 'ease-in',
+      keyframes: [
+        { position: 0, properties: { opacity: 1 } },
+        { position: 100, properties: { opacity: 0 } },
+      ],
+    });
+
+    dynamicElementIndex++;
+  }
+
   console.log('✅ Expanded dynamic_elements:', {
     originalElements: changes.elements?.length || 0,
     expandedElements: expandedElements.length,
     originalAnimations: changes.animations?.length || 0,
     expandedAnimations: expandedAnimations.length,
+    dynamicElementsWithDefaultAnimations: dynamicElementIndex,
   });
 
   return {
@@ -395,8 +451,18 @@ export function ChatPanel() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pendingAIChangesRef = useRef<{ changes: any; messageId: string } | null>(null); // Stores pending changes when user wants to skip images
   const skipImagesRef = useRef(false); // Flag to skip remaining image generation
+  const imageGenAbortRef = useRef<AbortController | null>(null); // AbortController for image generation
   const [isSkippingImages, setIsSkippingImages] = useState(false); // UI state for skip button visibility
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
+  // Track last failed request for auto-retry on duplicate message
+  const lastFailedRequestRef = useRef<{
+    input: string;
+    attachments: Attachment[];
+    timestamp: number;
+  } | null>(null);
+  // Track auto-retry attempts for image requests (reset on success)
+  const autoRetryCountRef = useRef(0);
+  const MAX_AUTO_RETRIES = 1; // Auto-retry once for image requests
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -432,9 +498,11 @@ export function ChatPanel() {
     clearChat,
   } = useDesignerStore();
 
-  // Load chat history when project changes
+  // Load chat history when project changes (only on initial load)
+  const hasLoadedChatRef = useRef<string | null>(null);
   useEffect(() => {
-    if (project?.id) {
+    if (project?.id && hasLoadedChatRef.current !== project.id) {
+      hasLoadedChatRef.current = project.id;
       loadChatMessages(project.id);
     }
   }, [project?.id, loadChatMessages]);
@@ -679,14 +747,18 @@ export function ChatPanel() {
             skipImagesRef.current = false; // Reset skip flag
             setIsSkippingImages(false); // Reset UI state
 
+            // Create AbortController for image generation
+            imageGenAbortRef.current = new AbortController();
+            const imageSignal = imageGenAbortRef.current.signal;
+
             // Resolve placeholders in all element content
             let imageIndex = 0;
             for (let i = 0; i < expandedChanges.elements.length; i++) {
               const el = expandedChanges.elements[i];
               const contentStr = JSON.stringify(el.content || {});
               if (hasGeneratePlaceholders(contentStr)) {
-                // Check if user requested to skip images
-                if (skipImagesRef.current) {
+                // Check if user requested to skip images (via ref or abort signal)
+                if (skipImagesRef.current || imageSignal.aborted) {
                   console.log(`⏭️ Skipping image generation for: ${el.name} - using placeholder`);
                   const placeholderContent = replaceGenerateWithPlaceholder(contentStr);
                   try {
@@ -716,7 +788,9 @@ export function ChatPanel() {
                 await new Promise(resolve => setTimeout(resolve, 50));
                 console.log(`🖼️ Resolving images for element: ${el.name}`);
                 console.log(`🖼️ Content string to resolve:`, contentStr);
-                const resolvedContent = await resolveGeneratePlaceholders(contentStr, organizationId, userId);
+
+                // Pass abort signal to image generation
+                const resolvedContent = await resolveGeneratePlaceholders(contentStr, organizationId, userId, imageSignal);
                 console.log(`🖼️ Resolved content:`, resolvedContent.substring(0, 200));
                 try {
                   const parsedContent = JSON.parse(resolvedContent);
@@ -736,8 +810,9 @@ export function ChatPanel() {
               }
             }
 
-            // Clear pending changes ref after image processing is complete
+            // Clear pending changes ref and abort controller after image processing is complete
             pendingAIChangesRef.current = null;
+            imageGenAbortRef.current = null;
           }
         } else {
           console.warn('⚠️ Cannot generate images: no organization or user ID available');
@@ -1310,34 +1385,37 @@ export function ChatPanel() {
                 }
               }
 
-              // Validate position (0-100)
-              let position = typeof kfData.position === 'number' ? kfData.position : 0;
-              if (isNaN(position) || position < 0) position = 0;
-              if (position > 100) position = 100;
+              // Validate position (0-100 from AI) and convert to absolute milliseconds
+              let positionPercent = typeof kfData.position === 'number' ? kfData.position : 0;
+              if (isNaN(positionPercent) || positionPercent < 0) positionPercent = 0;
+              if (positionPercent > 100) positionPercent = 100;
+
+              // Convert percentage to absolute milliseconds based on animation duration
+              const positionMs = Math.round((positionPercent / 100) * duration);
 
               const keyframe = {
                 id: crypto.randomUUID(),
                 animation_id: animId,
                 name: `${cleanElementName}_${phase}_key_${kfIndex + 1}`,
-                position,
+                position: positionMs,
                 properties: kfProperties,
               };
               newKeyframes.push(keyframe);
             });
           } else {
-            // Create default keyframes (fade in)
+            // Create default keyframes (fade in) - positions are in absolute milliseconds
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
               name: `${cleanElementName}_${phase}_key_1`,
-              position: 0,
+              position: 0,  // Start of animation (0ms)
               properties: { opacity: 0 },
             });
             newKeyframes.push({
               id: crypto.randomUUID(),
               animation_id: animId,
               name: `${cleanElementName}_${phase}_key_2`,
-              position: 100,
+              position: duration,  // End of animation (duration in ms)
               properties: { opacity: 1 },
             });
           }
@@ -1379,7 +1457,8 @@ export function ChatPanel() {
                 created_at: new Date().toISOString(),
               });
 
-              // Reverse the keyframes (swap 0 and 100 positions)
+              // Reverse the keyframes - out animation duration is different from in
+              const outDuration = Math.min(inAnim.duration, 400); // Matches the duration above
               const reversedKeyframes = [...inKeyframes].sort((a, b) => b.position - a.position);
               // Get element name for keyframe naming
               const outElement = currentStore.elements.find(e => e.id === elementId);
@@ -1392,7 +1471,8 @@ export function ChatPanel() {
                   id: crypto.randomUUID(),
                   animation_id: outAnimId,
                   name: `${outElementName}_out_key_${index + 1}`,
-                  position: index === 0 ? 0 : 100,
+                  // Position in absolute milliseconds: start=0, end=outDuration
+                  position: index === 0 ? 0 : outDuration,
                   properties: { ...kf.properties },
                 });
               });
@@ -1405,7 +1485,7 @@ export function ChatPanel() {
         newAnimations.forEach(anim => {
           const animKfs = newKeyframes.filter(kf => kf.animation_id === anim.id);
 
-          // If animation has only 1 keyframe at position 0, add a keyframe at position 100
+          // If animation has only 1 keyframe at position 0, add a keyframe at the end (duration ms)
           if (animKfs.length === 1 && animKfs[0].position === 0) {
             const startKf = animKfs[0];
             console.log(`⚠️ Fixing incomplete animation ${anim.id} - adding end keyframe`);
@@ -1445,7 +1525,7 @@ export function ChatPanel() {
               id: crypto.randomUUID(),
               animation_id: anim.id,
               name: `${fixElementName}_${anim.phase}_key_2`,
-              position: 100,
+              position: anim.duration,  // End position in absolute milliseconds
               properties: endProperties,
             });
           }
@@ -1491,7 +1571,8 @@ export function ChatPanel() {
             .replace(/_+/g, '_')
             .substring(0, 20);
 
-          // IN Keyframes
+          // IN Keyframes - position in absolute milliseconds
+          const inDuration = 500; // Matches duration above
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: inAnimId,
@@ -1503,11 +1584,12 @@ export function ChatPanel() {
             id: crypto.randomUUID(),
             animation_id: inAnimId,
             name: `${autoGenElementName}_in_key_2`,
-            position: 100,
+            position: inDuration,  // End of animation (500ms)
             properties: { opacity: 1, transform: 'translateX(0)' },
           });
 
           // OUT Animation (slide to left + fade)
+          const outDuration = 400;
           const outAnimId = crypto.randomUUID();
           newAnimations.push({
             id: outAnimId,
@@ -1515,7 +1597,7 @@ export function ChatPanel() {
             element_id: elementId,
             phase: 'out',
             delay: 0,
-            duration: 400,
+            duration: outDuration,
             iterations: 1,
             direction: 'normal' as const,
             easing: 'ease-in',
@@ -1523,7 +1605,7 @@ export function ChatPanel() {
             created_at: new Date().toISOString(),
           });
 
-          // OUT Keyframes
+          // OUT Keyframes - position in absolute milliseconds
           newKeyframes.push({
             id: crypto.randomUUID(),
             animation_id: outAnimId,
@@ -1535,7 +1617,7 @@ export function ChatPanel() {
             id: crypto.randomUUID(),
             animation_id: outAnimId,
             name: `${autoGenElementName}_out_key_2`,
-            position: 100,
+            position: outDuration,  // End of animation (400ms)
             properties: { opacity: 0, transform: 'translateX(-50px)' },
           });
 
@@ -1603,10 +1685,16 @@ export function ChatPanel() {
   const buildContext = (): AIContext => {
     const currentTemplate = templates.find((t) => t.id === currentTemplateId);
     const selectedElements = elements.filter((e) => selectedElementIds.includes(e.id));
-    
+
     // Get the design system from the store
     const storeDesignSystem = useDesignerStore.getState().designSystem;
-    
+
+    // IMPORTANT: Only include elements belonging to the current template
+    // This tells the AI what elements exist so it can UPDATE them instead of creating new ones
+    const currentTemplateElements = currentTemplate
+      ? elements.filter(e => e.template_id === currentTemplate.id)
+      : [];
+
     // Include available layers for AI to know where to add graphics
     const availableLayers = layers.map(l => ({
       name: l.name,
@@ -1624,7 +1712,7 @@ export function ChatPanel() {
       currentTemplate: currentTemplate ? {
         id: currentTemplate.id,
         name: currentTemplate.name,
-        elements,
+        elements: currentTemplateElements, // Only elements in this template
         animations: [],
         bindings: [],
       } : null,
@@ -1637,20 +1725,36 @@ export function ChatPanel() {
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image') => {
+    console.log('📁 [ChatPanel] handleFileChange called, type:', type);
     const files = e.target.files;
-    if (!files) return;
+    if (!files) {
+      console.log('  - No files selected');
+      return;
+    }
+    console.log('  - Files selected:', files.length);
 
     Array.from(files).forEach((file) => {
+      console.log('  - Processing file:', file.name, 'size:', file.size, 'type:', file.type);
       const reader = new FileReader();
       reader.onload = () => {
+        const dataUrl = reader.result as string;
+        console.log('  - File loaded, data URL length:', dataUrl?.length || 0);
+        console.log('  - Data URL prefix:', dataUrl?.substring(0, 50));
         const attachment: Attachment = {
           id: crypto.randomUUID(),
           type: type,
           name: file.name,
-          data: reader.result as string,
-          preview: type === 'image' ? reader.result as string : undefined,
+          data: dataUrl,
+          preview: type === 'image' ? dataUrl : undefined,
         };
-        setAttachments((prev) => [...prev, attachment]);
+        console.log('  - Adding attachment:', attachment.id, attachment.name);
+        setAttachments((prev) => {
+          console.log('  - Previous attachments count:', prev.length);
+          return [...prev, attachment];
+        });
+      };
+      reader.onerror = (err) => {
+        console.error('  - FileReader error:', err);
       };
       reader.readAsDataURL(file);
     });
@@ -1718,7 +1822,18 @@ export function ChatPanel() {
   const isAIAvailable = aiAvailability.available;
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    console.log('🚀 [ChatPanel] handleSend called');
+    console.log('  - input:', input.trim() ? `"${input.trim().substring(0, 50)}..."` : '(empty)');
+    console.log('  - attachments:', attachments.length);
+    console.log('  - isLoading:', isLoading);
+
+    // Allow sending if there's text OR attachments
+    if ((!input.trim() && attachments.length === 0) || isLoading) {
+      console.log('  - BLOCKED: no input and no attachments, or already loading');
+      return;
+    }
+
+    console.log('🔍 [ChatPanel] Passed initial check, continuing...');
 
     // Stop speech recognition when sending
     if (isListening && recognitionRef.current) {
@@ -1729,7 +1844,9 @@ export function ChatPanel() {
     }
 
     // Check if AI is available
+    console.log('🔍 [ChatPanel] Checking AI availability:', isAIAvailable);
     if (!isAIAvailable) {
+      console.log('  - AI NOT available, reason:', aiAvailability.reason);
       await addChatMessage({
         role: 'assistant',
         content: `**AI Not Available**
@@ -1747,12 +1864,24 @@ Alternatively, configure your API key in Settings (⚙️).`,
       });
       return;
     }
-    
+    console.log('  - AI is available, continuing...');
+
+    // Check if this is a retry of a failed request (same message sent within 60 seconds)
+    const isRetry = lastFailedRequestRef.current &&
+      lastFailedRequestRef.current.input === input.trim() &&
+      Date.now() - lastFailedRequestRef.current.timestamp < 60000;
+
+    if (isRetry) {
+      console.log('🔄 Detected retry of failed request - will use fresh connection');
+      // Clear the failed request ref since we're retrying
+      lastFailedRequestRef.current = null;
+    }
+
     // Note: Template selection is NOT required - AI will determine the correct layer
     // and create/select templates as needed
-    
+
     // Convert attachments to storage format
-    const chatAttachments: ChatAttachment[] | undefined = attachments.length > 0 
+    const chatAttachments: ChatAttachment[] | undefined = attachments.length > 0
       ? attachments.map((a) => ({
           id: a.id,
           type: a.type,
@@ -1762,20 +1891,39 @@ Alternatively, configure your API key in Settings (⚙️).`,
         }))
       : undefined;
 
-    // Add user message to store (persists to DB)
-    await addChatMessage({
-      role: 'user',
-      content: input,
-      attachments: chatAttachments,
-    });
-    
+    // Store the current request details in case it fails (for retry detection)
+    const currentRequestDetails = {
+      input: input.trim(),
+      attachments: [...attachments],
+      timestamp: Date.now(),
+    };
+
+    // Only add user message if this is NOT a retry (to avoid duplicate messages)
+    console.log('🔍 [ChatPanel] isRetry:', isRetry);
+    if (!isRetry) {
+      // Add user message to store (persists to DB)
+      console.log('🔍 [ChatPanel] Adding user message to store...');
+      await addChatMessage({
+        role: 'user',
+        content: input,
+        attachments: chatAttachments,
+      });
+      console.log('🔍 [ChatPanel] User message added');
+    } else {
+      // For retries, show a status message
+      console.log('🔄 Retrying previous request...');
+    }
+
     const userInput = input;
     const userAttachments = [...attachments];
     setInput('');
     setAttachments([]);
     setIsLoading(true);
-    
-    // Create AbortController for this request
+
+    // Create a fresh AbortController for this request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     abortControllerRef.current = new AbortController();
 
     try {
@@ -1789,11 +1937,24 @@ Alternatively, configure your API key in Settings (⚙️).`,
       let fullMessage = userInput;
       const imageAttachments: { data: string; mimeType: string }[] = [];
 
+      // Debug: Log user attachments
+      console.log('🔍 [ChatPanel] userAttachments count:', userAttachments.length);
+      userAttachments.forEach((a, i) => {
+        console.log(`  Attachment ${i + 1}:`, {
+          type: a.type,
+          name: a.name,
+          hasData: !!a.data,
+          dataLength: a.data?.length || 0,
+          dataPrefix: a.data?.substring(0, 50) || 'N/A',
+        });
+      });
+
       if (userAttachments.length > 0) {
         userAttachments.forEach((a) => {
           if ((a.type === 'image' || a.type === 'screenshot') && a.data) {
             // Extract base64 data and mime type
             const matches = a.data.match(/^data:([^;]+);base64,(.+)$/);
+            console.log(`  Regex match for ${a.name}:`, !!matches, matches ? `mimeType=${matches[1]}` : 'no match');
             if (matches) {
               imageAttachments.push({
                 mimeType: matches[1],
@@ -1816,6 +1977,9 @@ Alternatively, configure your API key in Settings (⚙️).`,
         fullMessage = `${attachmentDescriptions}\n\n${userInput}`;
       }
 
+      // Debug: Log final image attachments array
+      console.log('🔍 [ChatPanel] Final imageAttachments count:', imageAttachments.length);
+
       history.push({ role: 'user', content: fullMessage });
 
       // Documentation mode - simple Q&A about Nova/Pulsar GFX
@@ -1827,6 +1991,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
           role: 'assistant',
           content: responseText,
         });
+
+        // Clear failed request ref and reset auto-retry count on success
+        lastFailedRequestRef.current = null;
+        autoRetryCountRef.current = 0;
       } else {
         // Design mode - full AI assistant with canvas manipulation
         const context = buildContext();
@@ -1852,6 +2020,17 @@ Alternatively, configure your API key in Settings (⚙️).`,
 
         // Show initial thinking state
         setCreationProgress({ phase: 'thinking', message: 'Thinking...' });
+
+        // Debug: Log what we're sending to the AI
+        console.log('🔍 [ChatPanel] Preparing to send to AI:');
+        console.log('  - History messages:', history.length);
+        console.log('  - Image attachments:', imageAttachments.length);
+        if (imageAttachments.length > 0) {
+          imageAttachments.forEach((img, i) => {
+            console.log(`    Image ${i + 1}: mimeType=${img.mimeType}, data length=${img.data?.length || 0}`);
+          });
+        }
+        console.log('  - AbortController active:', !!abortControllerRef.current);
 
         // Use streaming API for real-time progress
         const response = await sendChatMessageStreaming(
@@ -1929,6 +2108,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
         setCreationProgress({ phase: 'idle', message: '' });
         setActiveMessageId(null);
 
+        // Clear failed request ref and reset auto-retry count on success
+        lastFailedRequestRef.current = null;
+        autoRetryCountRef.current = 0;
+
         // Check if there are changes to apply - do this asynchronously
         const shouldAutoApply = response.changes && !isDrasticChange(response.changes);
         console.log('📋 AI response check:', { hasChanges: !!response.changes, shouldAutoApply, elementCount: response.changes?.elements?.length || 0 });
@@ -1978,8 +2161,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
           content: 'Request cancelled.',
           error: false,
         });
+        // Don't store cancelled requests for retry
       } else {
         console.error('Chat error:', error);
+
         // Add error message to store with more details
         const errorMessage = error instanceof Error
           ? error.message
@@ -1987,11 +2172,53 @@ Alternatively, configure your API key in Settings (⚙️).`,
           ? error
           : 'Unknown error occurred';
 
+        // Check if it's a timeout error
+        const isTimeout = errorMessage.includes('timed out') || errorMessage.includes('timeout') || errorMessage.includes('TimeoutError');
+
+        // Check if request had images attached
+        const hasImages = currentRequestDetails.attachments.some(a => a.type === 'image' || a.type === 'screenshot');
+
+        // Auto-retry for image requests that timed out (once)
+        if (isTimeout && hasImages && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+          autoRetryCountRef.current++;
+          console.log(`🔄 Auto-retrying image request (attempt ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES})...`);
+
+          // Store for manual retry detection (won't add duplicate user message)
+          lastFailedRequestRef.current = currentRequestDetails;
+
+          // Restore the input and attachments for retry
+          setInput(currentRequestDetails.input);
+          setAttachments(currentRequestDetails.attachments);
+
+          // IMPORTANT: Reset isLoading BEFORE retry so handleSend isn't blocked
+          setIsLoading(false);
+
+          // Wait for cleanup then trigger retry with fresh connection
+          setTimeout(() => {
+            // Show reconnecting message
+            setCreationProgress({ phase: 'thinking', message: 'Reconnecting...' });
+            handleSend();
+          }, 1500);
+          return;
+        }
+
+        // Store the failed request details for retry detection
+        // This allows users to simply send the same message again to retry
+        lastFailedRequestRef.current = currentRequestDetails;
+        console.log('💾 Stored failed request for potential retry');
+
         await addChatMessage({
           role: 'assistant',
-          content: `Sorry, I encountered an error: ${errorMessage}. Please check your API key configuration and try again.`,
+          content: isTimeout
+            ? hasImages
+              ? `Request timed out after auto-retry. **Send the same message again to retry** with a fresh connection.`
+              : `Request timed out. **Send the same message again to retry** with a fresh connection.`
+            : `Sorry, I encountered an error: ${errorMessage}. Please check your API key configuration and try again.`,
           error: true,
         });
+
+        // Reset auto-retry count when showing error (so next attempt gets fresh retries)
+        autoRetryCountRef.current = 0;
       }
     } finally {
       setIsLoading(false);
@@ -2021,6 +2248,11 @@ Alternatively, configure your API key in Settings (⚙️).`,
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // Also abort any ongoing image generation
+    if (imageGenAbortRef.current) {
+      imageGenAbortRef.current.abort();
+      imageGenAbortRef.current = null;
+    }
   }, []);
 
   // Skip remaining image generation and use placeholder images
@@ -2032,6 +2264,12 @@ Alternatively, configure your API key in Settings (⚙️).`,
       phase: 'images',
       message: 'Skipping images, using placeholders...',
     });
+
+    // Abort any ongoing image generation
+    if (imageGenAbortRef.current) {
+      imageGenAbortRef.current.abort();
+      console.log('⏭️ Aborted ongoing image generation');
+    }
   }, []);
 
   // Handle paste for images from clipboard

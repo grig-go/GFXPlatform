@@ -24,9 +24,10 @@ import { useChannelStore } from '@/stores/channelStore';
 import { useProjectStore } from '@/stores/projectStore';
 
 // Nova GFX player URL - configurable via environment variable
-// In dev: defaults to localhost:5173 (Nova GFX dev server)
+// In dev: defaults to localhost:3003 (Nova GFX dev server port)
 // In prod: set VITE_NOVA_PREVIEW_URL to your deployed Nova GFX URL
-const NOVA_GFX_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || 'http://localhost:5173';
+const NOVA_GFX_PORT = import.meta.env.VITE_NOVA_GFX_PORT || '3003';
+const NOVA_GFX_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || `http://localhost:${NOVA_GFX_PORT}`;
 
 interface PublishModalProps {
   open: boolean;

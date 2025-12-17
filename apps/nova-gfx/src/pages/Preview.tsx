@@ -79,6 +79,7 @@ interface PreviewData {
   keyframes: Keyframe[];
   currentTemplateId: string | null;
   project: Project | null;
+  phaseDurations?: Record<AnimationPhase, number>;
 }
 
 // Preview renders templates with animations
@@ -107,6 +108,7 @@ export function Preview() {
     animations: state.animations,
     keyframes: state.keyframes,
     currentProject: state.project,
+    phaseDurations: state.phaseDurations,
   }));
 
   // Load from localStorage if store is empty (new window case)
@@ -148,6 +150,13 @@ export function Preview() {
   const animations = storeData.animations.length > 0 ? storeData.animations : (localData?.animations || []);
   const keyframes = storeData.keyframes.length > 0 ? storeData.keyframes : (localData?.keyframes || []);
   const currentProject = storeData.currentProject || localData?.project || null;
+
+  // Get phase durations from store, localStorage, or project settings (with defaults)
+  const defaultPhaseDurations: Record<AnimationPhase, number> = { in: 1500, loop: 3000, out: 1500 };
+  const phaseDurations = storeData.phaseDurations
+    || localData?.phaseDurations
+    || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined)
+    || defaultPhaseDurations;
 
   // Keep templatesRef updated with the actual templates array (for event handler access)
   useEffect(() => {
@@ -254,6 +263,35 @@ export function Preview() {
               content: { ...updatedElement.content, center: [lng, lat] as [number, number] },
             };
           }
+        } else if (element.content?.type === 'shape') {
+          // Shape elements - override can be a color (fill) or a URL (texture)
+          const overrideStr = String(override);
+          const isUrl = overrideStr.startsWith('http') || overrideStr.startsWith('/') || overrideStr.startsWith('data:');
+          const isColor = overrideStr.startsWith('#') || overrideStr.startsWith('rgb') || overrideStr.startsWith('hsl');
+
+          if (isUrl) {
+            // Override texture URL
+            const existingTexture = (element.content as any).texture || {};
+            const isVideo = overrideStr.match(/\.(mp4|webm|mov)$/i);
+            updatedElement = {
+              ...updatedElement,
+              content: {
+                ...updatedElement.content,
+                texture: {
+                  ...existingTexture,
+                  enabled: true,
+                  url: overrideStr,
+                  mediaType: isVideo ? 'video' : 'image',
+                },
+              },
+            };
+          } else if (isColor) {
+            // Override fill color
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, fill: overrideStr },
+            };
+          }
         }
       }
 
@@ -326,6 +364,35 @@ export function Preview() {
               updatedElement = {
                 ...updatedElement,
                 content: { ...updatedElement.content, center: [lng, lat] as [number, number] },
+              };
+            }
+          } else if (element.content?.type === 'shape') {
+            // Shape elements - override can be a color (fill) or a URL (texture)
+            const valueStr = String(value);
+            const isUrl = valueStr.startsWith('http') || valueStr.startsWith('/') || valueStr.startsWith('data:');
+            const isColor = valueStr.startsWith('#') || valueStr.startsWith('rgb') || valueStr.startsWith('hsl');
+
+            if (isUrl) {
+              // Override texture URL
+              const existingTexture = (element.content as any).texture || {};
+              const isVideo = valueStr.match(/\.(mp4|webm|mov)$/i);
+              updatedElement = {
+                ...updatedElement,
+                content: {
+                  ...updatedElement.content,
+                  texture: {
+                    ...existingTexture,
+                    enabled: true,
+                    url: valueStr,
+                    mediaType: isVideo ? 'video' : 'image',
+                  },
+                },
+              };
+            } else if (isColor) {
+              // Override fill color
+              updatedElement = {
+                ...updatedElement,
+                content: { ...updatedElement.content, fill: valueStr },
               };
             }
           }
@@ -434,9 +501,12 @@ export function Preview() {
     );
   }, [animations, currentPhase, visibleElements, elementsWithOverrides]);
 
-  // Calculate max duration - includes both regular animations and map location keyframes
+  // Calculate max duration - use phase duration from settings, or fall back to animation/keyframe times
   const maxDuration = useMemo(() => {
-    // Get max from regular animations
+    // Primary: Use the phase duration from project settings
+    const phaseDuration = phaseDurations[currentPhase] || 1500;
+
+    // Get max from regular animations (for reference, but phase duration takes priority)
     const maxAnim = Math.max(0, ...currentAnimations.map((a) => a.delay + a.duration));
 
     // Get max from map location keyframes for current phase
@@ -452,10 +522,11 @@ export function Preview() {
       }
     });
 
-    return Math.max(1000, maxAnim, maxMapKeyframe);
-  }, [currentAnimations, visibleElements, currentPhase]);
+    // Use the phase duration from settings, but ensure it's at least as long as any animation
+    return Math.max(phaseDuration, maxAnim, maxMapKeyframe);
+  }, [currentAnimations, visibleElements, currentPhase, phaseDurations]);
 
-  // Playback loop
+  // Playback loop - matches NovaPlayer exactly
   useEffect(() => {
     if (!isPlaying) {
       if (animationFrameRef.current) {
@@ -464,37 +535,56 @@ export function Preview() {
       return;
     }
 
+    let lastFrameTime = 0;
+    let isRunning = true;
+
     const animate = (timestamp: number) => {
-      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-      const delta = timestamp - lastTimeRef.current;
-      lastTimeRef.current = timestamp;
+      if (!isRunning) return;
+
+      if (!lastFrameTime) lastFrameTime = timestamp;
+      const delta = timestamp - lastFrameTime;
+      lastFrameTime = timestamp;
 
       setPlayheadPosition((prev) => {
         const newPosition = prev + delta;
+
         if (newPosition >= maxDuration) {
-          if (isLooping) {
+          if (currentPhase === 'in') {
+            setCurrentPhase('loop');
             return 0;
-          } else {
+          } else if (currentPhase === 'loop') {
+            // Loop phase complete - repeat if looping, otherwise stop
+            if (isLooping) {
+              return 0;
+            } else {
+              setIsPlaying(false);
+              return maxDuration;
+            }
+          } else if (currentPhase === 'out') {
             setIsPlaying(false);
             return maxDuration;
           }
         }
+
         return newPosition;
       });
 
-      animationFrameRef.current = requestAnimationFrame(animate);
+      if (isRunning) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
     };
 
     animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
+      isRunning = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, maxDuration, isLooping]);
+  }, [isPlaying, maxDuration, currentPhase, isLooping]);
 
-  // Reset when phase changes
+  // Reset playhead when phase changes
   useEffect(() => {
     setPlayheadPosition(0);
     lastTimeRef.current = 0;
@@ -657,6 +747,11 @@ export function Preview() {
             // Then set the template ID
             setSelectedTemplateId(payload.templateId);
             console.log('[Preview] State updates queued: selectedLayerId=all, selectedTemplateId=', payload.templateId);
+          } else {
+            // No specific template provided, show all
+            setSelectedLayerId('all');
+            setSelectedTemplateId('all');
+            console.log('[Preview] No template specified, showing all');
           }
           break;
         }
@@ -669,6 +764,9 @@ export function Preview() {
               setSelectedTemplateId('all');
             } else if (payload.templateId) {
               setSelectedTemplateId(payload.templateId);
+            } else {
+              // In isolated mode with no specific template, show all templates
+              setSelectedTemplateId('all');
             }
           }
           break;
@@ -698,6 +796,14 @@ export function Preview() {
             } catch (e) {
               console.error('[Preview] Failed to refresh data:', e);
             }
+          }
+          break;
+
+        case 'setLoop':
+          // Toggle loop mode from external control
+          if (payload?.loop !== undefined) {
+            setIsLooping(payload.loop);
+            console.log('[Preview] Loop mode set to:', payload.loop);
           }
           break;
 
@@ -846,6 +952,7 @@ export function Preview() {
               playheadPosition={playheadPosition}
               currentPhase={currentPhase}
               isPlaying={isPlaying}
+              phaseDuration={phaseDurations[currentPhase]}
             />
           ))}
         </div>
@@ -889,6 +996,7 @@ export function Preview() {
               playheadPosition={playheadPosition}
               currentPhase={currentPhase}
               isPlaying={isPlaying}
+              phaseDuration={phaseDurations[currentPhase]}
             />
           ))}
         </div>
@@ -1119,6 +1227,7 @@ interface PreviewElementProps {
   playheadPosition: number;
   currentPhase: AnimationPhase;
   isPlaying: boolean;
+  phaseDuration: number;
 }
 
 function PreviewElement({
@@ -1129,11 +1238,12 @@ function PreviewElement({
   playheadPosition,
   currentPhase,
   isPlaying,
+  phaseDuration,
 }: PreviewElementProps) {
-  // Calculate animated properties
+  // Calculate animated properties - pass phaseDuration for correct keyframe interpolation
   const animatedProps = useMemo(() => {
-    return getAnimatedProperties(element, animations, keyframes, playheadPosition, currentPhase);
-  }, [element, animations, keyframes, playheadPosition, currentPhase]);
+    return getAnimatedProperties(element, animations, keyframes, playheadPosition, currentPhase, false, phaseDuration);
+  }, [element, animations, keyframes, playheadPosition, currentPhase, phaseDuration]);
 
   // Get children
   const children = allElements
@@ -1242,6 +1352,7 @@ function PreviewElement({
           <TextElement
             text={textContent.text || ''}
             animation={mergedAnimation as Parameters<typeof TextElement>[0]['animation']}
+            charAnimation={textContent.charAnimation}
             style={textStyle}
             isPlaying={isPlaying}
             playheadPosition={playheadPosition}
@@ -1268,7 +1379,7 @@ function PreviewElement({
       case 'shape': {
         // Apply animated backgroundColor (which could come from 'fill' keyframe property)
         const animatedBgColor = animatedProps.backgroundColor;
-        // Cast to extended type that includes glow (which exists in the actual data but not in the strict type)
+        // Cast to extended type that includes glow and texture (which exist in the actual data but not in the strict type)
         const shapeContent = element.content as typeof element.content & {
           glow?: {
             enabled: boolean;
@@ -1277,10 +1388,26 @@ function PreviewElement({
             spread?: number;
             intensity?: number;
           };
+          texture?: {
+            enabled: boolean;
+            url: string;
+            thumbnailUrl?: string;
+            mediaType?: 'image' | 'video';
+            fit?: 'cover' | 'contain' | 'fill' | 'tile';
+            position?: { x: number; y: number };
+            scale?: number;
+            rotation?: number;
+            opacity?: number;
+            blur?: number;
+            blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
+            playbackMode?: 'loop' | 'pingpong' | 'once';
+            playbackSpeed?: number;
+          };
         };
         const glass = shapeContent.glass;
         const gradient = shapeContent.gradient;
         const glow = shapeContent.glow;
+        const texture = shapeContent.texture;
 
         // Calculate gradient value
         const gradientValue = (() => {
@@ -1340,13 +1467,16 @@ function PreviewElement({
         })();
 
         // Calculate glow style
+        // Multiply glow intensity by animated opacity so glow fades with element
         const glowStyle: React.CSSProperties = (() => {
           if (!glow?.enabled) return {};
 
           const glowColor = glow.color || shapeContent.fill || '#8B5CF6';
           const blur = glow.blur ?? 20;
           const spread = glow.spread ?? 0;
-          const intensity = glow.intensity ?? 0.6;
+          const baseIntensity = glow.intensity ?? 0.6;
+          // Apply animated opacity to glow intensity for proper fade in/out
+          const intensity = baseIntensity * (animatedOpacity ?? 1);
 
           // Convert color to rgba with intensity
           let colorWithAlpha = glowColor;
@@ -1456,6 +1586,111 @@ function PreviewElement({
             ...(element.styles || {}),
           };
           return <div style={gradientStyleFinal} />;
+        }
+
+        // If texture is enabled, render with texture background
+        if (texture?.enabled && texture.url) {
+          // For blend mode "normal", the texture should be the only visible background
+          // For other blend modes (multiply, screen, overlay, etc.), the fill color should show through
+          const textureBlendMode = texture.blendMode || 'normal';
+          const textureBaseBgColor = textureBlendMode === 'normal' ? 'transparent' : bgColorValue;
+
+          // Calculate texture background styles
+          const scale = texture.scale ?? 1;
+          const posX = texture.position?.x ?? 0;
+          const posY = texture.position?.y ?? 0;
+          const rotation = texture.rotation ?? 0;
+          const opacity = texture.opacity ?? 1;
+          const blur = texture.blur ?? 0;
+          const blendMode = texture.blendMode || 'normal';
+
+          // Map fit mode to background-size
+          const backgroundSize = (() => {
+            switch (texture.fit) {
+              case 'contain': return 'contain';
+              case 'fill': return '100% 100%';
+              case 'tile': return 'auto';
+              default: return 'cover'; // 'cover' is default
+            }
+          })();
+
+          // Calculate background position with offset
+          const bgPosX = 50 + posX;
+          const bgPosY = 50 + posY;
+
+          // For tile mode, use repeat; otherwise no-repeat
+          const backgroundRepeat = texture.fit === 'tile' ? 'repeat' : 'no-repeat';
+
+          // Scale up when blur is applied to hide soft edges
+          const blurScale = blur > 0 ? 1 + (blur * 0.04) : 1;
+
+          const textureBaseStyle: React.CSSProperties = {
+            ...baseStyle,
+            position: 'relative',
+            overflow: 'hidden',
+            backgroundColor: textureBaseBgColor,
+            ...(shapeContent.stroke && shapeContent.strokeWidth && shapeContent.strokeWidth > 0 ? {
+              border: `${shapeContent.strokeWidth}px solid ${shapeContent.stroke}`,
+            } : {}),
+            ...glowStyle,
+            ...(element.styles || {}),
+          };
+
+          const textureLayerStyle: React.CSSProperties = {
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${texture.url})`,
+            backgroundSize,
+            backgroundPosition: `${bgPosX}% ${bgPosY}%`,
+            backgroundRepeat,
+            opacity,
+            mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
+            filter: blur > 0 ? `blur(${blur}px)` : undefined,
+            transform: [
+              scale !== 1 || blurScale !== 1 ? `scale(${scale * blurScale})` : '',
+              rotation !== 0 ? `rotate(${rotation}deg)` : '',
+            ].filter(Boolean).join(' ') || undefined,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+          };
+
+          // If texture is a video, render video element
+          if (texture.mediaType === 'video') {
+            const videoStyle: React.CSSProperties = {
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: (texture.fit === 'cover' ? 'cover' : texture.fit === 'contain' ? 'contain' : 'fill') as React.CSSProperties['objectFit'],
+              objectPosition: `${bgPosX}% ${bgPosY}%`,
+              opacity,
+              mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'],
+              transform: rotation !== 0 || scale !== 1 ? `scale(${scale * blurScale}) rotate(${rotation}deg)` : undefined,
+              filter: blur > 0 ? `blur(${blur}px)` : undefined,
+              borderRadius: 'inherit',
+              pointerEvents: 'none',
+            };
+
+            return (
+              <div style={textureBaseStyle}>
+                <video
+                  src={texture.url}
+                  style={videoStyle}
+                  autoPlay
+                  loop={texture.playbackMode !== 'once'}
+                  muted
+                  playsInline
+                />
+              </div>
+            );
+          }
+
+          // For images, use background-image approach
+          return (
+            <div style={textureBaseStyle}>
+              <div style={textureLayerStyle} />
+            </div>
+          );
         }
 
         // Default: solid color
@@ -1675,6 +1910,7 @@ function PreviewElement({
           playheadPosition={playheadPosition}
           currentPhase={currentPhase}
           isPlaying={isPlaying}
+          phaseDuration={phaseDuration}
         />
       ))}
     </div>

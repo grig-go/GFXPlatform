@@ -338,11 +338,10 @@ function KeyframeInspector({
   const [showEasingDropdown, setShowEasingDropdown] = useState(false);
   const [expandedProperties, setExpandedProperties] = useState(true);
 
-  // Calculate time in ms from position percentage
-  // Include animation delay to show absolute time within the phase
-  const animationDelay = animation.delay || 0;
-  const animationDuration = animation.duration || phaseDuration;
-  const timeMs = animationDelay + (keyframe.position / 100) * animationDuration;
+  // Keyframe position is stored as milliseconds relative to animation start
+  const relativeTimeMs = keyframe.position;
+  // Absolute timeline position = animation delay + relative position
+  const absoluteTimeMs = animation.delay + keyframe.position;
 
   // Format time for display - always show in seconds
   const formatTimeDisplay = (ms: number): string => {
@@ -350,34 +349,31 @@ function KeyframeInspector({
     return `${seconds.toFixed(2)}s`;
   };
 
-  // Parse time input and convert to position percentage within the animation
+  // Parse time input and convert to absolute milliseconds
   const parseTimeInput = (input: string): number | null => {
     const trimmed = input.trim().toLowerCase();
 
-    // Handle milliseconds: "500ms" - absolute time in phase, convert to position within animation
+    // Handle milliseconds: "500ms" - absolute position in ms
     if (trimmed.endsWith('ms')) {
       const ms = parseFloat(trimmed.slice(0, -2));
       if (isNaN(ms)) return null;
-      // Convert absolute phase time to position within animation
-      const positionInAnimation = ((ms - animationDelay) / animationDuration) * 100;
-      return Math.max(0, Math.min(100, positionInAnimation));
+      return Math.max(0, Math.min(phaseDuration, ms));
     }
 
-    // Handle seconds: "1.5s" or just "1.5" - absolute time in phase
+    // Handle seconds: "1.5s" or just "1.5" - absolute time
     if (trimmed.endsWith('s') || /^\d+\.?\d*$/.test(trimmed)) {
       const seconds = parseFloat(trimmed.replace('s', ''));
       if (isNaN(seconds)) return null;
       const ms = seconds * 1000;
-      // Convert absolute phase time to position within animation
-      const positionInAnimation = ((ms - animationDelay) / animationDuration) * 100;
-      return Math.max(0, Math.min(100, positionInAnimation));
+      return Math.max(0, Math.min(phaseDuration, ms));
     }
 
-    // Handle percentage: "50%" - direct position within animation
+    // Handle percentage: "50%" - convert percentage of phase duration to milliseconds
     if (trimmed.endsWith('%')) {
       const pct = parseFloat(trimmed.slice(0, -1));
       if (isNaN(pct)) return null;
-      return Math.max(0, Math.min(100, pct));
+      const ms = (pct / 100) * phaseDuration;
+      return Math.max(0, Math.min(phaseDuration, ms));
     }
 
     return null;
@@ -470,7 +466,7 @@ function KeyframeInspector({
       <div className="space-y-1.5">
         <label className="text-[10px] text-muted-foreground uppercase font-medium flex items-center gap-1">
           <Clock className="w-3 h-3" />
-          Time Position
+          Timeline Position
         </label>
         {isEditingPosition ? (
           <Input
@@ -488,15 +484,26 @@ function KeyframeInspector({
         ) : (
           <button
             onClick={() => {
-              setEditPositionValue(formatTimeDisplay(timeMs));
+              setEditPositionValue(formatTimeDisplay(relativeTimeMs));
               setIsEditingPosition(true);
             }}
             className="w-full h-6 px-2 text-[10px] font-mono bg-muted hover:bg-muted/80 border border-input rounded-md flex items-center justify-between transition-colors"
           >
-            <span>{formatTimeDisplay(timeMs)}</span>
-            <span className="text-muted-foreground">({keyframe.position}%)</span>
+            <span className="text-amber-400">{formatTimeDisplay(absoluteTimeMs)}</span>
+            <span className="text-muted-foreground">on timeline</span>
           </button>
         )}
+        {/* Show delay/offset info if animation has a delay */}
+        {animation.delay > 0 && (
+          <div className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-500/10 rounded border border-slate-500/20">
+            <span className="text-slate-400">Offset (delay)</span>
+            <span className="font-mono text-slate-300">{formatTimeDisplay(animation.delay)}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between text-[10px] px-2 text-muted-foreground">
+          <span>Position in animation</span>
+          <span className="font-mono">{formatTimeDisplay(relativeTimeMs)}</span>
+        </div>
       </div>
 
       {/* Easing Section */}
@@ -5473,6 +5480,20 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
 function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const { updateElement } = useDesignerStore();
   const [showImageMediaPicker, setShowImageMediaPicker] = useState(false);
+  // These hooks must be at the top level, not inside conditionals (React hooks rules)
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  // Line editor state - initialized from content
+  const lineContent = element.content.type === 'line' ? element.content : null;
+  const [linePoints, setLinePoints] = useState<Array<{ x: number; y: number }>>(
+    lineContent?.points || [{ x: 0, y: 0 }, { x: 200, y: 0 }]
+  );
+
+  // Sync line points when content changes
+  useEffect(() => {
+    if (lineContent?.points) {
+      setLinePoints(lineContent.points);
+    }
+  }, [lineContent?.points]);
 
   const updateContent = (updates: Partial<typeof element.content>) => {
     updateElement(element.id, {
@@ -7407,15 +7428,10 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 
   // Line content editor
   if (element.content.type === 'line') {
-    const lineContent = element.content;
-    const [points, setPoints] = useState(lineContent.points || [{ x: 0, y: 0 }, { x: 200, y: 0 }]);
-
-    // Update points when content changes
-    useEffect(() => {
-      if (lineContent.points) {
-        setPoints(lineContent.points);
-      }
-    }, [lineContent.points]);
+    const lineContentLocal = element.content;
+    // Use linePoints and setLinePoints from top-level hooks (moved there for React hooks rules)
+    const points = linePoints;
+    const setPoints = setLinePoints;
 
     const updatePoints = (newPoints: Array<{ x: number; y: number }>) => {
       setPoints(newPoints);
@@ -7518,7 +7534,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
   // Icon content editor
   if (element.content.type === 'icon') {
     const iconContent = element.content;
-    const [showIconPicker, setShowIconPicker] = useState(false);
+    // showIconPicker state is now at top-level (React hooks rules)
 
     return (
       <div className="space-y-4">
@@ -8706,20 +8722,17 @@ export function KeyframableProperty({
       console.log('[Keyframe] Created new animation:', animationId);
     }
 
-    // Calculate position based on playhead (0-100%) relative to phase duration
-    // Use precise floating point calculation, round to 1 decimal place for precision
-    const rawPosition = (playhead / phaseDuration) * 100;
-    // Round to 1 decimal place for precision while still being reasonable
-    const position = Math.min(100, Math.round(rawPosition * 10) / 10);
+    // Use playhead position directly as absolute milliseconds (clamped to phase duration)
+    const position = Math.min(phaseDuration, Math.round(playhead));
 
-    console.log('[Keyframe] Position:', position, '% (playhead:', playhead, 'ms, phaseDuration:', phaseDuration, 'ms, raw:', rawPosition.toFixed(2), '%)');
+    console.log('[Keyframe] Position:', position, 'ms (playhead:', playhead, 'ms, phaseDuration:', phaseDuration, 'ms)');
 
     // Get fresh keyframes state after potential animation creation
     const freshKeyframes = useDesignerStore.getState().keyframes;
 
     // Find existing keyframe at this position for this animation
-    // Use tight tolerance (0.05%) - only match if practically at same position
-    const POSITION_TOLERANCE = 0.05;
+    // Use tight tolerance (5ms) - only match if practically at same position
+    const POSITION_TOLERANCE = 5; // milliseconds
     const existingKf = freshKeyframes.find(
       (kf) => kf.animation_id === animationId && Math.abs(kf.position - position) < POSITION_TOLERANCE
     );

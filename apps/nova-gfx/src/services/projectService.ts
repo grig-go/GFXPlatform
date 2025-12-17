@@ -1,4 +1,4 @@
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, directRestSelect, directRestInsert } from '@emergent-platform/supabase-client';
 import type {
   Project, Layer, Template, Element,
   Animation, Keyframe, Binding,
@@ -9,38 +9,40 @@ import type {
 // ============================================
 
 export async function fetchProject(projectId: string): Promise<Project | null> {
-  const { data, error } = await supabase
-    .from('gfx_projects')
-    .select('*')
-    .eq('id', projectId)
-    .single();
+  // Use direct REST API for reliable project loading
+  const result = await directRestSelect<Project>(
+    'gfx_projects',
+    '*',
+    { column: 'id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching project:', error);
+  if (result.error || !result.data?.[0]) {
+    console.error('Error fetching project:', result.error);
     return null;
   }
-  return data;
+  return result.data[0];
 }
 
 export async function fetchProjects(organizationId?: string): Promise<Project[]> {
-  let query = supabase
-    .from('gfx_projects')
-    .select('*')
-    .eq('archived', false)
-    .order('updated_at', { ascending: false });
+  // Use direct REST API for reliable project listing
+  // Note: directRestSelect doesn't support multiple filters, so we filter archived in JS
+  const result = await directRestSelect<Project>(
+    'gfx_projects',
+    '*',
+    organizationId ? { column: 'organization_id', value: organizationId } : undefined,
+    10000
+  );
 
-  // Filter by organization if provided
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching projects:', error);
+  if (result.error) {
+    console.error('Error fetching projects:', result.error);
     return [];
   }
-  return data || [];
+
+  // Filter out archived and sort by updated_at (descending)
+  return (result.data || [])
+    .filter((p) => !p.archived)
+    .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
 }
 
 export async function createProject(project: Partial<Project> & { organization_id: string; created_by?: string }): Promise<Project | null> {
@@ -52,38 +54,42 @@ export async function createProject(project: Partial<Project> & { organization_i
 
   const canvasWidth = project.canvas_width || 1920;
   const canvasHeight = project.canvas_height || 1080;
+  const TIMEOUT = 10000; // 10 second timeout for each operation
 
-  const { data, error } = await supabase
-    .from('gfx_projects')
-    .insert({
-      name: project.name || 'Untitled Project',
-      description: project.description || null,
-      slug: project.slug || `project-${Date.now()}`,
-      canvas_width: canvasWidth,
-      canvas_height: canvasHeight,
-      frame_rate: project.frame_rate || 30,
-      background_color: project.background_color || 'transparent',
-      organization_id: project.organization_id,
-      created_by: project.created_by || null,
-    })
-    .select()
-    .single();
+  console.log('[createProject] Creating new project via direct REST API...');
 
-  if (error) {
-    console.error('Error creating project:', error);
+  // Step 1: Create the project
+  const projectResult = await directRestInsert<Project>('gfx_projects', {
+    name: project.name || 'Untitled Project',
+    description: project.description || null,
+    slug: project.slug || `project-${Date.now()}`,
+    canvas_width: canvasWidth,
+    canvas_height: canvasHeight,
+    frame_rate: project.frame_rate || 30,
+    background_color: project.background_color || 'transparent',
+    organization_id: project.organization_id,
+    created_by: project.created_by || null,
+  }, TIMEOUT);
+
+  if (projectResult.error || !projectResult.data?.[0]) {
+    console.error('Error creating project:', projectResult.error);
     return null;
   }
 
-  // Create default design system
-  await supabase.from('gfx_project_design_systems').insert({
-    project_id: data.id,
-  });
+  const data = projectResult.data[0];
+  console.log(`[createProject] Project created: ${data.id}`);
 
-  // Create default layers (ordered by z_index, lowest at bottom)
+  // Step 2: Create default design system (fire and forget - not critical)
+  directRestInsert('gfx_project_design_systems', {
+    project_id: data.id,
+  }, TIMEOUT).catch((err: unknown) => console.warn('Design system creation failed:', err));
+
+  // Step 3: Create default layers (ordered by z_index, lowest at bottom)
   // Layer dimensions scale with canvas size
+  // IMPORTANT: All layer objects must have the same keys for Supabase batch insert
   const defaultLayers = [
-    { 
-      name: 'Background', 
+    {
+      name: 'Background',
       layer_type: 'background',
       z_index: 10,
       position_anchor: 'top-left',
@@ -100,9 +106,9 @@ export async function createProject(project: Partial<Project> & { organization_i
       enabled: true,
       always_on: true, // Background layer is always on by default
     },
-    { 
-      name: 'Fullscreen', 
-      layer_type: 'fullscreen', 
+    {
+      name: 'Fullscreen',
+      layer_type: 'fullscreen',
       z_index: 100,
       position_anchor: 'top-left',
       position_offset_x: 0,
@@ -116,10 +122,11 @@ export async function createProject(project: Partial<Project> & { organization_i
       transition_out: 'fade',
       transition_out_duration: 300,
       enabled: true,
+      always_on: false,
     },
-    { 
-      name: 'Lower Third', 
-      layer_type: 'lower-third', 
+    {
+      name: 'Lower Third',
+      layer_type: 'lower-third',
       z_index: 300,
       position_anchor: 'bottom-left',
       position_offset_x: Math.round(canvasWidth * 0.04),
@@ -133,10 +140,11 @@ export async function createProject(project: Partial<Project> & { organization_i
       transition_out: 'fade',
       transition_out_duration: 300,
       enabled: true,
+      always_on: false,
     },
-    { 
-      name: 'Bug', 
-      layer_type: 'bug', 
+    {
+      name: 'Bug',
+      layer_type: 'bug',
       z_index: 450,
       position_anchor: 'top-right',
       position_offset_x: Math.round(-canvasWidth * 0.02),
@@ -150,50 +158,50 @@ export async function createProject(project: Partial<Project> & { organization_i
       transition_out: 'fade',
       transition_out_duration: 200,
       enabled: true,
+      always_on: false,
     },
   ];
 
   // Insert layers and wait for completion
-  const { data: createdLayers, error: layerError } = await supabase.from('gfx_layers').insert(
+  const layersResult = await directRestInsert<Layer>('gfx_layers',
     defaultLayers.map((l, i) => ({
       project_id: data.id,
       ...l,
       locked: false,
       sort_order: i,
-    }))
-  ).select();
-  
-  if (layerError) {
-    console.error('Error creating default layers:', layerError);
+    })),
+    TIMEOUT
+  );
+
+  if (layersResult.error) {
+    console.error('Error creating default layers:', layersResult.error);
   } else {
-    console.log(`Created ${createdLayers?.length || 0} default layers for project ${data.id}`);
+    const createdLayers = layersResult.data || [];
+    console.log(`[createProject] Created ${createdLayers.length} default layers for project ${data.id}`);
 
     // Create a default blank template under the Fullscreen layer
-    const fullscreenLayer = createdLayers?.find(l => l.layer_type === 'fullscreen');
+    const fullscreenLayer = createdLayers.find((l: Layer) => l.layer_type === 'fullscreen');
     if (fullscreenLayer) {
-      const { data: blankTemplate, error: templateError } = await supabase
-        .from('gfx_templates')
-        .insert({
-          project_id: data.id,
-          layer_id: fullscreenLayer.id,
-          name: 'Blank',
-          description: 'Default blank template',
-          html_template: '<div class="gfx-root"></div>',
-          css_styles: '',
-          sort_order: 0,
-          enabled: true,
-        })
-        .select()
-        .single();
+      const templateResult = await directRestInsert<Template>('gfx_templates', {
+        project_id: data.id,
+        layer_id: fullscreenLayer.id,
+        name: 'Blank',
+        description: 'Default blank template',
+        html_template: '<div class="gfx-root"></div>',
+        css_styles: '',
+        sort_order: 0,
+        enabled: true,
+      }, TIMEOUT);
 
-      if (templateError) {
-        console.error('Error creating default blank template:', templateError);
+      if (templateResult.error) {
+        console.error('Error creating default blank template:', templateResult.error);
       } else {
-        console.log(`Created default blank template "${blankTemplate?.name}" for fullscreen layer`);
+        console.log(`[createProject] Created default blank template for fullscreen layer`);
       }
     }
   }
 
+  console.log(`[createProject] Project creation complete: ${data.id}`);
   return data;
 }
 
@@ -474,23 +482,27 @@ export async function duplicateProject(projectId: string): Promise<Project | nul
 // ============================================
 
 export async function fetchLayers(projectId: string): Promise<Layer[]> {
-  const { data, error } = await supabase
-    .from('gfx_layers')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('z_index', { ascending: true });
+  // Use direct REST API for reliable layer loading
+  const result = await directRestSelect<Layer>(
+    'gfx_layers',
+    '*',
+    { column: 'project_id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching layers:', error);
+  if (result.error) {
+    console.error('Error fetching layers:', result.error);
     return [];
   }
-  
-  // Apply defaults for properties that may not exist in older records
-  return (data || []).map((layer) => ({
-    ...layer,
-    enabled: layer.enabled ?? true,
-    locked: layer.locked ?? false,
-  }));
+
+  // Sort by z_index and apply defaults
+  return (result.data || [])
+    .sort((a, b) => (a.z_index ?? 0) - (b.z_index ?? 0))
+    .map((layer) => ({
+      ...layer,
+      enabled: layer.enabled ?? true,
+      locked: layer.locked ?? false,
+    }));
 }
 
 export async function createLayer(layer: Partial<Layer>): Promise<Layer | null> {
@@ -512,38 +524,45 @@ export async function createLayer(layer: Partial<Layer>): Promise<Layer | null> 
 // ============================================
 
 export async function fetchTemplates(projectId: string): Promise<Template[]> {
-  const { data, error } = await supabase
-    .from('gfx_templates')
-    .select('*')
-    .eq('project_id', projectId)
-    .eq('archived', false)
-    .order('sort_order', { ascending: true });
+  // Use direct REST API for reliable template loading
+  // Note: directRestSelect doesn't support multiple filters, so we filter archived in JS
+  const result = await directRestSelect<Template>(
+    'gfx_templates',
+    '*',
+    { column: 'project_id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching templates:', error);
+  if (result.error) {
+    console.error('Error fetching templates:', result.error);
     return [];
   }
-  
-  // Apply defaults for properties that may not exist in older records
-  return (data || []).map((template) => ({
-    ...template,
-    enabled: template.enabled ?? true,
-    locked: template.locked ?? false,
-  }));
+
+  // Filter out archived and sort by sort_order, apply defaults
+  return (result.data || [])
+    .filter((t) => !t.archived)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((template) => ({
+      ...template,
+      enabled: template.enabled ?? true,
+      locked: template.locked ?? false,
+    }));
 }
 
 export async function fetchTemplate(templateId: string): Promise<Template | null> {
-  const { data, error } = await supabase
-    .from('gfx_templates')
-    .select('*')
-    .eq('id', templateId)
-    .single();
+  // Use direct REST API for reliable template loading
+  const result = await directRestSelect<Template>(
+    'gfx_templates',
+    '*',
+    { column: 'id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching template:', error);
+  if (result.error || !result.data?.[0]) {
+    console.error('Error fetching template:', result.error);
     return null;
   }
-  return data;
+  return result.data[0];
 }
 
 export async function createTemplate(template: Partial<Template>): Promise<Template | null> {
@@ -666,17 +685,21 @@ export async function duplicateTemplate(templateId: string): Promise<Template | 
 // ============================================
 
 export async function fetchElements(templateId: string): Promise<Element[]> {
-  const { data, error } = await supabase
-    .from('gfx_elements')
-    .select('*')
-    .eq('template_id', templateId)
-    .order('sort_order', { ascending: true });
+  // Use direct REST API for reliable element loading
+  const result = await directRestSelect<Element>(
+    'gfx_elements',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching elements:', error);
+  if (result.error) {
+    console.error('Error fetching elements:', result.error);
     return [];
   }
-  return data || [];
+
+  // Sort by sort_order
+  return (result.data || []).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
 export async function createElement(element: Partial<Element>): Promise<Element | null> {
@@ -724,16 +747,19 @@ export async function deleteElement(elementId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchAnimations(templateId: string): Promise<Animation[]> {
-  const { data, error } = await supabase
-    .from('gfx_animations')
-    .select('*')
-    .eq('template_id', templateId);
+  // Use direct REST API for reliable animation loading
+  const result = await directRestSelect<Animation>(
+    'gfx_animations',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching animations:', error);
+  if (result.error) {
+    console.error('Error fetching animations:', result.error);
     return [];
   }
-  return data || [];
+  return result.data || [];
 }
 
 export async function createAnimation(animation: Partial<Animation>): Promise<Animation | null> {
@@ -781,20 +807,24 @@ export async function deleteAnimation(animationId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchKeyframes(animationId: string): Promise<Keyframe[]> {
-  const { data, error } = await supabase
-    .from('gfx_keyframes')
-    .select('*')
-    .eq('animation_id', animationId)
-    .order('position', { ascending: true });
+  // Use direct REST API for reliable keyframe loading
+  const result = await directRestSelect<any>(
+    'gfx_keyframes',
+    '*',
+    { column: 'animation_id', value: animationId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching keyframes:', error);
+  if (result.error) {
+    console.error('Error fetching keyframes:', result.error);
     return [];
   }
 
-  // Ensure properties object is populated - merge individual columns if properties is empty
+  // Sort by position and ensure properties object is populated
   // This handles backward compatibility with keyframes that have data in individual columns
-  return (data || []).map((kf: any) => {
+  return (result.data || [])
+    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+    .map((kf: any) => {
     const properties = kf.properties && Object.keys(kf.properties).length > 0
       ? kf.properties
       : {};
@@ -891,16 +921,19 @@ export async function deleteKeyframe(keyframeId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchBindings(templateId: string): Promise<Binding[]> {
-  const { data, error } = await supabase
-    .from('gfx_bindings')
-    .select('*')
-    .eq('template_id', templateId);
+  // Use direct REST API for reliable binding loading
+  const result = await directRestSelect<Binding>(
+    'gfx_bindings',
+    '*',
+    { column: 'template_id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error fetching bindings:', error);
+  if (result.error) {
+    console.error('Error fetching bindings:', result.error);
     return [];
   }
-  return data || [];
+  return result.data || [];
 }
 
 export async function createBinding(binding: Partial<Binding>): Promise<Binding | null> {

@@ -160,8 +160,6 @@ export async function directRestSelect<T = any>(
       url += `&${filter.column}=eq.${filter.value}`;
     }
 
-    console.log(`[Supabase REST] GET ${table}`);
-
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -184,7 +182,6 @@ export async function directRestSelect<T = any>(
     }
 
     const data = await response.json();
-    console.log(`[Supabase REST] Success, ${data.length} rows`);
     markSupabaseSuccess();
     return { data };
   } catch (err: any) {
@@ -194,6 +191,64 @@ export async function directRestSelect<T = any>(
       return { data: null, error: `Timeout after ${timeoutMs}ms` };
     }
     console.error(`[Supabase REST] Error:`, err);
+    return { data: null, error: err.message };
+  }
+}
+
+/**
+ * Direct REST API insert that completely bypasses the Supabase client.
+ * Use this for creating new records when the Supabase client is unresponsive.
+ * Returns the created record(s) when successful.
+ */
+export async function directRestInsert<T = any>(
+  table: string,
+  data: Record<string, any> | Record<string, any>[],
+  timeoutMs = 10000
+): Promise<{ data: T[] | null; error?: string }> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { data: null, error: 'Supabase not configured' };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    console.log(`[Supabase REST] POST ${table} (insert)`);
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Prefer': 'return=representation', // Return the created records
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Supabase REST] Insert error: ${response.status} ${errorText}`);
+      return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const result = await response.json();
+    console.log(`[Supabase REST] Insert success`);
+    markSupabaseSuccess();
+    return { data: Array.isArray(result) ? result : [result] };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.error(`[Supabase REST] Insert timeout after ${timeoutMs}ms`);
+      return { data: null, error: `Timeout after ${timeoutMs}ms` };
+    }
+    console.error(`[Supabase REST] Insert error:`, err);
     return { data: null, error: err.message };
   }
 }

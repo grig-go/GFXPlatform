@@ -39,7 +39,7 @@ import { AIModelSettingsDialog } from '@/components/dialogs/AIModelSettingsDialo
 import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { SystemTemplatesDialog } from '@/components/dialogs/SystemTemplatesDialog';
 import { TopBar } from '@/components/layout/TopBar';
-import { supabase } from '@emergent-platform/supabase-client';
+import { directRestSelect } from '@emergent-platform/supabase-client';
 import { useAuthStore } from '@/stores/authStore';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
@@ -95,7 +95,7 @@ export function ProjectList() {
   }, [user?.organizationId]);
 
   const loadProjects = async () => {
-    console.log('[ProjectList] Loading projects...');
+    console.log('[ProjectList] Loading projects via direct REST API...');
     setIsLoading(true);
     try {
       // First, load localStorage projects
@@ -115,38 +115,26 @@ export function ProjectList() {
       }
       console.log('[ProjectList] Found', localProjects.length, 'localStorage projects');
 
-      // Try to load from Supabase with timeout
-      const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), 10000)
+      // Use direct REST API for reliable project loading
+      // Note: directRestSelect doesn't support joins, so we load projects without user info
+      const result = await directRestSelect<Project>(
+        'gfx_projects',
+        '*',
+        user?.organizationId ? { column: 'organization_id', value: user.organizationId } : undefined,
+        10000
       );
 
-      // Build query - filter by organization if user is logged in
-      // Join with users table to get creator and updater info
-      let query = supabase
-        .from('gfx_projects')
-        .select('*, creator:users!created_by(id, email, name), updater:users!updated_by(id, email, name)')
-        .eq('archived', false);
-
-      // Filter by user's organization if they have one
-      if (user?.organizationId) {
-        query = query.eq('organization_id', user.organizationId);
-      }
-
-      const queryPromise = query.order('updated_at', { ascending: false });
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-
-      if (error) {
-        console.error('[ProjectList] Error loading from Supabase:', error);
+      if (result.error) {
+        console.error('[ProjectList] Error loading from Supabase:', result.error);
         // Use localStorage projects only
         const sortedLocalProjects = localProjects.sort(
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
         setProjects(sortedLocalProjects);
       } else {
-        console.log('[ProjectList] Loaded', data?.length || 0, 'projects from Supabase');
-        // Merge Supabase projects with localStorage projects
-        const supabaseProjects: Project[] = data || [];
+        // Filter out archived projects (REST API doesn't support multiple filters easily)
+        const supabaseProjects: Project[] = (result.data || []).filter(p => !p.archived);
+        console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase');
 
         // Create a map with project ID as key to ensure uniqueness
         const projectMap = new Map<string, Project>();

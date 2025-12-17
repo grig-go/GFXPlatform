@@ -13,6 +13,7 @@ import {
   TabsContent,
 } from '@emergent-platform/ui';
 import { useProjectStore } from '@/stores/projectStore';
+import { useUIPreferencesStore } from '@/stores/uiPreferencesStore';
 import { PageList } from '@/components/pages/PageList';
 import { TemplateList } from '@/components/templates/TemplateList';
 
@@ -24,9 +25,11 @@ interface LeftSidebarProps {
 
 export function LeftSidebar({ defaultTab = 'pages' }: LeftSidebarProps) {
   const { projects, currentProject, selectProject } = useProjectStore();
+  const { setLastProjectId } = useUIPreferencesStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>(defaultTab);
 
   const handleProjectChange = async (projectId: string) => {
+    setLastProjectId(projectId);
     await selectProject(projectId);
   };
 

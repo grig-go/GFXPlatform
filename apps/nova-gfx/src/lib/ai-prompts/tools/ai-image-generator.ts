@@ -13,7 +13,6 @@
  * 6. Return public URL
  */
 
-import { supabase } from '@emergent-platform/supabase-client';
 import { getGeminiApiKey, getAIImageModel, AI_IMAGE_MODELS } from '../../ai';
 
 // Constants
@@ -24,12 +23,16 @@ const IMAGE_HEIGHT = 720;
 const PLACEHOLDER_PATH = 'do-no-delete/placeholder.png';
 
 /**
- * Get the fallback placeholder URL dynamically from Supabase
+ * Get the fallback placeholder URL dynamically from env
  * This ensures the URL is always correct regardless of which Supabase project is configured
  */
 export function getFallbackPlaceholderUrl(): string {
-  const { data } = supabase.storage.from(TEXTURES_BUCKET).getPublicUrl(PLACEHOLDER_PATH);
-  return data.publicUrl;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) {
+    // Fallback to a generic placeholder
+    return '';
+  }
+  return `${supabaseUrl}/storage/v1/object/public/${TEXTURES_BUCKET}/${PLACEHOLDER_PATH}`;
 }
 
 /**
@@ -53,7 +56,29 @@ function hashPrompt(prompt: string): string {
 function enhancePromptForBroadcast(query: string): string {
   const normalizedQuery = query.toLowerCase().trim();
 
-  // Category-specific enhancements
+  // Check if this is a logo/crest/emblem request - needs vector/flat styling
+  const isLogoRequest = normalizedQuery.includes('logo') ||
+    normalizedQuery.includes('crest') ||
+    normalizedQuery.includes('emblem') ||
+    normalizedQuery.includes('badge') ||
+    normalizedQuery.includes('team') && (normalizedQuery.includes('flag') || normalizedQuery.includes('national'));
+
+  if (isLogoRequest) {
+    // For logos, ensure vector/flat design style (graphical, not photorealistic)
+    const hasVectorKeywords = normalizedQuery.includes('vector') ||
+      normalizedQuery.includes('flat') ||
+      normalizedQuery.includes('graphic');
+
+    if (hasVectorKeywords) {
+      // Already has the right keywords, just clean up
+      return `${query}, clean sharp edges, solid colors, no gradients, centered, simple background`;
+    } else {
+      // Add vector/flat design keywords for graphical style
+      return `${query}, vector graphic style, flat design, clean sharp edges, solid colors, no gradients, centered, simple solid color background, professional sports logo illustration`;
+    }
+  }
+
+  // Category-specific enhancements for non-logo images
   const enhancements: Record<string, string> = {
     // Sports
     'basketball': 'Professional basketball action shot, dynamic lighting, sports broadcast quality, HD, cinematic',
@@ -95,33 +120,63 @@ function enhancePromptForBroadcast(query: string): string {
 /**
  * Check if an image with this prompt already exists in the organization's textures
  * Uses the prompt hash in the filename for cache lookup
+ * Uses REST API to avoid Supabase client hangs
  */
 async function findExistingGeneratedImage(
   organizationId: string,
   promptHash: string
 ): Promise<string | null> {
   try {
+    // Get Supabase config from env
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('⚠️ Cache lookup: Missing Supabase env config');
+      return null;
+    }
+
     // Look for existing AI-generated image by checking if the filename contains the prompt hash
     // The hash is embedded in filenames like: timestamp-random-ai-prompt_HASH.png
-    const { data, error } = await supabase
-      .from('organization_textures')
-      .select('file_url')
-      .eq('organization_id', organizationId)
-      .ilike('name', `%${promptHash}%`)
-      .limit(1)
-      .maybeSingle(); // Use maybeSingle instead of single to avoid error when no match
+    // Use REST API with ilike filter
+    const queryUrl = `${supabaseUrl}/rest/v1/organization_textures?select=file_url&organization_id=eq.${organizationId}&name=ilike.*${promptHash}*&limit=1`;
 
-    if (error) {
-      console.warn(`⚠️ Cache lookup error:`, error.message);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`⚠️ Cache lookup error: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      if (!data || data.length === 0) {
+        return null;
+      }
+
+      console.log(`🎯 Found cached AI-generated image for prompt hash: ${promptHash}`);
+      return data[0].file_url;
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+        console.warn(`⚠️ Cache lookup timed out after 5s`);
+      } else {
+        console.warn(`⚠️ Cache lookup fetch error:`, fetchErr);
+      }
       return null;
     }
-
-    if (!data) {
-      return null;
-    }
-
-    console.log(`🎯 Found cached AI-generated image for prompt hash: ${promptHash}`);
-    return data.file_url;
   } catch (err) {
     console.warn(`⚠️ Cache lookup exception:`, err);
     return null;
@@ -162,11 +217,6 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
       },
     };
 
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const TIMEOUT_MS = 60000; // 60 seconds timeout for image generation
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${apiModel}:generateContent?key=${apiKey}`,
       {
@@ -186,11 +236,8 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
           ],
           generationConfig,
         }),
-        signal: controller.signal,
       }
     );
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -226,11 +273,7 @@ async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
     console.error('❌ No image data in Gemini response');
     return null;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.error('❌ Image generation timed out (60s limit)');
-    } else {
-      console.error('❌ Failed to generate image:', error);
-    }
+    console.error('❌ Failed to generate image:', error);
     return null;
   }
 }
@@ -243,7 +286,8 @@ async function uploadGeneratedImage(
   organizationId: string,
   userId: string,
   originalPrompt: string,
-  promptHash: string
+  promptHash: string,
+  accessToken: string
 ): Promise<string | null> {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 8);
@@ -253,75 +297,93 @@ async function uploadGeneratedImage(
   const thumbnailPath = `${organizationId}/thumbnails/${filename}.jpg`;
 
   try {
-    // Generate thumbnail
-    let thumbnailUrl: string | null = null;
-    try {
-      const thumbnailBlob = await generateThumbnail(imageBlob);
-      const { error: thumbError } = await supabase.storage
-        .from(TEXTURES_BUCKET)
-        .upload(thumbnailPath, thumbnailBlob, {
-          cacheControl: '31536000',
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
+    console.log(`📤 [Upload] Starting upload for: ${storagePath}`);
 
-      if (!thumbError) {
-        const { data: thumbUrlData } = supabase.storage
-          .from(TEXTURES_BUCKET)
-          .getPublicUrl(thumbnailPath);
-        thumbnailUrl = thumbUrlData.publicUrl;
-      }
-    } catch (err) {
-      console.warn('Failed to generate thumbnail:', err);
-    }
+    // Skip thumbnail for now - just upload main image
+    const thumbnailUrl: string | null = null;
 
-    // Upload original image
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(TEXTURES_BUCKET)
-      .upload(storagePath, imageBlob, {
-        cacheControl: '31536000',
-        contentType: imageBlob.type,
-        upsert: false,
-      });
+    // Get Supabase URL and anon key from env
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-    if (uploadError) {
-      console.error('❌ Failed to upload image:', uploadError);
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ [Upload] Missing Supabase URL or anon key');
       return null;
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from(TEXTURES_BUCKET)
-      .getPublicUrl(uploadData.path);
+    // Upload using direct REST API with user's access token (required for authenticated policies)
+    console.log(`📤 [Upload] Uploading via REST (size: ${imageBlob.size} bytes, type: ${imageBlob.type})...`);
 
-    const fileUrl = urlData.publicUrl;
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${TEXTURES_BUCKET}/${storagePath}`;
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': imageBlob.type,
+        'x-upsert': 'true',
+      },
+      body: imageBlob,
+    });
 
-    // Create database record
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error('❌ [Upload] REST upload failed:', uploadResponse.status, errorText);
+      return null;
+    }
+
+    console.log(`📤 [Upload] REST upload successful`);
+
+    // Construct public URL directly
+    const fileUrl = `${supabaseUrl}/storage/v1/object/public/${TEXTURES_BUCKET}/${storagePath}`;
+
+    // Create database record - skip for now, just return the URL
+    // The file is already uploaded and publicly accessible
     const textureName = `AI: ${originalPrompt.substring(0, 50)} (${promptHash})`;
 
-    const { error: dbError } = await supabase
-      .from('organization_textures')
-      .insert({
-        organization_id: organizationId,
-        name: textureName,
-        file_name: filename,
-        file_url: fileUrl,
-        thumbnail_url: thumbnailUrl,
-        storage_path: storagePath,
-        media_type: 'image',
-        size: imageBlob.size,
-        width: IMAGE_WIDTH,
-        height: IMAGE_HEIGHT,
-        duration: null,
-        uploaded_by: userId,
-        tags: AI_GENERATED_TAGS,
+    // Save to database using REST API (not Supabase client to avoid potential hangs)
+    console.log(`📤 [Upload] Saving to database via REST...`);
+
+    const dbInsertUrl = `${supabaseUrl}/rest/v1/organization_textures`;
+    const dbPayload = {
+      organization_id: organizationId,
+      name: textureName,
+      file_name: filename,
+      file_url: fileUrl,
+      thumbnail_url: thumbnailUrl,
+      storage_path: storagePath,
+      media_type: 'image',
+      size: imageBlob.size,
+      width: IMAGE_WIDTH,
+      height: IMAGE_HEIGHT,
+      duration: null,
+      uploaded_by: userId,
+      tags: AI_GENERATED_TAGS,
+    };
+
+    try {
+      const dbResponse = await fetch(dbInsertUrl, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(dbPayload),
       });
 
-    if (dbError) {
-      console.error('❌ Failed to save texture record:', dbError);
-      // Try to clean up uploaded file
-      await supabase.storage.from(TEXTURES_BUCKET).remove([storagePath, thumbnailPath]);
-      return null;
+      if (!dbResponse.ok) {
+        const dbErrorText = await dbResponse.text();
+        console.error('❌ [Upload] Failed to save texture record:', dbResponse.status, dbErrorText);
+        // Don't clean up - the file is still useful even without DB record
+        console.warn('⚠️ Continuing with URL despite DB error - file is uploaded');
+      } else {
+        console.log(`📤 [Upload] Database record saved`);
+      }
+    } catch (dbErr) {
+      console.error('❌ [Upload] DB insert exception:', dbErr);
+      console.warn('⚠️ Continuing with URL despite DB error - file is uploaded');
     }
 
     console.log(`✅ AI-generated image saved: ${fileUrl}`);
@@ -333,39 +395,22 @@ async function uploadGeneratedImage(
 }
 
 /**
- * Generate a thumbnail from an image blob with timeout protection
+ * Generate a thumbnail from an image blob (with 5s timeout)
  */
 async function generateThumbnail(imageBlob: Blob, maxSize: number = 400): Promise<Blob> {
-  // Add timeout to prevent hanging
-  const TIMEOUT_MS = 10000; // 10 seconds
-
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(imageBlob);
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let resolved = false;
 
-    const cleanup = () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
+    // Timeout after 5 seconds
+    const timeout = setTimeout(() => {
       URL.revokeObjectURL(url);
-    };
-
-    // Timeout handler
-    timeoutId = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        cleanup();
-        reject(new Error('Thumbnail generation timed out'));
-      }
-    }, TIMEOUT_MS);
+      reject(new Error('Thumbnail generation timed out'));
+    }, 5000);
 
     img.onload = () => {
-      if (resolved) return;
-      resolved = true;
-      cleanup();
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
 
       // Calculate thumbnail dimensions
       let width = img.naturalWidth;
@@ -410,9 +455,8 @@ async function generateThumbnail(imageBlob: Blob, maxSize: number = 400): Promis
     };
 
     img.onerror = () => {
-      if (resolved) return;
-      resolved = true;
-      cleanup();
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
       reject(new Error('Failed to load image for thumbnail'));
     };
 
@@ -426,18 +470,21 @@ async function generateThumbnail(imageBlob: Blob, maxSize: number = 400): Promis
 export async function getOrGenerateImageUrl(
   prompt: string,
   organizationId: string,
-  userId: string
+  userId: string,
+  accessToken: string
 ): Promise<string> {
   const promptHash = hashPrompt(prompt);
+  console.log(`🖼️ [getOrGenerateImageUrl] Starting for: "${prompt.substring(0, 40)}..."`);
 
-  // 1. Check for existing cached image
-  const existingUrl = await findExistingGeneratedImage(organizationId, promptHash);
-  if (existingUrl) {
-    return existingUrl;
-  }
+  // Skip cache check - database queries are too slow/hanging
+  // TODO: Re-enable once Supabase performance is fixed
+  // const existingUrl = await findExistingGeneratedImage(organizationId, promptHash);
+  // if (existingUrl) return existingUrl;
+  console.log(`🖼️ [getOrGenerateImageUrl] Generating new image (cache disabled)...`);
 
   // 2. Generate new image
   const imageBlob = await generateImageWithGemini(prompt);
+  console.log(`🖼️ [getOrGenerateImageUrl] Generation complete, blob:`, imageBlob ? 'OK' : 'NULL');
   if (!imageBlob) {
     console.warn(`⚠️ Image generation failed, using fallback placeholder for: "${prompt}"`);
     return getFallbackPlaceholderUrl();
@@ -449,7 +496,8 @@ export async function getOrGenerateImageUrl(
     organizationId,
     userId,
     prompt,
-    promptHash
+    promptHash,
+    accessToken
   );
 
   if (!uploadedUrl) {
@@ -499,7 +547,8 @@ export function extractGeneratePlaceholders(text: string): string[] {
 export async function resolveGeneratePlaceholders(
   text: string,
   organizationId: string,
-  userId: string
+  userId: string,
+  accessToken: string
 ): Promise<string> {
   const placeholders = extractGeneratePlaceholders(text);
 
@@ -511,7 +560,7 @@ export async function resolveGeneratePlaceholders(
 
   // Generate all images in parallel for better performance
   const urlPromises = placeholders.map((prompt) =>
-    getOrGenerateImageUrl(prompt, organizationId, userId)
+    getOrGenerateImageUrl(prompt, organizationId, userId, accessToken)
   );
 
   const urls = await Promise.all(urlPromises);
@@ -541,7 +590,6 @@ export function hasGeneratePlaceholders(text: string): boolean {
  */
 export function replaceGenerateWithPlaceholder(text: string): string {
   const placeholderUrl = getFallbackPlaceholderUrl();
-  // Reset regex state
   GENERATE_PATTERN.lastIndex = 0;
   return text.replace(GENERATE_PATTERN, placeholderUrl);
 }

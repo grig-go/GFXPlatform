@@ -177,17 +177,26 @@ export function TextElement({
   // Get the current progress value
   // Priority: animatedProps (from keyframes) > charAnimation.progress (from slider)
   const currentProgress = useMemo(() => {
-    // Debug: log what we're receiving
-    console.log('[TextElement] Progress sources:', {
-      animatedProgress: animatedProps?.charAnimation_progress,
-      sliderProgress: charAnimation?.progress,
-      isPlaying,
-      playheadPosition
-    });
-
+    // Priority 1: If we have an animated value from keyframes, use it
     if (animatedProps?.charAnimation_progress !== undefined) {
       return Number(animatedProps.charAnimation_progress);
     }
+
+    // Priority 2: When playing (in Preview/Player), if no keyframe value exists for
+    // charAnimation_progress in the current phase, default to 100 (fully visible).
+    // This handles phase transitions (e.g., IN -> LOOP) where LOOP may not have keyframes.
+    if (isPlaying) {
+      return 100;
+    }
+
+    // Priority 3: When NOT playing but playhead is at a non-zero position,
+    // we're likely at the end of an animation that played, so hold at 100.
+    // This ensures text stays visible after LOOP phase ends.
+    if (playheadPosition && playheadPosition > 0) {
+      return 100;
+    }
+
+    // Priority 4: In designer mode with playhead at 0, use the slider value for preview
     return charAnimation?.progress ?? 100;
   }, [animatedProps?.charAnimation_progress, charAnimation?.progress, isPlaying, playheadPosition]);
 
@@ -226,21 +235,16 @@ export function TextElement({
 
     // If text hasn't changed from last split, nothing to do
     if (text === lastSplitTextRef.current) {
-      console.log('[TextElement] Text unchanged from last split:', text);
       return;
     }
 
-    console.log('[TextElement] TEXT CHANGED! Last split:', JSON.stringify(lastSplitTextRef.current), '-> New:', JSON.stringify(text), '- waiting 500ms...');
-
     // Set debounce timer - increment version to trigger re-split
     debounceTimerRef.current = setTimeout(() => {
-      console.log('[TextElement] *** DEBOUNCE COMPLETE! *** Triggering re-split for:', JSON.stringify(text));
       setSplitVersion(v => v + 1);
     }, 500);
 
     return () => {
       if (debounceTimerRef.current) {
-        console.log('[TextElement] Clearing debounce timer (text changed again)');
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
@@ -265,7 +269,6 @@ export function TextElement({
     const needsSplit = lastSplitTextRef.current !== text || !splitCharsRef.current;
 
     if (needsSplit) {
-      console.log('[TextElement] Splitting text:', JSON.stringify(text), '(was:', JSON.stringify(lastSplitTextRef.current), ') version:', splitVersion);
 
       // Clear existing split state
       splitCharsRef.current = null;
@@ -313,7 +316,6 @@ export function TextElement({
       });
 
       splitCharsRef.current = chars;
-      console.log('[TextElement] Manual split complete, char count:', chars.length, 'text length:', text.length);
     }
   }, [charAnimation?.enabled, text, splitVersion, maxSize]);
 
@@ -395,8 +397,6 @@ export function TextElement({
 
       char.style.transform = transform.trim() || '';
     });
-
-    console.log('[TextElement] Applied char animation, text:', text, 'totalChars:', chars.length, 'currentProgress:', currentProgress);
   }, [charAnimation?.enabled, charAnimation?.type, charAnimation?.direction, charAnimation?.spread, charAnimation?.easing, currentProgress, splitVersion, text]);
 
   // Standard element animation (non-character based)

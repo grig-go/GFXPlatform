@@ -82,6 +82,7 @@ export function Canvas() {
     currentPhase,
     playheadPosition,
     selectedKeyframeIds,
+    phaseDurations,
   } = useDesignerStore();
 
   // Wrapper for addElement that automatically parents to selected group
@@ -1555,7 +1556,9 @@ export function Canvas() {
                   animations,
                   keyframes,
                   playheadPosition,
-                  currentPhase
+                  currentPhase,
+                  false,
+                  phaseDurations[currentPhase]
                 );
 
                 // Check if a keyframe is selected for this element - show keyframe values directly

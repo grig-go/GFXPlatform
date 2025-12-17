@@ -1,5 +1,6 @@
 // Utilities
 export { cn } from './utils';
+export { removeWhiteBackground } from './utils/imageUtils';
 
 // Components
 export * from './components/alert-dialog';
@@ -12,6 +13,7 @@ export * from './components/dialog';
 export * from './components/dropdown-menu';
 export * from './components/input';
 export * from './components/label';
+export * from './components/media-picker';
 export * from './components/resizable';
 export * from './components/scroll-area';
 export * from './components/select';

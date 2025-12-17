@@ -10,7 +10,7 @@ import {
   Label,
   Input,
 } from '@emergent-platform/ui';
-import { Play, Square, Eye, Layers, RotateCcw, ExternalLink, Loader2, Settings, Image, X, Video } from 'lucide-react';
+import { Play, Square, Eye, Layers, RotateCcw, ExternalLink, Loader2, Settings, Image, X, Video, Pause, RefreshCw } from 'lucide-react';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { usePreviewStore } from '@/stores/previewStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -19,9 +19,10 @@ import { supabase } from '@emergent-platform/supabase-client';
 import { useMemo } from 'react';
 
 // Nova GFX preview URL - configurable via environment variable
-// In dev: defaults to localhost:5173
+// In dev: uses VITE_NOVA_GFX_PORT (default 3003) or VITE_NOVA_PREVIEW_URL
 // In prod: set VITE_NOVA_PREVIEW_URL to your deployed Nova GFX URL (e.g., https://nova.yourdomain.com)
-const NOVA_PREVIEW_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || 'http://localhost:5173';
+const NOVA_GFX_PORT = import.meta.env.VITE_NOVA_GFX_PORT || '3003';
+const NOVA_PREVIEW_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || `http://localhost:${NOVA_GFX_PORT}`;
 
 interface PreviewData {
   layers: any[];
@@ -79,6 +80,8 @@ export function PreviewPanel() {
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   // Trigger to force iframe rebuild (e.g., when settings change)
   const [rebuildTrigger, setRebuildTrigger] = useState(0);
+  // Loop mode - enabled by default
+  const [isLooping, setIsLooping] = useState(true);
 
   // Get template from either direct selection or from the preview page
   const selectedTemplate = selectedTemplateId ? getTemplate(selectedTemplateId) : null;
@@ -372,10 +375,13 @@ export function PreviewPanel() {
   useEffect(() => {
     if (!previewReady || !iframeLoaded) return;
 
-    // Send mode change to preview
+    // In isolated mode, if no template selected, don't send undefined - the preview will show 'all'
+    // Only send a specific templateId if we have one selected
+    const templateIdToSend = mode === 'isolated' ? displayTemplate?.id : null;
+
     sendToPreview('setMode', {
       mode,
-      templateId: mode === 'isolated' ? displayTemplate?.id : null
+      templateId: templateIdToSend || undefined  // Don't send null, let preview handle it
     });
   }, [mode, previewReady, iframeLoaded, sendToPreview, displayTemplate?.id]);
 
@@ -389,8 +395,8 @@ export function PreviewPanel() {
     // OBS mode - hides all controls
     params.set('obs', '1');
 
-    // Disable looping - play once and stop
-    params.set('loop', '0');
+    // Enable looping by default
+    params.set('loop', isLooping ? '1' : '0');
 
     // Include template ID in URL for initial load (isolated mode)
     if (templateId && previewMode === 'isolated') {
@@ -403,7 +409,7 @@ export function PreviewPanel() {
     }
 
     return `${NOVA_PREVIEW_URL}/preview?${params.toString()}`;
-  }, [previewBgColor, previewBgMedia]);
+  }, [previewBgColor, previewBgMedia, isLooping]);
 
   // Track last rebuild trigger to detect new triggers
   const lastRebuildTriggerRef = useRef(0);
@@ -447,6 +453,12 @@ export function PreviewPanel() {
   const handleReset = () => {
     resetPreview();
     sendToPreview('reset');
+  };
+
+  const handleToggleLoop = () => {
+    const newLooping = !isLooping;
+    setIsLooping(newLooping);
+    sendToPreview('setLoop', { loop: newLooping });
   };
 
   // Open preview in new window (without OBS mode to show controls)
@@ -593,19 +605,6 @@ export function PreviewPanel() {
           </div>
         )}
 
-        {/* Animation Phase Indicator */}
-        {animationPhase !== 'idle' && previewReady && (
-          <div
-            className={cn(
-              'absolute top-2 left-2 px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded font-medium z-10',
-              animationPhase === 'in' && 'bg-emerald-500 text-white',
-              animationPhase === 'looping' && 'bg-cyan-500 text-white',
-              animationPhase === 'out' && 'bg-amber-500 text-white'
-            )}
-          >
-            {animationPhase === 'looping' ? 'LOOP' : animationPhase.toUpperCase()}
-          </div>
-        )}
       </div>
 
       {/* Animation Controls */}
@@ -650,6 +649,27 @@ export function PreviewPanel() {
         >
           <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           Reset
+        </Button>
+
+        <div className="w-px h-5 sm:h-6 bg-border/50 mx-0.5 sm:mx-1" />
+
+        <Button
+          size="sm"
+          variant={isLooping ? 'default' : 'outline'}
+          onClick={handleToggleLoop}
+          disabled={!previewReady || !iframeLoaded}
+          className={cn(
+            'gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs',
+            isLooping && 'bg-cyan-600 hover:bg-cyan-700 border-cyan-600'
+          )}
+          title={isLooping ? 'Loop phase repeats - click to play once' : 'Loop phase plays once - click to repeat'}
+        >
+          {isLooping ? (
+            <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" style={{ animationDuration: '2s' }} />
+          ) : (
+            <Pause className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          )}
+          Loop
         </Button>
       </div>
 

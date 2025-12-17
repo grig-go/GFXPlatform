@@ -7,7 +7,18 @@ export const SHAPE_ELEMENT_DOCS = `### Shape Element
 
 Shapes are the foundation for backgrounds, containers, and cards. They support gradients, glass effects, glow, and media textures.
 
-**Shapes Available**: rectangle, rhombus, trapezoid, parallelogram
+## ⛔ TEXTURE URLS MUST USE \`{{GENERATE:...}}\` PLACEHOLDERS!
+
+**For texture.url, NEVER use:**
+- ❌ \`data:image/png;base64,...\` - Will break the graphic!
+- ❌ \`https://...\` - External URLs not allowed!
+- ❌ Any hardcoded image URL
+
+**ALWAYS use:** \`"url": "{{GENERATE:your description here}}"\`
+
+**Shapes Available**: rectangle, ellipse, rhombus, trapezoid, parallelogram
+
+**TIP**: Use \`"shape": "ellipse"\` to create circular/oval elements. Combined with a texture, ellipses create perfect circular image frames.
 
 #### Basic Shape:
 \`\`\`json
@@ -87,10 +98,19 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
 
 #### Media Texture (Image or Video Background):
 
-**IMPORTANT**: When the user wants a pattern, texture, or background image, use the \`{{GENERATE:query}}\` placeholder to generate an AI image:
+**IMPORTANT**: When the user wants a pattern, texture, or background image, use the \`{{GENERATE:query}}\` placeholder to generate an AI image.
+
+**⚠️ ALWAYS set z_index: 1 for full-screen background shapes so other elements appear on top!**
 
 \`\`\`json
 {
+  "element_type": "shape",
+  "name": "Background",
+  "position_x": 0,
+  "position_y": 0,
+  "width": 1920,
+  "height": 1080,
+  "z_index": 1,
   "content": {
     "type": "shape",
     "shape": "rectangle",
@@ -98,8 +118,7 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
       "enabled": true,
       "url": "{{GENERATE:red white gray geometric pattern professional}}",
       "mediaType": "image",
-      "fit": "cover",
-      "opacity": 1
+      "fit": "cover"
     }
   }
 }
@@ -132,21 +151,57 @@ Shapes are the foundation for backgrounds, containers, and cards. They support g
 }
 \`\`\`
 
-**NEVER use SVG patterns or inline HTML for backgrounds** - always use \`{{GENERATE:query}}\` placeholders.
+#### Ellipse Shape - Circular Image Frame:
 
-**Video Texture Example**:
+Use ellipse shape with a texture to create **circular image frames** (headshots, profile pictures, logos):
+
+\`\`\`json
+{
+  "element_type": "shape",
+  "name": "Profile Photo",
+  "position_x": 100,
+  "position_y": 100,
+  "width": 120,
+  "height": 120,
+  "content": {
+    "type": "shape",
+    "shape": "ellipse",
+    "texture": {
+      "enabled": true,
+      "url": "{{GENERATE:professional male news anchor headshot}}",
+      "mediaType": "image",
+      "fit": "cover"
+    },
+    "stroke": "#3B82F6",
+    "strokeWidth": 3
+  }
+}
+\`\`\`
+
+**Why use ellipse + texture instead of image element?**
+- Ellipse clips the image to a perfect circle/oval shape
+- Supports stroke/border on the circular edge
+- Supports glow effects on circular shape
+- Best for: headshots, profile pictures, circular logos, avatar frames
+
+**Ellipse with glow:**
 \`\`\`json
 {
   "content": {
     "type": "shape",
-    "shape": "rectangle",
+    "shape": "ellipse",
     "texture": {
       "enabled": true,
-      "url": "https://example.com/background.mp4",
-      "thumbnailUrl": "https://example.com/thumb.jpg",
-      "mediaType": "video",
-      "fit": "cover",
-      "opacity": 0.8
+      "url": "{{GENERATE:professional reporter portrait}}",
+      "fit": "cover"
+    },
+    "stroke": "#FFFFFF",
+    "strokeWidth": 2,
+    "glow": {
+      "enabled": true,
+      "color": "#3B82F6",
+      "blur": 20,
+      "intensity": 0.6
     }
   }
 }

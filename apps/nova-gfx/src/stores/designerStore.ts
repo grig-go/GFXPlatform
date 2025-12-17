@@ -1465,11 +1465,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             }
 
             // 6. Save keyframes (use properties JSONB column)
+            // NOTE: position is now stored as absolute milliseconds (not percentage 0-100)
             if (state.keyframes.length > 0) {
               const keyframesToSave = state.keyframes.map(k => ({
                 id: k.id,
                 animation_id: k.animation_id,
-                position: k.position,
+                name: k.name ?? null,
+                position: k.position, // Absolute milliseconds
                 easing: k.easing || 'linear',
                 properties: k.properties || {},
                 // Also save individual columns for backward compatibility
@@ -1625,11 +1627,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           // Get current user for updated_by tracking
           const currentUserId = useAuthStore.getState().user?.id;
 
-          // Persist to Supabase
+          // Persist to Supabase using direct REST API
           try {
-            const { error } = await supabase
-              .from('gfx_projects')
-              .update({
+            const result = await directRestUpdate(
+              'gfx_projects',
+              {
                 name: updatedProject.name,
                 description: updatedProject.description,
                 slug: updatedProject.slug,
@@ -1640,11 +1642,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 settings: updatedProject.settings,
                 updated_at: new Date().toISOString(),
                 updated_by: currentUserId || null,
-              })
-              .eq('id', state.project.id);
-            
-            if (error) {
-              console.error('Failed to update project settings:', error);
+              },
+              { column: 'id', value: state.project.id },
+              5000
+            );
+
+            if (!result.success) {
+              console.error('Failed to update project settings:', result.error);
               // Optionally revert on error
             } else {
               set({ isDirty: false, lastSaved: new Date() });
@@ -1885,10 +1889,18 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           // Calculate z_index: new elements get the highest z_index in the current template
           // Video elements always get z_index 0
+          // Ticker elements default to z_index 500 (to appear above most elements)
           const templateElements = state.elements.filter(e => e.template_id === state.currentTemplateId);
-          const maxZIndex = templateElements.length > 0 
-            ? Math.max(...templateElements.map(e => e.z_index ?? 0)) 
+          const maxZIndex = templateElements.length > 0
+            ? Math.max(...templateElements.map(e => e.z_index ?? 0))
             : 0;
+
+          // Determine z_index based on element type
+          const getZIndex = () => {
+            if (type === 'video') return 0; // Video always at bottom
+            if (type === 'ticker') return 500; // Ticker defaults to 500
+            return maxZIndex + 10; // Others get next available
+          };
 
           const newElement: Element = {
             id,
@@ -1898,7 +1910,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             element_type: type,
             parent_element_id: parentId || null,
             sort_order: state.elements.length,
-            z_index: type === 'video' ? 0 : (maxZIndex + 10), // Video elements always get z_index 0, others get maxZIndex + 10
+            z_index: getZIndex(),
             position_x: position.x,
             position_y: position.y,
             width: type === 'text' ? 200 : type === 'line' ? 200 : 200,
@@ -1939,12 +1951,22 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           }
 
           // Calculate z_index: new elements get the highest z_index
+          // Video elements always get z_index 0
+          // Ticker elements default to z_index 500 (to appear above most elements)
           const templateElements = state.elements.filter(e => e.template_id === templateId);
-          const maxZIndex = templateElements.length > 0 
-            ? Math.max(...templateElements.map(e => e.z_index ?? 0)) 
+          const maxZIndex = templateElements.length > 0
+            ? Math.max(...templateElements.map(e => e.z_index ?? 0))
             : 0;
 
           const elementType = data.element_type || 'shape';
+
+          // Determine default z_index based on element type (if not provided)
+          const getDefaultZIndex = () => {
+            if (elementType === 'video') return 0; // Video always at bottom
+            if (elementType === 'ticker') return 500; // Ticker defaults to 500
+            return maxZIndex + 10; // Others get next available
+          };
+
           const newElement: Element = {
             id,
             template_id: templateId,
@@ -1953,7 +1975,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             element_type: elementType,
             parent_element_id: data.parent_element_id || null,
             sort_order: state.elements.length,
-            z_index: data.z_index ?? (elementType === 'video' ? 0 : maxZIndex + 10), // Video elements always get z_index 0
+            z_index: data.z_index ?? getDefaultZIndex(),
             position_x: data.position_x ?? 100,
             position_y: data.position_y ?? 100,
             width: data.width ?? 200,

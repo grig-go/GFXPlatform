@@ -15,6 +15,13 @@ const PROPERTY_COLORS: Record<string, string> = {
   opacity: '#EC4899',    // pink
   filter_blur: '#06B6D4', // cyan
   filter_brightness: '#F97316', // orange
+  // Transform-derived properties
+  translateX: '#EF4444', // red (like position_x)
+  translateY: '#22C55E', // green (like position_y)
+  scale: '#F59E0B',      // amber (like scale_x)
+  scaleX: '#F59E0B',     // amber
+  scaleY: '#8B5CF6',     // violet (like scale_y)
+  rotate: '#3B82F6',     // blue (like rotation)
 };
 
 // Get color for a property (with fallback)
@@ -117,6 +124,7 @@ interface CurveGraphEditorProps {
   onKeyframeUpdate?: (keyframeId: string, property: string, value: number) => void;
   onEasingUpdate?: (keyframeId: string, easing: string) => void;
   onScrollChange?: (scrollLeft: number) => void;
+  onDeletePropertyCurve?: (property: string, keyframeIds: string[]) => void;
   className?: string;
 }
 
@@ -130,6 +138,7 @@ export function CurveGraphEditor({
   onKeyframeUpdate,
   onEasingUpdate,
   onScrollChange,
+  onDeletePropertyCurve,
   className,
 }: CurveGraphEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -141,18 +150,21 @@ export function CurveGraphEditor({
   const [selectedSegment, setSelectedSegment] = useState<{ prop: string; segmentIdx: number } | null>(null);
   const [hoveredHandle, setHoveredHandle] = useState<HandleId | null>(null);
   const [draggingHandle, setDraggingHandle] = useState<HandleId | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; property: string } | null>(null);
 
   // Height for the graph area
   const GRAPH_HEIGHT = 150;
   const PADDING_TOP = 20;
   const PADDING_BOTTOM = 20;
-  // Left margin to match animation-timeline-js library default (25px)
+  // Match animation-timeline-js default leftMargin (25px)
   const LEFT_MARGIN = 25;
 
   // Calculate pixels per millisecond (matching timeline)
-  // Timeline uses: stepPx: 50, stepVal: 100, and zoom multiplier
-  // So 100ms = 50px at zoom 1, meaning 0.5px per ms at zoom 1
-  const pxPerMs = 0.5 * zoom;
+  // Timeline library formula: px = val * (stepPx / (stepVal * zoom))
+  // With stepPx=50, stepVal=100: pxPerMs = 50 / (100 * zoom) = 0.5 / zoom
+  const pxPerMs = 0.5 / zoom;
+
+  console.log('[CurveGraphEditor] phaseDuration:', phaseDuration, 'animation.duration:', animation.duration, 'animation.phase:', animation.phase, 'zoom:', zoom, 'pxPerMs:', pxPerMs, 'canvasWidth:', LEFT_MARGIN + phaseDuration * pxPerMs + 50);
 
   // Extract curve data from keyframes
   const curveData = useMemo(() => {
@@ -213,6 +225,58 @@ export function CurveGraphEditor({
           if (!propKeyMap.get(normalized)!.includes(originalKey)) {
             propKeyMap.get(normalized)!.push(originalKey);
           }
+        } else if (originalKey.toLowerCase() === 'transform' && typeof val === 'string') {
+          // Parse CSS transform string to extract numeric values
+          const transformStr = val as string;
+
+          // Extract translateX
+          const translateXMatch = transformStr.match(/translateX\s*\(\s*(-?[\d.]+)(?:px)?\s*\)/i);
+          if (translateXMatch) {
+            allProperties.add('translateX');
+            if (!propKeyMap.has('translateX')) propKeyMap.set('translateX', []);
+          }
+
+          // Extract translateY
+          const translateYMatch = transformStr.match(/translateY\s*\(\s*(-?[\d.]+)(?:px)?\s*\)/i);
+          if (translateYMatch) {
+            allProperties.add('translateY');
+            if (!propKeyMap.has('translateY')) propKeyMap.set('translateY', []);
+          }
+
+          // Extract translate(x, y)
+          const translateMatch = transformStr.match(/translate\s*\(\s*(-?[\d.]+)(?:px)?\s*,\s*(-?[\d.]+)(?:px)?\s*\)/i);
+          if (translateMatch) {
+            allProperties.add('translateX');
+            allProperties.add('translateY');
+            if (!propKeyMap.has('translateX')) propKeyMap.set('translateX', []);
+            if (!propKeyMap.has('translateY')) propKeyMap.set('translateY', []);
+          }
+
+          // Extract scale (uniform) - use lookbehind/lookahead to avoid matching scaleX/scaleY
+          const scaleMatch = transformStr.match(/(?<![a-zA-Z])scale\s*\(\s*(-?[\d.]+)\s*\)(?![XY])/i);
+          if (scaleMatch) {
+            allProperties.add('scale');
+            if (!propKeyMap.has('scale')) propKeyMap.set('scale', []);
+          }
+
+          // Extract scaleX/scaleY
+          const scaleXMatch = transformStr.match(/scaleX\s*\(\s*(-?[\d.]+)\s*\)/i);
+          const scaleYMatch = transformStr.match(/scaleY\s*\(\s*(-?[\d.]+)\s*\)/i);
+          if (scaleXMatch) {
+            allProperties.add('scaleX');
+            if (!propKeyMap.has('scaleX')) propKeyMap.set('scaleX', []);
+          }
+          if (scaleYMatch) {
+            allProperties.add('scaleY');
+            if (!propKeyMap.has('scaleY')) propKeyMap.set('scaleY', []);
+          }
+
+          // Extract rotate - use lookbehind/lookahead to avoid matching rotateX/Y/Z
+          const rotateMatch = transformStr.match(/(?<![a-zA-Z])rotate\s*\(\s*(-?[\d.]+)(?:deg)?\s*\)(?![XYZ])/i);
+          if (rotateMatch) {
+            allProperties.add('rotate');
+            if (!propKeyMap.has('rotate')) propKeyMap.set('rotate', []);
+          }
         }
       });
     });
@@ -251,10 +315,54 @@ export function CurveGraphEditor({
               }
             }
           }
+
+          // If still no value, try extracting from transform string
+          if (value === null && kf.properties.transform && typeof kf.properties.transform === 'string') {
+            const transformStr = kf.properties.transform;
+
+            if (prop === 'translateX') {
+              // Try translateX(value) first
+              let match = transformStr.match(/translateX\s*\(\s*(-?[\d.]+)(?:px)?\s*\)/i);
+              if (match) {
+                value = parseFloat(match[1]);
+              } else {
+                // Try translate(x, y)
+                match = transformStr.match(/translate\s*\(\s*(-?[\d.]+)(?:px)?\s*,\s*(-?[\d.]+)(?:px)?\s*\)/i);
+                if (match) value = parseFloat(match[1]);
+              }
+            } else if (prop === 'translateY') {
+              // Try translateY(value) first
+              let match = transformStr.match(/translateY\s*\(\s*(-?[\d.]+)(?:px)?\s*\)/i);
+              if (match) {
+                value = parseFloat(match[1]);
+              } else {
+                // Try translate(x, y)
+                match = transformStr.match(/translate\s*\(\s*(-?[\d.]+)(?:px)?\s*,\s*(-?[\d.]+)(?:px)?\s*\)/i);
+                if (match) value = parseFloat(match[2]);
+              }
+            } else if (prop === 'scale') {
+              // Use lookbehind/lookahead to avoid matching scaleX/scaleY
+              const match = transformStr.match(/(?<![a-zA-Z])scale\s*\(\s*(-?[\d.]+)\s*\)(?![XY])/i);
+              if (match) value = parseFloat(match[1]);
+            } else if (prop === 'scaleX') {
+              const match = transformStr.match(/scaleX\s*\(\s*(-?[\d.]+)\s*\)/i);
+              if (match) value = parseFloat(match[1]);
+            } else if (prop === 'scaleY') {
+              const match = transformStr.match(/scaleY\s*\(\s*(-?[\d.]+)\s*\)/i);
+              if (match) value = parseFloat(match[1]);
+            } else if (prop === 'rotate') {
+              // Use lookbehind/lookahead to avoid matching rotateX/Y/Z
+              const match = transformStr.match(/(?<![a-zA-Z])rotate\s*\(\s*(-?[\d.]+)(?:deg)?\s*\)(?![XYZ])/i);
+              if (match) value = parseFloat(match[1]);
+            }
+          }
         }
 
         if (value !== null) {
-          const timeMs = animation.delay + (kf.position / 100) * animation.duration;
+          // Calculate keyframe time position on the timeline
+          // Keyframe position is stored as milliseconds relative to animation start
+          // Add animation delay to get absolute timeline position
+          const timeMs = animation.delay + kf.position;
           kfData.push({
             time: timeMs,
             value,
@@ -276,23 +384,25 @@ export function CurveGraphEditor({
           keyframes: kfData,
           minValue: minVal - padding,
           maxValue: maxVal + padding,
-          visible: visibleProperties.size === 0 || visibleProperties.has(prop),
+          visible: true, // All properties visible by default, toggle via visibleProperties state
         });
       }
     });
 
     console.log('[CurveGraphEditor] All properties found:', Array.from(allProperties));
-    console.log('[CurveGraphEditor] Curves generated:', curves.length, curves.map(c => c.property));
+    console.log('[CurveGraphEditor] Curves generated:', curves.length, curves.map(c => c.property), 'phaseDuration:', phaseDuration);
 
     return curves;
-  }, [animation, keyframes, visibleProperties]);
+  }, [animation, keyframes, phaseDuration]);
 
-  // Initialize visible properties
+  // Initialize visible properties - always show all properties by default
+  // Reset when animation changes to ensure new properties are visible
   useEffect(() => {
-    if (visibleProperties.size === 0 && curveData.length > 0) {
+    if (curveData.length > 0) {
+      // Always set all properties visible when curveData changes
       setVisibleProperties(new Set(curveData.map(c => c.property)));
     }
-  }, [curveData, visibleProperties.size]);
+  }, [animation.id, curveData]); // Reset when animation or curves change
 
   // Toggle property visibility
   const toggleProperty = useCallback((prop: string) => {
@@ -306,6 +416,34 @@ export function CurveGraphEditor({
       return next;
     });
   }, []);
+
+  // Handle right-click context menu on property
+  const handlePropertyContextMenu = useCallback((e: React.MouseEvent, prop: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, property: prop });
+  }, []);
+
+  // Handle delete property curve
+  const handleDeletePropertyCurve = useCallback(() => {
+    if (!contextMenu || !onDeletePropertyCurve) return;
+
+    const curve = curveData.find(c => c.property === contextMenu.property);
+    if (curve) {
+      const keyframeIds = curve.keyframes.map(kf => kf.keyframeId);
+      onDeletePropertyCurve(contextMenu.property, keyframeIds);
+    }
+    setContextMenu(null);
+  }, [contextMenu, curveData, onDeletePropertyCurve]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   // Sync scroll position when scrollLeft prop changes
   useEffect(() => {
@@ -375,7 +513,12 @@ export function CurveGraphEditor({
     // Get combined value range for all visible curves
     let globalMin = Infinity;
     let globalMax = -Infinity;
-    curveData.filter(c => c.visible).forEach(curve => {
+    // Filter curves by visibleProperties state (empty means show all)
+    const getVisibleCurves = () => curveData.filter(c =>
+      visibleProperties.size === 0 || visibleProperties.has(c.property)
+    );
+
+    getVisibleCurves().forEach(curve => {
       globalMin = Math.min(globalMin, curve.minValue);
       globalMax = Math.max(globalMax, curve.maxValue);
     });
@@ -396,7 +539,7 @@ export function CurveGraphEditor({
       }
 
       // Draw curves
-      curveData.filter(c => c.visible).forEach(curve => {
+      getVisibleCurves().forEach(curve => {
         if (curve.keyframes.length < 2) {
           // Single keyframe - draw a horizontal line
           if (curve.keyframes.length === 1) {
@@ -559,11 +702,13 @@ export function CurveGraphEditor({
       ctx.stroke();
     }
 
-  }, [curveData, phaseDuration, pxPerMs, playheadPosition, hoveredKeyframe, draggingKeyframe, selectedSegment, hoveredHandle, draggingHandle, GRAPH_HEIGHT, LEFT_MARGIN]);
+  }, [curveData, phaseDuration, pxPerMs, playheadPosition, hoveredKeyframe, draggingKeyframe, selectedSegment, hoveredHandle, draggingHandle, visibleProperties, GRAPH_HEIGHT, LEFT_MARGIN]);
 
   // Helper to get handle positions for a segment
   const getHandlePositions = useCallback((curve: CurveData, segmentIdx: number) => {
-    const visibleCurves = curveData.filter(c => c.visible);
+    const visibleCurves = curveData.filter(c =>
+      visibleProperties.size === 0 || visibleProperties.has(c.property)
+    );
     const globalMin = Math.min(...visibleCurves.map(c => c.minValue));
     const globalMax = Math.max(...visibleCurves.map(c => c.maxValue));
 
@@ -594,7 +739,7 @@ export function CurveGraphEditor({
       segmentWidth,
       segmentHeight,
     };
-  }, [curveData, pxPerMs, GRAPH_HEIGHT]);
+  }, [curveData, pxPerMs, visibleProperties, GRAPH_HEIGHT]);
 
   // Handle mouse events for keyframe and handle interaction
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -605,7 +750,9 @@ export function CurveGraphEditor({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const visibleCurves = curveData.filter(c => c.visible);
+    const visibleCurves = curveData.filter(c =>
+      visibleProperties.size === 0 || visibleProperties.has(c.property)
+    );
     const globalMin = Math.min(...visibleCurves.map(c => c.minValue));
     const globalMax = Math.max(...visibleCurves.map(c => c.maxValue));
 
@@ -662,12 +809,25 @@ export function CurveGraphEditor({
     // Handle dragging keyframes
     if (draggingKeyframe) {
       const curve = curveData.find(c => c.property === draggingKeyframe.prop);
+      console.log('[CurveGraphEditor] Dragging keyframe:', {
+        prop: draggingKeyframe.prop,
+        idx: draggingKeyframe.idx,
+        curveFound: !!curve,
+        curveDataProps: curveData.map(c => c.property),
+      });
       if (curve && onKeyframeUpdate) {
         const normalized = 1 - (y - PADDING_TOP) / (GRAPH_HEIGHT - PADDING_TOP - PADDING_BOTTOM);
         const newValue = globalMin + normalized * (globalMax - globalMin);
 
         const kf = curve.keyframes[draggingKeyframe.idx];
+        console.log('[CurveGraphEditor] Calling onKeyframeUpdate:', {
+          keyframeId: kf.keyframeId,
+          property: curve.property,
+          newValue: Math.round(newValue * 100) / 100,
+        });
         onKeyframeUpdate(kf.keyframeId, curve.property, Math.round(newValue * 100) / 100);
+      } else {
+        console.log('[CurveGraphEditor] Cannot update - curve:', !!curve, 'onKeyframeUpdate:', !!onKeyframeUpdate);
       }
       return;
     }
@@ -707,7 +867,7 @@ export function CurveGraphEditor({
     });
 
     setHoveredKeyframe(foundKeyframe);
-  }, [curveData, pxPerMs, draggingKeyframe, draggingHandle, selectedSegment, onKeyframeUpdate, onEasingUpdate, getHandlePositions, GRAPH_HEIGHT]);
+  }, [curveData, pxPerMs, draggingKeyframe, draggingHandle, selectedSegment, onKeyframeUpdate, onEasingUpdate, getHandlePositions, visibleProperties, GRAPH_HEIGHT]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     // Priority: handle > keyframe > curve segment
@@ -746,7 +906,9 @@ export function CurveGraphEditor({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const visibleCurves = curveData.filter(c => c.visible);
+    const visibleCurves = curveData.filter(c =>
+      visibleProperties.size === 0 || visibleProperties.has(c.property)
+    );
     const globalMin = Math.min(...visibleCurves.map(c => c.minValue));
     const globalMax = Math.max(...visibleCurves.map(c => c.maxValue));
 
@@ -788,7 +950,7 @@ export function CurveGraphEditor({
       // Click on empty area - deselect
       setSelectedSegment(null);
     }
-  }, [hoveredKeyframe, hoveredHandle, curveData, pxPerMs, GRAPH_HEIGHT]);
+  }, [hoveredKeyframe, hoveredHandle, curveData, pxPerMs, visibleProperties, GRAPH_HEIGHT]);
 
   const handleMouseUp = useCallback(() => {
     setDraggingKeyframe(null);
@@ -834,6 +996,7 @@ export function CurveGraphEditor({
             <button
               key={curve.property}
               onClick={() => toggleProperty(curve.property)}
+              onContextMenu={(e) => handlePropertyContextMenu(e, curve.property)}
               className={cn(
                 "flex items-center gap-2 w-full px-2 py-1 rounded hover:bg-muted/50 transition-colors",
                 !curve.visible && "opacity-40"
@@ -846,7 +1009,7 @@ export function CurveGraphEditor({
               <span className="truncate flex-1 text-left">
                 {formatPropertyName(curve.property)}
               </span>
-              {curve.visible ? (
+              {visibleProperties.size === 0 || visibleProperties.has(curve.property) ? (
                 <Eye className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
               ) : (
                 <EyeOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -875,6 +1038,26 @@ export function CurveGraphEditor({
           )}
         />
       </div>
+
+      {/* Context menu for property curves */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2 text-destructive"
+            onClick={handleDeletePropertyCurve}
+            disabled={!onDeletePropertyCurve}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete "{formatPropertyName(contextMenu.property)}" curve
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -45,8 +45,10 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     let response;
 
     if (provider === 'gemini') {
-      const geminiApiKey = process.env.GEMINI_API_KEY;
+      // Try both naming conventions for env vars
+      const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
       if (!geminiApiKey) {
+        console.error('Missing Gemini API key. Available env vars:', Object.keys(process.env).filter(k => k.includes('GEMINI') || k.includes('API')));
         return {
           statusCode: 500,
           headers: { 'Content-Type': 'application/json' },
@@ -77,8 +79,10 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         }
       );
     } else if (provider === 'claude') {
-      const claudeApiKey = process.env.CLAUDE_API_KEY;
+      // Try both naming conventions for env vars
+      const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.VITE_CLAUDE_API_KEY;
       if (!claudeApiKey) {
+        console.error('Missing Claude API key. Available env vars:', Object.keys(process.env).filter(k => k.includes('CLAUDE') || k.includes('API')));
         return {
           statusCode: 500,
           headers: { 'Content-Type': 'application/json' },

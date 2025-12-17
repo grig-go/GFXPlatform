@@ -13,23 +13,31 @@ import {
 } from '@emergent-platform/ui';
 import { useChannelStore } from '@/stores/channelStore';
 import { useProjectStore } from '@/stores/projectStore';
-import { supabase } from '@emergent-platform/supabase-client';
-import { Circle, Send, Square, Radio } from 'lucide-react';
+import { supabase, directRestUpdate, directRestSelect } from '@emergent-platform/supabase-client';
+import { Circle, Send, Square, Radio, ExternalLink, RefreshCw } from 'lucide-react';
 
 // Nova GFX player URL - configurable via environment variable
-const NOVA_GFX_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || 'http://localhost:5173';
+// Fallback uses VITE_NOVA_GFX_PORT (3003) for local dev
+const NOVA_GFX_PORT = import.meta.env.VITE_NOVA_GFX_PORT || '3003';
+const NOVA_GFX_URL = import.meta.env.VITE_NOVA_PREVIEW_URL || `http://localhost:${NOVA_GFX_PORT}`;
 
 export function StatusBar() {
   const { channels, selectedChannel, selectChannel, loadChannels } = useChannelStore();
   const { currentProject } = useProjectStore();
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // Subscribe to realtime channel status updates
+  // Subscribe to realtime channel status updates + polling fallback
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.log('[StatusBar] Supabase not available, skipping subscription');
+      return;
+    }
+
+    console.log('[StatusBar] Setting up realtime subscription for pulsar_channels...');
+    let realtimeWorking = false;
 
     const subscription = supabase
-      .channel('channel-status-updates')
+      .channel('statusbar-channel-updates')
       .on(
         'postgres_changes',
         {
@@ -37,15 +45,45 @@ export function StatusBar() {
           schema: 'public',
           table: 'pulsar_channels',
         },
-        () => {
+        (payload) => {
+          console.log('[StatusBar] Received channel update via realtime:', payload);
+          realtimeWorking = true;
           // Reload channels when status changes
           loadChannels();
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('[StatusBar] Subscription status:', status, err ? `Error: ${err.message}` : '');
+        if (status === 'SUBSCRIBED') {
+          console.log('[StatusBar] ✓ Successfully subscribed to channel updates');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[StatusBar] ⚠ Subscription timed out - Realtime may not be enabled');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[StatusBar] ✗ Subscription error');
+        }
+      });
+
+    // Polling fallback - refresh channels every 5 seconds to ensure status is accurate
+    // This handles cases where Realtime is not enabled or unreliable
+    const pollInterval = setInterval(() => {
+      if (!realtimeWorking) {
+        // Only log occasionally to avoid spam
+        console.log('[StatusBar] Polling channel status (realtime not working)...');
+      }
+      loadChannels();
+    }, 5000);
+
+    // Also do an immediate refresh after a short delay
+    // This catches the initial state when Nova Player connects
+    setTimeout(() => {
+      console.log('[StatusBar] Initial channel status refresh...');
+      loadChannels();
+    }, 2000);
 
     return () => {
+      console.log('[StatusBar] Unsubscribing from channel updates');
       subscription.unsubscribe();
+      clearInterval(pollInterval);
     };
   }, [loadChannels]);
 
@@ -54,109 +92,181 @@ export function StatusBar() {
     selectChannel(channelId);
   };
 
+  // Open player window for a channel (always opens/refreshes the window)
+  const openPlayerWindow = (channelId: string) => {
+    const playerUrl = `${NOVA_GFX_URL}/player/${channelId}`;
+    console.log('[StatusBar] Opening Nova Player window:', playerUrl);
+    window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+  };
+
   // Publish to a single channel
-  const handlePublishToChannel = async (channelId: string) => {
-    if (!currentProject || !supabase) return;
+  // forceOpen: if true, always opens the player window (for recovery from bad states)
+  // Uses direct REST API to bypass unreliable Supabase client
+  const handlePublishToChannel = async (channelId: string, forceOpen = false) => {
+    if (!currentProject) return;
+
+    // Check if channel is already live with this project (just needs refresh, not full republish)
+    const channel = channels.find(c => c.id === channelId);
+    const isPlayerConnected = channel?.playerStatus === 'connected';
 
     setIsPublishing(true);
+
+    // Safety timeout - NEVER lock UI for more than 8 seconds
+    const safetyTimeout = setTimeout(() => {
+      console.warn('[StatusBar] Publish safety timeout - resetting UI');
+      setIsPublishing(false);
+    }, 8000);
 
     try {
       console.log('[StatusBar] Publishing project to channel:', channelId, 'Project:', currentProject.id);
 
+      // Generate unique command ID for reliable delivery tracking
+      const commandId = crypto.randomUUID();
       const command = {
+        id: commandId,
         type: 'initialize',
         projectId: currentProject.id,
         timestamp: new Date().toISOString(),
+        forceReload: true,
       };
 
-      // Update channel with loaded project
-      const channelResult = await supabase
-        .from('pulsar_channels')
-        .update({
+      // Step 1: Update channel with loaded project (direct REST - 5s timeout)
+      const channelResult = await directRestUpdate(
+        'pulsar_channels',
+        {
           loaded_project_id: currentProject.id,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', channelId);
+        },
+        { column: 'id', value: channelId },
+        5000
+      );
 
-      if (channelResult.error) {
-        throw channelResult.error;
+      if (!channelResult.success) {
+        console.warn('[StatusBar] Channel update failed:', channelResult.error);
+        // Continue anyway - command is more important
       }
 
-      // Send command to channel state
-      const stateResult = await supabase
-        .from('pulsar_channel_state')
-        .update({
+      // Step 2: Get current sequence (direct REST - 3s timeout)
+      const stateResult = await directRestSelect<{ command_sequence: number }>(
+        'pulsar_channel_state',
+        'command_sequence',
+        { column: 'channel_id', value: channelId },
+        3000
+      );
+
+      const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+      const newSequence = currentSequence + 1;
+      console.log('[StatusBar] Sending command id:', commandId.slice(0, 8), 'seq:', newSequence);
+
+      // Step 3: Send command (direct REST - 5s timeout)
+      const cmdResult = await directRestUpdate(
+        'pulsar_channel_state',
+        {
           pending_command: command,
+          command_sequence: newSequence,
+          last_command: command,
+          last_command_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('channel_id', channelId);
+        },
+        { column: 'channel_id', value: channelId },
+        5000
+      );
 
-      if (stateResult.error) {
-        throw stateResult.error;
+      if (!cmdResult.success) {
+        throw new Error(cmdResult.error || 'Command send failed');
       }
 
-      // Reload channels to get updated state
-      await loadChannels();
+      console.log('[StatusBar] Command sent successfully');
 
-      // Open Nova GFX player window
-      const playerUrl = `${NOVA_GFX_URL}/player/${channelId}`;
-      window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+      // Reload channels (fire and forget)
+      loadChannels().catch(() => {});
+
+      // Open Nova Player window if needed
+      if (!isPlayerConnected || forceOpen) {
+        console.log('[StatusBar] Opening Nova Player window');
+        openPlayerWindow(channelId);
+      }
 
       console.log('[StatusBar] Publish successful');
     } catch (err) {
       console.error('[StatusBar] Publish failed:', err);
     } finally {
+      clearTimeout(safetyTimeout);
       setIsPublishing(false);
     }
   };
 
-  // Stop a single channel
+  // Stop a single channel - clears the loaded project
+  // Uses direct REST API to bypass unreliable Supabase client
   const handleStopChannel = async (channelId: string) => {
-    if (!supabase) return;
-
     setIsPublishing(true);
+    console.log('[StatusBar] Stopping channel:', channelId);
+
+    // Safety timeout - NEVER lock UI for more than 8 seconds
+    const safetyTimeout = setTimeout(() => {
+      console.warn('[StatusBar] Stop safety timeout - resetting UI');
+      setIsPublishing(false);
+    }, 8000);
 
     try {
-      console.log('[StatusBar] Stopping channel:', channelId);
+      // Step 1: Clear loaded_project_id (direct REST)
+      await directRestUpdate(
+        'pulsar_channels',
+        {
+          loaded_project_id: null,
+          updated_at: new Date().toISOString(),
+        },
+        { column: 'id', value: channelId },
+        5000
+      );
 
+      // Step 2: Get current sequence (direct REST)
+      const stateResult = await directRestSelect<{ command_sequence: number }>(
+        'pulsar_channel_state',
+        'command_sequence',
+        { column: 'channel_id', value: channelId },
+        3000
+      );
+
+      const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+      const newSequence = currentSequence + 1;
+
+      // Send a clear command with unique ID
+      const commandId = crypto.randomUUID();
       const command = {
-        type: 'stop',
+        id: commandId,
+        type: 'clear_all',
         timestamp: new Date().toISOString(),
       };
 
-      // Send stop command to channel state
-      const stateResult = await supabase
-        .from('pulsar_channel_state')
-        .update({
+      console.log('[StatusBar] Sending stop command id:', commandId.slice(0, 8));
+
+      // Step 3: Send command (direct REST)
+      const cmdResult = await directRestUpdate(
+        'pulsar_channel_state',
+        {
           pending_command: command,
+          command_sequence: newSequence,
+          last_command: command,
+          last_command_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('channel_id', channelId);
+        },
+        { column: 'channel_id', value: channelId },
+        5000
+      );
 
-      if (stateResult.error) {
-        throw stateResult.error;
+      if (!cmdResult.success) {
+        console.warn('[StatusBar] Stop command failed:', cmdResult.error);
       }
 
-      // Clear loaded_project_id on channel
-      const channelResult = await supabase
-        .from('pulsar_channels')
-        .update({
-          loaded_project_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', channelId);
-
-      if (channelResult.error) {
-        console.warn('[StatusBar] Failed to clear loaded_project_id:', channelResult.error);
-      }
-
-      // Reload channels to get updated state
-      await loadChannels();
+      // Reload channels (fire and forget)
+      loadChannels().catch(() => {});
 
       console.log('[StatusBar] Stop successful');
     } catch (err) {
       console.error('[StatusBar] Stop failed:', err);
     } finally {
+      clearTimeout(safetyTimeout);
       setIsPublishing(false);
     }
   };
@@ -197,8 +307,11 @@ export function StatusBar() {
         <div className="flex items-center gap-1 sm:gap-2">
           {/* Channel buttons with dropdown */}
           {channels.map((channel) => {
-            // Channel is live if it has a loadedProjectId from the database
-            const isLive = !!channel.loadedProjectId;
+            // Channel is LIVE only if player is connected AND has a loaded project
+            // Just having loadedProjectId doesn't mean it's actually broadcasting
+            const isPlayerConnected = channel.playerStatus === 'connected';
+            const hasLoadedProject = !!channel.loadedProjectId;
+            const isLive = isPlayerConnected && hasLoadedProject;
 
             return (
               <DropdownMenu key={channel.id}>
@@ -266,6 +379,15 @@ export function StatusBar() {
                     <Send className="h-4 w-4 mr-2" />
                     Publish to Channel
                   </DropdownMenuItem>
+                  {isPlayerConnected && (
+                    <DropdownMenuItem
+                      onClick={() => handlePublishToChannel(channel.id, true)}
+                      disabled={!currentProject || isPublishing}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Force Republish
+                    </DropdownMenuItem>
+                  )}
                   {isLive && (
                     <DropdownMenuItem
                       onClick={() => handleStopChannel(channel.id)}
@@ -277,6 +399,10 @@ export function StatusBar() {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => openPlayerWindow(channel.id)}>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Player Window
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleChannelClick(channel.id)}>
                     Select Channel
                   </DropdownMenuItem>
