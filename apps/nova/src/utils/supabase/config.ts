@@ -2,26 +2,42 @@ import { projectId, publicAnonKey } from './info';
 
 /**
  * Get Supabase URL from environment variables or fallback to info.tsx
+ * Priority: VITE_NOVA_SUPABASE_URL > VITE_SUPABASE_URL > info.tsx fallback
  */
 export function getSupabaseUrl(): string {
   // Check if import.meta.env exists (Vite environment)
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) {
-    return import.meta.env.VITE_SUPABASE_URL;
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // First check Nova-specific env var
+    if (import.meta.env.VITE_NOVA_SUPABASE_URL) {
+      return import.meta.env.VITE_NOVA_SUPABASE_URL;
+    }
+    // Fallback to generic env var
+    if (import.meta.env.VITE_SUPABASE_URL) {
+      return import.meta.env.VITE_SUPABASE_URL;
+    }
   }
-  
+
   // Fallback to projectId from info.tsx
   return `https://${projectId}.supabase.co`;
 }
 
 /**
  * Get Supabase Anon Key from environment variables or fallback to info.tsx
+ * Priority: VITE_NOVA_SUPABASE_ANON_KEY > VITE_SUPABASE_ANON_KEY > info.tsx fallback
  */
 export function getSupabaseAnonKey(): string {
   // Check if import.meta.env exists (Vite environment)
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    return import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // First check Nova-specific env var
+    if (import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY) {
+      return import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY;
+    }
+    // Fallback to generic env var
+    if (import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      return import.meta.env.VITE_SUPABASE_ANON_KEY;
+    }
   }
-  
+
   // Fallback to publicAnonKey from info.tsx
   return publicAnonKey;
 }
