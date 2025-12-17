@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pulsar App - Development Start Script
+# Pulsar MCR App - Development Start Script
 # Starts the Vite dev server
 
 set -e
@@ -16,7 +16,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🚀 Starting Pulsar App (Development Mode)${NC}"
+echo -e "${GREEN}🚀 Starting Pulsar MCR App (Development Mode)${NC}"
 
 # Create logs directory
 mkdir -p "$LOG_DIR"
@@ -55,7 +55,7 @@ fi
 
 # Create logrotate config (always regenerate to ensure correct path)
 cat > "$LOGROTATE_CONF" << EOF
-# Logrotate configuration for Pulsar App
+# Logrotate configuration for Pulsar MCR App
 # Max 100MB per log, 500MB total (5 logs x 100MB max)
 
 $LOG_DIR/*.log {
@@ -111,7 +111,7 @@ sleep 2
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
-echo -e "${GREEN}   Pulsar App Development Environment Ready${NC}"
+echo -e "${GREEN}   Pulsar MCR App Development Environment Ready${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
 echo -e "  Frontend:    ${YELLOW}http://localhost:5173${NC}"

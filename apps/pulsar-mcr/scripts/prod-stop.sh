@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pulsar App - Production Stop Script (Local)
+# Pulsar MCR App - Production Stop Script (Local)
 # Stops all production services
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +12,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🛑 Stopping Pulsar App (Production Mode)${NC}"
+echo -e "${YELLOW}🛑 Stopping Pulsar MCR App (Production Mode)${NC}"
 
 # Function to stop a service by PID file
 stop_service() {
@@ -38,7 +38,7 @@ stop_service "Production server" "serve"
 stop_service "Log rotation watcher" "logrotate"
 
 # Also kill any remaining processes by name (cleanup)
-pkill -f "serve.*pulsar.*dist" 2>/dev/null || true
+pkill -f "serve.*pulsar-mcr.*dist" 2>/dev/null || true
 pkill -f "node.*serve.*5173" 2>/dev/null || true
 
 echo ""

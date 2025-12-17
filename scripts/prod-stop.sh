@@ -42,7 +42,7 @@ stop_service() {
 # Stop all services
 SERVICES=(
     "nova"
-    "pulsar"
+    "pulsar-mcr"
     "nova-gfx"
     "pulsar-gfx"
     "nexus"

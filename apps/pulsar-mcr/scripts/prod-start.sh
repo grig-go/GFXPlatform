@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pulsar App - Production Start Script (Local)
+# Pulsar MCR App - Production Start Script (Local)
 # Builds and serves production bundle
 
 set -e
@@ -17,7 +17,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🚀 Starting Pulsar App (Production Mode - Local)${NC}"
+echo -e "${GREEN}🚀 Starting Pulsar MCR App (Production Mode - Local)${NC}"
 
 # Create logs directory
 mkdir -p "$LOG_DIR"
@@ -56,7 +56,7 @@ fi
 
 # Create logrotate config (always regenerate to ensure correct path)
 cat > "$LOGROTATE_CONF" << EOF
-# Logrotate configuration for Pulsar App
+# Logrotate configuration for Pulsar MCR App
 # Max 100MB per log, 500MB total (5 logs x 100MB max)
 
 $LOG_DIR/*.log {
@@ -124,7 +124,7 @@ sleep 2
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
-echo -e "${GREEN}   Pulsar App Production Environment Ready${NC}"
+echo -e "${GREEN}   Pulsar MCR App Production Environment Ready${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
 echo -e "  Frontend:    ${YELLOW}http://localhost:5173${NC}"

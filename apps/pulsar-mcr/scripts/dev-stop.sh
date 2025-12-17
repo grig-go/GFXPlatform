@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pulsar App - Development Stop Script
+# Pulsar MCR App - Development Stop Script
 # Stops all development services
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +12,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🛑 Stopping Pulsar App (Development Mode)${NC}"
+echo -e "${YELLOW}🛑 Stopping Pulsar MCR App (Development Mode)${NC}"
 
 # Function to stop a service by PID file
 stop_service() {
@@ -38,9 +38,9 @@ stop_service "Vite dev server" "vite"
 stop_service "Log rotation watcher" "logrotate"
 
 # Also kill any remaining processes by name (cleanup)
-pkill -f "vite.*pulsar" 2>/dev/null || true
-pkill -f "node.*pulsar.*vite" 2>/dev/null || true
-pkill -f "esbuild.*pulsar" 2>/dev/null || true
+pkill -f "vite.*pulsar-mcr" 2>/dev/null || true
+pkill -f "node.*pulsar-mcr.*vite" 2>/dev/null || true
+pkill -f "esbuild.*pulsar-mcr" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"

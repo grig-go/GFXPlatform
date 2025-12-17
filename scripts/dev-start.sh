@@ -26,7 +26,7 @@ NC='\033[0m' # No Color
 
 # Default ports (can be overridden via .env)
 NOVA_PORT=${VITE_NOVA_PORT:-5173}
-PULSAR_PORT=${VITE_PULSAR_PORT:-5174}
+PULSAR_MCR_PORT=${VITE_PULSAR_MCR_PORT:-5174}
 NOVA_GFX_PORT=${VITE_NOVA_GFX_PORT:-3000}
 PULSAR_GFX_PORT=${VITE_PULSAR_GFX_PORT:-3001}
 NEXUS_PORT=${VITE_NEXUS_PORT:-3002}
@@ -57,7 +57,7 @@ show_help() {
     echo ""
     echo "Available apps:"
     echo "  nova            Nova app (standalone)"
-    echo "  pulsar          Pulsar app (standalone)"
+    echo "  pulsar-mcr      Pulsar MCR app (standalone)"
     echo "  nova-gfx        Nova GFX (design tool)"
     echo "  pulsar-gfx      Pulsar GFX (control tool)"
     echo "  nexus           Nexus (central hub)"
@@ -66,7 +66,7 @@ show_help() {
     echo "  docs            Documentation site"
     echo ""
     echo "Examples:"
-    echo "  $0 nova pulsar           # Start Nova and Pulsar"
+    echo "  $0 nova pulsar-mcr       # Start Nova and Pulsar MCR"
     echo "  $0 --all                 # Start all apps"
     echo "  $0 nova --file-server    # Start Nova with file server"
     echo ""
@@ -260,7 +260,7 @@ fi
 cd "$PROJECT_ROOT"
 
 if [ "$START_ALL" = true ]; then
-    APPS_TO_START=("nova" "pulsar" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "docs")
+    APPS_TO_START=("nova" "pulsar-mcr" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "docs")
 fi
 
 for app in "${APPS_TO_START[@]}"; do
@@ -268,8 +268,8 @@ for app in "${APPS_TO_START[@]}"; do
         nova)
             start_app "nova" "$NOVA_PORT"
             ;;
-        pulsar)
-            start_app "pulsar" "$PULSAR_PORT"
+        pulsar-mcr)
+            start_app "pulsar-mcr" "$PULSAR_MCR_PORT"
             ;;
         nova-gfx)
             start_app "nova-gfx" "$NOVA_GFX_PORT"
@@ -317,8 +317,8 @@ for app in "${APPS_TO_START[@]}"; do
         nova)
             echo -e "  Nova:          ${CYAN}http://localhost:$NOVA_PORT${NC}"
             ;;
-        pulsar)
-            echo -e "  Pulsar:        ${CYAN}http://localhost:$PULSAR_PORT${NC}"
+        pulsar-mcr)
+            echo -e "  Pulsar MCR:    ${CYAN}http://localhost:$PULSAR_MCR_PORT${NC}"
             ;;
         nova-gfx)
             echo -e "  Nova GFX:      ${CYAN}http://localhost:$NOVA_GFX_PORT${NC}"
