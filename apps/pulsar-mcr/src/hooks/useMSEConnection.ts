@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// Default MSE Connection configuration (used if no per-channel config)
-const DEFAULT_MSE_HOST = import.meta.env.VITE_MSE_HOST || '192.168.68.83';
-const DEFAULT_MSE_PORT = parseInt(import.meta.env.VITE_MSE_WEBSOCKET_PORT || '8595', 10);
+// Default MSE port (host must be explicitly provided - no fallback)
+const DEFAULT_MSE_PORT = 8595;
 
 // Configuration options for the hook
 export interface MSEConnectionConfig {
@@ -173,7 +172,7 @@ export const useMSEConnection = (config: MSEConnectionConfig | boolean = true) =
     : config;
 
   const {
-    host = DEFAULT_MSE_HOST,
+    host,  // No default - must be explicitly provided
     port = DEFAULT_MSE_PORT,
     enabled = true
   } = normalizedConfig;

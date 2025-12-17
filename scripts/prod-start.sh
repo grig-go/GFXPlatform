@@ -26,7 +26,7 @@ NC='\033[0m' # No Color
 
 # Default ports (can be overridden via .env)
 NOVA_PORT=${VITE_NOVA_PORT:-5173}
-PULSAR_PORT=${VITE_PULSAR_PORT:-5174}
+PULSAR_MCR_PORT=${VITE_PULSAR_MCR_PORT:-5174}
 NOVA_GFX_PORT=${VITE_NOVA_GFX_PORT:-3000}
 PULSAR_GFX_PORT=${VITE_PULSAR_GFX_PORT:-3001}
 NEXUS_PORT=${VITE_NEXUS_PORT:-3002}
@@ -51,7 +51,7 @@ show_help() {
     echo ""
     echo "Available apps:"
     echo "  nova            Nova app (standalone)"
-    echo "  pulsar          Pulsar app (standalone)"
+    echo "  pulsar-mcr      Pulsar MCR app (standalone)"
     echo "  nova-gfx        Nova GFX (design tool)"
     echo "  pulsar-gfx      Pulsar GFX (control tool)"
     echo "  nexus           Nexus (central hub)"
@@ -89,7 +89,7 @@ if [ ${#APPS_TO_START[@]} -eq 0 ] && [ "$START_ALL" = false ]; then
 fi
 
 if [ "$START_ALL" = true ]; then
-    APPS_TO_START=("nova" "pulsar" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "docs")
+    APPS_TO_START=("nova" "pulsar-mcr" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "docs")
 fi
 
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
@@ -164,8 +164,8 @@ for app in "${APPS_TO_START[@]}"; do
         nova)
             start_prod_app "nova" "$NOVA_PORT"
             ;;
-        pulsar)
-            start_prod_app "pulsar" "$PULSAR_PORT"
+        pulsar-mcr)
+            start_prod_app "pulsar-mcr" "$PULSAR_MCR_PORT"
             ;;
         nova-gfx)
             start_prod_app "nova-gfx" "$NOVA_GFX_PORT"
@@ -213,8 +213,8 @@ for app in "${APPS_TO_START[@]}"; do
         nova)
             echo -e "  Nova:          ${CYAN}http://localhost:$NOVA_PORT${NC}"
             ;;
-        pulsar)
-            echo -e "  Pulsar:        ${CYAN}http://localhost:$PULSAR_PORT${NC}"
+        pulsar-mcr)
+            echo -e "  Pulsar MCR:    ${CYAN}http://localhost:$PULSAR_MCR_PORT${NC}"
             ;;
         nova-gfx)
             echo -e "  Nova GFX:      ${CYAN}http://localhost:$NOVA_GFX_PORT${NC}"
