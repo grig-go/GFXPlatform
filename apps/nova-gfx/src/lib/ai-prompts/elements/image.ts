@@ -7,29 +7,42 @@ export const IMAGE_ELEMENT_DOCS = `### Image Element
 
 Images for logos, photos, and graphics. Supports various fit modes, borders, corner radius, and blur effects.
 
-#### Basic Image:
+## ⛔ CRITICAL: ALL IMAGE SOURCES MUST USE PLACEHOLDERS!
+
+**NEVER use:**
+- ❌ \`data:image/png;base64,...\` - Will break the graphic!
+- ❌ \`https://example.com/...\` - External URLs not allowed!
+- ❌ \`/assets/...\` - Local paths not allowed!
+- ❌ Any hardcoded URL or inline image data
+
+**ALWAYS use:** \`{{GENERATE:description}}\` for ALL images (backgrounds, icons, photos, logos, etc.)
+
+#### Basic Image with AI Generation:
 \`\`\`json
 {
   "element_type": "image",
-  "name": "Logo",
-  "position_x": 50,
-  "position_y": 50,
-  "width": 120,
-  "height": 80,
+  "name": "Background",
+  "position_x": 0,
+  "position_y": 0,
+  "width": 1920,
+  "height": 1080,
+  "z_index": 1,
   "content": {
     "type": "image",
-    "src": "https://example.com/logo.png",
-    "fit": "contain"
+    "src": "{{GENERATE:sports stadium night dramatic lighting}}",
+    "fit": "cover"
   }
 }
 \`\`\`
+
+**⚠️ ALWAYS set z_index: 1 for background images so other elements appear on top!**
 
 #### Image Properties:
 \`\`\`json
 {
   "content": {
     "type": "image",
-    "src": "https://example.com/image.jpg",
+    "src": "{{GENERATE:basketball court professional broadcast}}",
     "fit": "cover",              // "cover" | "contain" | "fill" | "none" | "scale-down"
     "nativeAspectRatio": 1.78,   // Lock to aspect ratio
     "aspectRatioLocked": true,
@@ -65,7 +78,7 @@ Images for logos, photos, and graphics. Supports various fit modes, borders, cor
 {
   "content": {
     "type": "image",
-    "src": "https://example.com/headshot.jpg",
+    "src": "{{GENERATE:professional news anchor headshot}}",
     "fit": "cover",
     "border": {
       "enabled": true,
@@ -77,71 +90,10 @@ Images for logos, photos, and graphics. Supports various fit modes, borders, cor
 }
 \`\`\`
 
-#### Sports Team Logo:
-For team logos, use the \`{{LOGO:LEAGUE:TEAM}}\` placeholder:
-\`\`\`json
-{
-  "element_type": "image",
-  "name": "Home Team Logo",
-  "width": 80,
-  "height": 80,
-  "content": {
-    "type": "image",
-    "src": "{{LOGO:NFL:Chiefs}}",
-    "fit": "contain"
-  }
-}
-\`\`\`
-
 #### Blend Modes:
 normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion
 
-#### Image Sources:
-
-**For Team Logos** - Use the logo placeholder syntax:
-\`\`\`json
-"src": "{{LOGO:NFL:Chiefs}}"
-"src": "{{LOGO:NBA:Lakers}}"
-"src": "{{LOGO:MLB:Yankees}}"
-\`\`\`
-
-**For Custom/Background Images** - Use AI-generated images with the \`{{GENERATE:query}}\` placeholder:
-\`\`\`json
-"src": "{{GENERATE:basketball stadium dramatic lighting}}"
-"src": "{{GENERATE:football field night game}}"
-"src": "{{GENERATE:soccer player action shot}}"
-"src": "{{GENERATE:sports arena crowd cheering}}"
-"src": "{{GENERATE:city skyline night neon lights}}"
-\`\`\`
-
-The system will generate a unique, high-quality image using AI and store it in the organization's textures library.
-Use descriptive queries for best results. Images are generated at 1280x720 (16:9) resolution.
-
-**Common queries by use case**:
-- Sports backgrounds: \`{{GENERATE:basketball court professional broadcast}}\`, \`{{GENERATE:football field stadium lights}}\`, \`{{GENERATE:baseball stadium night game}}\`
-- Action shots: \`{{GENERATE:basketball player dunking dynamic}}\`, \`{{GENERATE:soccer action dramatic}}\`
-- Venues: \`{{GENERATE:sports arena crowd cheering}}\`, \`{{GENERATE:stadium lights dramatic atmosphere}}\`
-- Abstract/textures: \`{{GENERATE:dark abstract texture broadcast}}\`, \`{{GENERATE:blue gradient professional background}}\`
-- Weather: \`{{GENERATE:storm clouds dramatic}}\`, \`{{GENERATE:sunny weather clear sky}}\`
-
-**For Person/Headshot Images** - ALWAYS use \`{{GENERATE:query}}\` with descriptive terms:
-\`\`\`json
-"src": "{{GENERATE:professional male news anchor headshot}}"
-"src": "{{GENERATE:female sports reporter portrait studio lighting}}"
-"src": "{{GENERATE:professional anchor portrait blue background}}"
-"src": "{{GENERATE:male broadcaster headshot formal attire}}"
-\`\`\`
-
-The AI will generate a realistic professional portrait. Include descriptive terms like:
-- Role: anchor, reporter, host, broadcaster
-- Style: professional, formal, studio lighting
-- Background: blue background, gradient background, studio backdrop
-- Gender/appearance if needed: male, female, etc.
-
-**NEVER use**:
-- Direct pexels.com URLs (deprecated - use \`{{GENERATE:query}}\` instead)
-- Direct unsplash.com URLs (they 404)
-- Any direct image URLs from stock photo sites
-- Random placeholder URLs
-- Made-up image URLs
-- \`{{PEXELS:query}}\` syntax (deprecated - use \`{{GENERATE:query}}\` instead)`;
+#### Common \`{{GENERATE:...}}\` Queries:
+- Backgrounds: \`basketball court professional broadcast\`, \`football field stadium lights\`, \`sports arena crowd\`
+- People: \`professional male news anchor headshot\`, \`female sports reporter portrait\`
+- Abstract: \`dark abstract texture broadcast\`, \`blue gradient professional background\``;

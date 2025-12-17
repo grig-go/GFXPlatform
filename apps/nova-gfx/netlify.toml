@@ -6,6 +6,10 @@
 [functions]
   node_bundler = "esbuild"
 
+# Increase timeout for AI chat function (max 26s on free tier, 60s on paid)
+[functions."ai-chat"]
+  timeout = 26
+
 # Docs - serve from /docs subfolder
 [[redirects]]
   from = "/docs/*"

@@ -38,9 +38,10 @@ async function resolveImagePlaceholders(
     const authState = useAuthStore.getState();
     const organizationId = authState.user?.organizationId;
     const userId = authState.user?.id;
-    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8) });
+    const accessToken = authState.accessToken; // Get from store, not supabase.auth.getSession()
+    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8), hasToken: !!accessToken });
 
-    if (organizationId && userId) {
+    if (organizationId && userId && accessToken) {
       console.log('🖼️ Resolving GENERATE placeholders...');
 
       // Extract placeholders to get count and show progress
@@ -64,11 +65,11 @@ async function resolveImagePlaceholders(
         }
 
         // Resolve just this one placeholder
-        const singleResolved = await resolveGeneratePlaceholders(placeholderStr, organizationId, userId);
+        const singleResolved = await resolveGeneratePlaceholders(placeholderStr, organizationId, userId, accessToken);
         resolved = resolved.replace(placeholderStr, singleResolved);
       }
     } else {
-      console.warn('⚠️ Cannot generate images: no organization or user ID available');
+      console.warn('⚠️ Cannot generate images: missing org, user, or access token');
       // Replace GENERATE placeholders with fallback
       const fallbackUrl = getFallbackPlaceholderUrl();
       resolved = resolved.replace(/\{\{GENERATE:[^}]+\}\}/g, fallbackUrl);
@@ -2173,7 +2174,14 @@ function normalizeElement(el: any, index: number): any {
   const opacity = safeParseNumber(el.opacity, 1, 0, 1);
   const scaleX = safeParseNumber(el.scale_x ?? el.scaleX, 1, 0.01);
   const scaleY = safeParseNumber(el.scale_y ?? el.scaleY, 1, 0.01);
-  const zIndex = safeParseNumber(el.zIndex ?? el.z_index ?? el._zIndex, index);
+  let zIndex = safeParseNumber(el.zIndex ?? el.z_index ?? el._zIndex, index);
+
+  // Force z_index to 1 for background elements (so they appear behind other elements)
+  const nameLower = (el.name || '').toLowerCase();
+  if (nameLower.includes('background') || nameLower === 'bg') {
+    console.log(`🎯 Forcing z_index=1 for background element: "${el.name}"`);
+    zIndex = 1;
+  }
 
   // Normalize element type
   let elementType = el.element_type || el.type || 'shape';
@@ -2374,6 +2382,73 @@ function normalizeAnimation(anim: any, elementIdMap: Map<string, string>): any {
     easing,
     keyframes,
   };
+}
+
+/**
+ * Generate default fade-in/out animations for elements that don't have explicit animations.
+ * This ensures all elements have at least basic animations when the AI response is incomplete.
+ */
+function generateDefaultAnimationsForElements(
+  elements: any[],
+  existingAnimations: any[]
+): any[] {
+  // Build set of element names that already have animations (any phase)
+  const animatedElementNames = new Set<string>();
+  for (const anim of existingAnimations) {
+    if (anim?.element_name) {
+      animatedElementNames.add(anim.element_name);
+    }
+  }
+
+  const defaultAnimations: any[] = [];
+  const baseDelay = 200; // Base delay for staggered animations
+  let elementIndex = 0;
+
+  for (const element of elements) {
+    const elementName = element.name;
+    if (!elementName || animatedElementNames.has(elementName)) {
+      continue; // Skip if already has animation
+    }
+
+    // Calculate staggered delay based on element index (not counting already-animated elements)
+    const staggerDelay = Math.min(baseDelay + (elementIndex * 50), 800); // Cap at 800ms
+
+    // Create default IN animation (fade + slight scale)
+    defaultAnimations.push({
+      element_name: elementName,
+      phase: 'in',
+      delay: staggerDelay,
+      duration: 400,
+      iterations: 1,
+      easing: 'ease-out',
+      keyframes: [
+        { position: 0, properties: { opacity: 0, scale_x: 0.95, scale_y: 0.95 } },
+        { position: 100, properties: { opacity: 1, scale_x: 1, scale_y: 1 } },
+      ],
+    });
+
+    // Create default OUT animation (fade)
+    defaultAnimations.push({
+      element_name: elementName,
+      phase: 'out',
+      delay: 0,
+      duration: 300,
+      iterations: 1,
+      easing: 'ease-in',
+      keyframes: [
+        { position: 0, properties: { opacity: 1 } },
+        { position: 100, properties: { opacity: 0 } },
+      ],
+    });
+
+    elementIndex++;
+  }
+
+  if (defaultAnimations.length > 0) {
+    console.log(`🎬 Generated ${defaultAnimations.length / 2} default animation sets for elements without explicit animations`);
+  }
+
+  return defaultAnimations;
 }
 
 // Normalize animation for action-based format - similar to normalizeAnimation but for action format
@@ -2814,13 +2889,18 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           .map((anim: any) => normalizeAnimation(anim, elementIdMap))
           .filter((anim: any) => anim !== null);
 
-        console.log(`✅ Simplified format parsed: ${normalizedElements.length} elements, ${normalizedAnimations.length} animations`);
+        // Generate default animations for elements that don't have any
+        console.log(`🎬 [Pre-default] ${normalizedElements.length} elements, ${normalizedAnimations.length} parsed animations`);
+        const defaultAnimations = generateDefaultAnimationsForElements(normalizedElements, normalizedAnimations);
+        const finalAnimations = [...normalizedAnimations, ...defaultAnimations];
+
+        console.log(`✅ Simplified format parsed: ${normalizedElements.length} elements, ${finalAnimations.length} animations (${defaultAnimations.length} defaults added)`);
 
         return {
           type: 'create' as const,
           layerType: 'fullscreen',
           elements: normalizedElements,
-          animations: normalizedAnimations,
+          animations: finalAnimations,
           elementsToDelete: [],
           validationHints: hints.length > 0 ? hints : undefined,
           // Preserve dynamic_elements for template expansion
@@ -3077,6 +3157,11 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
             // Note: Group containers don't set backgroundColor in styles - they use content.fill
             const groupStyles = { ...el.styles };
             delete groupStyles.backgroundColor; // Remove to avoid conflicts with content.fill
+            // Force z_index to 1 for background groups
+            const groupName = (el.name || '').toLowerCase();
+            const isBackgroundGroup = groupName.includes('background') || groupName === 'bg';
+            const groupZIndex = isBackgroundGroup ? 1 : (el.z_index ?? el.zIndex ?? layerDefaults.z_index + result.length);
+
             result.push({
               name: el.name || 'Group',
               element_type: 'shape',
@@ -3091,7 +3176,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               styles: groupStyles,
               content: { type: 'shape', shape: 'rectangle', fill: 'transparent', opacity: 0 },
               _layerType: layerType,
-              _zIndex: layerDefaults.z_index + result.length,
+              _zIndex: groupZIndex,
             });
             
             // Recursively flatten child elements with parent offset
@@ -3109,6 +3194,11 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               }
             }
 
+            // Force z_index to 1 for background elements
+            const elName = (el.name || '').toLowerCase();
+            const isBackground = elName.includes('background') || elName === 'bg';
+            const zIndex = isBackground ? 1 : (el.z_index ?? el.zIndex ?? layerDefaults.z_index + result.length);
+
             result.push({
               // IMPORTANT: Preserve ID for update operations
               ...(el.id && { id: el.id }),
@@ -3125,7 +3215,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               styles: elementStyles,
               content: el.content || { type: 'shape', shape: 'rectangle', fill: '#3B82F6' },
               _layerType: layerType,
-              _zIndex: layerDefaults.z_index + result.length,
+              _zIndex: zIndex,
             });
           }
         });
@@ -3158,13 +3248,23 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
         const normalized = normalizeAnimationForAction(anim, anim.element_name, elementIdMapForAction);
         return normalized ? [normalized] : [];
       });
-      
-      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${processedAnimations.length}, layerType=${layerType}`);
+
+      // Generate default animations for elements that don't have any (only for create actions)
+      // This handles cases where AI response was truncated or incomplete
+      let finalAnimations = processedAnimations;
+      if (parsed.action === 'create') {
+        const defaultAnimations = generateDefaultAnimationsForElements(flatElements, processedAnimations);
+        if (defaultAnimations.length > 0) {
+          finalAnimations = [...processedAnimations, ...defaultAnimations];
+        }
+      }
+
+      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${finalAnimations.length}, layerType=${layerType}`);
       return {
         type: parsed.action as 'create' | 'update' | 'delete',
         layerType: layerType,
         elements: flatElements,
-        animations: processedAnimations,
+        animations: finalAnimations,
         elementsToDelete: parsed.elementsToDelete || [],
         // Preserve dynamic_elements for template expansion in ChatPanel
         ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
@@ -3470,18 +3570,22 @@ function convertBlueprintToChanges(blueprint: any): AIResponse['changes'] | null
       convertLayoutNode(blueprint.layout);
     }
     
-    console.log(`📊 Blueprint conversion complete: ${elements.length} elements, ${animations.length} animations`);
-    
+    // Generate default animations for elements that don't have any
+    const defaultAnimations = generateDefaultAnimationsForElements(elements, animations);
+    const finalAnimations = [...animations, ...defaultAnimations];
+
+    console.log(`📊 Blueprint conversion complete: ${elements.length} elements, ${finalAnimations.length} animations`);
+
     if (elements.length === 0) {
       console.warn('⚠️ No elements created from blueprint');
       return null;
     }
-    
+
     return {
       type: 'create',
       layerType,
       elements,
-      animations,
+      animations: finalAnimations,
       elementsToDelete: [],
     };
   } catch (error) {

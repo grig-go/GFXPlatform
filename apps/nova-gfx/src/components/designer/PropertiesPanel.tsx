@@ -5480,6 +5480,20 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
 function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const { updateElement } = useDesignerStore();
   const [showImageMediaPicker, setShowImageMediaPicker] = useState(false);
+  // These hooks must be at the top level, not inside conditionals (React hooks rules)
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  // Line editor state - initialized from content
+  const lineContent = element.content.type === 'line' ? element.content : null;
+  const [linePoints, setLinePoints] = useState<Array<{ x: number; y: number }>>(
+    lineContent?.points || [{ x: 0, y: 0 }, { x: 200, y: 0 }]
+  );
+
+  // Sync line points when content changes
+  useEffect(() => {
+    if (lineContent?.points) {
+      setLinePoints(lineContent.points);
+    }
+  }, [lineContent?.points]);
 
   const updateContent = (updates: Partial<typeof element.content>) => {
     updateElement(element.id, {
@@ -7414,15 +7428,10 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 
   // Line content editor
   if (element.content.type === 'line') {
-    const lineContent = element.content;
-    const [points, setPoints] = useState(lineContent.points || [{ x: 0, y: 0 }, { x: 200, y: 0 }]);
-
-    // Update points when content changes
-    useEffect(() => {
-      if (lineContent.points) {
-        setPoints(lineContent.points);
-      }
-    }, [lineContent.points]);
+    const lineContentLocal = element.content;
+    // Use linePoints and setLinePoints from top-level hooks (moved there for React hooks rules)
+    const points = linePoints;
+    const setPoints = setLinePoints;
 
     const updatePoints = (newPoints: Array<{ x: number; y: number }>) => {
       setPoints(newPoints);
@@ -7525,7 +7534,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
   // Icon content editor
   if (element.content.type === 'icon') {
     const iconContent = element.content;
-    const [showIconPicker, setShowIconPicker] = useState(false);
+    // showIconPicker state is now at top-level (React hooks rules)
 
     return (
       <div className="space-y-4">

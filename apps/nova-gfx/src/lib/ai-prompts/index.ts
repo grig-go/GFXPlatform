@@ -57,15 +57,8 @@ export function buildDynamicSystemPrompt(
     });
   }
 
-  // Add sports tools if sports-related
-  if (intent.isSportsRelated) {
-    modules.push({
-      id: 'sports-tools',
-      name: 'Sports Tools',
-      content: SPORTS_TOOLS_PROMPT,
-      priority: 20,
-    });
-  }
+  // Sports tools disabled - all images now use {{GENERATE:...}} placeholders
+  // Team logos are generated via AI like all other images
 
   // Add broadcast design guidelines for creating/styling (this is essential)
   if (intent.isCreating || intent.needsStyling) {
@@ -190,9 +183,10 @@ export function buildContextMessage(context: AIContext): string {
         return `• ${e.name} (${e.element_type}) [${details.join(', ')}]`;
       }).join('\n');
 
-      parts.push(`ELEMENTS (${context.currentTemplate.elements.length}):\n${elementList}`);
+      parts.push(`EXISTING ELEMENTS (${context.currentTemplate.elements.length}) - Use "action": "update" to modify these:\n${elementList}`);
+      parts.push(`⚠️ IMPORTANT: When user says "update", "modify", "change", "improve", or "add to" - use "action": "update" with the element IDs above. Do NOT create a new template!`);
     } else {
-      parts.push(`No elements yet - CREATE new ones.`);
+      parts.push(`No elements yet - use "action": "create" to make new ones.`);
     }
   }
 

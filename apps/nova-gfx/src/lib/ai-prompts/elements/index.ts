@@ -56,7 +56,7 @@ export function getElementTypeSummary(): string {
 | Type | Use For |
 |------|---------|
 | text | ALL text: labels, titles, names, scores, stats, records, numbers, headlines |
-| shape | Backgrounds, containers, cards (supports gradients, glass, textures) |
+| shape | Backgrounds, containers, cards (supports gradients, glass, textures). Shapes: rectangle, ellipse, rhombus, trapezoid, parallelogram. Use ellipse+texture for circular image frames! |
 | image | Photos, logos, graphics |
 | icon | Icons from Lucide, FontAwesome, Weather, Lottie |
 | line | Lines, dividers, arrows |

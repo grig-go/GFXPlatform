@@ -235,11 +235,67 @@ function expandDynamicElements(changes: AIChanges): AIChanges {
     });
   }
 
+  // Generate default animations for expanded elements that don't have any
+  const animatedElementNames = new Set<string>();
+  for (const anim of expandedAnimations) {
+    if (anim?.element_name) {
+      animatedElementNames.add(anim.element_name);
+    }
+  }
+
+  const staticElementCount = changes.elements?.length || 0;
+  const dynamicExpandedElements = expandedElements.slice(staticElementCount);
+  let dynamicElementIndex = 0;
+
+  for (const element of dynamicExpandedElements) {
+    const elementName = element.name;
+    if (!elementName || animatedElementNames.has(elementName)) {
+      continue;
+    }
+
+    // Calculate staggered delay based on row index for coordinated appearance
+    const rowIndex = element._rowIndex ?? dynamicElementIndex;
+    const baseDelay = 600; // Start after static elements
+    const rowDelay = rowIndex * 80; // Stagger by row
+    const staggerDelay = Math.min(baseDelay + rowDelay, 1500); // Cap at 1.5s
+
+    // Create default IN animation (fade + slide)
+    expandedAnimations.push({
+      element_name: elementName,
+      phase: 'in',
+      delay: staggerDelay,
+      duration: 350,
+      iterations: 1,
+      easing: 'ease-out',
+      keyframes: [
+        { position: 0, properties: { opacity: 0, position_y: element.position_y + 20 } },
+        { position: 100, properties: { opacity: 1, position_y: element.position_y } },
+      ],
+    });
+
+    // Create default OUT animation (fade)
+    expandedAnimations.push({
+      element_name: elementName,
+      phase: 'out',
+      delay: 0,
+      duration: 250,
+      iterations: 1,
+      easing: 'ease-in',
+      keyframes: [
+        { position: 0, properties: { opacity: 1 } },
+        { position: 100, properties: { opacity: 0 } },
+      ],
+    });
+
+    dynamicElementIndex++;
+  }
+
   console.log('✅ Expanded dynamic_elements:', {
     originalElements: changes.elements?.length || 0,
     expandedElements: expandedElements.length,
     originalAnimations: changes.animations?.length || 0,
     expandedAnimations: expandedAnimations.length,
+    dynamicElementsWithDefaultAnimations: dynamicElementIndex,
   });
 
   return {
@@ -395,6 +451,7 @@ export function ChatPanel() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pendingAIChangesRef = useRef<{ changes: any; messageId: string } | null>(null); // Stores pending changes when user wants to skip images
   const skipImagesRef = useRef(false); // Flag to skip remaining image generation
+  const imageGenAbortRef = useRef<AbortController | null>(null); // AbortController for image generation
   const [isSkippingImages, setIsSkippingImages] = useState(false); // UI state for skip button visibility
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
   // Track last failed request for auto-retry on duplicate message
@@ -441,9 +498,11 @@ export function ChatPanel() {
     clearChat,
   } = useDesignerStore();
 
-  // Load chat history when project changes
+  // Load chat history when project changes (only on initial load)
+  const hasLoadedChatRef = useRef<string | null>(null);
   useEffect(() => {
-    if (project?.id) {
+    if (project?.id && hasLoadedChatRef.current !== project.id) {
+      hasLoadedChatRef.current = project.id;
       loadChatMessages(project.id);
     }
   }, [project?.id, loadChatMessages]);
@@ -688,14 +747,18 @@ export function ChatPanel() {
             skipImagesRef.current = false; // Reset skip flag
             setIsSkippingImages(false); // Reset UI state
 
+            // Create AbortController for image generation
+            imageGenAbortRef.current = new AbortController();
+            const imageSignal = imageGenAbortRef.current.signal;
+
             // Resolve placeholders in all element content
             let imageIndex = 0;
             for (let i = 0; i < expandedChanges.elements.length; i++) {
               const el = expandedChanges.elements[i];
               const contentStr = JSON.stringify(el.content || {});
               if (hasGeneratePlaceholders(contentStr)) {
-                // Check if user requested to skip images
-                if (skipImagesRef.current) {
+                // Check if user requested to skip images (via ref or abort signal)
+                if (skipImagesRef.current || imageSignal.aborted) {
                   console.log(`⏭️ Skipping image generation for: ${el.name} - using placeholder`);
                   const placeholderContent = replaceGenerateWithPlaceholder(contentStr);
                   try {
@@ -725,7 +788,9 @@ export function ChatPanel() {
                 await new Promise(resolve => setTimeout(resolve, 50));
                 console.log(`🖼️ Resolving images for element: ${el.name}`);
                 console.log(`🖼️ Content string to resolve:`, contentStr);
-                const resolvedContent = await resolveGeneratePlaceholders(contentStr, organizationId, userId);
+
+                // Pass abort signal to image generation
+                const resolvedContent = await resolveGeneratePlaceholders(contentStr, organizationId, userId, imageSignal);
                 console.log(`🖼️ Resolved content:`, resolvedContent.substring(0, 200));
                 try {
                   const parsedContent = JSON.parse(resolvedContent);
@@ -745,8 +810,9 @@ export function ChatPanel() {
               }
             }
 
-            // Clear pending changes ref after image processing is complete
+            // Clear pending changes ref and abort controller after image processing is complete
             pendingAIChangesRef.current = null;
+            imageGenAbortRef.current = null;
           }
         } else {
           console.warn('⚠️ Cannot generate images: no organization or user ID available');
@@ -1619,10 +1685,16 @@ export function ChatPanel() {
   const buildContext = (): AIContext => {
     const currentTemplate = templates.find((t) => t.id === currentTemplateId);
     const selectedElements = elements.filter((e) => selectedElementIds.includes(e.id));
-    
+
     // Get the design system from the store
     const storeDesignSystem = useDesignerStore.getState().designSystem;
-    
+
+    // IMPORTANT: Only include elements belonging to the current template
+    // This tells the AI what elements exist so it can UPDATE them instead of creating new ones
+    const currentTemplateElements = currentTemplate
+      ? elements.filter(e => e.template_id === currentTemplate.id)
+      : [];
+
     // Include available layers for AI to know where to add graphics
     const availableLayers = layers.map(l => ({
       name: l.name,
@@ -1640,7 +1712,7 @@ export function ChatPanel() {
       currentTemplate: currentTemplate ? {
         id: currentTemplate.id,
         name: currentTemplate.name,
-        elements,
+        elements: currentTemplateElements, // Only elements in this template
         animations: [],
         bindings: [],
       } : null,
@@ -2118,6 +2190,9 @@ Alternatively, configure your API key in Settings (⚙️).`,
           setInput(currentRequestDetails.input);
           setAttachments(currentRequestDetails.attachments);
 
+          // IMPORTANT: Reset isLoading BEFORE retry so handleSend isn't blocked
+          setIsLoading(false);
+
           // Wait for cleanup then trigger retry with fresh connection
           setTimeout(() => {
             // Show reconnecting message
@@ -2173,6 +2248,11 @@ Alternatively, configure your API key in Settings (⚙️).`,
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // Also abort any ongoing image generation
+    if (imageGenAbortRef.current) {
+      imageGenAbortRef.current.abort();
+      imageGenAbortRef.current = null;
+    }
   }, []);
 
   // Skip remaining image generation and use placeholder images
@@ -2184,6 +2264,12 @@ Alternatively, configure your API key in Settings (⚙️).`,
       phase: 'images',
       message: 'Skipping images, using placeholders...',
     });
+
+    // Abort any ongoing image generation
+    if (imageGenAbortRef.current) {
+      imageGenAbortRef.current.abort();
+      console.log('⏭️ Aborted ongoing image generation');
+    }
   }, []);
 
   // Handle paste for images from clipboard

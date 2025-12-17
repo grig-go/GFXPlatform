@@ -21,6 +21,7 @@ export {
   // Direct REST API (bypasses Supabase client entirely)
   directRestUpdate,
   directRestSelect,
+  directRestInsert,
   // Beacon for window close scenarios
   sendBeaconUpdate,
 } from './client';
