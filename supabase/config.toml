@@ -334,6 +334,16 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# Disable JWT verification for public edge functions
+[functions.vizrt-ticker]
+verify_jwt = false
+
+[functions.sponsor-schedule]
+verify_jwt = false
+
+[functions.banner-schedule]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
