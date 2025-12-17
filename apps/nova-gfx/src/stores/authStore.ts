@@ -35,10 +35,18 @@ export interface AppUser {
   isAdmin: boolean; // true if role is 'owner' or 'admin'
 }
 
+export interface OrganizationSettings {
+  ai_model?: string;
+  ai_image_model?: string;
+  gemini_api_key?: string;
+  claude_api_key?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
   slug: string;
+  settings?: OrganizationSettings;
 }
 
 export interface Invitation {
@@ -79,6 +87,9 @@ interface AuthState {
   getOrganizationMembers: () => Promise<AppUser[]>;
   updateMemberRole: (userId: string, role: string) => Promise<{ success: boolean; error?: string }>;
   removeMember: (userId: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Organization settings actions
+  updateOrganizationSettings: (settings: Partial<OrganizationSettings>) => Promise<{ success: boolean; error?: string }>;
 }
 
 // Check if we're in dev mode (set VITE_DEV_MODE=false to simulate production)
@@ -134,14 +145,15 @@ async function fetchAndSetUserData(
       organizations (
         id,
         name,
-        slug
+        slug,
+        settings
       )
     `)
     .eq('id', userId)
     .single();
 
   if (userData && !userError) {
-    const org = userData.organizations as unknown as Organization | null;
+    const org = userData.organizations as unknown as (Organization & { settings?: OrganizationSettings }) | null;
     set({
       user: {
         id: userData.id,
@@ -157,6 +169,7 @@ async function fetchAndSetUserData(
         id: org.id,
         name: org.name,
         slug: org.slug,
+        settings: org.settings,
       } : null,
     });
   }
@@ -270,14 +283,15 @@ export const useAuthStore = create<AuthState>()(
                 organizations (
                   id,
                   name,
-                  slug
+                  slug,
+                  settings
                 )
               `)
               .eq('id', data.user.id)
               .single();
 
             if (userData) {
-              const org = userData.organizations as unknown as Organization | null;
+              const org = userData.organizations as unknown as (Organization & { settings?: OrganizationSettings }) | null;
               set({
                 user: {
                   id: userData.id,
@@ -293,6 +307,7 @@ export const useAuthStore = create<AuthState>()(
                   id: org.id,
                   name: org.name,
                   slug: org.slug,
+                  settings: org.settings,
                 } : null,
                 isLoading: false,
               });
@@ -667,6 +682,41 @@ export const useAuthStore = create<AuthState>()(
           return { success: true };
         } catch {
           return { success: false, error: 'Failed to remove member' };
+        }
+      },
+
+      updateOrganizationSettings: async (settings) => {
+        const { organization } = get();
+        if (!supabase || !organization) {
+          return { success: false, error: 'No organization' };
+        }
+
+        try {
+          // Merge new settings with existing ones
+          const currentSettings = organization.settings || {};
+          const updatedSettings = { ...currentSettings, ...settings };
+
+          const { error } = await supabase
+            .from('organizations')
+            .update({ settings: updatedSettings })
+            .eq('id', organization.id);
+
+          if (error) {
+            return { success: false, error: error.message };
+          }
+
+          // Update local state
+          set({
+            organization: {
+              ...organization,
+              settings: updatedSettings,
+            },
+          });
+
+          return { success: true };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to update settings';
+          return { success: false, error: message };
         }
       },
     }),

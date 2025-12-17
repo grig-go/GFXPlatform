@@ -56,6 +56,7 @@ interface AuthState {
   // State
   user: AppUser | null;
   organization: Organization | null;
+  accessToken: string | null; // JWT access token for API calls
   isLoading: boolean;
   isInitialized: boolean;
   error: string | null;
@@ -159,6 +160,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       organization: null,
+      accessToken: null,
       isLoading: false,
       isInitialized: false,
       error: null,
@@ -166,14 +168,17 @@ export const useAuthStore = create<AuthState>()(
       initialize: async () => {
         // If already initialized, just return (prevents re-init loops)
         if (get().isInitialized) {
+          console.log('[authStore] Already initialized, skipping');
           return;
         }
 
         if (!isSupabaseConfigured() || !supabase) {
+          console.log('[authStore] Supabase not configured');
           set({ isInitialized: true, isLoading: false });
           return;
         }
 
+        console.log('[authStore] Starting initialization...');
         set({ isLoading: true });
 
         try {
@@ -185,8 +190,13 @@ export const useAuthStore = create<AuthState>()(
           );
 
           const session = sessionResult?.data?.session;
+          console.log('[authStore] Session result:', session ? `Found session for ${session.user?.email}` : 'No session');
 
           if (session?.user) {
+            // Store the access token
+            console.log('[authStore] Storing access token');
+            set({ accessToken: session.access_token });
+
             // Fetch user data from our users table (also with timeout)
             try {
               await withTimeout(
@@ -207,8 +217,10 @@ export const useAuthStore = create<AuthState>()(
             authListenerSetup = true;
             supabase.auth.onAuthStateChange(async (event, session) => {
               if (event === 'SIGNED_OUT') {
-                set({ user: null, organization: null });
+                set({ user: null, organization: null, accessToken: null });
               } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+                // Store/refresh the access token
+                set({ accessToken: session.access_token });
                 // Refresh user data without re-initializing
                 await fetchAndSetUserData(session.user.id, set);
               }
@@ -240,7 +252,10 @@ export const useAuthStore = create<AuthState>()(
             return { success: false, error: error.message };
           }
 
-          if (data.user) {
+          if (data.user && data.session) {
+            // Store access token
+            set({ accessToken: data.session.access_token });
+
             // Fetch user data
             const { data: userData } = await supabase
               .from('users')
@@ -447,7 +462,7 @@ export const useAuthStore = create<AuthState>()(
         if (supabase) {
           await supabase.auth.signOut();
         }
-        set({ user: null, organization: null, error: null });
+        set({ user: null, organization: null, accessToken: null, error: null });
       },
 
       clearError: () => set({ error: null }),

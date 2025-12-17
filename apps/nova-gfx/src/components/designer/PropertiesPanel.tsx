@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import {
-  Type, Image, Square, Move, RotateCcw,
+  Type, Image as ImageIcon, Square, Move, RotateCcw,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Diamond, BarChart3, Group,
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
-  FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock, Scissors,
+  FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock, Scissors, Play,
 } from 'lucide-react';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
@@ -861,7 +861,7 @@ export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }
 function ElementIcon({ type }: { type: string }) {
   const icons: Record<string, React.ReactNode> = {
     text: <Type className="w-3 h-3" />,
-    image: <Image className="w-3 h-3" />,
+    image: <ImageIcon className="w-3 h-3" />,
     shape: <Square className="w-3 h-3" />,
     div: <Square className="w-3 h-3" />,
     group: <Group className="w-3 h-3" />,
@@ -5480,6 +5480,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
 function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorProps) {
   const { updateElement } = useDesignerStore();
   const [showImageMediaPicker, setShowImageMediaPicker] = useState(false);
+  const [showVideoMediaPicker, setShowVideoMediaPicker] = useState(false);
   // These hooks must be at the top level, not inside conditionals (React hooks rules)
   const [showIconPicker, setShowIconPicker] = useState(false);
   // Line editor state - initialized from content
@@ -5538,33 +5539,42 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 
     return (
       <div className="space-y-4">
-        <PropertySection title="Image Source">
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                value={imageContent.src || ''}
-                onChange={(e) => updateContent({ src: e.target.value })}
-                placeholder="https://..."
-                className="flex-1 h-8 text-xs"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2"
+        <PropertySection title="Content">
+          <div className="space-y-3">
+            {/* Thumbnail Preview - click to change, X to remove */}
+            {imageContent.src ? (
+              <div
+                className="relative w-16 h-16 rounded-lg border border-input overflow-hidden cursor-pointer group bg-muted/30"
                 onClick={() => setShowImageMediaPicker(true)}
               >
-                <FolderOpen className="w-4 h-4" />
-              </Button>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full h-7 text-xs gap-1"
-              onClick={() => setShowImageMediaPicker(true)}
-            >
-              <FolderOpen className="w-3 h-3" />
-              Browse Media Library
-            </Button>
+                <img
+                  src={imageContent.src}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+                  }}
+                />
+                {/* Remove button - top right corner, always visible */}
+                <button
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive flex items-center justify-center shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateContent({ src: '' });
+                  }}
+                  title="Remove image"
+                >
+                  <X className="w-2.5 h-2.5 text-white" />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="w-16 h-16 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={() => setShowImageMediaPicker(true)}
+              >
+                <ImageIcon className="w-5 h-5 text-muted-foreground/50" />
+              </div>
+            )}
           </div>
         </PropertySection>
 
@@ -7269,18 +7279,67 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
     const videoContent = element.content;
     // Extended video content type for additional properties
     const videoContentExtended = videoContent as typeof videoContent & { controls?: boolean; fit?: string };
+
+    // Check if it's a direct video URL (not YouTube/Vimeo embed)
+    const isDirectVideo = videoContent.src && (
+      videoContent.src.includes('.mp4') ||
+      videoContent.src.includes('.webm') ||
+      videoContent.src.includes('.mov') ||
+      videoContent.src.includes('supabase')
+    );
+
     return (
       <div className="space-y-4">
-        <PropertySection title="Video URL">
-          <Input
-            value={videoContent.src || ''}
-            onChange={(e) => updateContent({ src: e.target.value })}
-            placeholder="YouTube, Vimeo, or direct video URL..."
-            className="h-8 text-xs"
-          />
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Supports YouTube, Vimeo, and direct video URLs (.mp4, .webm)
-          </p>
+        <PropertySection title="Content">
+          <div className="space-y-3">
+            {/* Video Preview - click to change, X to remove */}
+            {videoContent.src ? (
+              <div
+                className="relative w-16 h-16 rounded-lg border border-input overflow-hidden cursor-pointer group bg-black"
+                onClick={() => setShowVideoMediaPicker(true)}
+              >
+                {isDirectVideo ? (
+                  <video
+                    src={videoContent.src}
+                    className="w-full h-full object-cover"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-muted/50">
+                    <Play className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                )}
+                {/* Remove button - top right corner, always visible */}
+                <button
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive flex items-center justify-center shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateContent({ src: '' });
+                  }}
+                  title="Remove video"
+                >
+                  <X className="w-2.5 h-2.5 text-white" />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="w-16 h-16 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={() => setShowVideoMediaPicker(true)}
+              >
+                <Play className="w-5 h-5 text-muted-foreground/50" />
+              </div>
+            )}
+            {/* URL Input for YouTube/Vimeo */}
+            <div>
+              <Input
+                value={videoContent.src || ''}
+                onChange={(e) => updateContent({ src: e.target.value })}
+                placeholder="YouTube, Vimeo, or direct video URL..."
+                className="h-7 text-[10px] text-muted-foreground font-mono"
+              />
+            </div>
+          </div>
         </PropertySection>
 
         <PropertySection title="Playback">
@@ -7354,6 +7413,14 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
             <option value="https://www.youtube.com/watch?v=jNQXAC9IVRw">Sample Video 2</option>
           </select>
         </PropertySection>
+
+        <MediaPickerDialog
+          open={showVideoMediaPicker}
+          onOpenChange={setShowVideoMediaPicker}
+          onSelect={(url) => updateContent({ src: url })}
+          mediaType="video"
+          title="Select Video"
+        />
       </div>
     );
   }

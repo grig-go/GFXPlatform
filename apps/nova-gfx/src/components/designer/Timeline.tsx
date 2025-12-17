@@ -146,6 +146,12 @@ export function Timeline() {
   const [contextMenuSelectedKeyframes, setContextMenuSelectedKeyframes] = useState<string[]>([]);
   const [contextMenuShowEasing, setContextMenuShowEasing] = useState(false);
 
+  // Curves panel resizing state
+  const [curvesPanelHeight, setCurvesPanelHeight] = useState(180);
+  const isDraggingDividerRef = useRef(false);
+  const dividerDragStartY = useRef(0);
+  const dividerDragStartHeight = useRef(0);
+
   // Easing options for context menu
   const easingOptions = [
     { value: 'linear', label: 'Linear' },
@@ -211,6 +217,42 @@ export function Timeline() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []); // Empty deps - handler gets fresh state from store
+
+  // Curves panel divider drag handlers
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingDividerRef.current = true;
+    dividerDragStartY.current = e.clientY;
+    dividerDragStartHeight.current = curvesPanelHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, [curvesPanelHeight]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingDividerRef.current) return;
+
+      // Dragging up increases height, dragging down decreases
+      const deltaY = dividerDragStartY.current - e.clientY;
+      const newHeight = Math.max(80, Math.min(400, dividerDragStartHeight.current + deltaY));
+      setCurvesPanelHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingDividerRef.current) {
+        isDraggingDividerRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   // Filter elements by current template
   const templateElements = useMemo(() => 
@@ -2106,17 +2148,27 @@ export function Timeline() {
         const timelineDuration = phaseDurations[currentPhase];
 
         return (
-          <div className="border-t border-border">
-            <CurveGraphEditor
-              animation={firstAnim}
-              keyframes={keyframes}
-              phaseDuration={timelineDuration}
-              zoom={zoom}
-              playheadPosition={playheadPosition}
-              onKeyframeUpdate={handleKeyframeUpdate}
-              onEasingUpdate={handleEasingUpdate}
-              onDeletePropertyCurve={handleDeletePropertyCurve}
-            />
+          <div className="flex flex-col">
+            {/* Draggable Divider */}
+            <div
+              className="h-1.5 bg-border hover:bg-primary/50 cursor-row-resize flex items-center justify-center group transition-colors"
+              onMouseDown={handleDividerMouseDown}
+            >
+              <div className="w-12 h-0.5 bg-muted-foreground/30 group-hover:bg-primary/70 rounded-full transition-colors" />
+            </div>
+            {/* Curves Panel */}
+            <div style={{ height: curvesPanelHeight }}>
+              <CurveGraphEditor
+                animation={firstAnim}
+                keyframes={keyframes}
+                phaseDuration={timelineDuration}
+                zoom={zoom}
+                playheadPosition={playheadPosition}
+                onKeyframeUpdate={handleKeyframeUpdate}
+                onEasingUpdate={handleEasingUpdate}
+                onDeletePropertyCurve={handleDeletePropertyCurve}
+              />
+            </div>
           </div>
         );
       })()}

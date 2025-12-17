@@ -45,7 +45,10 @@ export async function fetchProjects(organizationId?: string): Promise<Project[]>
     .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
 }
 
-export async function createProject(project: Partial<Project> & { organization_id: string; created_by?: string }): Promise<Project | null> {
+export async function createProject(
+  project: Partial<Project> & { organization_id: string; created_by?: string },
+  accessToken?: string
+): Promise<Project | null> {
   // Validate organization_id is provided (required by database constraint)
   if (!project.organization_id) {
     console.error('Error: organization_id is required to create a project');
@@ -58,7 +61,7 @@ export async function createProject(project: Partial<Project> & { organization_i
 
   console.log('[createProject] Creating new project via direct REST API...');
 
-  // Step 1: Create the project
+  // Step 1: Create the project (pass access token for authenticated RLS)
   const projectResult = await directRestInsert<Project>('gfx_projects', {
     name: project.name || 'Untitled Project',
     description: project.description || null,
@@ -69,7 +72,7 @@ export async function createProject(project: Partial<Project> & { organization_i
     background_color: project.background_color || 'transparent',
     organization_id: project.organization_id,
     created_by: project.created_by || null,
-  }, TIMEOUT);
+  }, TIMEOUT, accessToken);
 
   if (projectResult.error || !projectResult.data?.[0]) {
     console.error('Error creating project:', projectResult.error);

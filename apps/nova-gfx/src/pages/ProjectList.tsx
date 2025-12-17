@@ -10,14 +10,41 @@ import {
   Pencil,
   LayoutGrid,
   List,
-  Eye,
-  Send,
-  Gamepad2,
+  Tv,
+  Rocket,
   Library,
   BookTemplate,
   ArrowUpDown,
   ChevronDown,
 } from 'lucide-react';
+
+// Pulsar GFX "P" icon component - matches the Pulsar GFX app icon style
+function PulsarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      fill="none"
+      className={className}
+    >
+      {/* Rounded blue background - larger box */}
+      <rect x="0" y="0" width="32" height="32" rx="6" fill="#3B82F6" />
+      {/* White "P" letter - same relative size */}
+      <path
+        d="M11 7h8a5.5 5.5 0 0 1 0 11H11V7z"
+        fill="none"
+        stroke="white"
+        strokeWidth="2.5"
+      />
+      <path
+        d="M11 7v18"
+        stroke="white"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 import {
   Button,
   Input,
@@ -683,7 +710,7 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
             }}
             title="Preview"
           >
-            <Eye className="w-4 h-4" />
+            <Tv className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
@@ -696,7 +723,7 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
             }}
             title="Publish"
           >
-            <Send className="w-4 h-4" />
+            <Rocket className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
@@ -709,7 +736,7 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
             }}
             title="Control"
           >
-            <Gamepad2 className="w-4 h-4" />
+            <PulsarIcon className="w-4 h-4" />
           </Button>
         </div>
 
@@ -867,15 +894,15 @@ function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDupl
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPreview(); }}>
-                <Eye className="mr-2 h-4 w-4" />
+                <Tv className="mr-2 h-4 w-4" />
                 Preview
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPublish(); }}>
-                <Send className="mr-2 h-4 w-4" />
+                <Rocket className="mr-2 h-4 w-4" />
                 Publish
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onControl(); }}>
-                <Gamepad2 className="mr-2 h-4 w-4" />
+                <PulsarIcon className="mr-2 h-4 w-4" />
                 Control
               </DropdownMenuItem>
               <DropdownMenuSeparator />

@@ -171,6 +171,7 @@ async function uploadThumbnailToStorage(projectId: string, dataUrl: string): Pro
   if (!supabase || !dataUrl) return null;
 
   try {
+    console.log('[Thumbnail] Starting upload for project:', projectId);
     // Convert base64 data URL to Blob
     const base64Data = dataUrl.split(',')[1];
     if (!base64Data) {
@@ -188,6 +189,7 @@ async function uploadThumbnailToStorage(projectId: string, dataUrl: string): Pro
 
     // Upload to storage bucket "thumbnails"
     const fileName = `${projectId}.jpg`;
+    console.log('[Thumbnail] Uploading to storage bucket, file:', fileName, 'size:', blob.size);
     const { error } = await supabase.storage
       .from('thumbnails')
       .upload(fileName, blob, {
@@ -197,7 +199,7 @@ async function uploadThumbnailToStorage(projectId: string, dataUrl: string): Pro
       });
 
     if (error) {
-      console.error('Error uploading thumbnail to storage:', error.message);
+      console.error('[Thumbnail] Error uploading to storage:', error.message, error);
       // Fall back to storing base64 directly (not ideal but works)
       console.log('Falling back to base64 storage for thumbnail');
       return dataUrl;
@@ -1269,8 +1271,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 thumbnailUrl = uploadedUrl;
               }
             } catch (thumbnailError) {
-              // Silently continue - thumbnail upload failure shouldn't block save
-              console.warn('Thumbnail upload failed, continuing with save');
+              // Continue with save - thumbnail upload failure shouldn't block it
+              console.warn('Thumbnail upload failed, continuing with save', thumbnailError);
             }
           }
 
@@ -3478,7 +3480,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             state.chatMessages.push(tempMessage);
           });
 
-          // Save to database
+          // Save to database - pass access token for authenticated RLS
+          const accessToken = useAuthStore.getState().accessToken;
           const saved = await saveChatMessage(project.id, {
             role: message.role,
             content: message.content,
@@ -3487,7 +3490,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             error: message.error,
             context_template_id: get().currentTemplateId,
             context_element_ids: get().selectedElementIds,
-          });
+          }, accessToken || undefined);
 
           if (saved) {
             // Update with saved message

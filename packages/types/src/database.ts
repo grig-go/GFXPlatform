@@ -25,6 +25,7 @@ export interface Project {
   id: string;
   organization_id: string;
   created_by: string | null;
+  updated_by?: string | null;
   name: string;
   description: string | null;
   slug: string;

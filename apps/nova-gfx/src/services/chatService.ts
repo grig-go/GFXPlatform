@@ -78,7 +78,8 @@ export async function saveChatMessage(
     error?: boolean;
     context_template_id?: string | null;
     context_element_ids?: string[] | null;
-  }
+  },
+  accessToken?: string
 ): Promise<StoredChatMessage | null> {
   // Return mock if Supabase is not configured or project is local
   if (!isSupabaseConfigured() || !isValidUUID(projectId)) {
@@ -125,6 +126,7 @@ export async function saveChatMessage(
   })) || [];
 
   // Use direct REST API for reliable insert with timeout
+  // Pass access token for authenticated RLS policies
   const result = await directRestInsert<StoredChatMessage>(
     'gfx_chat_messages',
     {
@@ -138,7 +140,8 @@ export async function saveChatMessage(
       context_template_id: message.context_template_id || null,
       context_element_ids: message.context_element_ids || null,
     },
-    REST_TIMEOUT
+    REST_TIMEOUT,
+    accessToken
   );
 
   if (result.error || !result.data?.[0]) {

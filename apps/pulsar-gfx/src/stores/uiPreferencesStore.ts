@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@emergent-platform/supabase-client';
+import { useAuthStore } from './authStore';
 
 /**
  * UI Preferences Store
@@ -103,14 +104,34 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
   saveTimeout = setTimeout(async () => {
     try {
       console.log('[uiPreferencesStore] Debounce timer fired, saving to DB...');
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.warn('[uiPreferencesStore] No user logged in, cannot save preferences');
+
+      // Wait for auth to be initialized AND have an access token before saving
+      const authState = useAuthStore.getState();
+      if (!authState.isInitialized || !authState.accessToken) {
+        console.log('[uiPreferencesStore] Auth not ready yet, waiting...');
+        // Wait up to 5 seconds for auth to initialize with a valid session
+        let waited = 0;
+        while (waited < 5000) {
+          const state = useAuthStore.getState();
+          if (state.isInitialized && state.accessToken) break;
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waited += 100;
+        }
+      }
+
+      // Get user and access token from auth store
+      const currentAuthState = useAuthStore.getState();
+      const authUser = currentAuthState.user;
+      const accessToken = currentAuthState.accessToken;
+
+      if (!authUser || !accessToken) {
+        console.warn('[uiPreferencesStore] No authenticated session, cannot save preferences');
         pendingUpdates = {};
         return;
       }
 
-      console.log('[uiPreferencesStore] User found:', user.id, user.email);
+      const userId = authUser.id;
+      console.log('[uiPreferencesStore] User found:', userId, authUser.email, 'hasToken:', !!accessToken);
 
       // Map store fields to DB column names
       const fieldMapping: Record<keyof UIPreferences, string> = {
@@ -138,7 +159,7 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
       const { data: existingRow, error: checkError } = await supabase
         .from('pulsar_user_preferences')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (checkError) {
@@ -161,7 +182,7 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
         const { error, data } = await supabase
           .from('pulsar_user_preferences')
           .update(updateData)
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .select();
 
         if (error) {
@@ -172,7 +193,7 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
       } else {
         // INSERT new row with defaults + changed fields
         const insertData: Record<string, any> = {
-          user_id: user.id,
+          user_id: userId,
           // Defaults
           open_playlist_ids: [],
           show_playout_controls: true,
@@ -237,19 +258,37 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
     // This prevents React StrictMode double-render from creating two separate loads
     loadingPromise = (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.log('[uiPreferencesStore] No user logged in, using defaults');
+        // Wait for auth to be initialized AND have an access token before loading preferences
+        const authState = useAuthStore.getState();
+        if (!authState.isInitialized || !authState.accessToken) {
+          console.log('[uiPreferencesStore] Auth not ready yet, waiting...');
+          // Wait up to 5 seconds for auth to initialize with a valid session
+          let waited = 0;
+          while (waited < 5000) {
+            const state = useAuthStore.getState();
+            if (state.isInitialized && state.accessToken) break;
+            await new Promise(resolve => setTimeout(resolve, 100));
+            waited += 100;
+          }
+        }
+
+        // Get user and access token from auth store
+        const currentAuthState = useAuthStore.getState();
+        const authUser = currentAuthState.user;
+        const accessToken = currentAuthState.accessToken;
+
+        if (!authUser || !accessToken) {
+          console.log('[uiPreferencesStore] No authenticated session, using defaults');
           set({ isLoading: false, isLoaded: true });
           return;
         }
 
-        console.log('[uiPreferencesStore] Loading preferences for user:', user.email);
+        console.log('[uiPreferencesStore] Loading preferences for user:', authUser.email, 'hasToken:', !!accessToken);
 
         const { data, error } = await supabase
           .from('pulsar_user_preferences')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', authUser.id)
           .single();
 
         if (error) {
