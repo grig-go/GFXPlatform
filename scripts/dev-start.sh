@@ -33,6 +33,7 @@ NEXUS_PORT=${VITE_NEXUS_PORT:-3002}
 DOCS_PORT=${VITE_DOCS_PORT:-3003}
 PULSAR_VS_PORT=${VITE_PULSAR_VS_PORT:-3004}
 PULSAR_HUB_PORT=${VITE_PULSAR_HUB_PORT:-3005}
+FUSION_PORT=${VITE_FUSION_PORT:-3007}
 FILE_SERVER_PORT=${VITE_FILE_SERVER_PORT:-8001}
 TLS_PROXY_PORT=${VITE_TLS_PROXY_PORT:-8002}
 
@@ -63,6 +64,7 @@ show_help() {
     echo "  nexus           Nexus (central hub)"
     echo "  pulsar-vs       Pulsar VS (visual system)"
     echo "  pulsar-hub      Pulsar Hub"
+    echo "  fusion          Fusion app"
     echo "  docs            Documentation site"
     echo ""
     echo "Examples:"
@@ -260,7 +262,7 @@ fi
 cd "$PROJECT_ROOT"
 
 if [ "$START_ALL" = true ]; then
-    APPS_TO_START=("nova" "pulsar-mcr" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "docs")
+    APPS_TO_START=("nova" "pulsar-mcr" "nova-gfx" "pulsar-gfx" "nexus" "pulsar-vs" "pulsar-hub" "fusion" "docs")
 fi
 
 for app in "${APPS_TO_START[@]}"; do
@@ -285,6 +287,9 @@ for app in "${APPS_TO_START[@]}"; do
             ;;
         pulsar-hub)
             start_app "pulsar-hub" "$PULSAR_HUB_PORT"
+            ;;
+        fusion)
+            start_app "fusion" "$FUSION_PORT"
             ;;
         docs)
             start_app "docs" "$DOCS_PORT"
@@ -334,6 +339,9 @@ for app in "${APPS_TO_START[@]}"; do
             ;;
         pulsar-hub)
             echo -e "  Pulsar Hub:    ${CYAN}http://localhost:$PULSAR_HUB_PORT${NC}"
+            ;;
+        fusion)
+            echo -e "  Fusion:        ${CYAN}http://localhost:$FUSION_PORT${NC}"
             ;;
         docs)
             echo -e "  Docs:          ${CYAN}http://localhost:$DOCS_PORT${NC}"

@@ -48,6 +48,7 @@ SERVICES=(
     "nexus"
     "pulsar-vs"
     "pulsar-hub"
+    "fusion"
     "docs"
     "logrotate"
 )

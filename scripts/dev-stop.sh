@@ -49,6 +49,7 @@ SERVICES=(
     "nexus"
     "pulsar-vs"
     "pulsar-hub"
+    "fusion"
     "docs"
     "file-server"
     "proxy"

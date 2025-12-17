@@ -5,12 +5,16 @@
 // The current election year that we're tracking live data for
 export const CURRENT_ELECTION_YEAR = 2024;
 
+// Get Supabase URL from environment variables
+const supabaseUrl = import.meta.env.VITE_FUSION_SUPABASE_URL || '';
+
 // GeoJSON file URLs hosted on Supabase Storage
 export const GEOJSON_URLS = {
-  COUNTIES: 'https://bgkjcngrslxyqjitksim.supabase.co/storage/v1/object/public/election-images/geoJSON/us_county_2023.json',
-  DISTRICTS: 'https://bgkjcngrslxyqjitksim.supabase.co/storage/v1/object/public/election-images/geoJSON/us_district_2024.json'
+  COUNTIES: `${supabaseUrl}/storage/v1/object/public/election-images/geoJSON/us_county_2023.json`,
+  DISTRICTS: `${supabaseUrl}/storage/v1/object/public/election-images/geoJSON/us_district_2024.json`
 };
 
-// Supabase credentials for map settings
-export const SUPABASE_PROJECT_ID = 'bgkjcngrslxyqjitksim';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJna2pjbmdyc2x4eXFqaXRrc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE1MjAyOTEsImV4cCI6MjA0NzA5NjI5MX0.wOv2fZJ8j1Ir7CRCVOhJqWxETMtf4Nxa6_uyRxRPM0c';
+// Supabase credentials from environment variables
+const url = import.meta.env.VITE_FUSION_SUPABASE_URL || '';
+export const SUPABASE_PROJECT_ID = url.replace('https://', '').replace('http://', '').replace('.supabase.co', '').split(':')[0];
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_FUSION_SUPABASE_ANON_KEY || '';

@@ -1,8 +1,15 @@
 // Script to run SQL migration using service_role key
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://ihdoylhzekyluiiigxxc.supabase.co';
-const serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZG95bGh6ZWt5bHVpaWlneHhjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDUwODk5MiwiZXhwIjoyMDgwMDg0OTkyfQ.Fv-tmnerDBQhWUJA8Oq3Jhf0Dm53SYriWC1kRUYH4AQ';
+// Require environment variables - no hardcoded fallbacks
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('Error: VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+  console.error('Make sure your .env file is configured and loaded');
+  process.exit(1);
+}
 
 // Create admin client with service_role key
 const supabase = createClient(supabaseUrl, serviceRoleKey, {

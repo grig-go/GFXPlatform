@@ -3,8 +3,9 @@
  * Connects to Nova's media-library edge function for browsing and searching media
  */
 
-const NOVA_SUPABASE_URL = 'https://bgkjcngrslxyqjitksim.supabase.co';
-const NOVA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJna2pjbmdyc2x4eXFqaXRrc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMDk2MDgsImV4cCI6MjA3NzU4NTYwOH0.7BWAMP7l3PoPr9NnTUz2WT5qo2sqt8ggA2AAHrqfrR0';
+// Use environment variables - no hardcoded fallbacks
+const NOVA_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const NOVA_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const MEDIA_LIBRARY_URL = `${NOVA_SUPABASE_URL}/functions/v1/media-library`;
 
 export interface NovaMediaAsset {

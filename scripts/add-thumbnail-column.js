@@ -1,8 +1,15 @@
 // Script to add thumbnail_url column to gfx_projects table
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ihdoylhzekyluiiigxxc.supabase.co';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZG95bGh6ZWt5bHVpaWlneHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MDg5OTIsImV4cCI6MjA4MDA4NDk5Mn0.BTBy31mZUYuxTP-FTU6BU2lu95K0YTxN5eaDRX3hn8o';
+// Require environment variables - no hardcoded fallbacks
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Error: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables are required');
+  console.error('Make sure your .env file is configured and loaded');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
