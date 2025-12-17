@@ -5,6 +5,7 @@ import ContentPage from './ContentPage';
 import PlaylistPage from './PlaylistPage';
 import { AdvancedSettingsDialog } from './AdvancedSettingsDialog';
 import { AIPromptSettingsDialog } from './AIPromptSettingsDialog';
+import { AIProvidersDialog } from './AIProvidersDialog';
 import { ProjectProvider } from './ProjectContext';
 import { ProjectManagementModal } from './ProjectManagementModal';
 
@@ -16,6 +17,7 @@ export default function HomePage() {
   const [isResizing, setIsResizing] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [aiPromptSettingsOpen, setAIPromptSettingsOpen] = useState(false);
+  const [aiProvidersOpen, setAIProvidersOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageView>('virtual-set');
 
@@ -52,6 +54,7 @@ export default function HomePage() {
           currentLayout={layout}
           onOpenSettings={() => setAdvancedSettingsOpen(true)}
           onOpenAIPromptSettings={() => setAIPromptSettingsOpen(true)}
+          onOpenAIProviders={() => setAIProvidersOpen(true)}
           onOpenProjects={() => setProjectsOpen(true)}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
@@ -117,6 +120,10 @@ export default function HomePage() {
         <AIPromptSettingsDialog
           open={aiPromptSettingsOpen}
           onOpenChange={setAIPromptSettingsOpen}
+        />
+        <AIProvidersDialog
+          open={aiProvidersOpen}
+          onOpenChange={setAIProvidersOpen}
         />
         <ProjectManagementModal
           open={projectsOpen}

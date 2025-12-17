@@ -69,11 +69,13 @@ import {
   generateWithGemini,
   generateImageWithImagen,
   editImageWithImagen,
+  fetchPulsarVSProviders,
   GEMINI_MODELS,
   IMAGEN_MODELS,
   ASPECT_RATIOS,
   AISettings,
   DEFAULT_AI_SETTINGS,
+  AIProvider,
 } from "../types/aiImageGen";
 
 import { sendCommandToUnreal } from "../services/unreal/commandService";
@@ -384,9 +386,34 @@ export default function VirtualSetPage({
   const [nameError, setNameError] = useState("");
   const [showInstanceDialog, setShowInstanceDialog] = useState(false);
 
+  // AI Providers state (loaded from backend)
+  const [aiProviders, setAiProviders] = useState<{
+    text: AIProvider | null;
+    imageGen: AIProvider | null;
+    imageEdit: AIProvider | null;
+  }>({ text: null, imageGen: null, imageEdit: null });
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
+
   // ============================================
   // EFFECTS
   // ============================================
+
+  // Load AI providers from backend on mount
+  useEffect(() => {
+    const loadProviders = async () => {
+      setIsLoadingProviders(true);
+      try {
+        const providers = await fetchPulsarVSProviders();
+        setAiProviders(providers);
+        console.log('[VirtualSetPage] Loaded AI providers from backend:', providers);
+      } catch (error) {
+        console.error('[VirtualSetPage] Failed to load AI providers:', error);
+      } finally {
+        setIsLoadingProviders(false);
+      }
+    };
+    loadProviders();
+  }, []);
 
   useEffect(() => {
     loadChannels();
@@ -776,6 +803,11 @@ export default function VirtualSetPage({
         aiSettings.gemini.apiKey &&
         aiSettings.gemini.apiKey !== "YOUR_GOOGLE_STUDIO_API_KEY";
 
+      // Use backend provider model if available, otherwise fall back to settings
+      const textModel = aiProviders.text?.model ||
+        aiSettings.virtualSet?.selectedGeminiModel ||
+        DEFAULT_AI_SETTINGS.gemini.textModel;
+
       let systemPrompt: string;
       let userPrompt: string;
 
@@ -790,12 +822,12 @@ export default function VirtualSetPage({
         userPrompt = buildVirtualSetUserPrompt(environmentPrompt, currentScene as VirtualSetSceneParameters);
       }
 
-      addDebugLog("Sending request to AI...");
+      addDebugLog(`Sending request to AI using model: ${textModel}...`);
 
       let responseText = "";
 
       if (hasLocalKey) {
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${aiSettings.virtualSet.selectedGeminiModel || DEFAULT_AI_SETTINGS.gemini.textModel}:generateContent?key=${aiSettings.gemini.apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${aiSettings.gemini.apiKey}`;
         const requestBody = {
           contents: [{ parts: [{ text: systemPrompt }, { text: userPrompt }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
@@ -817,7 +849,7 @@ export default function VirtualSetPage({
         const response = await generateWithGemini(systemPrompt + "\n\n" + userPrompt, {
           gemini: {
             ...aiSettings.gemini,
-            textModel: aiSettings.virtualSet.selectedGeminiModel || DEFAULT_AI_SETTINGS.gemini.textModel,
+            textModel: textModel,
             apiKey: aiSettings.gemini.apiKey || DEFAULT_AI_SETTINGS.gemini.apiKey,
           },
         });
@@ -1713,22 +1745,41 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       ]);
 
       const selectedRatio = aiSettings.virtualSet.defaultAspectRatio || '16:9';
-      const selectedModel = aiSettings.imagen.model || DEFAULT_AI_SETTINGS.imagen.model;
+      // Use backend provider model if available, otherwise fall back to settings
+      const selectedModel = aiProviders.imageGen?.model ||
+        aiSettings.virtualSet?.selectedImagenModel ||
+        aiSettings.imagen.model ||
+        DEFAULT_AI_SETTINGS.imagen.model;
 
       addDebugLog(`Using model: ${selectedModel}, ratio: ${selectedRatio}`);
       addDebugLog(`Mode: ${isEditMode ? 'EDIT (with mask)' : 'GENERATE (new image)'}`);
+
+      // Use backend provider model for image editing if available
+      const imageEditModel = aiProviders.imageEdit?.model ||
+        aiSettings.virtualSet?.selectedImageEditModel ||
+        aiSettings.imageEdit?.model ||
+        DEFAULT_AI_SETTINGS.imageEdit.model;
 
       let result: { imageUrl?: string; base64?: string; error?: string };
 
       if (isEditMode) {
         // EDIT MODE: Use existing backdrop with mask for inpainting
-        addDebugLog("Calling Imagen Edit API with mask...");
+        addDebugLog(`Calling Imagen Edit API with mask using model: ${imageEditModel}...`);
+
+        // Merge backend provider model into settings
+        const editSettings = {
+          ...aiSettings,
+          virtualSet: {
+            ...aiSettings.virtualSet,
+            selectedImageEditModel: imageEditModel
+          }
+        };
 
         result = await editImageWithImagen(
           selectedBackdrop!,  // Source image
           maskDataUri!,       // Mask (white = edit areas)
           backgroundPrompt,   // What to generate in masked areas
-          aiSettings
+          editSettings
         );
 
         // Clear the canvas after editing
@@ -1739,9 +1790,18 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
         addDebugLog("Calling Imagen Generate API...");
 
+        // Merge backend provider model into settings
+        const genSettings = {
+          ...aiSettings,
+          imagen: {
+            ...aiSettings.imagen,
+            model: selectedModel
+          }
+        };
+
         result = await generateImageWithImagen(
           enhancedPrompt,
-          aiSettings,
+          genSettings,
           backgroundPrompt.length > 50 ? backgroundPrompt.substring(0, 47) + "..." : backgroundPrompt,
           backgroundPrompt,
           true  // usePromptInjectors

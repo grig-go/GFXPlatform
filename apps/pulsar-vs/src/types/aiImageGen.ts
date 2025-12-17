@@ -5,6 +5,31 @@ import { getPulsarPromptInjectors } from '../utils/aiSettingsApi';
 // AI Generation Types
 export type AIGenerationType = 'virtual-set' | 'backdrop';
 
+// Dashboard assignment types for Pulsar VS
+export type PulsarVSDashboard = 'pulsar-vs-text' | 'pulsar-vs-image-gen' | 'pulsar-vs-image-edit';
+
+// AI Provider model from backend
+export interface AIProviderModel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+// AI Provider from backend
+export interface AIProvider {
+  id: string;
+  name: string;
+  providerName: string;
+  type: string;
+  description: string;
+  apiKeyConfigured: boolean;
+  endpoint: string;
+  model: string;
+  availableModels: AIProviderModel[];
+  enabled: boolean;
+  dashboardAssignments: string[];
+}
+
 // AI Generation Settings Interface
 export interface AIGenSettings {
   apiKey: string;
@@ -35,6 +60,11 @@ export interface AISettings {
     model: string;
     baseUrl: string;
   };
+  imageEdit: {
+    apiKey: string;
+    model: string;
+    baseUrl: string;
+  };
   storage: {
     enabled: boolean;
     bucket: string;
@@ -45,6 +75,7 @@ export interface AISettings {
     defaultAspectRatio: string;
     selectedGeminiModel?: string;
     selectedImagenModel?: string;
+    selectedImageEditModel?: string;
     boundSetVirtualSetFunction?: string;
     boundSetBackdropFunction?: string;
   };
@@ -68,6 +99,11 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   imagen: {
     apiKey: googleAiKey,
     model: 'imagen-4.0-fast-generate-001',
+    baseUrl: 'https://generativelanguage.googleapis.com'
+  },
+  imageEdit: {
+    apiKey: googleAiKey,
+    model: 'gemini-3-pro-image-preview',
     baseUrl: 'https://generativelanguage.googleapis.com'
   },
   storage: {
@@ -98,9 +134,142 @@ export const GEMINI_MODELS = [
 export const IMAGEN_MODELS = [
   'imagen-4.0-generate-001',
   'imagen-4.0-fast-generate-001',
-  'imagen-4.0-ultra-generate-001',  
+  'imagen-4.0-ultra-generate-001',
   'imagen-3.0-generate-002'
 ];
+
+export const IMAGE_EDIT_MODELS = [
+  'gemini-3-pro-image-preview',
+  'gemini-2.5-flash-image'
+];
+
+// ============================================
+// FETCH PROVIDERS BY DASHBOARD FROM BACKEND
+// ============================================
+
+// Cache for providers to avoid repeated fetches
+let cachedProviders: {
+  text?: AIProvider;
+  imageGen?: AIProvider;
+  imageEdit?: AIProvider;
+  timestamp: number;
+} | null = null;
+const PROVIDER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Fetch provider by dashboard assignment
+export const fetchProviderByDashboard = async (dashboard: PulsarVSDashboard): Promise<AIProvider | null> => {
+  try {
+    const { supabaseAnonKey } = await import('../src/supabaseConfig');
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/providers/by-dashboard/${dashboard}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch provider for dashboard ${dashboard}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.ok || !data.providers || data.providers.length === 0) {
+      console.warn(`No provider found for dashboard ${dashboard}`);
+      return null;
+    }
+
+    // Return the first enabled provider for this dashboard
+    return data.providers[0] as AIProvider;
+  } catch (error) {
+    console.warn(`Failed to fetch provider for dashboard ${dashboard}:`, error);
+    return null;
+  }
+};
+
+// Fetch all Pulsar VS providers in parallel
+export const fetchPulsarVSProviders = async (forceRefresh = false): Promise<{
+  text: AIProvider | null;
+  imageGen: AIProvider | null;
+  imageEdit: AIProvider | null;
+}> => {
+  // Return cached if valid
+  if (!forceRefresh && cachedProviders && (Date.now() - cachedProviders.timestamp) < PROVIDER_CACHE_TTL) {
+    return {
+      text: cachedProviders.text || null,
+      imageGen: cachedProviders.imageGen || null,
+      imageEdit: cachedProviders.imageEdit || null
+    };
+  }
+
+  console.log('🔄 Fetching Pulsar VS providers from backend...');
+
+  // Fetch all 3 dashboards in parallel
+  const [textProvider, imageGenProvider, imageEditProvider] = await Promise.all([
+    fetchProviderByDashboard('pulsar-vs-text'),
+    fetchProviderByDashboard('pulsar-vs-image-gen'),
+    fetchProviderByDashboard('pulsar-vs-image-edit')
+  ]);
+
+  // Cache the results
+  cachedProviders = {
+    text: textProvider || undefined,
+    imageGen: imageGenProvider || undefined,
+    imageEdit: imageEditProvider || undefined,
+    timestamp: Date.now()
+  };
+
+  console.log('✅ Pulsar VS providers cached:', {
+    text: textProvider?.id,
+    imageGen: imageGenProvider?.id,
+    imageEdit: imageEditProvider?.id
+  });
+
+  return {
+    text: textProvider,
+    imageGen: imageGenProvider,
+    imageEdit: imageEditProvider
+  };
+};
+
+// Invalidate provider cache
+export const invalidateProviderCache = () => {
+  cachedProviders = null;
+  console.log('🔄 Provider cache invalidated');
+};
+
+// Get available models for a dashboard from backend provider
+export const getAvailableModels = async (dashboard: PulsarVSDashboard): Promise<AIProviderModel[]> => {
+  const providers = await fetchPulsarVSProviders();
+
+  switch (dashboard) {
+    case 'pulsar-vs-text':
+      return providers.text?.availableModels || [];
+    case 'pulsar-vs-image-gen':
+      return providers.imageGen?.availableModels || [];
+    case 'pulsar-vs-image-edit':
+      return providers.imageEdit?.availableModels || [];
+    default:
+      return [];
+  }
+};
+
+// Get current model for a dashboard from backend provider
+export const getCurrentModel = async (dashboard: PulsarVSDashboard): Promise<string> => {
+  const providers = await fetchPulsarVSProviders();
+
+  switch (dashboard) {
+    case 'pulsar-vs-text':
+      return providers.text?.model || DEFAULT_AI_SETTINGS.gemini.textModel;
+    case 'pulsar-vs-image-gen':
+      return providers.imageGen?.model || DEFAULT_AI_SETTINGS.imagen.model;
+    case 'pulsar-vs-image-edit':
+      return providers.imageEdit?.model || DEFAULT_AI_SETTINGS.imageEdit.model;
+    default:
+      return '';
+  }
+};
 
 // Aspect Ratios for Image Generation
 export const ASPECT_RATIOS = {
@@ -293,22 +462,22 @@ export const generateImageWithImagen = async (
   // Only fetch and apply prompt injectors for NEW image generation (not edits)
   if (usePromptInjectors) {
     const injectors = await getPulsarPromptInjectors();
-    
-    // Add camera angle if provided
+
+    // Add framing/angle if provided (avoid the word "camera" to prevent AI from rendering cameras)
     if (injectors.cameraAngle) {
-      enhancedPrompt = `${enhancedPrompt}. Camera angle: ${injectors.cameraAngle}`;
+      enhancedPrompt = `${enhancedPrompt}. Framing: ${injectors.cameraAngle}`;
     }
-    
-    // Add point of view if provided
+
+    // Add perspective if provided
     if (injectors.pointOfView) {
-      enhancedPrompt = `${enhancedPrompt}. Point of view: ${injectors.pointOfView}`;
+      enhancedPrompt = `${enhancedPrompt}. Perspective: ${injectors.pointOfView}`;
     }
-    
+
     // Add scene considerations if provided
     if (injectors.sceneConsiderations) {
-      enhancedPrompt = `${enhancedPrompt}. Scene considerations: ${injectors.sceneConsiderations}`;
+      enhancedPrompt = `${enhancedPrompt}. ${injectors.sceneConsiderations}`;
     }
-    
+
     console.log('🎨 Applied prompt injectors to new image generation');
   } else {
     console.log('✏️ Skipping prompt injectors for image editing');
@@ -420,8 +589,10 @@ export const editImageWithImagen = async (
 ): Promise<{ imageUrl?: string; base64?: string; error?: string }> => {
   const config = { ...DEFAULT_AI_SETTINGS, ...settings };
 
-  // Use Gemini 3 Pro Image for editing - the latest native image generation/editing model
-  const editModel = 'gemini-3-pro-image-preview';
+  // Use image edit model from settings or fallback to default
+  const editModel = config.virtualSet?.selectedImageEditModel ||
+    config.imageEdit?.model ||
+    DEFAULT_AI_SETTINGS.imageEdit.model;
 
   const url = `${config.gemini.baseUrl}/v1beta/models/${editModel}:generateContent?key=${config.gemini.apiKey}`;
 
@@ -665,6 +836,7 @@ export const migrateSettingsToSupabase = async (userId: string): Promise<void> =
           baseUrl: oldConfig.baseUrl || vsConfig.baseUrl || DEFAULT_AI_SETTINGS.gemini.baseUrl
         },
         imagen: DEFAULT_AI_SETTINGS.imagen,
+        imageEdit: DEFAULT_AI_SETTINGS.imageEdit,
         storage: DEFAULT_AI_SETTINGS.storage,
         virtualSet: {
           promptEnhancement: oldConfig.promptEnhancement || vsConfig.promptEnhancement,
@@ -684,33 +856,108 @@ export const migrateSettingsToSupabase = async (userId: string): Promise<void> =
   }
 };
 
+// ============================================
+// API KEY CACHE (for performance optimization)
+// ============================================
+let cachedAPIKeys: { timestamp: number } | null = null;
+
+// Function to invalidate the cache (call after saving new keys)
+export const invalidateAPIKeyCache = () => {
+  cachedAPIKeys = null;
+  console.log('🔄 API key cache invalidated');
+};
+
 // Backward compatibility functions
 export const loadAIImageGenSettings = async (): Promise<AISettings> => {
   // Don't force user login check, try to get user but fail gracefully
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (user?.id) {
     await migrateSettingsToSupabase(user.id);
     return loadSettingsFromSupabase(user.id);
   }
-  
+
   // If no user, load from local storage directly
   const backup = localStorage.getItem('ai_settings_backup');
   if (backup) {
     return JSON.parse(backup);
   }
-  
+
   return DEFAULT_AI_SETTINGS;
+};
+
+// Save API key to ai_providers table via edge function (uses PUT to update existing provider)
+const saveAPIKeyToProvider = async (
+  providerId: string,
+  apiKey: string,
+  model?: string
+): Promise<boolean> => {
+  try {
+    const { supabaseAnonKey } = await import('../src/supabaseConfig');
+
+    const body: Record<string, unknown> = { apiKey };
+    if (model) {
+      body.model = model;
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/providers/${providerId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to update ${providerId} provider:`, response.status);
+      return false;
+    }
+
+    console.log(`✅ ${providerId} API key saved to database`);
+    return true;
+  } catch (error) {
+    console.warn(`Failed to save ${providerId} API key to edge function:`, error);
+    return false;
+  }
 };
 
 export const saveAIImageGenSettings = async (settings: AISettings): Promise<void> => {
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (user?.id) {
     await saveSettingsToSupabase(user.id, settings);
-  } 
+  }
   // Always save to local storage as backup/primary for anon users
   localStorage.setItem('ai_settings_backup', JSON.stringify(settings));
+
+  // Save API keys and models to ai_providers table via edge function (parallel for speed)
+  const savePromises: Promise<boolean>[] = [];
+
+  if (settings.gemini?.apiKey) {
+    savePromises.push(
+      saveAPIKeyToProvider('gemini', settings.gemini.apiKey, settings.virtualSet?.selectedGeminiModel || settings.gemini.textModel)
+    );
+  }
+
+  if (settings.imagen?.apiKey) {
+    savePromises.push(
+      saveAPIKeyToProvider('imagen', settings.imagen.apiKey, settings.virtualSet?.selectedImagenModel || settings.imagen.model)
+    );
+  }
+
+  if (settings.imageEdit?.apiKey) {
+    savePromises.push(
+      saveAPIKeyToProvider('gemini-image-edit', settings.imageEdit.apiKey, settings.virtualSet?.selectedImageEditModel || settings.imageEdit.model)
+    );
+  }
+
+  if (savePromises.length > 0) {
+    await Promise.all(savePromises);
+    // Invalidate caches so next load gets fresh data
+    invalidateAPIKeyCache();
+    invalidateProviderCache();
+  }
 };
 
 // Export for backward compatibility

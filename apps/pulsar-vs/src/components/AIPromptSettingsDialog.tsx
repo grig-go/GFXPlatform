@@ -170,32 +170,32 @@ EXAMPLE COMMANDS:
                   These will be automatically added to your image generation prompts.
                 </p>
 
-                {/* Camera Angle */}
+                {/* Framing / Angle */}
                 <div className="space-y-2">
                   <Label htmlFor="camera-angle">
-                    Camera Angle
+                    Framing / Angle
                   </Label>
                   <Textarea
                     id="camera-angle"
-                    placeholder="e.g., Wide angle shot, cinematic perspective, slightly elevated viewpoint..."
+                    placeholder="e.g., Wide angle shot, cinematic framing, slightly elevated viewpoint..."
                     value={cameraAngle}
                     onChange={(e) => setCameraAngle(e.target.value)}
                     rows={3}
                     className="resize-none"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Specify the camera angle and framing for generated images
+                    Specify the framing and angle for generated images (avoid using the word "camera")
                   </p>
                 </div>
 
-                {/* Point of View */}
+                {/* Perspective */}
                 <div className="space-y-2">
                   <Label htmlFor="point-of-view">
-                    Point of View
+                    Perspective
                   </Label>
                   <Textarea
                     id="point-of-view"
-                    placeholder="e.g., Eye-level perspective, viewer positioned as observer, immersive viewpoint..."
+                    placeholder="e.g., Eye-level view, observer perspective, immersive viewpoint..."
                     value={pointOfView}
                     onChange={(e) => setPointOfView(e.target.value)}
                     rows={3}

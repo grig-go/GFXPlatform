@@ -23,6 +23,7 @@ import {
   FolderOpen,
   ListMusic,
   Monitor,
+  Bot,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +38,7 @@ interface TopBarProps {
   currentLayout?: 'single' | 'split';
   onOpenSettings?: () => void;
   onOpenAIPromptSettings?: () => void;
+  onOpenAIProviders?: () => void;
   onOpenProjects?: () => void;
   currentPage?: PageView;
   onPageChange?: (page: PageView) => void;
@@ -47,6 +49,7 @@ export function TopBar({
   currentLayout = 'single',
   onOpenSettings,
   onOpenAIPromptSettings,
+  onOpenAIProviders,
   onOpenProjects,
   currentPage = 'virtual-set',
   onPageChange,
@@ -225,6 +228,12 @@ export function TopBar({
             label: t('settings.advancedSettings'),
             icon: Settings,
             onClick: onOpenSettings
+          },
+          {
+            id: 'ai-providers',
+            label: 'AI Providers',
+            icon: Bot,
+            onClick: onOpenAIProviders
           },
           {
             id: 'ai-prompt-settings',
