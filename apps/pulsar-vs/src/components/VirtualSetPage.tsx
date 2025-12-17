@@ -576,8 +576,106 @@ export default function VirtualSetPage({
     try {
       const parsed = typeof jsonData === "string" ? JSON.parse(jsonData) : jsonData;
 
+      // Handle array format - the array IS the sections array for Airport
+      if (Array.isArray(parsed)) {
+        console.log("📦 set_manager_json is an array with", parsed.length, "items");
+        console.log("📦 First few items:", parsed.slice(0, 3).map((p: any) =>
+          p?.$schema ? `Schema v${p.$schema}` :
+          p?.Sections ? 'OldFormat(Sections)' :
+          p?.sections ? 'NewFormat(sections)' :
+          p?.id ? `id:${p.id}` :
+          Object.keys(p || {}).slice(0, 3).join(',')
+        ));
+        addDebugLog(`set_manager_json array format detected: ${parsed.length} items`);
+
+        // Check if this looks like Airport sections (array of objects with id and options)
+        if (parsed.length > 0 && parsed[0].id && parsed[0].options) {
+          // This is the sections array directly - wrap it in Airport descriptor format
+          const airportDescriptor: AirportSceneDescriptor = {
+            sections: parsed,
+            environment_background: []
+          };
+          setSceneDescriptor(airportDescriptor);
+          extractAirportAvailableOptions(airportDescriptor);
+          addDebugLog("Airport sections array loaded from database");
+          return;
+        }
+
+        // Check if first element contains the actual descriptor
+        for (const item of parsed) {
+          if (item && typeof item === 'object') {
+            // Check for new VirtualSet v1.1.0 schema format (has actors array)
+            if (item.$schema && item.sections && item.actors) {
+              console.log("✅ Found new VirtualSet schema v1.1.0 format in array");
+              processNewSchemaFormat(item);
+              return;
+            }
+            // Check for Airport schema format (has sections with id+options)
+            if (item.$schema && item.sections && Array.isArray(item.sections) && !item.actors) {
+              const firstSection = item.sections[0];
+              if (firstSection && firstSection.id && firstSection.options) {
+                console.log("✅ Found Airport schema format in array");
+                setSceneDescriptor(item as AirportSceneDescriptor);
+                extractAirportAvailableOptions(item as AirportSceneDescriptor);
+                addDebugLog("Airport descriptor (schema format) found in array");
+                return;
+              }
+            }
+            // Check for old VirtualSet format (Sections with capital S, Styles, ActorTags)
+            if (item.Sections && item.Styles && item.ActorTags) {
+              console.log("✅ Found old VirtualSet format in array");
+              setSceneDescriptor(item as VirtualSetSceneDescriptor);
+              extractVirtualSetAvailableOptions(item as VirtualSetSceneDescriptor);
+              addDebugLog("VirtualSet descriptor found in array");
+              return;
+            }
+            // Check for old VirtualSet format without ActorTags (Sections + Styles only)
+            if (item.Sections && item.Styles && !item.$schema) {
+              console.log("✅ Found old VirtualSet format (Sections+Styles) in array");
+              setSceneDescriptor(item as VirtualSetSceneDescriptor);
+              extractVirtualSetAvailableOptions(item as VirtualSetSceneDescriptor);
+              addDebugLog("VirtualSet descriptor (no ActorTags) found in array");
+              return;
+            }
+            // Check for Airport format with sections property (legacy, no $schema)
+            if (item.sections && Array.isArray(item.sections) && !item.$schema && !item.actors) {
+              console.log("✅ Found Airport legacy format in array");
+              setSceneDescriptor(item as AirportSceneDescriptor);
+              extractAirportAvailableOptions(item as AirportSceneDescriptor);
+              addDebugLog("Airport descriptor found in array");
+              return;
+            }
+          }
+        }
+
+        console.warn("Array format not recognized, items:", parsed.map((p: any) => p?.id || Object.keys(p || {})));
+        addDebugLog("Unknown array format, falling back to defaults");
+        fetchSceneDescriptorFallback(projectType);
+        return;
+      }
+
+      // NEW: Check for v1.1.0 VirtualSet schema format (has $schema, sections, actors - NOT options in sections)
+      if (parsed.$schema && parsed.sections && parsed.actors) {
+        console.log("📋 New VirtualSet schema v1.1.0 format detected");
+        processNewSchemaFormat(parsed);
+        return;
+      }
+
+      // Check for Airport schema format (has $schema, sections with id+options, environment_background)
+      if (parsed.$schema && parsed.sections && Array.isArray(parsed.sections)) {
+        // Airport sections have 'id' and 'options' properties
+        const firstSection = parsed.sections[0];
+        if (firstSection && firstSection.id && firstSection.options) {
+          console.log("📋 Airport schema format detected");
+          setSceneDescriptor(parsed as AirportSceneDescriptor);
+          extractAirportAvailableOptions(parsed as AirportSceneDescriptor);
+          addDebugLog("Airport scene descriptor loaded from database (schema format)");
+          return;
+        }
+      }
+
       if (projectType === "Airport") {
-        // Airport schema parsing
+        // Airport schema parsing (legacy without $schema)
         if (parsed.sections && Array.isArray(parsed.sections)) {
           setSceneDescriptor(parsed as AirportSceneDescriptor);
           extractAirportAvailableOptions(parsed as AirportSceneDescriptor);
@@ -615,7 +713,7 @@ export default function VirtualSetPage({
         }
       }
 
-      console.warn("Unknown set_manager_json format:", Object.keys(parsed));
+      console.warn("Unknown set_manager_json format:", Array.isArray(parsed) ? `Array(${parsed.length})` : Object.keys(parsed));
       addDebugLog("Unknown JSON format, falling back to defaults");
       fetchSceneDescriptorFallback(projectType);
     } catch (error) {
@@ -623,6 +721,85 @@ export default function VirtualSetPage({
       addDebugLog(`JSON processing error: ${error}`);
       fetchSceneDescriptorFallback(projectType);
     }
+  };
+
+  // NEW: Process v1.1.0 schema format with sections, materials, and actors
+  const processNewSchemaFormat = (schema: any) => {
+    const schemaVersion = schema.$schema || "unknown";
+    const levelName = schema.levelinfo?.name || "Unknown Level";
+    console.log(`📋 Processing schema v${schemaVersion} for level: ${levelName}`);
+    addDebugLog(`New schema v${schemaVersion} detected: ${levelName}`);
+
+    // Get all materials (materials can go to any section)
+    const allMaterials = schema.materials || [];
+
+    // Group actors by section
+    const actorsBySection: Record<string, any[]> = {};
+    (schema.actors || []).forEach((actor: any) => {
+      const section = actor.section || "General";
+      if (!actorsBySection[section]) actorsBySection[section] = [];
+      actorsBySection[section].push(actor);
+    });
+
+    // Build available options from sections
+    const options: Record<string, string[]> = {};
+
+    // For each section, create Actor:Material options
+    // Materials can go to any section, so pair each actor with ALL materials
+    (schema.sections || []).forEach((section: any) => {
+      const sectionName = section.name;
+      const sectionActors = actorsBySection[sectionName] || [];
+
+      const actorMaterialOptions: string[] = [];
+
+      // If section has actors, create Actor:Material combinations
+      if (sectionActors.length > 0) {
+        sectionActors.forEach((actor: any) => {
+          // Check if actor has specific allowedMaterials
+          if (actor.allowedMaterials && actor.allowedMaterials.length > 0) {
+            // Use only allowed materials for this actor
+            actor.allowedMaterials.forEach((matId: string) => {
+              const material = allMaterials.find((m: any) => m.materialid === matId);
+              if (material) {
+                const theme = material.theme || material.materialid;
+                actorMaterialOptions.push(`${actor.name}:${theme}`);
+              }
+            });
+          } else {
+            // No specific materials restricted - use ALL materials
+            allMaterials.forEach((material: any) => {
+              const theme = material.theme || material.materialid;
+              const optionValue = `${actor.name}:${theme}`;
+              if (!actorMaterialOptions.includes(optionValue)) {
+                actorMaterialOptions.push(optionValue);
+              }
+            });
+          }
+        });
+      }
+
+      // Filter out any empty strings and add "__none__" for clear option
+      const filteredOptions = actorMaterialOptions.filter(opt => opt && opt !== "");
+      options[sectionName] = filteredOptions.length > 0 ? [...filteredOptions, "__none__"] : [];
+
+      if (filteredOptions.length > 0) {
+        console.log(`📋 Section "${sectionName}": ${sectionActors.length} actors × ${allMaterials.length} materials => ${filteredOptions.length} options`);
+      }
+    });
+
+    // Store the raw schema for AI context (includes actor descriptions)
+    setSceneDescriptor({
+      ...schema,
+      _schemaVersion: schemaVersion,
+      _processedOptions: options,
+      _actorsBySection: actorsBySection,
+      _allMaterials: allMaterials,
+    } as any);
+
+    setAvailableOptions(options as VirtualSetAvailableOptions);
+    const sectionsWithOptions = Object.keys(options).filter(k => options[k].length > 0);
+    console.log(`✅ New schema processed: ${sectionsWithOptions.length} sections with options`, options);
+    addDebugLog(`New schema processed: ${sectionsWithOptions.length} sections with options`);
   };
 
   // NEW: Extract Airport available options
@@ -1902,6 +2079,17 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     if (currentProjectType === "Airport") {
       return ["timeOfDay","environment_background", "BaseDown", "BaseTop", "DecoDown", "DecoTop", "ElementDown", "ElementMiddle", "ElementTop"];
     }
+    // For VirtualSet, use dynamic keys from availableOptions if available
+    // This supports both old schema and new v1.1.0 schema with dynamic sections
+    if (availableOptions) {
+      const dynamicKeys = Object.keys(availableOptions).filter(
+        key => (availableOptions as any)[key]?.length > 0
+      );
+      if (dynamicKeys.length > 0) {
+        return dynamicKeys;
+      }
+    }
+    // Fallback to default keys for old schema
     return ["Floor", "WallLeft", "WallBack", "WallRight", "Platform", "Columns", "Roof", "Back", "Screen"];
   };
 
@@ -2373,14 +2561,20 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__none__"><em>{t('generatedFields.noneDisabled')}</em></SelectItem>
-                                  {options.map((option: string | AirportOptionItem) => {
-                                    // Handle both string (VirtualSet) and object (Airport) options
-                                    const optionId = typeof option === 'string' ? option : option.id;
-                                    const optionName = typeof option === 'string' ? option : option.name;
-                                    return (
-                                      <SelectItem key={optionId} value={optionId}>{optionName}</SelectItem>
-                                    );
-                                  })}
+                                  {options
+                                    .filter((option: string | AirportOptionItem) => {
+                                      // Filter out empty strings, __none__ (already added above), and items with empty IDs
+                                      const optionId = typeof option === 'string' ? option : option.id;
+                                      return optionId && optionId !== "" && optionId !== "__none__";
+                                    })
+                                    .map((option: string | AirportOptionItem) => {
+                                      // Handle both string (VirtualSet) and object (Airport) options
+                                      const optionId = typeof option === 'string' ? option : option.id;
+                                      const optionName = typeof option === 'string' ? option : option.name;
+                                      return (
+                                        <SelectItem key={optionId} value={optionId}>{optionName}</SelectItem>
+                                      );
+                                    })}
                                 </SelectContent>
                               </Select>
                               {value && (
