@@ -211,7 +211,7 @@ app.post("/ai_provider/initialize", async (c)=>{
     const { data: existingOpenAI } = await supabase.from("ai_providers").select("id").eq("id", "openai-default").single();
     if (!existingOpenAI) {
       console.log("Initializing default OpenAI provider...");
-      const openaiApiKey = "Deno.env.get("OPENAI_API_KEY") || """;
+      const openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
       await supabase.from("ai_providers").insert({
         id: "openai-default",
         name: "OpenAI GPT (Production)",
