@@ -48,7 +48,7 @@ interface NewProjectDialogProps {
 export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) {
   const navigate = useNavigate();
   const loadProject = useDesignerStore((s) => s.loadProject);
-  const { user } = useAuthStore();
+  const { user, accessToken } = useAuthStore();
   
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState('Untitled Project');
@@ -90,7 +90,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         background_color: backgroundColor,
         organization_id: user.organizationId,
         created_by: user.id,
-      });
+      }, accessToken || undefined);
 
       if (newProject) {
         // Close dialog first

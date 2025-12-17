@@ -199,11 +199,14 @@ export async function directRestSelect<T = any>(
  * Direct REST API insert that completely bypasses the Supabase client.
  * Use this for creating new records when the Supabase client is unresponsive.
  * Returns the created record(s) when successful.
+ * @param accessToken - Optional user access token (JWT) for authenticated requests.
+ *                      If not provided, uses anon key (will fail for tables with auth-only RLS).
  */
 export async function directRestInsert<T = any>(
   table: string,
   data: Record<string, any> | Record<string, any>[],
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  accessToken?: string
 ): Promise<{ data: T[] | null; error?: string }> {
   if (!supabaseUrl || !supabaseAnonKey) {
     return { data: null, error: 'Supabase not configured' };
@@ -212,15 +215,18 @@ export async function directRestInsert<T = any>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Use access token if provided, otherwise fall back to anon key
+  const authToken = accessToken || supabaseAnonKey;
+
   try {
-    console.log(`[Supabase REST] POST ${table} (insert)`);
+    console.log(`[Supabase REST] POST ${table} (insert, auth: ${accessToken ? 'user' : 'anon'})`);
 
     const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Prefer': 'return=representation', // Return the created records
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',

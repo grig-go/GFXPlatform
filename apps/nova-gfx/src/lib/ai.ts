@@ -184,8 +184,14 @@ export type AIImageModelId = keyof typeof AI_IMAGE_MODELS;
 // Default image model
 export const DEFAULT_AI_IMAGE_MODEL: AIImageModelId = 'gemini-2.5-flash-image';
 
-// Get/set image model preference from localStorage
+// Get/set image model preference from organization settings (fallback to localStorage)
 export function getAIImageModel(): AIImageModelId {
+  // First check organization settings
+  const orgSettings = useAuthStore.getState().organization?.settings;
+  if (orgSettings?.ai_image_model && orgSettings.ai_image_model in AI_IMAGE_MODELS) {
+    return orgSettings.ai_image_model as AIImageModelId;
+  }
+  // Fallback to localStorage for backwards compatibility
   const stored = localStorage.getItem('nova-ai-image-model');
   if (stored && stored in AI_IMAGE_MODELS) {
     return stored as AIImageModelId;
@@ -193,12 +199,23 @@ export function getAIImageModel(): AIImageModelId {
   return DEFAULT_AI_IMAGE_MODEL;
 }
 
-export function setAIImageModel(modelId: AIImageModelId): void {
-  localStorage.setItem('nova-ai-image-model', modelId);
+export async function setAIImageModel(modelId: AIImageModelId): Promise<void> {
+  const result = await useAuthStore.getState().updateOrganizationSettings({ ai_image_model: modelId });
+  if (!result.success) {
+    // Fallback to localStorage if org update fails
+    console.warn('Failed to save to organization settings, using localStorage:', result.error);
+    localStorage.setItem('nova-ai-image-model', modelId);
+  }
 }
 
-// Get/set model preference from localStorage
+// Get/set model preference from organization settings (fallback to localStorage)
 export function getAIModel(): AIModelId {
+  // First check organization settings
+  const orgSettings = useAuthStore.getState().organization?.settings;
+  if (orgSettings?.ai_model && orgSettings.ai_model in AI_MODELS) {
+    return orgSettings.ai_model as AIModelId;
+  }
+  // Fallback to localStorage for backwards compatibility
   const stored = localStorage.getItem('nova-ai-model');
   if (stored && stored in AI_MODELS) {
     return stored as AIModelId;
@@ -211,19 +228,51 @@ export function getAIModel(): AIModelId {
   return DEFAULT_AI_MODEL;
 }
 
-export function setAIModel(modelId: AIModelId): void {
-  localStorage.setItem('nova-ai-model', modelId);
+export async function setAIModel(modelId: AIModelId): Promise<void> {
+  const result = await useAuthStore.getState().updateOrganizationSettings({ ai_model: modelId });
+  if (!result.success) {
+    // Fallback to localStorage if org update fails
+    console.warn('Failed to save to organization settings, using localStorage:', result.error);
+    localStorage.setItem('nova-ai-model', modelId);
+  }
 }
 
-// Get API keys (user-supplied keys or VITE_ env vars for local dev)
+// Get API keys (organization settings -> localStorage -> VITE_ env vars)
 export function getGeminiApiKey(): string | null {
-  // Check localStorage first (user-supplied), then env variable (local dev)
+  // First check organization settings
+  const orgSettings = useAuthStore.getState().organization?.settings;
+  if (orgSettings?.gemini_api_key) {
+    return orgSettings.gemini_api_key;
+  }
+  // Fallback to localStorage, then env variable (local dev)
   return localStorage.getItem('nova-gemini-api-key') || import.meta.env.VITE_GEMINI_API_KEY || null;
 }
 
 export function getClaudeApiKey(): string | null {
-  // Check localStorage first (user-supplied), then env variable (local dev)
+  // First check organization settings
+  const orgSettings = useAuthStore.getState().organization?.settings;
+  if (orgSettings?.claude_api_key) {
+    return orgSettings.claude_api_key;
+  }
+  // Fallback to localStorage, then env variable (local dev)
   return localStorage.getItem('nova-claude-api-key') || import.meta.env.VITE_CLAUDE_API_KEY || null;
+}
+
+// Set API keys to organization settings
+export async function setGeminiApiKey(apiKey: string): Promise<void> {
+  const result = await useAuthStore.getState().updateOrganizationSettings({ gemini_api_key: apiKey });
+  if (!result.success) {
+    console.warn('Failed to save to organization settings, using localStorage:', result.error);
+    localStorage.setItem('nova-gemini-api-key', apiKey);
+  }
+}
+
+export async function setClaudeApiKey(apiKey: string): Promise<void> {
+  const result = await useAuthStore.getState().updateOrganizationSettings({ claude_api_key: apiKey });
+  if (!result.success) {
+    console.warn('Failed to save to organization settings, using localStorage:', result.error);
+    localStorage.setItem('nova-claude-api-key', apiKey);
+  }
 }
 
 // Check if we're in production (backend proxy available)

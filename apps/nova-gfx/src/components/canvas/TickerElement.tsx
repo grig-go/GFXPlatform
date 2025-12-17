@@ -155,23 +155,20 @@ function ScrollTicker({ items, config, className, style, onItemClick }: TickerMo
   const duration = singleSetWidth > 0 ? singleSetWidth / config.speed : 10;
 
   // Render items with consistent gap
-  const renderItems = (keyPrefix: string) => (
-    <>
-      {items.map((item, index) => (
-        <div
-          key={`${keyPrefix}-${item.id || index}`}
-          className="inline-flex items-center h-full shrink-0"
-          style={{ marginRight: config.gap }}
-        >
-          <TickerItemRenderer
-            item={item}
-            config={config}
-            onClick={onItemClick}
-          />
-        </div>
-      ))}
-    </>
-  );
+  const renderItems = (keyPrefix: string) =>
+    items.map((item, index) => (
+      <div
+        key={`${keyPrefix}-${item.id || index}`}
+        className="inline-flex items-center h-full shrink-0"
+        style={{ marginRight: config.gap }}
+      >
+        <TickerItemRenderer
+          item={item}
+          config={config}
+          onClick={onItemClick}
+        />
+      </div>
+    ));
 
   // Animation translate amount - move by exactly one set width
   const translateAmount = singleSetWidth > 0 ? singleSetWidth : 0;

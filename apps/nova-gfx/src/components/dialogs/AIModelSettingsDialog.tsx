@@ -18,11 +18,16 @@ import {
   setAIModel,
   getAIImageModel,
   setAIImageModel,
+  getGeminiApiKey,
+  getClaudeApiKey,
+  setGeminiApiKey,
+  setClaudeApiKey,
   type AIModelId,
   type AIImageModelId,
   DEFAULT_AI_MODEL,
   DEFAULT_AI_IMAGE_MODEL,
 } from '@/lib/ai';
+import { useAuthStore } from '@/stores/authStore';
 import {
   Sparkles,
   Check,
@@ -41,34 +46,39 @@ interface AIModelSettingsDialogProps {
 }
 
 export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDialogProps) {
-  // Local state
-  const [aiModel, setAiModel] = useState<AIModelId>(getAIModel());
-  const [aiImageModel, setAiImageModel] = useState<AIImageModelId>(getAIImageModel());
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [claudeApiKey, setClaudeApiKey] = useState('');
+  // Local state - using "State" suffix to avoid conflict with imported setters
+  const [aiModel, setAiModelState] = useState<AIModelId>(getAIModel());
+  const [aiImageModel, setAiImageModelState] = useState<AIImageModelId>(getAIImageModel());
+  const [geminiApiKey, setGeminiApiKeyState] = useState('');
+  const [claudeApiKey, setClaudeApiKeyState] = useState('');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Get organization settings from auth store
+  const organization = useAuthStore(state => state.organization);
+
   // Load current settings when dialog opens
   useEffect(() => {
     if (open) {
-      setAiModel(getAIModel());
-      setAiImageModel(getAIImageModel());
-      // Load API keys from localStorage (user preferences)
-      setGeminiApiKey(localStorage.getItem('nova-gemini-api-key') || '');
-      setClaudeApiKey(localStorage.getItem('nova-claude-api-key') || '');
+      setAiModelState(getAIModel());
+      setAiImageModelState(getAIImageModel());
+      // Load API keys from organization settings (or localStorage fallback)
+      const orgGeminiKey = organization?.settings?.gemini_api_key || '';
+      const orgClaudeKey = organization?.settings?.claude_api_key || '';
+      setGeminiApiKeyState(orgGeminiKey || localStorage.getItem('nova-gemini-api-key') || '');
+      setClaudeApiKeyState(orgClaudeKey || localStorage.getItem('nova-claude-api-key') || '');
       setHasChanges(false);
     }
-  }, [open]);
+  }, [open, organization]);
 
   // Track changes
   useEffect(() => {
     const originalModel = getAIModel();
     const originalImageModel = getAIImageModel();
-    const originalGeminiKey = localStorage.getItem('nova-gemini-api-key') || '';
-    const originalClaudeKey = localStorage.getItem('nova-claude-api-key') || '';
+    const originalGeminiKey = getGeminiApiKey() || '';
+    const originalClaudeKey = getClaudeApiKey() || '';
 
     const changed =
       aiModel !== originalModel ||
@@ -90,22 +100,13 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      // Save AI model preferences
-      setAIModel(aiModel);
-      setAIImageModel(aiImageModel);
-
-      // Save API keys to localStorage (these override env variables)
-      if (geminiApiKey) {
-        localStorage.setItem('nova-gemini-api-key', geminiApiKey);
-      } else {
-        localStorage.removeItem('nova-gemini-api-key');
-      }
-
-      if (claudeApiKey) {
-        localStorage.setItem('nova-claude-api-key', claudeApiKey);
-      } else {
-        localStorage.removeItem('nova-claude-api-key');
-      }
+      // Save AI model preferences to organization settings (async)
+      await Promise.all([
+        setAIModel(aiModel),
+        setAIImageModel(aiImageModel),
+        geminiApiKey ? setGeminiApiKey(geminiApiKey) : Promise.resolve(),
+        claudeApiKey ? setClaudeApiKey(claudeApiKey) : Promise.resolve(),
+      ]);
 
       setHasChanges(false);
       onOpenChange(false);
@@ -118,10 +119,10 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
 
   // Reset to defaults
   const resetToDefaults = useCallback(() => {
-    setAiModel(DEFAULT_AI_MODEL);
-    setAiImageModel(DEFAULT_AI_IMAGE_MODEL);
-    setGeminiApiKey('');
-    setClaudeApiKey('');
+    setAiModelState(DEFAULT_AI_MODEL);
+    setAiImageModelState(DEFAULT_AI_IMAGE_MODEL);
+    setGeminiApiKeyState('');
+    setClaudeApiKeyState('');
   }, []);
 
   return (
@@ -170,7 +171,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                           : 'border-border hover:border-blue-500/50 hover:bg-muted/50',
                         isDisabled && 'opacity-50 cursor-not-allowed hover:border-border hover:bg-transparent'
                       )}
-                      onClick={() => setAiModel(id as AIModelId)}
+                      onClick={() => setAiModelState(id as AIModelId)}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -236,7 +237,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                         : 'border-border hover:border-violet-500/50 hover:bg-muted/50',
                       !hasClaudeKey && 'opacity-50 cursor-not-allowed'
                     )}
-                    onClick={() => setAiModel(id as AIModelId)}
+                    onClick={() => setAiModelState(id as AIModelId)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -302,7 +303,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                         : 'border-border hover:border-emerald-500/50 hover:bg-muted/50',
                       !hasGeminiKey && 'opacity-50 cursor-not-allowed'
                     )}
-                    onClick={() => setAiImageModel(id as AIImageModelId)}
+                    onClick={() => setAiImageModelState(id as AIImageModelId)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -360,7 +361,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                         : 'border-border hover:border-orange-500/50 hover:bg-muted/50',
                       !hasGeminiKey && 'opacity-50 cursor-not-allowed'
                     )}
-                    onClick={() => setAiImageModel(id as AIImageModelId)}
+                    onClick={() => setAiImageModelState(id as AIImageModelId)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -402,7 +403,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
               <Label className="text-sm font-medium">API Keys</Label>
             </div>
             <p className="text-xs text-muted-foreground -mt-2">
-              Enter your API keys below. These are stored locally in your browser and override environment variables.
+              Enter your API keys below. These are stored in your organization settings and shared with team members.
             </p>
 
             {/* Gemini API Key */}
@@ -426,7 +427,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                   id="gemini-key"
                   type={showGeminiKey ? 'text' : 'password'}
                   value={geminiApiKey}
-                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  onChange={(e) => setGeminiApiKeyState(e.target.value)}
                   placeholder={import.meta.env.VITE_GEMINI_API_KEY ? '••••••••••••••••' : 'AIza...'}
                   className="pr-10 font-mono text-xs"
                 />
@@ -469,7 +470,7 @@ export function AIModelSettingsDialog({ open, onOpenChange }: AIModelSettingsDia
                   id="claude-key"
                   type={showClaudeKey ? 'text' : 'password'}
                   value={claudeApiKey}
-                  onChange={(e) => setClaudeApiKey(e.target.value)}
+                  onChange={(e) => setClaudeApiKeyState(e.target.value)}
                   placeholder={import.meta.env.VITE_CLAUDE_API_KEY ? '••••••••••••••••' : 'sk-ant-...'}
                   className="pr-10 font-mono text-xs"
                 />
