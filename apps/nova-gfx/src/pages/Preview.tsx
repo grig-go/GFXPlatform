@@ -15,6 +15,7 @@ import { TopicBadgeElement } from '@/components/canvas/TopicBadgeElement';
 import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
+import { InteractiveElement } from '@/components/canvas/InteractiveElement';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
 
 // Helper to convert color to rgba with opacity
@@ -1887,6 +1888,17 @@ function PreviewElement({
             className="w-full h-full"
             isPlaying={isPlaying}
             style={element.styles as React.CSSProperties}
+          />
+        );
+
+      case 'interactive':
+        return (
+          <InteractiveElement
+            config={element.content}
+            elementId={element.id}
+            className="w-full h-full"
+            style={element.styles as React.CSSProperties}
+            isPreview={true}
           />
         );
 

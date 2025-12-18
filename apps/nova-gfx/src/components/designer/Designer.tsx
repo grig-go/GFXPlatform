@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { TopBar } from '@/components/layout/TopBar';
-import { ChatPanel } from './ChatPanel';
+import { LeftPanel } from './LeftPanel';
 import { useAIPreferenceStore } from '@/stores/aiPreferenceStore';
 import { Canvas } from './Canvas';
 import { OutlinePanel } from './OutlinePanel';
@@ -579,7 +579,7 @@ export function Designer() {
           {aiEnabled && (
             <>
               <ResizablePanel defaultSize={18} minSize={10} maxSize={35}>
-                <ChatPanel />
+                <LeftPanel />
               </ResizablePanel>
               <ResizableHandle className="w-1 bg-border hover:bg-violet-500/50 transition-colors" />
             </>

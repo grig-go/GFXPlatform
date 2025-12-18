@@ -3,7 +3,10 @@ import {
   ZoomIn, ZoomOut, Maximize, Grid3X3, Ruler, Undo, Redo, Trash2,
   MousePointer, RotateCw, Type, Image, Square, Circle, Hand, BarChart3, Loader2, MapPin, Video, ScrollText, Tag, FileCode, Sparkles, Table2, Minus, Timer,
   TrendingUp, CandlestickChart, Vote, Trophy, Dribbble, LineChart, PieChart, Activity, Gauge,
+  // Interactive element icons
+  MousePointerClick, TextCursor, Hash, List, CheckSquare, CircleDot, ToggleLeft, SlidersHorizontal, Calendar, Palette,
 } from 'lucide-react';
+import type { InteractiveInputType } from '@emergent-platform/types';
 import {
   Button, Separator, cn,
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -43,6 +46,7 @@ export function Canvas() {
   const [iconPickerPosition, setIconPickerPosition] = useState({ x: 100, y: 100 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [pendingChartType, setPendingChartType] = useState<string | null>(null);
+  const [pendingInteractiveType, setPendingInteractiveType] = useState<InteractiveInputType | null>(null);
 
   const {
     project,
@@ -643,6 +647,140 @@ export function Canvas() {
       return;
     }
 
+    // Interactive tool - create interactive element on click
+    if (tool === 'interactive') {
+      const inputType = pendingInteractiveType || 'button';
+      const id = addElement('interactive', { x: canvasPos.x, y: canvasPos.y });
+
+      // Set dimensions and content based on input type
+      let width = 150;
+      let height = 40;
+      let defaultValue: string | number | boolean = '';
+      let additionalContent: Record<string, unknown> = {};
+
+      switch (inputType) {
+        case 'button':
+          width = 120;
+          height = 40;
+          additionalContent = {
+            label: 'Button',
+            buttonVariant: 'primary',
+            buttonSize: 'md',
+          };
+          break;
+        case 'text-input':
+          width = 250;
+          height = 40;
+          additionalContent = {
+            placeholder: 'Enter text...',
+            inputMode: 'text',
+          };
+          break;
+        case 'number-input':
+          width = 150;
+          height = 40;
+          defaultValue = 0;
+          additionalContent = {
+            placeholder: 'Enter number...',
+            step: 1,
+          };
+          break;
+        case 'textarea':
+          width = 300;
+          height = 100;
+          additionalContent = {
+            placeholder: 'Enter text...',
+          };
+          break;
+        case 'select':
+          width = 200;
+          height = 40;
+          additionalContent = {
+            placeholder: 'Select an option...',
+            options: [
+              { value: 'option1', label: 'Option 1' },
+              { value: 'option2', label: 'Option 2' },
+              { value: 'option3', label: 'Option 3' },
+            ],
+          };
+          break;
+        case 'checkbox':
+          width = 150;
+          height = 24;
+          defaultValue = false;
+          additionalContent = {
+            label: 'Checkbox label',
+          };
+          break;
+        case 'radio':
+          width = 180;
+          height = 100;
+          additionalContent = {
+            label: 'Radio Group',
+            options: [
+              { value: 'option1', label: 'Option 1' },
+              { value: 'option2', label: 'Option 2' },
+              { value: 'option3', label: 'Option 3' },
+            ],
+          };
+          break;
+        case 'toggle':
+          width = 120;
+          height = 28;
+          defaultValue = false;
+          additionalContent = {
+            label: 'Toggle',
+            onLabel: 'On',
+            offLabel: 'Off',
+            showValue: true,
+          };
+          break;
+        case 'slider':
+          width = 250;
+          height = 50;
+          defaultValue = 50;
+          additionalContent = {
+            label: 'Slider',
+            showValue: true,
+            step: 1,
+            validation: { min: 0, max: 100 },
+          };
+          break;
+        case 'date-picker':
+          width = 180;
+          height = 40;
+          additionalContent = {
+            label: 'Date',
+          };
+          break;
+        case 'color-picker':
+          width = 180;
+          height = 40;
+          defaultValue = '#3B82F6';
+          additionalContent = {
+            label: 'Color',
+            showValue: true,
+          };
+          break;
+      }
+
+      useDesignerStore.getState().updateElement(id, {
+        width,
+        height,
+        content: {
+          type: 'interactive',
+          inputType,
+          name: `${inputType}-${id.slice(0, 6)}`,
+          defaultValue,
+          ...additionalContent,
+        },
+      });
+
+      setPendingInteractiveType(null);
+      setTool('select');
+      return;
+    }
+
     // Map tool - create map on click (works anywhere on canvas)
     if (tool === 'map') {
       const id = addElement('map', { x: canvasPos.x, y: canvasPos.y });
@@ -1098,6 +1236,29 @@ export function Canvas() {
     ],
   };
 
+  // Interactive element categories for dropdown
+  const interactiveCategories = {
+    buttons: [
+      { id: 'button' as InteractiveInputType, name: 'Button', icon: MousePointerClick },
+    ],
+    inputs: [
+      { id: 'text-input' as InteractiveInputType, name: 'Text Input', icon: TextCursor },
+      { id: 'number-input' as InteractiveInputType, name: 'Number Input', icon: Hash },
+      { id: 'textarea' as InteractiveInputType, name: 'Text Area', icon: TextCursor },
+    ],
+    selection: [
+      { id: 'select' as InteractiveInputType, name: 'Dropdown Select', icon: List },
+      { id: 'checkbox' as InteractiveInputType, name: 'Checkbox', icon: CheckSquare },
+      { id: 'radio' as InteractiveInputType, name: 'Radio Group', icon: CircleDot },
+      { id: 'toggle' as InteractiveInputType, name: 'Toggle Switch', icon: ToggleLeft },
+    ],
+    pickers: [
+      { id: 'slider' as InteractiveInputType, name: 'Slider', icon: SlidersHorizontal },
+      { id: 'date-picker' as InteractiveInputType, name: 'Date Picker', icon: Calendar },
+      { id: 'color-picker' as InteractiveInputType, name: 'Color Picker', icon: Palette },
+    ],
+  };
+
   // Get cursor based on tool
   const getCursor = () => {
     if (isPanning) return 'grabbing';
@@ -1113,6 +1274,7 @@ export function Canvas() {
         return 'crosshair';
       case 'image':
       case 'chart':
+      case 'interactive':
         return 'copy';
       default:
         return 'default';
@@ -1365,6 +1527,114 @@ export function Canvas() {
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Interactive Elements Dropdown - only visible when project has interactive mode enabled */}
+          {project?.interactive_enabled && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={tool === 'interactive' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className={cn(
+                    'h-8 w-8',
+                    tool === 'interactive' && 'bg-violet-500/20 text-violet-400'
+                  )}
+                  title="Interactive Element"
+                >
+                  <MousePointerClick className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                {/* Buttons */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <MousePointerClick className="w-4 h-4 mr-2" />
+                    Buttons
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {interactiveCategories.buttons.map((item) => (
+                      <DropdownMenuItem
+                        key={item.id}
+                        onClick={() => {
+                          setPendingInteractiveType(item.id);
+                          setTool('interactive');
+                        }}
+                      >
+                        <item.icon className="w-4 h-4 mr-2" />
+                        {item.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Inputs */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <TextCursor className="w-4 h-4 mr-2" />
+                    Inputs
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {interactiveCategories.inputs.map((item) => (
+                      <DropdownMenuItem
+                        key={item.id}
+                        onClick={() => {
+                          setPendingInteractiveType(item.id);
+                          setTool('interactive');
+                        }}
+                      >
+                        <item.icon className="w-4 h-4 mr-2" />
+                        {item.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Selection */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <CheckSquare className="w-4 h-4 mr-2" />
+                    Selection
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {interactiveCategories.selection.map((item) => (
+                      <DropdownMenuItem
+                        key={item.id}
+                        onClick={() => {
+                          setPendingInteractiveType(item.id);
+                          setTool('interactive');
+                        }}
+                      >
+                        <item.icon className="w-4 h-4 mr-2" />
+                        {item.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Pickers */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <SlidersHorizontal className="w-4 h-4 mr-2" />
+                    Pickers
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {interactiveCategories.pickers.map((item) => (
+                      <DropdownMenuItem
+                        key={item.id}
+                        onClick={() => {
+                          setPendingInteractiveType(item.id);
+                          setTool('interactive');
+                        }}
+                      >
+                        <item.icon className="w-4 h-4 mr-2" />
+                        {item.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           <Separator orientation="vertical" className="h-6 mx-1" />
           <Button

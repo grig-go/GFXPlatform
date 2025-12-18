@@ -1,3 +1,5 @@
+import type { ElementInteractions, InteractiveAppConfig } from './interactive';
+
 // Organization & Users (Phase 2)
 export interface Organization {
   id: string;
@@ -43,6 +45,10 @@ export interface Project {
   updated_at: string;
   settings?: ProjectSettings;
   thumbnail_url?: string; // Base64 data URL of project thumbnail
+  // Interactive app mode - enables event handlers, script editor, input elements
+  interactive_enabled?: boolean;
+  // Interactive app configuration (state, functions, navigation, etc.)
+  interactive_config?: InteractiveAppConfig;
 }
 
 // Project Settings (API keys, integrations, etc.)
@@ -230,7 +236,22 @@ export type ElementType =
   | 'svg'
   | 'icon'
   | 'table'
-  | 'countdown';
+  | 'countdown'
+  | 'interactive'; // Interactive input elements (button, text-input, select, etc.)
+
+// Interactive element sub-types
+export type InteractiveInputType =
+  | 'button'
+  | 'text-input'
+  | 'number-input'
+  | 'textarea'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
+  | 'toggle'
+  | 'slider'
+  | 'date-picker'
+  | 'color-picker';
 
 // Screen Mask - clips element to screen coordinates
 export interface ScreenMask {
@@ -281,6 +302,8 @@ export interface Element {
     offsetX: number; // Horizontal offset (used when following top/bottom)
     offsetY: number; // Vertical offset (used when following left/right)
   };
+  // Interactive app event handlers and input configuration
+  interactions?: ElementInteractions;
 }
 
 // Table types
@@ -535,6 +558,45 @@ export type ElementContent =
       clockFormat?: '12h' | '24h';
       showDate?: boolean;
       timezone?: string;
+    }
+  | {
+      type: 'interactive';
+      inputType: InteractiveInputType;
+      // Common properties
+      name?: string;           // Form field name
+      label?: string;          // Label text
+      placeholder?: string;    // Placeholder text
+      defaultValue?: string | number | boolean;
+      required?: boolean;
+      disabled?: boolean;
+      readOnly?: boolean;
+      // State binding
+      bindTo?: string;         // State variable to bind value to
+      // Validation
+      validation?: {
+        minLength?: number;
+        maxLength?: number;
+        min?: number;
+        max?: number;
+        pattern?: string;
+        customMessage?: string;
+      };
+      // Button-specific
+      buttonVariant?: 'default' | 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
+      buttonSize?: 'sm' | 'md' | 'lg';
+      // Select/Radio-specific
+      options?: Array<{ value: string; label: string; disabled?: boolean }>;
+      // Slider-specific
+      step?: number;
+      showValue?: boolean;
+      // Toggle-specific
+      onLabel?: string;
+      offLabel?: string;
+      // Text input-specific
+      inputMode?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search';
+      // Styling
+      accentColor?: string;
+      borderRadius?: number;
     };
 
 // Topic Badge types

@@ -14,6 +14,7 @@ import { TableElement } from './TableElement';
 import { TickerElement } from './TickerElement';
 import { TopicBadgeElement } from './TopicBadgeElement';
 import { CountdownElement } from './CountdownElement';
+import { InteractiveElement } from './InteractiveElement';
 import { TextElement } from './TextElement';
 import { ImageElement } from './ImageElement';
 import { LineElement } from './LineElement';
@@ -1396,6 +1397,17 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             className="w-full h-full"
             isPlaying={isPlaying}
             style={element.styles as React.CSSProperties}
+          />
+        );
+
+      case 'interactive':
+        return (
+          <InteractiveElement
+            config={element.content}
+            elementId={element.id}
+            className="w-full h-full"
+            style={element.styles as React.CSSProperties}
+            isPreview={isPlaying}
           />
         );
 

@@ -15,6 +15,7 @@ import { FontPickerDialog } from '@/components/dialogs/FontPickerDialog';
 import { loadFont } from '@/lib/fonts';
 import { TableEditor } from '@/components/panels/TableEditor';
 import { MapContentEditor, MapStyleEditor } from './MapPropertiesPanel';
+import { InteractivePropertiesEditor } from './InteractivePropertiesPanel';
 import {
   Button,
   Input,
@@ -2211,6 +2212,14 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               });
             }}
           />
+        </>
+      )}
+
+      {/* Interactive Element Properties */}
+      {element.content.type === 'interactive' && (
+        <>
+          <Separator className="my-2" />
+          <InteractivePropertiesEditor element={element} />
         </>
       )}
     </div>

@@ -70,6 +70,8 @@ import {
   generateImageWithImagen,
   editImageWithImagen,
   fetchPulsarVSProviders,
+  generateTextViaBackend,
+  generateImageViaBackend,
   GEMINI_MODELS,
   IMAGEN_MODELS,
   ASPECT_RATIOS,
@@ -742,6 +744,7 @@ export default function VirtualSetPage({
     });
 
     // Build available options from sections
+    // All values use Actor:MaterialID format for both display and commands
     const options: Record<string, string[]> = {};
 
     // For each section, create Actor:Material options
@@ -752,7 +755,7 @@ export default function VirtualSetPage({
 
       const actorMaterialOptions: string[] = [];
 
-      // If section has actors, create Actor:Material combinations
+      // If section has actors, create Actor:MaterialID combinations
       if (sectionActors.length > 0) {
         sectionActors.forEach((actor: any) => {
           // Check if actor has specific allowedMaterials
@@ -761,15 +764,15 @@ export default function VirtualSetPage({
             actor.allowedMaterials.forEach((matId: string) => {
               const material = allMaterials.find((m: any) => m.materialid === matId);
               if (material) {
-                const theme = material.theme || material.materialid;
-                actorMaterialOptions.push(`${actor.name}:${theme}`);
+                // Use Actor:MaterialID format
+                actorMaterialOptions.push(`${actor.name}:${material.materialid}`);
               }
             });
           } else {
             // No specific materials restricted - use ALL materials
             allMaterials.forEach((material: any) => {
-              const theme = material.theme || material.materialid;
-              const optionValue = `${actor.name}:${theme}`;
+              // Use Actor:MaterialID format
+              const optionValue = `${actor.name}:${material.materialid}`;
               if (!actorMaterialOptions.includes(optionValue)) {
                 actorMaterialOptions.push(optionValue);
               }
@@ -891,7 +894,8 @@ export default function VirtualSetPage({
         });
 
         compatibleStyles.forEach((style) => {
-          combinations.push(`${actorName}:${style.Name}`);
+          // Use MaterialID for the command value (Actor:MaterialID format)
+          combinations.push(`${actorName}:${style.MaterialID}`);
         });
       });
 
@@ -975,15 +979,9 @@ export default function VirtualSetPage({
     addDebugLog(`Generating environment for prompt: "${environmentPrompt}" (Type: ${currentProjectType})`);
 
     try {
-      const aiSettings = await loadAIImageGenSettings();
-      const hasLocalKey =
-        aiSettings.gemini.apiKey &&
-        aiSettings.gemini.apiKey !== "YOUR_GOOGLE_STUDIO_API_KEY";
-
-      // Use backend provider model if available, otherwise fall back to settings
-      const textModel = aiProviders.text?.model ||
-        aiSettings.virtualSet?.selectedGeminiModel ||
-        DEFAULT_AI_SETTINGS.gemini.textModel;
+      // Use backend provider if available (preferred - API key stored securely in database)
+      const textProviderId = aiProviders.text?.id || 'gemini';
+      const hasBackendProvider = aiProviders.text?.apiKeyConfigured;
 
       let systemPrompt: string;
       let userPrompt: string;
@@ -999,11 +997,38 @@ export default function VirtualSetPage({
         userPrompt = buildVirtualSetUserPrompt(environmentPrompt, currentScene as VirtualSetSceneParameters);
       }
 
-      addDebugLog(`Sending request to AI using model: ${textModel}...`);
-
+      const fullPrompt = systemPrompt + "\n\n" + userPrompt;
       let responseText = "";
 
-      if (hasLocalKey) {
+      if (hasBackendProvider) {
+        // Use backend API (API key stored in ai_providers table)
+        addDebugLog(`Sending request to backend AI provider: ${textProviderId}...`);
+        const backendResponse = await generateTextViaBackend(
+          textProviderId,
+          fullPrompt,
+          undefined,
+          'pulsar-vs-text'
+        );
+        responseText = backendResponse.response;
+        addDebugLog(`Backend AI responded using model: ${backendResponse.model}`);
+      } else {
+        // Fallback to local settings (legacy - will fail if no local key)
+        addDebugLog(`No backend provider configured, falling back to local settings...`);
+        const aiSettings = await loadAIImageGenSettings();
+        const hasLocalKey =
+          aiSettings.gemini.apiKey &&
+          aiSettings.gemini.apiKey !== "YOUR_GOOGLE_STUDIO_API_KEY" &&
+          aiSettings.gemini.apiKey !== "";
+
+        if (!hasLocalKey) {
+          throw new Error("No AI API key configured. Please configure a Gemini API key in the ai_providers table or in Settings.");
+        }
+
+        const textModel = aiSettings.virtualSet?.selectedGeminiModel ||
+          DEFAULT_AI_SETTINGS.gemini.textModel;
+
+        addDebugLog(`Sending request to AI using model: ${textModel}...`);
+
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${aiSettings.gemini.apiKey}`;
         const requestBody = {
           contents: [{ parts: [{ text: systemPrompt }, { text: userPrompt }] }],
@@ -1021,20 +1046,6 @@ export default function VirtualSetPage({
           responseText = response.candidates[0].content.parts[0].text;
         } else {
           throw new Error("Invalid response format from Gemini API");
-        }
-      } else {
-        const response = await generateWithGemini(systemPrompt + "\n\n" + userPrompt, {
-          gemini: {
-            ...aiSettings.gemini,
-            textModel: textModel,
-            apiKey: aiSettings.gemini.apiKey || DEFAULT_AI_SETTINGS.gemini.apiKey,
-          },
-        });
-
-        if (response.candidates?.[0]?.content?.parts) {
-          responseText = response.candidates[0].content.parts[0].text;
-        } else {
-          throw new Error("Invalid response format from Gemini API (Wrapper)");
         }
       }
 
@@ -1299,6 +1310,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
   };
 
   // UPDATED: Apply scene via object based on project type
+  // Now uses dynamic objectPath from channel and dynamic parameters from schema
   const applySceneParametersViaObject = async (params: SceneParameters) => {
     const channel = availableChannels.find((c) => c.id === selectedChannel);
     if (!channel) {
@@ -1306,50 +1318,32 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       throw new Error("No channel selected");
     }
 
-    console.log("📡 Using channel:", { id: channel.id, name: channel.name });
+    // Get objectPath from channel config (from pulsar_connections table)
+    const objectPath = channel.objectPath;
+    if (!objectPath) {
+      console.error("❌ No objectPath configured for channel:", channel.name);
+      showSnackbar(`Channel "${channel.name}" has no objectPath configured`, "error");
+      throw new Error("No objectPath configured for this channel");
+    }
+
+    console.log("📡 Using channel:", { id: channel.id, name: channel.name, objectPath });
 
     try {
-      let messageObject: any;
+      // Build parameters dynamically from the schema keys
+      const dynamicKeys = getOptionKeys();
+      const dynamicParameters: Record<string, string> = {};
 
-      if (currentProjectType === "Airport") {
-        // Airport message format
-        const airportParams = params as AirportSceneParameters;
-        messageObject = {
-          objectPath: "/Game/UEDPIE_0_RigLevel01.RigLevel01:PersistentLevel.SceneController_C_1",
-          functionName: "ChangeScene",
-          parameters: {
-            timeOfDay: airportParams.timeOfDay || "",
-            environment_background: airportParams.environment_background || "",
-            BaseDown: airportParams.BaseDown || "",
-            BaseTop: airportParams.BaseTop || "",
-            DecoDown: airportParams.DecoDown || "",
-            DecoTop: airportParams.DecoTop || "",
-            ElementDown: airportParams.ElementDown || "",
-            ElementMiddle: airportParams.ElementMiddle || "",
-            ElementTop: airportParams.ElementTop || "",
-          },
-        };
-      } else {
-        // VirtualSet message format (existing)
-        const vsParams = params as VirtualSetSceneParameters;
-        messageObject = {
-          objectPath: "/Game/-Levels/UEDPIE_0_CleanLevel.CleanLevel:PersistentLevel.BP_SetManager_v4_C_1",
-          functionName: "ChangeScene",
-          parameters: {
-            WallLeft: vsParams.WallLeft || "",
-            WallRight: vsParams.WallRight || "",
-            WallBack: vsParams.WallBack || "",
-            Back: vsParams.Back || "",
-            Platform: vsParams.Platform || "",
-            Roof: vsParams.Roof || "",
-            Screen: vsParams.Screen || "",
-            Columns: vsParams.Columns || "",
-            Floor: vsParams.Floor || "",
-          },
-        };
+      for (const key of dynamicKeys) {
+        dynamicParameters[key] = (params as Record<string, any>)[key] || "";
       }
 
-      console.log(`📤 Sending ${currentProjectType} command:`, messageObject);
+      const messageObject = {
+        objectPath: objectPath,
+        functionName: "ChangeScene",
+        parameters: dynamicParameters,
+      };
+
+      console.log(`📤 Sending ${currentProjectType} command with dynamic parameters:`, messageObject);
       await sendCommandToUnreal(channel.name, messageObject);
     } catch (error) {
       console.error("Command failed:", error);
@@ -1643,9 +1637,17 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     const channel = availableChannels.find((c) => c.id === selectedChannel);
     if (!channel) return;
 
+    // Get objectPath from channel config (from pulsar_connections table)
+    const objectPath = channel.objectPath;
+    if (!objectPath) {
+      console.error("❌ No objectPath configured for channel:", channel.name);
+      showSnackbar(`Channel "${channel.name}" has no objectPath configured`, "error");
+      return;
+    }
+
     try {
       const messageObject = {
-        objectPath: "/Game/-Levels/UEDPIE_0_CleanLevel.CleanLevel:PersistentLevel.BP_SetManager_v4_C_1",
+        objectPath: objectPath,
         functionName: "SetBackdropImage",
         parameters: { URL: imageUrl }
       };

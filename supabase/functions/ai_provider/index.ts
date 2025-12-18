@@ -962,7 +962,222 @@ app.post("/ai_provider/chat", async (c) => {
 });
 
 // ============================================================================
-// AI IMAGE GENERATION
+// AI IMAGE GENERATION (Imagen for Pulsar VS)
+// ============================================================================
+
+app.post("/ai_provider/generate-imagen", async (c) => {
+  try {
+    const body = await safeJson(c);
+    const { providerId, prompt, aspectRatio, numberOfImages, safetyLevel } = body;
+
+    if (!providerId || !prompt) {
+      return jsonErr(c, 400, 'AI_IMAGEN_INVALID_INPUT', 'providerId and prompt are required');
+    }
+
+    console.log(`🎨 Imagen generation: provider=${providerId}`);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Fetch provider details
+    const { data: provider, error: providerError } = await supabase
+      .from("ai_providers")
+      .select("*")
+      .eq("id", providerId)
+      .single();
+
+    if (providerError || !provider) {
+      return jsonErr(c, 404, 'AI_PROVIDER_NOT_FOUND', providerId);
+    }
+
+    if (!provider.enabled) {
+      return jsonErr(c, 400, 'AI_PROVIDER_DISABLED', 'This AI provider is disabled');
+    }
+
+    if (!provider.api_key) {
+      return jsonErr(c, 400, 'AI_PROVIDER_NO_KEY', 'No API key configured for this provider');
+    }
+
+    // Call Imagen API
+    const apiUrl = `${provider.endpoint}/models/${provider.model}:predict?key=${provider.api_key}`;
+
+    console.log('🎨 Calling Imagen API with model:', provider.model);
+
+    const apiResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        instances: [{ prompt }],
+        parameters: {
+          sampleCount: numberOfImages || 1,
+          aspectRatio: aspectRatio || '16:9',
+          safetyFilterLevel: safetyLevel || 'block_some',
+          personGeneration: 'allow_adult'
+        }
+      }),
+      signal: AbortSignal.timeout(120000) // 2 minute timeout for image generation
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      console.error('Imagen API error:', errorText);
+      throw new Error(`Imagen API error: ${apiResponse.status} - ${errorText}`);
+    }
+
+    const data = await apiResponse.json();
+
+    if (!data.predictions || data.predictions.length === 0) {
+      throw new Error('No predictions returned from Imagen API');
+    }
+
+    const prediction = data.predictions[0];
+    const imageData = prediction.bytesBase64Encoded || prediction.generated_images?.[0]?.bytesBase64Encoded;
+
+    if (!imageData) {
+      throw new Error('No image data in Imagen response');
+    }
+
+    console.log('✅ Imagen generation completed successfully');
+
+    return c.json({
+      ok: true,
+      base64: imageData,
+      providerId,
+      model: provider.model
+    });
+
+  } catch (error: any) {
+    console.error('❌ Imagen generation error:', error);
+    return jsonErr(c, 500, 'AI_IMAGEN_GENERATION_FAILED', error.message || String(error));
+  }
+});
+
+// ============================================================================
+// AI IMAGE EDITING (Gemini for Pulsar VS)
+// ============================================================================
+
+app.post("/ai_provider/edit-image", async (c) => {
+  try {
+    const body = await safeJson(c);
+    const { providerId, sourceImage, prompt } = body;
+
+    if (!providerId || !sourceImage || !prompt) {
+      return jsonErr(c, 400, 'AI_IMAGE_EDIT_INVALID_INPUT', 'providerId, sourceImage, and prompt are required');
+    }
+
+    console.log(`✏️ Image edit: provider=${providerId}`);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Fetch provider details
+    const { data: provider, error: providerError } = await supabase
+      .from("ai_providers")
+      .select("*")
+      .eq("id", providerId)
+      .single();
+
+    if (providerError || !provider) {
+      return jsonErr(c, 404, 'AI_PROVIDER_NOT_FOUND', providerId);
+    }
+
+    if (!provider.enabled) {
+      return jsonErr(c, 400, 'AI_PROVIDER_DISABLED', 'This AI provider is disabled');
+    }
+
+    if (!provider.api_key) {
+      return jsonErr(c, 400, 'AI_PROVIDER_NO_KEY', 'No API key configured for this provider');
+    }
+
+    // Call Gemini API for image editing
+    const apiUrl = `${provider.endpoint}/models/${provider.model}:generateContent?key=${provider.api_key}`;
+
+    console.log('✏️ Calling Gemini image edit API with model:', provider.model);
+
+    // Clean up base64 data
+    let imageBase64 = sourceImage;
+    if (imageBase64.startsWith('data:')) {
+      imageBase64 = imageBase64.split(',')[1];
+    }
+
+    const editPrompt = `Edit this image: ${prompt}. Keep the rest of the image unchanged. Only modify the areas that match the description.`;
+
+    const apiResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: imageBase64
+              }
+            },
+            {
+              text: editPrompt
+            }
+          ]
+        }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          temperature: 0.4
+        }
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      console.error('Gemini image edit API error:', errorText);
+      throw new Error(`Gemini image edit error: ${apiResponse.status} - ${errorText}`);
+    }
+
+    const data = await apiResponse.json();
+
+    // Extract image from response
+    let resultImageData: string | undefined;
+    if (data.candidates && data.candidates.length > 0) {
+      const candidate = data.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData && part.inlineData.data) {
+            resultImageData = part.inlineData.data;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!resultImageData) {
+      throw new Error('Gemini did not return an edited image. Try rephrasing your edit request.');
+    }
+
+    console.log('✅ Image edit completed successfully');
+
+    return c.json({
+      ok: true,
+      base64: resultImageData,
+      providerId,
+      model: provider.model
+    });
+
+  } catch (error: any) {
+    console.error('❌ Image edit error:', error);
+    return jsonErr(c, 500, 'AI_IMAGE_EDIT_FAILED', error.message || String(error));
+  }
+});
+
+// ============================================================================
+// AI IMAGE GENERATION (Generic - OpenAI DALL-E)
 // ============================================================================
 
 app.post("/ai_provider/generate-image", async (c) => {
