@@ -328,13 +328,21 @@ app.put("/locations/:id", async (c)=>{
 // ============================================================================
 // WEATHER DATA FETCH & UPSERT (Multi-provider, skips CSV / News12 providers)
 // ============================================================================
+// Timeout for individual WeatherAPI requests (15 seconds)
+const WEATHER_API_TIMEOUT_MS = 15000;
+
 async function fetchWeatherAPI(provider, locations) {
   const apiKey = provider.api_key;
   if (!apiKey) {
     console.error(`⚠️ API key missing for ${provider.name}`);
     return [];
   }
-  const results = await Promise.all(locations.map(async (loc)=>{
+
+  const fetchStart = Date.now();
+  console.log(`[fetchWeatherAPI] 🚀 Starting fetch for ${locations.length} locations with provider ${provider.name}`);
+
+  const results = await Promise.all(locations.map(async (loc, index)=>{
+    const locStart = Date.now();
     try {
       const { id, lat, lon, name, custom_name, admin1, country, channel_id } = loc;
       if (!lat || !lon || lat === 0 || lon === 0) {
@@ -345,9 +353,17 @@ async function fetchWeatherAPI(provider, locations) {
           reason: "invalid lat/lon"
         };
       }
-      console.log(`🌤️ Fetching WeatherAPI for ${name} (${lat},${lon})`);
+      console.log(`[fetchWeatherAPI] 🌤️ [${index + 1}/${locations.length}] Fetching ${name} (${lat},${lon})`);
       const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lon}&days=14&aqi=yes&alerts=yes`;
-      const res = await fetch(url);
+
+      // Add timeout to WeatherAPI request
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(WEATHER_API_TIMEOUT_MS)
+      });
+
+      const apiDuration = Date.now() - locStart;
+      console.log(`[fetchWeatherAPI] 📥 [${index + 1}/${locations.length}] ${name} API response in ${apiDuration}ms, status: ${res.status}`);
+
       if (!res.ok) throw new Error(`WeatherAPI error: ${res.status}`);
       const forecast = await res.json();
       const current = forecast.current;
@@ -605,6 +621,9 @@ async function fetchWeatherAPI(provider, locations) {
       } : name;
       // Return data in the format frontend expects
       // ============================================================================
+      const totalLocDuration = Date.now() - locStart;
+      console.log(`[fetchWeatherAPI] ✅ [${index + 1}/${locations.length}] ${name} completed in ${totalLocDuration}ms`);
+
       return {
         success: true,
         name,
@@ -736,8 +755,13 @@ async function fetchWeatherAPI(provider, locations) {
       };
     }
   }));
-  // ✅ Log a summary if any failed
+  const totalFetchDuration = Date.now() - fetchStart;
+  const successful = results.filter((r)=>r.success);
   const failed = results.filter((r)=>!r.success);
+
+  console.log(`[fetchWeatherAPI] 📊 Batch complete in ${totalFetchDuration}ms: ${successful.length} success, ${failed.length} failed`);
+
+  // ✅ Log a summary if any failed
   if (failed.length > 0) {
     console.warn(`⚠️ ${failed.length} failed fetch(es):`);
     failed.forEach((f, i)=>{
@@ -939,6 +963,9 @@ async function fetchFromDatabase(locations) {
 // GET /weather-data — Fetch all active providers + all locations
 // ============================================================================
 app.get("/weather-data", async (c)=>{
+  const requestStart = Date.now();
+  console.log(`[/weather-data] 🚀 Request started at ${new Date().toISOString()}`);
+
   try {
     // ============================================================================
     // SUPPORT FOR provider_id FROM SCHEDULER
@@ -946,9 +973,9 @@ app.get("/weather-data", async (c)=>{
     const url = new URL(c.req.url);
     const providerId = url.searchParams.get("provider_id");
     if (providerId) {
-      console.log(`🚀 Ingest triggered for specific provider: ${providerId}`);
+      console.log(`[/weather-data] 🎯 Ingest triggered for specific provider: ${providerId}`);
     } else {
-      console.log(`🌍 Ingest triggered for ALL active providers`);
+      console.log(`[/weather-data] 🌍 Ingest triggered for ALL active providers`);
     }
     // ============================================================================
     // 📡 Fetch provider(s)
@@ -976,16 +1003,20 @@ app.get("/weather-data", async (c)=>{
     if (!providers.length) {
       return jsonErr(c, 400, "NO_PROVIDERS", "No active weather providers configured.");
     }
-    console.log(`✅ Found ${providers.length} active weather provider(s) to process.`);
-    console.log(`🔍 Found ${providers.length} active weather providers`);
+    const providersDuration = Date.now() - requestStart;
+    console.log(`[/weather-data] ✅ Found ${providers.length} active weather provider(s) in ${providersDuration}ms`);
+
     // ✅ Fetch ALL active locations (including CSV/News12)
+    const locationsStart = Date.now();
     const { data: allLocations, error: locError } = await supabase.from("weather_locations").select("*").eq("is_active", true).order("name");
+    const locationsDuration = Date.now() - locationsStart;
+
     if (locError) {
-      console.error("Error fetching locations:", locError);
+      console.error("[/weather-data] ❌ Error fetching locations:", locError);
       return jsonErr(c, 500, "LOCATIONS_FETCH_FAILED", locError.message);
     }
     if (!allLocations?.length) {
-      console.log("⚠️ No active weather locations found");
+      console.log("[/weather-data] ⚠️ No active weather locations found");
       return c.json({
         ok: true,
         providers: [],
@@ -993,7 +1024,7 @@ app.get("/weather-data", async (c)=>{
         data: []
       });
     }
-    console.log(`📍 Found ${allLocations.length} total active locations`);
+    console.log(`[/weather-data] 📍 Found ${allLocations.length} total active locations in ${locationsDuration}ms`);
     // Group by provider_id for efficiency
     const grouped = allLocations.reduce((acc, loc)=>{
       if (!acc[loc.provider_id]) acc[loc.provider_id] = [];
@@ -1002,9 +1033,11 @@ app.get("/weather-data", async (c)=>{
     }, {});
     const allResults = [];
     // Loop through each provider and its matching locations
+    const processingStart = Date.now();
     for (const provider of providers){
+      const providerStart = Date.now();
       const locations = grouped[provider.id] || [];
-      console.log(`🌐 Processing provider ${provider.name} (${provider.type}) with ${locations.length} locations`);
+      console.log(`[/weather-data] 🌐 Processing provider ${provider.name} (${provider.type}) with ${locations.length} locations`);
       if (!locations.length) continue;
       let results = [];
       switch(provider.type){
@@ -1014,16 +1047,20 @@ app.get("/weather-data", async (c)=>{
           break;
         case "csv":
           // Fetch from database only (CSV data already imported)
-          console.log(`📄 Fetching CSV provider (${provider.name}) data from database`);
+          console.log(`[/weather-data] 📄 Fetching CSV provider (${provider.name}) data from database`);
           results = await fetchFromDatabase(locations);
           break;
         default:
-          console.warn(`⚠️ No fetch logic yet for provider type: ${provider.type}`);
+          console.warn(`[/weather-data] ⚠️ No fetch logic yet for provider type: ${provider.type}`);
           // Default: try to fetch from database
           results = await fetchFromDatabase(locations);
       }
+      const providerDuration = Date.now() - providerStart;
+      console.log(`[/weather-data] ✅ Provider ${provider.name} completed in ${providerDuration}ms`);
       allResults.push(...results);
     }
+    const processingDuration = Date.now() - processingStart;
+    console.log(`[/weather-data] 📊 All providers processed in ${processingDuration}ms`);
     // Combine and report
     const successful = allResults.filter((r)=>r.success);
     const failed = allResults.filter((r)=>!r.success);
@@ -1039,6 +1076,14 @@ app.get("/weather-data", async (c)=>{
           reason: f.reason || f.error || "Unknown error"
         })), null, 2));
     }
+    const totalRequestDuration = Date.now() - requestStart;
+    console.log(`[/weather-data] 🏁 Request completed in ${totalRequestDuration}ms`, {
+      providers: providers.length,
+      locations: allLocations.length,
+      successful: successful.length,
+      failed: failed.length,
+    });
+
     return c.json({
       ok: true,
       providers: providers.map((p)=>p.name),
@@ -1046,7 +1091,8 @@ app.get("/weather-data", async (c)=>{
       data: successful.map((r)=>r.data)
     });
   } catch (error) {
-    console.error("❌ WEATHER_DATA_FETCH_FAILED:", error);
+    const errorDuration = Date.now() - requestStart;
+    console.error(`[/weather-data] ❌ WEATHER_DATA_FETCH_FAILED after ${errorDuration}ms:`, error);
     return jsonErr(c, 500, "WEATHER_DATA_FETCH_FAILED", error);
   }
 });

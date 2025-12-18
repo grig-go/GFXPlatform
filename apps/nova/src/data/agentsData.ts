@@ -32,18 +32,25 @@ export function setOnDataChange(callback: (data: AgentsData) => void) {
 
 // Function to fetch agents counts from Supabase
 async function getAgentsData(): Promise<AgentsData> {
+  const startTime = performance.now();
+  console.log('[getAgentsData] 🚀 Starting agents count fetch...');
+
   try {
     const { data, error } = await supabase
       .from('api_endpoints')
       .select('id, active');
 
+    const queryDuration = performance.now() - startTime;
+
     if (error) {
-      console.error('Failed to fetch agents data:', error);
+      console.error(`[getAgentsData] ❌ Query failed after ${queryDuration.toFixed(0)}ms:`, error);
       throw error;
     }
 
     const totalCount = data?.length || 0;
     const activeCount = data?.filter((agent: any) => agent.active).length || 0;
+
+    console.log(`[getAgentsData] ✅ Fetched in ${queryDuration.toFixed(0)}ms:`, { totalCount, activeCount });
 
     return {
       totalCount,
@@ -51,25 +58,32 @@ async function getAgentsData(): Promise<AgentsData> {
       lastUpdated: new Date().toISOString()
     };
   } catch (error) {
-    console.error('Error fetching agents data:', error);
+    const errorDuration = performance.now() - startTime;
+    console.error(`[getAgentsData] ❌ Error after ${errorDuration.toFixed(0)}ms:`, error);
     throw error;
   }
 }
 
 // Initialize on first import
 export const initializeAgentsData = async (): Promise<AgentsData> => {
-  if (dataLoadPromise) return dataLoadPromise;
+  if (dataLoadPromise) {
+    console.log('[initializeAgentsData] ⏳ Already loading, returning existing promise');
+    return dataLoadPromise;
+  }
+
+  const startTime = performance.now();
+  console.log('[initializeAgentsData] 🚀 Starting initialization...');
 
   dataLoadPromise = (async () => {
     try {
-      console.log('Starting to fetch agents data...');
       isAgentsDataLoading = true;
       agentsDataError = null;
 
       const data = await getAgentsData();
       agentsData = data;
 
-      console.log('Agents data loaded successfully:', agentsData);
+      const totalDuration = performance.now() - startTime;
+      console.log(`[initializeAgentsData] ✅ Completed in ${totalDuration.toFixed(0)}ms:`, agentsData);
       isAgentsDataLoading = false;
 
       // Notify callback if set
@@ -79,7 +93,8 @@ export const initializeAgentsData = async (): Promise<AgentsData> => {
 
       return agentsData;
     } catch (error) {
-      console.error('Failed to initialize agents data:', error);
+      const errorDuration = performance.now() - startTime;
+      console.error(`[initializeAgentsData] ❌ Failed after ${errorDuration.toFixed(0)}ms:`, error);
       agentsDataError = error as Error;
       isAgentsDataLoading = false;
 

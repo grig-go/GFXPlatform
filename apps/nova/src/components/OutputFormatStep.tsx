@@ -38,6 +38,7 @@ import { useToast } from './ui/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { JsonFieldMapper } from './JsonFieldMapper/JsonFieldMapper';
 import { OpenAPIImport } from './JsonFieldMapper/components/OpenAPIImport';
+import { XmlFieldMapper } from './XmlFieldMapper/XmlFieldMapper';
 
 // Helper function to extract field paths with data examples
 function extractFieldPaths(obj: any, prefix = ''): Array<{ path: string; display: string }> {
@@ -462,6 +463,9 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     // JSON Advanced Field Mapping Configuration
     jsonMappingConfig: formData.formatOptions?.jsonMappingConfig || undefined,
 
+    // XML Advanced Field Mapping Configuration
+    xmlMappingConfig: formData.formatOptions?.xmlMappingConfig || undefined,
+
     // XML options
     xmlRootElement: formData.formatOptions?.xmlRootElement || 'response',
     namespace: formData.formatOptions?.namespace || '',
@@ -514,6 +518,13 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced' | 'openapi'>(() => {
     // If we have saved jsonMappingConfig, start in advanced mode
     if (formData.formatOptions?.jsonMappingConfig) {
+      return 'advanced';
+    }
+    return 'simple';
+  });
+  const [xmlConfigMode, setXmlConfigMode] = useState<'simple' | 'advanced'>(() => {
+    // If we have saved xmlMappingConfig, start in advanced mode
+    if (formData.formatOptions?.xmlMappingConfig) {
       return 'advanced';
     }
     return 'simple';
@@ -1370,42 +1381,263 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
           )}
 
           {format === 'XML' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="xml-root">Root element name</Label>
-                <Input
-                  id="xml-root"
-                  value={formatOptions.xmlRootElement}
-                  onChange={(e) => updateFormatOption('xmlRootElement', e.target.value)}
-                  placeholder="response"
-                />
+            <>
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Configuration Mode</Label>
+                <p className="text-sm text-gray-500 mb-3">Choose between simple options or advanced field-by-field mapping with element/attribute control</p>
+                <RadioGroup value={xmlConfigMode} onValueChange={(v: any) => setXmlConfigMode(v)}>
+                  <div className="flex items-start space-x-2 mb-3">
+                    <RadioGroupItem value="simple" id="xml-simple" className="border-2 border-gray-700 mt-0.5" />
+                    <Label htmlFor="xml-simple" className="font-normal cursor-pointer">
+                      <div>
+                        <span className="font-semibold">Simple Configuration</span>
+                        <p className="text-sm text-gray-500">Basic XML output with root element and namespace settings</p>
+                      </div>
+                    </Label>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <RadioGroupItem value="advanced" id="xml-advanced" className="border-2 border-gray-700 mt-0.5" />
+                    <Label htmlFor="xml-advanced" className="font-normal cursor-pointer">
+                      <div>
+                        <span className="font-semibold">Advanced Field Mapping</span>
+                        <p className="text-sm text-gray-500">Visual field mapping with element/attribute control, CDATA support, and custom XML structure</p>
+                      </div>
+                    </Label>
+                  </div>
+                </RadioGroup>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="namespace">XML namespace (optional)</Label>
-                <Input
-                  id="namespace"
-                  value={formatOptions.namespace}
-                  onChange={(e) => updateFormatOption('namespace', e.target.value)}
-                  placeholder="http://example.com/ns"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="declaration"
-                  checked={formatOptions.includeDeclaration}
-                  onCheckedChange={(v) => updateFormatOption('includeDeclaration', v)}
-                />
-                <Label htmlFor="declaration">Include XML declaration</Label>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="attributes"
-                  checked={formatOptions.useAttributes}
-                  onCheckedChange={(v) => updateFormatOption('useAttributes', v)}
-                />
-                <Label htmlFor="attributes">Use attributes instead of elements</Label>
-              </div>
-            </div>
+
+              {xmlConfigMode === 'simple' && (
+                <div className="space-y-4">
+                  <Alert className="bg-blue-50 border-blue-200 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                    <AlertDescription className="flex-1">
+                      Configure basic XML output settings. Your data sources will be converted to a standard XML structure.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="xml-root">Root element name</Label>
+                    <Input
+                      id="xml-root"
+                      value={formatOptions.xmlRootElement}
+                      onChange={(e) => updateFormatOption('xmlRootElement', e.target.value)}
+                      placeholder="response"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="namespace">XML namespace (optional)</Label>
+                    <Input
+                      id="namespace"
+                      value={formatOptions.namespace}
+                      onChange={(e) => updateFormatOption('namespace', e.target.value)}
+                      placeholder="http://example.com/ns"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="declaration"
+                      checked={formatOptions.includeDeclaration}
+                      onCheckedChange={(v) => updateFormatOption('includeDeclaration', v)}
+                    />
+                    <Label htmlFor="declaration">Include XML declaration</Label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="attributes"
+                      checked={formatOptions.useAttributes}
+                      onCheckedChange={(v) => updateFormatOption('useAttributes', v)}
+                    />
+                    <Label htmlFor="attributes">Use attributes instead of elements</Label>
+                  </div>
+
+                  {formData.dataSources && formData.dataSources.length > 0 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="xml-source-id">Primary Data Source *</Label>
+                      <Select
+                        value={formatOptions.sourceId || '__none__'}
+                        onValueChange={(v) => updateFormatOption('sourceId', v === '__none__' ? '' : v)}
+                      >
+                        <SelectTrigger id="xml-source-id">
+                          <SelectValue placeholder="Select a data source..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Select a data source...</SelectItem>
+                          {formData.dataSources.map((source: any) => (
+                            <SelectItem key={source.id} value={source.id}>
+                              {source.name} ({source.type})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">Select which data source to use as the main response body</p>
+                    </div>
+                  )}
+
+                  {formatOptions.sourceId && sampleData[formatOptions.sourceId] && (
+                    <div className="space-y-2">
+                      <Label>XML Structure Preview</Label>
+                      <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap break-words">
+{`<?xml version="1.0" encoding="UTF-8"?>
+<${formatOptions.xmlRootElement || 'response'}${formatOptions.namespace ? ` xmlns="${formatOptions.namespace}"` : ''}>
+  <item>
+    <!-- Your data fields will appear here -->
+  </item>
+</${formatOptions.xmlRootElement || 'response'}>`}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {xmlConfigMode === 'advanced' && (
+                <div className="mt-4">
+                  <Alert className="bg-blue-50 border-blue-200 mb-4">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertTitle>Advanced XML Field Mapping</AlertTitle>
+                    <AlertDescription>
+                      Create a custom XML structure by mapping fields from your data sources.
+                      Define which fields become elements or attributes, add CDATA sections, and control the exact XML output.
+                    </AlertDescription>
+                  </Alert>
+
+                  <XmlFieldMapper
+                    dataSources={formData.dataSources || []}
+                    sampleData={sampleData}
+                    initialConfig={(() => {
+                      // If we have saved config, use it
+                      if (formatOptions.xmlMappingConfig?.outputTemplate?.fields?.length > 0) {
+                        return formatOptions.xmlMappingConfig;
+                      }
+
+                      // Otherwise, create default config
+                      return {
+                        sourceSelection: {
+                          type: 'object',
+                          primaryPath: '',
+                          sources: []
+                        },
+                        outputTemplate: {
+                          structure: {},
+                          fields: [
+                            { path: 'id', name: 'ID', elementName: 'id', type: 'string', xmlType: 'attribute', required: false },
+                            { path: 'title', name: 'Title', elementName: 'title', type: 'string', xmlType: 'element', required: true },
+                            { path: 'description', name: 'Description', elementName: 'description', type: 'string', xmlType: 'element', required: false, cdata: true },
+                            { path: 'value', name: 'Value', elementName: 'value', type: 'string', xmlType: 'element', required: false }
+                          ],
+                          rootElement: 'data',
+                          itemElement: 'item'
+                        },
+                        fieldMappings: [],
+                        transformations: [],
+                        outputWrapper: {
+                          enabled: true,
+                          rootElement: 'data',
+                          includeDeclaration: true,
+                          encoding: 'UTF-8',
+                          version: '1.0',
+                          includeMetadata: false,
+                          metadataFields: {
+                            timestamp: true,
+                            source: true,
+                            count: true,
+                            version: false
+                          }
+                        }
+                      };
+                    })()}
+                    onChange={(config: any) => updateFormatOption('xmlMappingConfig', config)}
+                    onTestDataSource={onTestDataSource}
+                  />
+
+                  {/* Quick Actions */}
+                  <Card className="mt-4 bg-gray-50">
+                    <CardContent className="pt-6">
+                      <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (formatOptions.xmlMappingConfig) {
+                              const configJson = JSON.stringify(formatOptions.xmlMappingConfig, null, 2);
+                              const blob = new Blob([configJson], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = 'xml-mapping-config.json';
+                              a.click();
+                              URL.revokeObjectURL(url);
+
+                              toast({
+                                title: 'Success',
+                                description: 'Configuration exported',
+                              });
+                            }
+                          }}
+                          disabled={!formatOptions.xmlMappingConfig}
+                        >
+                          <FileCode className="w-4 h-4 mr-2" />
+                          Export Configuration
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.json';
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                try {
+                                  const text = await file.text();
+                                  const config = JSON.parse(text);
+                                  updateFormatOption('xmlMappingConfig', config);
+
+                                  toast({
+                                    title: 'Success',
+                                    description: 'Configuration imported successfully',
+                                  });
+                                } catch (error) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to import configuration',
+                                    variant: 'destructive',
+                                  });
+                                }
+                              }
+                            };
+                            input.click();
+                          }}
+                        >
+                          <FileCode className="w-4 h-4 mr-2" />
+                          Import Configuration
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm('Are you sure you want to reset the mapping configuration?')) {
+                              updateFormatOption('xmlMappingConfig', null);
+                              toast({
+                                title: 'Warning',
+                                description: 'Configuration reset',
+                              });
+                            }
+                          }}
+                          disabled={!formatOptions.xmlMappingConfig}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Reset Configuration
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
           )}
 
           {format === 'RSS' && (

@@ -112,25 +112,65 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
 
       const isRSSEndpoint = formData.format === 'RSS';
       const sourceMappings = (formData.formatOptions as any)?.outputSchema?.metadata?.sourceMappings || [];
+      const jsonMappingConfig = (formData.formatOptions as any)?.jsonMappingConfig;
 
       console.log('TransformationStep - Processing fields:', {
         isRSSEndpoint,
         sourceMappings,
         dataSources: formData.dataSources?.length || 0,
-        hasSampleData: Object.keys(sampleData).length > 0
+        hasSampleData: Object.keys(sampleData).length > 0,
+        hasJsonMappingConfig: !!jsonMappingConfig
       });
+
+      // If we have JSON mapping config with sourceSelection, use that to determine the data path
+      const sourceSelectionPrimaryPath = jsonMappingConfig?.sourceSelection?.primaryPath || '';
+      const selectedSources = jsonMappingConfig?.sourceSelection?.sources || [];
 
       // Process each data source
       for (const source of formData.dataSources || []) {
         try {
+          // Check if this source is selected in jsonMappingConfig
+          const sourceConfig = selectedSources.find((s: any) => s.id === source.id);
+          const primaryPath = sourceConfig?.primaryPath || sourceSelectionPrimaryPath;
+
           // Use passed sampleData
           if (sampleData[source.id]) {
-            console.log(`Using sample data for ${source.name}`);
+            console.log(`Using sample data for ${source.name}, primaryPath: ${primaryPath}`);
 
             let dataToAnalyze = sampleData[source.id];
 
-            // Handle nested data paths for APIs
-            if (source.type === 'api' && (source as any).api_config?.data_path) {
+            // First, try to use the primaryPath from jsonMappingConfig (respects user's selection)
+            if (primaryPath) {
+              const pathParts = primaryPath.split('.');
+              let current = dataToAnalyze;
+
+              for (const part of pathParts) {
+                if (current && typeof current === 'object') {
+                  current = current[part];
+                }
+              }
+
+              if (Array.isArray(current) && current.length > 0) {
+                // For transformations, we need to work with the array path
+                // Add fields with array notation
+                const arrayFields = extractFieldsFromData(current[0], `${primaryPath}[*]`);
+                arrayFields.forEach(field => {
+                  if (!fieldPaths.has(field)) {
+                    fieldPaths.add(field);
+                    allFields.push({
+                      path: field,
+                      display: field.includes('.') ? field.split('.').join(' → ') : field,
+                      type: inferFieldType(field)
+                    });
+                  }
+                });
+                continue; // Skip the rest of this source processing
+              } else if (current) {
+                dataToAnalyze = current;
+              }
+            }
+            // Fallback: Handle nested data paths for APIs
+            else if (source.type === 'api' && (source as any).api_config?.data_path) {
               const pathParts = (source as any).api_config.data_path.split('.');
               let current = dataToAnalyze;
 

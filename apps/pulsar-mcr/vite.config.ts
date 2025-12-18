@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    envDir: '../../', // Load .env from root
     server: {
       host: '0.0.0.0',
       port: parseInt(mergedEnv.VITE_PULSAR_PORT || mergedEnv.VITE_PORT) || 5174,

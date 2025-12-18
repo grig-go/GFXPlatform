@@ -39,6 +39,9 @@ function saveCachedData(data: WeatherDataStats) {
   }
 }
 
+// Timeout duration for weather data fetch (30 seconds)
+const FETCH_TIMEOUT_MS = 30000;
+
 export function useWeatherData() {
   // Initialize with cached data if available, otherwise empty
   const cachedData = loadCachedData();
@@ -52,15 +55,33 @@ export function useWeatherData() {
   });
 
   const fetchWeatherData = async () => {
+    const startTime = performance.now();
+    console.log('[useWeatherData] 🚀 Starting weather data fetch...');
+
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error(`[useWeatherData] ⏰ Fetch timed out after ${FETCH_TIMEOUT_MS}ms`);
+      controller.abort();
+    }, FETCH_TIMEOUT_MS);
+
     try {
+      const url = getEdgeFunctionUrl('weather_dashboard/weather-data');
+      console.log('[useWeatherData] 📡 Fetching from:', url);
+
       const response = await fetch(
-        getEdgeFunctionUrl('weather_dashboard/weather-data'),
+        url,
         {
           headers: {
             Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
+          signal: controller.signal,
         }
       );
+
+      clearTimeout(timeoutId);
+      const fetchDuration = performance.now() - startTime;
+      console.log(`[useWeatherData] 📥 Response received in ${fetchDuration.toFixed(0)}ms, status: ${response.status}`);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -68,9 +89,17 @@ export function useWeatherData() {
         throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
+      const parseStart = performance.now();
       const result = await response.json();
+      const parseDuration = performance.now() - parseStart;
 
-      console.log("🔴 Backend response structure:", result);
+      console.log(`[useWeatherData] 📦 JSON parsed in ${parseDuration.toFixed(0)}ms`);
+      console.log("[useWeatherData] 📊 Backend response structure:", {
+        ok: result.ok,
+        providers: result.providers,
+        locationsProcessed: result.locationsProcessed,
+        dataLength: result.data?.length || 0,
+      });
       
       // ✅ Handle new response format with metadata
       if (result.ok) {
@@ -143,10 +172,30 @@ export function useWeatherData() {
         providerSettings: result.providerSettings,
       };
 
+      const totalDuration = performance.now() - startTime;
+      console.log(`[useWeatherData] ✅ Weather data loaded successfully in ${totalDuration.toFixed(0)}ms`, {
+        locations: newStats.totalLocations,
+        alerts: newStats.activeAlerts,
+      });
+
       setStats(newStats);
       saveCachedData(newStats);
     } catch (error) {
-      console.error("Error fetching weather data:", error);
+      clearTimeout(timeoutId);
+      const errorDuration = performance.now() - startTime;
+
+      // Handle abort/timeout specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`[useWeatherData] ❌ Request aborted after ${errorDuration.toFixed(0)}ms (timeout: ${FETCH_TIMEOUT_MS}ms)`);
+        setStats((prev) => ({
+          ...prev,
+          loading: false,
+          error: `Request timed out after ${Math.round(FETCH_TIMEOUT_MS / 1000)} seconds. The server may be slow or unresponsive.`,
+        }));
+        return;
+      }
+
+      console.error(`[useWeatherData] ❌ Error after ${errorDuration.toFixed(0)}ms:`, error);
       setStats((prev) => ({
         ...prev,
         loading: false,

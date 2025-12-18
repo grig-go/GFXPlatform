@@ -41,10 +41,12 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { supabase } from "../utils/supabase/client";
+import * as agentWizardApi from "../utils/agentWizardApi";
 import { useToast } from "./ui/use-toast";
 import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from "../utils/constants";
 import { refreshAgentsData } from "../data/agentsData";
+
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
 
 interface AgentsDashboardWithSupabaseProps {
   feeds?: Feed[];
@@ -213,6 +215,7 @@ export function AgentsDashboardWithSupabase({
 }: AgentsDashboardWithSupabaseProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardKey, setWizardKey] = useState(0); // Used to force remount of wizard
   const [editingAgent, setEditingAgent] = useState<Agent | undefined>(undefined);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,73 +232,43 @@ export function AgentsDashboardWithSupabase({
   }));
 
   // Cleanup unused Nova Weather, Nova Election, Nova Finance, and Nova Sports data sources
+  // Uses edge function API to avoid Supabase client hangs
   const cleanupUnusedNovaSources = async () => {
     try {
-      // Get all Nova Weather, Nova Election, Nova Finance, and Nova Sports data sources
-      const { data: novaSources, error: sourcesError } = await supabase
-        .from('data_sources')
-        .select('id, name, category')
-        .in('category', ['Nova Weather', 'Nova Election', 'Nova Finance', 'Nova Sports']);
-
-      if (sourcesError) {
-        console.error('Failed to fetch Nova sources:', sourcesError);
-        return;
-      }
-
-      if (!novaSources || novaSources.length === 0) {
-        return; // No Nova sources to clean up
-      }
-
-      // Get all data source IDs that are referenced by api_endpoint_sources
-      const { data: usedSources, error: usedError } = await supabase
-        .from('api_endpoint_sources')
-        .select('data_source_id')
-        .in('data_source_id', novaSources.map(s => s.id));
-
-      if (usedError) {
-        console.error('Failed to fetch used sources:', usedError);
-        return;
-      }
-
-      // Find unused Nova sources
-      const usedSourceIds = new Set(usedSources?.map(s => s.data_source_id) || []);
-      const unusedSources = novaSources.filter(s => !usedSourceIds.has(s.id));
-
-      if (unusedSources.length > 0) {
-        // Delete unused Nova sources
-        const { error: deleteError } = await supabase
-          .from('data_sources')
-          .delete()
-          .in('id', unusedSources.map(s => s.id));
-
-        if (deleteError) {
-          console.error('Failed to delete unused Nova sources:', deleteError);
-        } else {
-          console.log(`Cleaned up ${unusedSources.length} unused Nova data source(s)`);
-        }
+      const result = await agentWizardApi.cleanupNovaSources();
+      if (result.error) {
+        console.error('Failed to cleanup Nova sources:', result.error);
+      } else if (result.cleaned > 0) {
+        console.log(result.message);
       }
     } catch (error) {
       console.error('Error during Nova sources cleanup:', error);
     }
   };
 
-  // Load agents from database
-  const loadAgents = async () => {
+  // Load agents from database via edge function API
+  const loadAgents = async (isMounted: { current: boolean } = { current: true }) => {
+    const startTime = performance.now();
+    console.log('[loadAgents] 🚀 Starting agents load...');
+
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('api_endpoints')
-        .select(`
-          *,
-          api_endpoint_sources (
-            *,
-            data_source:data_sources (*)
-          )
-        `)
-        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Failed to load agents:', error);
+      const queryStart = performance.now();
+      // Use edge function API instead of direct Supabase client
+      const result = await agentWizardApi.listAgents();
+
+      const queryDuration = performance.now() - queryStart;
+      console.log(`[loadAgents] 📥 API call completed in ${queryDuration.toFixed(0)}ms`);
+
+      // Check if component is still mounted before updating state
+      if (!isMounted.current) {
+        console.log('[loadAgents] ⚠️ Component unmounted, skipping state update');
+        return;
+      }
+
+      if (result.error) {
+        console.error(`[loadAgents] ❌ Query failed after ${queryDuration.toFixed(0)}ms:`, result.error);
         toast({
           title: "Error",
           description: "Failed to load agents from database",
@@ -304,27 +277,52 @@ export function AgentsDashboardWithSupabase({
         return;
       }
 
+      const data = result.data;
+      console.log(`[loadAgents] 📊 Received ${data?.length || 0} agents from database`);
+
       // Convert APIEndpoint to Agent format for UI
+      const convertStart = performance.now();
       const convertedAgents = (data || []).map(convertAPIEndpointToAgent);
+      const convertDuration = performance.now() - convertStart;
+      console.log(`[loadAgents] 🔄 Converted agents in ${convertDuration.toFixed(0)}ms`);
+
+      if (!isMounted.current) return;
       setAgents(convertedAgents);
 
       // Clean up unused Nova Weather sources after loading agents
+      const cleanupStart = performance.now();
       await cleanupUnusedNovaSources();
-    } catch (error) {
-      console.error('Failed to load agents:', error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred",
-        variant: "destructive"
+      const cleanupDuration = performance.now() - cleanupStart;
+      console.log(`[loadAgents] 🧹 Cleanup completed in ${cleanupDuration.toFixed(0)}ms`);
+
+      const totalDuration = performance.now() - startTime;
+      console.log(`[loadAgents] ✅ Agents loaded successfully in ${totalDuration.toFixed(0)}ms`, {
+        count: convertedAgents.length,
       });
+    } catch (error) {
+      const errorDuration = performance.now() - startTime;
+      console.error(`[loadAgents] ❌ Failed after ${errorDuration.toFixed(0)}ms:`, error);
+      if (isMounted.current) {
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive"
+        });
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
   // Load agents on component mount
   useEffect(() => {
-    loadAgents();
+    const isMounted = { current: true };
+    loadAgents(isMounted);
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   // Refresh agents
@@ -347,25 +345,17 @@ export function AgentsDashboardWithSupabase({
     );
   });
 
+  // Edit agent - uses edge function API to avoid Supabase client hangs
   const handleEdit = async (agent: Agent) => {
     try {
-      // Fetch the complete endpoint data with all relationships
-      const { data: fullEndpoint, error } = await supabase
-        .from('api_endpoints')
-        .select(`
-          *,
-          api_endpoint_sources (
-            *,
-            data_source:data_sources (*)
-          )
-        `)
-        .eq('id', agent.id)
-        .single();
+      // Fetch the complete endpoint data with all relationships via edge function
+      const result = await agentWizardApi.getAgent(agent.id);
 
-      if (error) throw error;
+      if (result.error) throw new Error(result.error);
 
-      console.log('Full endpoint data from Supabase:', fullEndpoint);
-      console.log('api_endpoint_sources:', (fullEndpoint as any).api_endpoint_sources);
+      const fullEndpoint = result.data;
+      console.log('Full endpoint data from API:', fullEndpoint);
+      console.log('api_endpoint_sources:', fullEndpoint?.api_endpoint_sources);
 
       // Convert back to Agent format with full data
       const fullAgent = convertAPIEndpointToAgent(fullEndpoint);
@@ -385,84 +375,12 @@ export function AgentsDashboardWithSupabase({
     }
   };
 
+  // Duplicate agent - uses edge function API to avoid Supabase client hangs
   const handleDuplicate = async (agent: Agent) => {
     try {
-      // Get current user or use dev user ID
-      let userId = DEV_USER_ID;
+      const result = await agentWizardApi.duplicateAgent(agent.id);
 
-      if (!isDevelopment || !SKIP_AUTH_IN_DEV) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          toast({
-            title: "Error",
-            description: "You must be logged in to duplicate agents",
-            variant: "destructive"
-          });
-          return;
-        }
-        userId = user.id;
-      }
-
-      // First, fetch the complete endpoint data with all relationships
-      const { data: fullEndpoint, error: fetchError } = await supabase
-        .from('api_endpoints')
-        .select(`
-          *,
-          api_endpoint_sources (
-            *,
-            data_source:data_sources (*)
-          )
-        `)
-        .eq('id', agent.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // Generate a unique slug by appending a timestamp
-      const timestamp = Date.now();
-      const newSlug = `${fullEndpoint.slug}-copy-${timestamp}`;
-
-      // Create the duplicated endpoint
-      const duplicatedEndpoint = {
-        name: `${fullEndpoint.name} (Copy)`,
-        slug: newSlug,
-        description: fullEndpoint.description,
-        output_format: fullEndpoint.output_format,
-        schema_config: fullEndpoint.schema_config,
-        transform_config: fullEndpoint.transform_config,
-        relationship_config: fullEndpoint.relationship_config,
-        cache_config: fullEndpoint.cache_config,
-        auth_config: fullEndpoint.auth_config,
-        rate_limit_config: fullEndpoint.rate_limit_config,
-        active: false, // Start duplicates as inactive
-        user_id: userId
-      };
-
-      const { data: newEndpoint, error: insertError } = await supabase
-        .from('api_endpoints')
-        .insert(duplicatedEndpoint)
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      // Duplicate the api_endpoint_sources relationships
-      if (fullEndpoint.api_endpoint_sources && fullEndpoint.api_endpoint_sources.length > 0) {
-        const sourceRelations = fullEndpoint.api_endpoint_sources.map((source: any) => ({
-          endpoint_id: newEndpoint.id,
-          data_source_id: source.data_source_id,
-          is_primary: source.is_primary,
-          join_config: source.join_config,
-          filter_config: source.filter_config,
-          sort_order: source.sort_order
-        }));
-
-        const { error: relationsError } = await supabase
-          .from('api_endpoint_sources')
-          .insert(sourceRelations);
-
-        if (relationsError) throw relationsError;
-      }
+      if (result.error) throw new Error(result.error);
 
       // Reload agents list
       await loadAgents();
@@ -489,156 +407,100 @@ export function AgentsDashboardWithSupabase({
   const handleWizardClose = () => {
     setWizardOpen(false);
     setEditingAgent(undefined);
+    // Increment key to force fresh wizard state next time
+    setWizardKey(prev => prev + 1);
   };
 
+  // Save agent using edge function API to avoid Supabase client lock issues
   const handleWizardSave = async (agent: Agent, closeDialog: boolean = true) => {
+    console.log('[DashboardSave] Starting handleWizardSave, closeDialog:', closeDialog);
+    const saveStartTime = Date.now();
+
     try {
-      const endpointData = convertAgentToAPIEndpoint(agent);
+      // Determine data source IDs to save
+      let dataSourceIds: string[] = [];
 
-      if (editingAgent) {
-        // Update existing agent
-        const { error } = await supabase
-          .from('api_endpoints')
-          .update(endpointData)
-          .eq('id', agent.id);
+      if (agent.dataSources && agent.dataSources.length > 0) {
+        // For RSS format with sourceMappings, only save enabled sources
+        let sourcesToSave = agent.dataSources;
 
-        if (error) throw error;
+        if (agent.format === 'RSS' && agent.formatOptions?.sourceMappings) {
+          const enabledSourceIds = new Set(
+            agent.formatOptions.sourceMappings
+              .filter((m: any) => m.enabled)
+              .map((m: any) => m.sourceId)
+          );
 
-        // Update api_endpoint_sources relationships
-        // First, delete all existing relationships
-        await supabase
-          .from('api_endpoint_sources')
-          .delete()
-          .eq('endpoint_id', agent.id);
+          sourcesToSave = agent.dataSources.filter((source: any) =>
+            enabledSourceIds.has(source.id)
+          );
 
-        // Then insert the new relationships
-        if (agent.dataSources && agent.dataSources.length > 0) {
-          // Filter sources based on enabled status from formatOptions.sourceMappings (for RSS)
-          let sourcesToSave = agent.dataSources;
-
-          if (agent.format === 'RSS' && agent.formatOptions?.sourceMappings) {
-            const enabledSourceIds = new Set(
-              agent.formatOptions.sourceMappings
-                .filter((m: any) => m.enabled)
-                .map((m: any) => m.sourceId)
-            );
-
-            sourcesToSave = agent.dataSources.filter((source: any) =>
-              enabledSourceIds.has(source.id)
-            );
-
-            console.log('[EDIT] RSS enabled source IDs:', Array.from(enabledSourceIds));
-            console.log('[EDIT] Filtered sources to save:', sourcesToSave.map((s: any) => ({ id: s.id, feedId: s.feedId })));
-          }
-
-          if (sourcesToSave.length > 0) {
-            const sourceRelations = sourcesToSave.map((source: any, index: number) => ({
-              endpoint_id: agent.id,
-              data_source_id: source.feedId,
-              is_primary: index === 0, // First source is primary
-              join_config: {},
-              filter_config: {},
-              sort_order: index
-            }));
-
-            console.log('[EDIT] Inserting source relations:', sourceRelations);
-
-            const { error: relationsError } = await supabase
-              .from('api_endpoint_sources')
-              .insert(sourceRelations);
-
-            if (relationsError) {
-              console.error('Failed to update source relations:', relationsError);
-              throw relationsError;
-            }
-          } else {
-            console.log('[EDIT] No sources to save (all disabled or none selected)');
-          }
+          console.log('[DashboardSave] RSS enabled source IDs:', Array.from(enabledSourceIds));
         }
 
-        // Always show success toast
-        toast({
-          title: "Success",
-          description: "Agent updated successfully"
-        });
-      } else {
-        // Create new agent
-        const { data: newEndpoint, error } = await supabase
-          .from('api_endpoints')
-          .insert(endpointData)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Insert api_endpoint_sources relationships
-        if (newEndpoint && agent.dataSources && agent.dataSources.length > 0) {
-          // For RSS format with sourceMappings, only save enabled sources
-          let sourcesToSave = agent.dataSources;
-
-          if (agent.format === 'RSS' && agent.formatOptions?.sourceMappings) {
-            // Get enabled source IDs from mappings (these are the local agent source IDs)
-            const enabledSourceIds = new Set(
-              agent.formatOptions.sourceMappings
-                .filter((m: any) => m.enabled)
-                .map((m: any) => m.sourceId)
-            );
-
-            // Filter dataSources to only include enabled ones
-            sourcesToSave = agent.dataSources.filter((source: any) =>
-              enabledSourceIds.has(source.id)
-            );
-
-            console.log('RSS enabled source IDs:', Array.from(enabledSourceIds));
-            console.log('Filtered sources to save:', sourcesToSave.map((s: any) => ({ id: s.id, feedId: s.feedId })));
-          }
-
-          if (sourcesToSave.length > 0) {
-            const sourceRelations = sourcesToSave.map((source: any, index: number) => ({
-              endpoint_id: newEndpoint.id,
-              data_source_id: source.feedId,
-              is_primary: index === 0, // First source is primary
-              join_config: {},
-              filter_config: {},
-              sort_order: index
-            }));
-
-            console.log('Inserting source relations:', sourceRelations);
-
-            const { error: relationsError } = await supabase
-              .from('api_endpoint_sources')
-              .insert(sourceRelations);
-
-            if (relationsError) {
-              console.error('Failed to create source relations:', relationsError);
-              throw relationsError;
-            }
-          } else {
-            console.log('No sources to save (all disabled or none selected)');
-          }
-        }
-
-        // Always show success toast
-        toast({
-          title: "Success",
-          description: "Agent created successfully"
-        });
+        dataSourceIds = sourcesToSave.map((source: any) => source.feedId || source.id).filter(Boolean);
+        console.log('[DashboardSave] Data source IDs to save:', dataSourceIds);
       }
 
-      // Reload agents list
-      await loadAgents();
+      // Use edge function API to save agent
+      console.log('[DashboardSave] Calling edge function API...');
+      const result = await agentWizardApi.saveAgent({
+        id: editingAgent ? agent.id : undefined,
+        isEdit: !!editingAgent,
+        name: agent.name,
+        slug: agent.slug,
+        description: agent.description,
+        format: agent.format || 'JSON',
+        formatOptions: agent.formatOptions,
+        environment: agent.environment,
+        autoStart: agent.autoStart,
+        generateDocs: agent.generateDocs,
+        transforms: agent.transforms,
+        relationships: agent.relationships,
+        cache: agent.cache,
+        auth: agent.auth,
+        requiresAuth: agent.requiresAuth,
+        authConfig: agent.authConfig,
+        status: agent.status,
+        dataSourceIds
+      });
+
+      console.log('[DashboardSave] API call took:', Date.now() - saveStartTime, 'ms');
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      console.log('[DashboardSave] Agent saved successfully:', result.data?.id);
+
+      // Show success toast
+      toast({
+        title: "Success",
+        description: editingAgent ? "Agent updated successfully" : "Agent created successfully"
+      });
+
+      // Only close wizard if requested - do this BEFORE reloading to ensure clean state
+      console.log('[DashboardSave] Save successful, closeDialog:', closeDialog);
+      if (closeDialog) {
+        console.log('[DashboardSave] Closing wizard...');
+        handleWizardClose();
+      }
+
+      // Reload agents list (don't await - do in background so wizard closes immediately)
+      console.log('[DashboardSave] Triggering background reload...');
+      loadAgents().catch(err => {
+        console.error('[DashboardSave] Failed to reload agents list:', err);
+      });
 
       // Refresh agents count in App.tsx
       refreshAgentsData().catch(err => {
-        console.error('Failed to refresh agents count:', err);
+        console.error('[DashboardSave] Failed to refresh agents count:', err);
       });
 
-      // Only close wizard if requested
-      if (closeDialog) {
-        handleWizardClose();
-      }
+      console.log('[DashboardSave] Total save time:', Date.now() - saveStartTime, 'ms');
     } catch (error) {
-      console.error('Failed to save agent:', error);
+      console.error('[DashboardSave] Failed to save agent:', error);
+      console.error('[DashboardSave] Time before error:', Date.now() - saveStartTime, 'ms');
       toast({
         title: "Error",
         description: editingAgent ? "Failed to update agent" : "Failed to create agent",
@@ -653,12 +515,10 @@ export function AgentsDashboardWithSupabase({
     if (!selectedAgent) return;
 
     try {
-      const { error } = await supabase
-        .from('api_endpoints')
-        .delete()
-        .eq('id', selectedAgent.id);
+      // Use edge function API to delete agent
+      const result = await agentWizardApi.deleteAgent(selectedAgent.id);
 
-      if (error) throw error;
+      if (result.error) throw new Error(result.error);
 
       // Reload agents list
       await loadAgents();
@@ -690,15 +550,13 @@ export function AgentsDashboardWithSupabase({
     setDeleteDialogOpen(true);
   };
 
+  // Toggle agent status - uses edge function API to avoid Supabase client hangs
   const toggleAgentStatus = async (agent: Agent) => {
     try {
       const newStatus = agent.status !== 'ACTIVE';
-      const { error } = await supabase
-        .from('api_endpoints')
-        .update({ active: newStatus } as any)
-        .eq('id', agent.id);
+      const result = await agentWizardApi.toggleAgentStatus(agent.id, newStatus);
 
-      if (error) throw error;
+      if (result.error) throw new Error(result.error);
 
       // Update the agent in the local state without reloading the entire list
       setAgents(prevAgents =>
@@ -742,8 +600,7 @@ export function AgentsDashboardWithSupabase({
   };
 
   const getEndpointUrl = (agent: Agent) => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}${agent.url}`;
+    return `${novaBaseUrl}${agent.url}`;
   };
 
   const copyEndpointUrl = (agent: Agent) => {
@@ -945,6 +802,7 @@ export function AgentsDashboardWithSupabase({
 
       {/* Wizard Dialog */}
       <AgentWizard
+        key={editingAgent?.id || `new-${wizardKey}`}
         open={wizardOpen}
         onClose={handleWizardClose}
         onSave={handleWizardSave}

@@ -17,12 +17,13 @@ import {
   AgentFieldMapping,
   AgentTransform
 } from "../types/agents";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle, Trash2 } from "lucide-react";
 import { Switch } from "./ui/switch";
-import { supabase } from "../utils/supabase/client";
+import * as agentWizardApi from "../utils/agentWizardApi";
 
 const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
 const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
@@ -111,6 +112,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   // State for slug validation
   const [slugExists, setSlugExists] = useState(false);
   const [checkingSlug, setCheckingSlug] = useState(false);
+  const slugCheckIdRef = useRef<number>(0);
+
+  // State for final save operation
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Reset saving states on mount/hot-reload to prevent stuck UI
+  useEffect(() => {
+    setIsSaving(false);
+    setIsSavingDataSources(false);
+  }, []);
 
   // State for test connection results
   const [testResults, setTestResults] = useState<Record<number, any>>({});
@@ -280,21 +291,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     loadNovaFinanceOptions();
   }, [newDataSources]);
 
-  // Load Nova Sports options when needed
+  // Load Nova Sports options when needed - uses edge function API
   useEffect(() => {
     const hasNovaSports = newDataSources.some(ds => ds.category === 'Nova Sports');
     if (!hasNovaSports) return;
 
     const loadNovaSportsOptions = async () => {
       try {
-        // Load leagues from sports_leagues table
-        const { data: leaguesData, error: leaguesError } = await supabase
-          .from('sports_leagues')
-          .select('id, name, alternative_name')
-          .order('name');
-
-        if (!leaguesError && leaguesData) {
-          setNovaSportsLeagues(leaguesData.map((l: any) => ({
+        // Load leagues via edge function
+        const leaguesResult = await agentWizardApi.listLeagues();
+        if (!leaguesResult.error && leaguesResult.data) {
+          setNovaSportsLeagues(leaguesResult.data.map((l: any) => ({
             id: l.id,
             name: l.name,
             abbrev: l.alternative_name || l.name
@@ -302,6 +309,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         }
 
         // Load providers from data_providers_public view (category = sports)
+        // This still uses fetch since it's a public view with no auth issues
         const providersResponse = await fetch(
           `${supabaseUrl}/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
           {
@@ -320,15 +328,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           })));
         }
 
-        // Load seasons from sports_seasons table
-        const { data: seasonsData, error: seasonsError } = await supabase
-          .from('sports_seasons')
-          .select('id, name, year, league_id')
-          .eq('is_current', true)
-          .order('name');
-
-        if (!seasonsError && seasonsData) {
-          setNovaSportsSeasons(seasonsData);
+        // Load current seasons via edge function
+        const seasonsResult = await agentWizardApi.listCurrentSeasons();
+        if (!seasonsResult.error && seasonsResult.data) {
+          setNovaSportsSeasons(seasonsResult.data);
         }
       } catch (error) {
         console.error('Error loading Nova Sports options:', error);
@@ -338,8 +341,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     loadNovaSportsOptions();
   }, [newDataSources]);
 
-  // Check if slug already exists
-  const checkSlugExists = async (slug: string) => {
+  // Check if slug already exists - uses edge function API
+  const checkSlugExists = async (slug: string, checkId: number) => {
     if (!slug || slug.trim() === '') {
       setSlugExists(false);
       return;
@@ -352,32 +355,64 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
 
     setCheckingSlug(true);
-    try {
-      const { data, error } = await supabase
-        .from('api_endpoints')
-        .select('id')
-        .eq('slug', slug)
-        .limit(1);
+    console.log('[Slug Check] Starting check for:', slug, 'checkId:', checkId);
 
-      if (error) throw error;
-      setSlugExists(data && data.length > 0);
-    } catch (error) {
-      console.error('Error checking slug:', error);
+    try {
+      // Use edge function API instead of direct Supabase client
+      const result = await agentWizardApi.checkSlugExists(
+        slug,
+        editAgent?.id // Exclude current agent when editing
+      );
+
+      // Check if this check is still the current one (slug hasn't changed)
+      if (slugCheckIdRef.current !== checkId) {
+        console.log('[Slug Check] Stale check, ignoring result. Current:', slugCheckIdRef.current, 'This:', checkId);
+        return;
+      }
+
+      if (result.error) {
+        console.error('[Slug Check] API error:', result.error);
+        throw new Error(result.error);
+      }
+
+      console.log('[Slug Check] Result:', result.exists);
+      setSlugExists(result.exists);
+    } catch (error: any) {
+      console.error('[Slug Check] Error:', error?.message || error);
+      // On error, allow the user to proceed (assume slug is available)
       setSlugExists(false);
     } finally {
-      setCheckingSlug(false);
+      // Only update state if this check is still current
+      if (slugCheckIdRef.current === checkId) {
+        console.log('[Slug Check] Complete, setting checkingSlug to false');
+        setCheckingSlug(false);
+      }
     }
   };
 
-  // Debounced slug check
+  // Debounced slug check with proper cleanup
   useEffect(() => {
+    // If slug is empty, reset states immediately
+    if (!formData.slug || formData.slug.trim() === '') {
+      setSlugExists(false);
+      setCheckingSlug(false);
+      // Increment check ID to invalidate any in-flight requests
+      slugCheckIdRef.current++;
+      return;
+    }
+
     const timeoutId = setTimeout(() => {
       if (formData.slug) {
-        checkSlugExists(formData.slug);
+        // Increment check ID to invalidate any previous in-flight requests
+        slugCheckIdRef.current++;
+        const currentCheckId = slugCheckIdRef.current;
+        checkSlugExists(formData.slug, currentCheckId);
       }
     }, 500); // Wait 500ms after user stops typing
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [formData.slug, editAgent]);
 
   // Helper function to extract JSON fields
@@ -642,16 +677,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         setLoadingDataSources(true);
         console.log('Fetching data sources for categories:', categories);
         try {
-          const { data, error } = await supabase
-            .from('data_sources')
-            .select('id, name, type, category')
-            .in('category', categories)
-            .order('name');
+          // Use edge function API instead of direct Supabase client
+          const result = await agentWizardApi.listDataSources(categories);
 
-          console.log('Data sources query result:', { data, error, count: data?.length });
+          console.log('Data sources query result:', { data: result.data, error: result.error, count: result.data?.length });
 
-          if (error) throw error;
-          setAvailableDataSources(data || []);
+          if (result.error) throw new Error(result.error);
+          setAvailableDataSources(result.data || []);
         } catch (error) {
           console.error('Error fetching data sources:', error);
           setAvailableDataSources([]);
@@ -712,55 +744,59 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         const convertedSources = novaSources.map((ds: AgentDataSource) => {
           // Parse Nova Weather or Nova Election filters from URL if not already present
           let api_config = ds.api_config;
-          if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaWeatherFilters: {
-                type: params.get('type') || 'current',
-                channel: params.get('channel') || 'all',
-                dataProvider: params.get('dataProvider') || 'all',
-                state: params.get('state') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Election' && api_config?.url && !api_config.novaElectionFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaElectionFilters: {
-                year: params.get('year') || currentElectionYear.toString(),
-                raceType: params.get('raceType') || 'presidential',
-                level: params.get('level') || 'state',
-                state: params.get('state') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Finance' && api_config?.url && !api_config.novaFinanceFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaFinanceFilters: {
-                type: params.get('type') || 'all',
-                change: params.get('change') || 'all',
-                symbol: params.get('symbol') || 'all'
-              }
-            };
-          } else if (ds.category === 'Nova Sports' && api_config?.url && !api_config.novaSportsFilters) {
-            const url = new URL(api_config.url);
-            const params = new URLSearchParams(url.search);
-            api_config = {
-              ...api_config,
-              novaSportsFilters: {
-                view: params.get('view') || 'teams',
-                league: params.get('league') || 'all',
-                provider: params.get('provider') || 'all',
-                position: params.get('position') || 'all',
-                status: params.get('status') || 'all',
-                season: params.get('season') || 'all'
-              }
-            };
+          try {
+            if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaWeatherFilters: {
+                  type: params.get('type') || 'current',
+                  channel: params.get('channel') || 'all',
+                  dataProvider: params.get('dataProvider') || 'all',
+                  state: params.get('state') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Election' && api_config?.url && !api_config.novaElectionFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaElectionFilters: {
+                  year: params.get('year') || currentElectionYear.toString(),
+                  raceType: params.get('raceType') || 'presidential',
+                  level: params.get('level') || 'state',
+                  state: params.get('state') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Finance' && api_config?.url && !api_config.novaFinanceFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaFinanceFilters: {
+                  type: params.get('type') || 'all',
+                  change: params.get('change') || 'all',
+                  symbol: params.get('symbol') || 'all'
+                }
+              };
+            } else if (ds.category === 'Nova Sports' && api_config?.url && !api_config.novaSportsFilters) {
+              const url = new URL(api_config.url);
+              const params = new URLSearchParams(url.search);
+              api_config = {
+                ...api_config,
+                novaSportsFilters: {
+                  view: params.get('view') || 'teams',
+                  league: params.get('league') || 'all',
+                  provider: params.get('provider') || 'all',
+                  position: params.get('position') || 'all',
+                  status: params.get('status') || 'all',
+                  season: params.get('season') || 'all'
+                }
+              };
+            }
+          } catch (e) {
+            console.warn('Failed to parse URL for data source:', ds.name, e);
           }
 
           return {
@@ -835,29 +871,24 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   ];
   const currentStepIndex = steps.indexOf(currentStep);
 
+  // Save all new data sources using edge function API
   const saveAllNewDataSources = async (): Promise<boolean> => {
+    console.log('[SaveDataSources] Starting saveAllNewDataSources...');
+    const startTime = Date.now();
+
     // Process both new (without ID) and existing (with isExisting flag) sources
     const sourcesToSave = newDataSources.filter((ds: any) => ds.name && ds.type);
+    console.log('[SaveDataSources] Sources to save:', sourcesToSave.length);
 
     if (sourcesToSave.length === 0) {
+      console.log('[SaveDataSources] Nothing to save, returning true');
       return true; // Nothing to save
     }
 
     setIsSavingDataSources(true);
 
     try {
-      // Get user ID with dev mode support
-      let userId = DEV_USER_ID;
-
-      if (!isDevelopment || !SKIP_AUTH_IN_DEV) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('User not authenticated');
-        }
-        userId = user.id;
-      }
-
-      // Save all data sources (insert new, update existing)
+      // Save all data sources (insert new, update existing) via edge function API
       for (let i = 0; i < newDataSources.length; i++) {
         const source = newDataSources[i];
 
@@ -892,46 +923,31 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           return false;
         }
 
-        const dataSourceData: any = {
+        // Use edge function API to save data source
+        console.log('[SaveDataSources] Saving data source via API:', source.name);
+        const queryStart = Date.now();
+
+        const result = await agentWizardApi.saveDataSource({
+          id: source.isExisting ? source.id : undefined,
+          isExisting: source.isExisting,
           name: source.name,
           type: source.type,
-          category: source.category,
+          category: source.category || '',
           active: true,
           api_config: source.type === 'api' ? source.api_config : null,
           database_config: source.type === 'database' ? source.database_config : null,
           file_config: source.type === 'file' ? source.file_config : null,
-          rss_config: source.type === 'rss' ? source.rss_config : null,
-          user_id: userId
-        };
+          rss_config: source.type === 'rss' ? source.rss_config : null
+        });
 
-        let data, error;
+        console.log('[SaveDataSources] API call took:', Date.now() - queryStart, 'ms');
 
-        // Check if this is an existing source (has isExisting flag or already has an id)
-        if (source.isExisting && source.id) {
-          // UPDATE existing source
-          console.log('Updating existing data source:', source.id, dataSourceData);
-          const updateResult = await supabase
-            .from('data_sources')
-            .update(dataSourceData)
-            .eq('id', source.id)
-            .select()
-            .single();
-          data = updateResult.data;
-          error = updateResult.error;
-        } else {
-          // INSERT new source
-          const insertResult = await supabase
-            .from('data_sources')
-            .insert(dataSourceData)
-            .select()
-            .single();
-          data = insertResult.data;
-          error = insertResult.error;
+        if (result.error) {
+          throw new Error(`Failed to save ${source.name}: ${result.error}`);
         }
 
-        if (error) {
-          throw new Error(`Failed to save ${source.name}: ${error.message}`);
-        }
+        const data = result.data;
+        console.log('[SaveDataSources] Save result:', { data: !!data });
 
         // Update the data source with the saved ID
         setNewDataSources((prev: any) => prev.map((ds: any, idx: number) =>
@@ -968,12 +984,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         }
       }
 
-      console.log(`Successfully saved ${sourcesToSave.length} data source(s)`);
+      console.log(`[SaveDataSources] Successfully saved ${sourcesToSave.length} data source(s) in`, Date.now() - startTime, 'ms');
       setIsSavingDataSources(false);
       return true;
 
     } catch (error: any) {
-      console.error('Error saving data sources:', error);
+      console.error('[SaveDataSources] Error saving data sources:', error);
+      console.error('[SaveDataSources] Total time before error:', Date.now() - startTime, 'ms');
       alert(`Failed to save data sources: ${error.message}`);
       setIsSavingDataSources(false);
       return false;
@@ -986,137 +1003,149 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
       if (selectedDataTypes.includes('Nova Weather')) {
-        // Generate unique ID for Nova Weather
-        const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
+        // Check if Nova Weather source already exists
+        const existingNovaWeather = newDataSources.find(ds => ds.category === 'Nova Weather');
+        if (!existingNovaWeather) {
+          // Generate unique ID for Nova Weather
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Weather data source with default filters
-        const novaWeatherSource = {
-          name: `Nova Weather ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Weather',
-          api_config: {
-            url: `${currentDomain}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'locations',  // Use data_path for the actual field
-            dataPath: 'locations',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Weather filter settings
-            novaWeatherFilters: {
-              type: 'current',
-              channel: 'all',
-              dataProvider: 'all',
-              state: 'all'
+          // Create a Nova Weather data source with default filters
+          const novaWeatherSource = {
+            name: `Nova Weather ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Weather',
+            api_config: {
+              url: `${novaBaseUrl}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'locations',  // Use data_path for the actual field
+              dataPath: 'locations',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Weather filter settings
+              novaWeatherFilters: {
+                type: 'current',
+                channel: 'all',
+                dataProvider: 'all',
+                state: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaWeatherSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaWeatherSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Election')) {
-        // Generate unique ID for Nova Election
-        const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
+        // Check if Nova Election source already exists
+        const existingNovaElection = newDataSources.find(ds => ds.category === 'Nova Election');
+        if (!existingNovaElection) {
+          // Generate unique ID for Nova Election
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Election data source with default filters
-        const novaElectionSource = {
-          name: `Nova Election ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Election',
-          api_config: {
-            url: `${currentDomain}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'races',  // Use data_path for the actual field
-            dataPath: 'races',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Election filter settings
-            novaElectionFilters: {
-              year: currentElectionYear.toString(),
-              raceType: 'presidential',
-              level: 'state',
-              state: 'all'
+          // Create a Nova Election data source with default filters
+          const novaElectionSource = {
+            name: `Nova Election ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Election',
+            api_config: {
+              url: `${novaBaseUrl}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'races',  // Use data_path for the actual field
+              dataPath: 'races',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Election filter settings
+              novaElectionFilters: {
+                year: currentElectionYear.toString(),
+                raceType: 'presidential',
+                level: 'state',
+                state: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaElectionSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaElectionSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Finance')) {
-        // Generate unique ID for Nova Finance
-        const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
+        // Check if Nova Finance source already exists
+        const existingNovaFinance = newDataSources.find(ds => ds.category === 'Nova Finance');
+        if (!existingNovaFinance) {
+          // Generate unique ID for Nova Finance
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Finance data source with default filters
-        const novaFinanceSource = {
-          name: `Nova Finance ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Finance',
-          api_config: {
-            url: `${currentDomain}/nova/finance?type=all&change=all&symbol=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'securities',  // Use data_path for the actual field
-            dataPath: 'securities',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Finance filter settings
-            novaFinanceFilters: {
-              type: 'all',
-              change: 'all',
-              symbol: 'all'
+          // Create a Nova Finance data source with default filters
+          const novaFinanceSource = {
+            name: `Nova Finance ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Finance',
+            api_config: {
+              url: `${novaBaseUrl}/nova/finance?type=all&change=all&symbol=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'securities',  // Use data_path for the actual field
+              dataPath: 'securities',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Finance filter settings
+              novaFinanceFilters: {
+                type: 'all',
+                change: 'all',
+                symbol: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaFinanceSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaFinanceSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Sports')) {
-        // Generate unique ID for Nova Sports
-        const uniqueId = Date.now().toString();
-        const currentDomain = window.location.origin;
+        // Check if Nova Sports source already exists
+        const existingNovaSports = newDataSources.find(ds => ds.category === 'Nova Sports');
+        if (!existingNovaSports) {
+          // Generate unique ID for Nova Sports
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Sports data source with default filters
-        const novaSportsSource = {
-          name: `Nova Sports ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Sports',
-          api_config: {
-            url: `${currentDomain}/nova/sports?view=teams&league=all&provider=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'data',  // Use data_path for the actual field
-            dataPath: 'data',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Sports filter settings
-            novaSportsFilters: {
-              view: 'teams',
-              league: 'all',
-              provider: 'all',
-              position: 'all',
-              status: 'all',
-              season: 'all'
+          // Create a Nova Sports data source with default filters
+          const novaSportsSource = {
+            name: `Nova Sports ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Sports',
+            api_config: {
+              url: `${novaBaseUrl}/nova/sports?view=teams&league=all&provider=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'data',  // Use data_path for the actual field
+              dataPath: 'data',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Sports filter settings
+              novaSportsFilters: {
+                view: 'teams',
+                league: 'all',
+                provider: 'all',
+                position: 'all',
+                status: 'all',
+                season: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaSportsSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaSportsSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
@@ -1177,118 +1206,68 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       // Sync auth settings before saving
       const authData = securityStepRef.current?.syncAuthToFormData();
 
-      // Save new data sources first if needed
+      // Save new data sources first if needed - uses edge function API
       const savedDataSourceIds: string[] = [];
       const unsavedSources = newDataSources.filter(ds => !ds.id && ds.name && ds.type);
 
       if (unsavedSources.length > 0) {
         for (const newSource of unsavedSources) {
-          const { data, error } = await supabase
-            .from('data_sources')
-            .insert({
-              name: newSource.name,
-              type: newSource.type,
-              category: newSource.category || null,
-              api_config: newSource.api_config || null,
-              rss_config: newSource.rss_config || null,
-              file_config: newSource.file_config || null,
-              database_config: newSource.database_config || null
-            })
-            .select()
-            .single();
+          const result = await agentWizardApi.saveDataSource({
+            name: newSource.name,
+            type: newSource.type,
+            category: newSource.category || '',
+            api_config: newSource.api_config || null,
+            rss_config: newSource.rss_config || null,
+            file_config: newSource.file_config || null,
+            database_config: newSource.database_config || null
+          });
 
-          if (error) throw error;
-          if (data) {
-            savedDataSourceIds.push((data as any).id);
+          if (result.error) throw new Error(result.error);
+          if (result.data) {
+            savedDataSourceIds.push(result.data.id);
 
             // Update newDataSources with the saved ID so cleanup can work
             setNewDataSources((prev) => prev.map(ds =>
               ds.name === newSource.name && ds.type === newSource.type && !ds.id
-                ? { ...ds, id: (data as any).id }
+                ? { ...ds, id: result.data.id }
                 : ds
             ));
           }
         }
       }
 
-      // Get user ID
-      const userId = isDevelopment && SKIP_AUTH_IN_DEV ? DEV_USER_ID : (await supabase.auth.getUser()).data.user?.id;
-
       // Prepare data source IDs (existing + newly saved)
       const allDataSourceIds = [
         ...(testAgentData.dataSources?.map(ds => ds.id || ds.feedId) || []),
         ...savedDataSourceIds
-      ].filter(Boolean);
+      ].filter(Boolean) as string[];
 
-      // Insert the test agent into api_endpoints
-      // Structure schema_config to match expected format for RSS
-      const formatOptions = testAgentData.formatOptions || {};
-      const schema_config = {
-        environment: testAgentData.environment || 'production',
-        autoStart: testAgentData.autoStart !== undefined ? testAgentData.autoStart : true,
-        generateDocs: testAgentData.generateDocs !== undefined ? testAgentData.generateDocs : true,
-        schema: {
-          metadata: formatOptions
-        },
-        mapping: []
-      };
+      // Save agent via edge function API
+      const agentResult = await agentWizardApi.saveAgent({
+        name: testAgentData.name || '',
+        slug: testAgentData.slug || '',
+        description: testAgentData.description,
+        format: testAgentData.format || 'JSON',
+        formatOptions: testAgentData.formatOptions,
+        environment: testAgentData.environment,
+        autoStart: testAgentData.autoStart,
+        generateDocs: testAgentData.generateDocs,
+        transforms: testAgentData.transforms,
+        relationships: testAgentData.relationships,
+        cache: testAgentData.cache,
+        auth: authData?.auth || testAgentData.auth,
+        requiresAuth: authData?.requiresAuth ?? testAgentData.requiresAuth,
+        authConfig: authData?.authConfig || testAgentData.authConfig,
+        status: testAgentData.status,
+        dataSourceIds: allDataSourceIds
+      });
 
-      const { data: endpoint, error: endpointError } = await supabase
-        .from('api_endpoints')
-        .insert({
-          name: testAgentData.name,
-          slug: testAgentData.slug,
-          description: testAgentData.description || null,
-          output_format: testAgentData.format?.toLowerCase() as any,
-          schema_config,
-          transform_config: {
-            transformations: testAgentData.transforms || [],
-            pipeline: []
-          },
-          relationship_config: { relationships: testAgentData.relationships || [] },
-          cache_config: {
-            enabled: testAgentData.cache !== 'OFF',
-            ttl: parseCacheDuration(testAgentData.cache || '15M')
-          },
-          auth_config: {
-            required: authData?.requiresAuth ?? testAgentData.requiresAuth ?? false,
-            type: authData?.auth || testAgentData.auth || 'none',
-            config: authData?.authConfig || testAgentData.authConfig || {}
-          },
-          rate_limit_config: {
-            enabled: false,
-            requests_per_minute: 60
-          },
-          active: testAgentData.status === 'ACTIVE',
-          user_id: userId
-        })
-        .select()
-        .single();
-
-      if (endpointError) throw endpointError;
-      if (!endpoint) throw new Error('Failed to create test endpoint');
-
-      // Link data sources to the endpoint
-      if (allDataSourceIds.length > 0) {
-        const junctionRecords = allDataSourceIds.map((sourceId, index) => ({
-          endpoint_id: (endpoint as any).id,
-          data_source_id: sourceId,
-          is_primary: index === 0,
-          join_config: {},
-          filter_config: {},
-          sort_order: index
-        }));
-
-        const { error: junctionError } = await supabase
-          .from('api_endpoint_sources')
-          .insert(junctionRecords);
-
-        if (junctionError) throw junctionError;
-      }
+      if (agentResult.error) throw new Error(agentResult.error);
+      if (!agentResult.data) throw new Error('Failed to create test endpoint');
 
       return {
         success: true,
-        agentId: (endpoint as any).id
+        agentId: agentResult.data.id
       };
     } catch (error: any) {
       console.error('Failed to save test agent:', error);
@@ -1300,145 +1279,181 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleSave = async (closeDialog: boolean = true) => {
-    // Sync auth settings from SecurityStep before saving and get the auth data synchronously
-    const authData = securityStepRef.current?.syncAuthToFormData();
+    console.log('[HandleSave] Starting save, closeDialog:', closeDialog);
+    const saveStartTime = Date.now();
 
-    // First, save/update Nova Weather, Nova Election, Nova Finance, or Nova Sports data sources if needed
-    const hasNovaSources = newDataSources.some(ds =>
-      (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports') && ds.name && ds.type && (ds.isExisting || !ds.id)
-    );
-
-    if (hasNovaSources) {
-      console.log('Saving/updating Nova data sources before final save...');
-      const saveSuccess = await saveAllNewDataSources();
-      if (!saveSuccess) {
-        console.error('Failed to save Nova data sources');
-        return; // Don't proceed if data source save failed
-      }
+    // Prevent double-clicks
+    if (isSaving) {
+      console.log('[HandleSave] Save already in progress, ignoring');
+      return;
     }
 
-    // Now save any other new data sources (non-Nova Weather/Election/Finance/Sports)
-    const savedDataSourceIds: string[] = [];
-    const newlySavedSources: AgentDataSource[] = [];
+    setIsSaving(true);
+    console.log('[HandleSave] Set isSaving to true');
 
-    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election/Finance/Sports
-    const unsavedSources = newDataSources.filter(ds =>
-      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election' && ds.category !== 'Nova Finance' && ds.category !== 'Nova Sports'
-    );
-    if (unsavedSources.length > 0) {
-      console.log('Saving new data sources to database...');
+    try {
+      // Sync auth settings from SecurityStep before saving and get the auth data synchronously
+      console.log('[HandleSave] Syncing auth data from SecurityStep...');
+      const authData = securityStepRef.current?.syncAuthToFormData();
+      console.log('[HandleSave] Auth data synced:', authData ? 'has data' : 'no data');
 
-      for (const newSource of unsavedSources) {
-        try {
-          const { data, error } = await supabase
-            .from('data_sources')
-            .insert({
+      // First, save/update Nova Weather, Nova Election, Nova Finance, or Nova Sports data sources if needed
+      const hasNovaSources = newDataSources.some(ds =>
+        (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports') && ds.name && ds.type && (ds.isExisting || !ds.id)
+      );
+      console.log('[HandleSave] Has Nova sources to save:', hasNovaSources);
+
+      if (hasNovaSources) {
+        console.log('[HandleSave] Saving Nova data sources before final save...');
+        const novaStartTime = Date.now();
+        const saveSuccess = await saveAllNewDataSources();
+        console.log('[HandleSave] saveAllNewDataSources took:', Date.now() - novaStartTime, 'ms, success:', saveSuccess);
+        if (!saveSuccess) {
+          console.error('[HandleSave] Failed to save Nova data sources');
+          setIsSaving(false);
+          return; // Don't proceed if data source save failed
+        }
+      }
+
+      // Now save any other new data sources (non-Nova Weather/Election/Finance/Sports)
+      console.log('[HandleSave] Checking for unsaved non-Nova data sources...');
+      const savedDataSourceIds: string[] = [];
+      const newlySavedSources: AgentDataSource[] = [];
+
+      // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election/Finance/Sports
+      const unsavedSources = newDataSources.filter(ds =>
+        !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election' && ds.category !== 'Nova Finance' && ds.category !== 'Nova Sports'
+      );
+      console.log('[HandleSave] Found', unsavedSources.length, 'unsaved non-Nova data sources');
+
+      if (unsavedSources.length > 0) {
+        console.log('[HandleSave] Saving new data sources to database...');
+
+        for (const newSource of unsavedSources) {
+          try {
+            console.log('[HandleSave] Inserting data source:', newSource.name);
+            const insertStart = Date.now();
+            // Use edge function API instead of direct Supabase client
+            const result = await agentWizardApi.saveDataSource({
               name: newSource.name,
               type: newSource.type,
-              category: newSource.category || null,
+              category: newSource.category || '',
               api_config: newSource.api_config || null,
               rss_config: newSource.rss_config || null,
               file_config: newSource.file_config || null,
               database_config: newSource.database_config || null
-            })
-            .select()
-            .single();
+            });
+            console.log('[HandleSave] Insert took:', Date.now() - insertStart, 'ms');
 
-          if (error) {
-            console.error('Error saving data source:', error);
-            throw error;
+            if (result.error) {
+              console.error('[HandleSave] Error saving data source:', result.error);
+              throw new Error(result.error);
+            }
+
+            if (result.data) {
+              console.log('[HandleSave] Saved data source:', result.data.id);
+              savedDataSourceIds.push(result.data.id);
+
+              // Track newly saved source with full configuration for testing
+              const newAgentSource: AgentDataSource = {
+                id: result.data.id, // Use database UUID directly, no temporary ID
+                name: result.data.name,
+                feedId: result.data.id,
+                category: result.data.category as AgentDataType,
+                // Include configuration fields so test function can access them
+                type: result.data.type,
+                api_config: result.data.api_config,
+                rss_config: result.data.rss_config,
+                database_config: result.data.database_config,
+                file_config: result.data.file_config
+              };
+
+              newlySavedSources.push(newAgentSource);
+
+              setFormData(prev => ({
+                ...prev,
+                dataSources: [...(prev.dataSources || []), newAgentSource]
+              }));
+
+              // Update newDataSources with the saved ID so cleanup can work
+              setNewDataSources((prev) => prev.map(ds =>
+                ds.name === newSource.name && ds.type === newSource.type && !ds.id
+                  ? { ...ds, id: result.data.id }
+                  : ds
+              ));
+            }
+          } catch (error) {
+            console.error('[HandleSave] Failed to save new data source:', error);
+            // Continue with other sources even if one fails
           }
-
-          if (data) {
-            console.log('Saved data source:', data);
-            savedDataSourceIds.push((data as any).id);
-
-            // Track newly saved source with full configuration for testing
-            const newAgentSource: AgentDataSource = {
-              id: (data as any).id, // Use database UUID directly, no temporary ID
-              name: (data as any).name,
-              feedId: (data as any).id,
-              category: (data as any).category as AgentDataType,
-              // Include configuration fields so test function can access them
-              type: (data as any).type,
-              api_config: (data as any).api_config,
-              rss_config: (data as any).rss_config,
-              database_config: (data as any).database_config,
-              file_config: (data as any).file_config
-            };
-
-            newlySavedSources.push(newAgentSource);
-
-            setFormData(prev => ({
-              ...prev,
-              dataSources: [...(prev.dataSources || []), newAgentSource]
-            }));
-
-            // Update newDataSources with the saved ID so cleanup can work
-            setNewDataSources((prev) => prev.map(ds =>
-              ds.name === newSource.name && ds.type === newSource.type && !ds.id
-                ? { ...ds, id: (data as any).id }
-                : ds
-            ));
-          }
-        } catch (error) {
-          console.error('Failed to save new data source:', error);
-          // Continue with other sources even if one fails
         }
+
+        console.log(`[HandleSave] Saved ${savedDataSourceIds.length} new data sources`);
       }
 
-      console.log(`Saved ${savedDataSourceIds.length} new data sources`);
-    }
+      // Combine existing and newly saved sources
+      console.log('[HandleSave] Combining data sources...');
+      const allDataSources = [...(formData.dataSources || []), ...newlySavedSources];
+      console.log('[HandleSave] Total data sources:', allDataSources.length);
 
-    // Combine existing and newly saved sources
-    const allDataSources = [...(formData.dataSources || []), ...newlySavedSources];
+      // No need to update sourceMappings - they already use database UUIDs directly
+      console.log('[HandleSave] Building agent object...');
+      const newAgent: Agent = {
+        id: editAgent?.id || `agent-${Date.now()}`,
+        name: formData.name || 'Unnamed Agent',
+        description: formData.description,
+        icon: formData.icon,
+        slug: formData.slug,
+        environment: formData.environment,
+        autoStart: formData.autoStart,
+        generateDocs: formData.generateDocs,
+        dataType: formData.dataType,
+        dataSources: allDataSources,
+        relationships: formData.relationships || [],
+        format: formData.format || 'JSON',
+        formatOptions: formData.formatOptions || {},
+        itemPath: formData.itemPath,
+        fieldMappings: formData.fieldMappings || [],
+        fixedFields: formData.fixedFields || {},
+        transforms: formData.transforms || [],
+        auth: authData?.auth || formData.auth || 'none',
+        apiKey: formData.apiKey,
+        requiresAuth: authData?.requiresAuth ?? formData.requiresAuth,
+        authConfig: authData?.authConfig || formData.authConfig, // Use synchronously returned auth data
+        status: formData.status || 'ACTIVE',
+        cache: formData.cache || '15M',
+        url: `${novaBaseUrl}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
+        created: editAgent?.created || new Date().toISOString(),
+        lastRun: editAgent?.lastRun,
+        runCount: editAgent?.runCount || 0
+      };
 
-    // No need to update sourceMappings - they already use database UUIDs directly
-    const newAgent: Agent = {
-      id: editAgent?.id || `agent-${Date.now()}`,
-      name: formData.name || 'Unnamed Agent',
-      description: formData.description,
-      icon: formData.icon,
-      slug: formData.slug,
-      environment: formData.environment,
-      autoStart: formData.autoStart,
-      generateDocs: formData.generateDocs,
-      dataType: formData.dataType,
-      dataSources: allDataSources,
-      relationships: formData.relationships || [],
-      format: formData.format || 'JSON',
-      formatOptions: formData.formatOptions || {},
-      itemPath: formData.itemPath,
-      fieldMappings: formData.fieldMappings || [],
-      fixedFields: formData.fixedFields || {},
-      transforms: formData.transforms || [],
-      auth: authData?.auth || formData.auth || 'none',
-      apiKey: formData.apiKey,
-      requiresAuth: authData?.requiresAuth ?? formData.requiresAuth,
-      authConfig: authData?.authConfig || formData.authConfig, // Use synchronously returned auth data
-      status: formData.status || 'ACTIVE',
-      cache: formData.cache || '15M',
-      url: `${window.location.origin}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
-      created: editAgent?.created || new Date().toISOString(),
-      lastRun: editAgent?.lastRun,
-      runCount: editAgent?.runCount || 0
-    };
-
-    try {
       // Pass closeDialog parameter to parent and await the result
+      console.log('[HandleSave] Calling onSave with agent:', newAgent.name);
+      const onSaveStart = Date.now();
       await onSave(newAgent, closeDialog);
+      console.log('[HandleSave] onSave completed in:', Date.now() - onSaveStart, 'ms');
 
       // Only close dialog locally if requested AND save succeeded
       if (closeDialog) {
+        console.log('[HandleSave] Closing dialog after successful save');
         handleClose(true); // Pass true to indicate successful save
       }
+      console.log('[HandleSave] Total save time:', Date.now() - saveStartTime, 'ms');
     } catch (error) {
       // Don't close dialog on error - user can see the error toast and fix it
-      console.error('Save failed, keeping dialog open:', error);
+      console.error('[HandleSave] Save failed, keeping dialog open:', error);
+      console.error('[HandleSave] Time before error:', Date.now() - saveStartTime, 'ms');
+    } finally {
+      console.log('[HandleSave] Setting isSaving to false');
+      setIsSaving(false);
     }
   };
 
   const handleClose = async (agentSavedSuccessfully: boolean = false) => {
+    console.log('[HandleClose] Starting, agentSavedSuccessfully:', agentSavedSuccessfully);
+    const closeStartTime = Date.now();
+
     // Clean up any Nova Weather, Nova Election, Nova Finance, or Nova Sports data sources that were saved but not associated with an agent
     // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
     // AND only in create mode, not edit mode (in edit mode, sources already belong to an agent)
@@ -1446,29 +1461,33 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       const novaSources = newDataSources.filter(
         ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports') && ds.id && !ds.isExisting
       );
+      console.log('[HandleClose] Nova sources to clean up:', novaSources.length);
 
       if (novaSources.length > 0) {
-        console.log('Cleaning up unused Nova data sources...');
+        console.log('[HandleClose] Cleaning up unused Nova data sources...');
         for (const source of novaSources) {
           try {
-            const { error } = await supabase
-              .from('data_sources')
-              .delete()
-              .eq('id', source.id);
+            console.log('[HandleClose] Deleting source:', source.id);
+            const deleteStart = Date.now();
+            // Use edge function API instead of direct Supabase client
+            const result = await agentWizardApi.deleteDataSource(source.id!);
+            console.log('[HandleClose] Delete took:', Date.now() - deleteStart, 'ms');
 
-            if (error) {
-              console.error('Error deleting unused Nova source:', error);
+            if (result.error) {
+              console.error('[HandleClose] Error deleting unused Nova source:', result.error);
             } else {
-              console.log('Deleted unused Nova source:', source.id);
+              console.log('[HandleClose] Deleted unused Nova source:', source.id);
             }
           } catch (error) {
-            console.error('Failed to delete unused Nova source:', error);
+            console.error('[HandleClose] Failed to delete unused Nova source:', error);
           }
         }
       }
     }
 
+    console.log('[HandleClose] Resetting state...');
     setCurrentStep('basic');
+    setVisitedSteps(new Set<WizardStep>(['basic'])); // Reset visited steps
     setFormData({
       name: '',
       description: '',
@@ -1494,6 +1513,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     setTestResults({}); // Clear test connection results
     setTestLoading({}); // Clear test loading states
     setTestParams({}); // Clear test parameters
+    // Reset slug validation states
+    setSlugExists(false);
+    setCheckingSlug(false);
+    // Invalidate any pending slug checks
+    slugCheckIdRef.current++;
+    // Reset saving states
+    setIsSaving(false);
+    setIsSavingDataSources(false);
+    console.log('[HandleClose] Total close time:', Date.now() - closeStartTime, 'ms');
+    console.log('[HandleClose] Calling onClose()');
     onClose();
   };
 
@@ -1546,6 +1575,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
+  const stepLabels: Record<WizardStep, string> = {
+    basic: 'Info',
+    dataType: 'Type',
+    dataSources: 'Sources',
+    configureNewSources: 'Configure',
+    relationships: 'Relations',
+    outputFormat: 'Format',
+    transformations: 'Transform',
+    security: 'Security',
+    test: 'Test',
+    review: 'Review'
+  };
+
   const renderStepIndicator = () => {
     return (
       <div className="space-y-2">
@@ -1557,35 +1599,44 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             const isClickable = editAgent || visitedSteps.has(step);
             return (
               <div key={step} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => isClickable && setCurrentStep(step)}
-                  disabled={!isClickable}
-                  title={
-                    isClickable
-                      ? `Go to step ${index + 1}`
-                      : `Complete previous steps first`
-                  }
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
-                    isClickable ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-not-allowed opacity-50'
-                  } ${
-                    index < currentStepIndex
-                      ? 'bg-blue-600 text-white'
-                      : index === currentStepIndex
-                        ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => isClickable && setCurrentStep(step)}
+                    disabled={!isClickable}
+                    title={
+                      isClickable
+                        ? `Go to step ${index + 1}`
+                        : `Complete previous steps first`
+                    }
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
+                      isClickable ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-not-allowed opacity-50'
+                    } ${
+                      index < currentStepIndex
+                        ? 'bg-blue-600 text-white'
+                        : index === currentStepIndex
+                          ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}>
+                    {index < currentStepIndex ? (
+                      <>
+                        <Check className="w-4 h-4 group-hover:hidden" />
+                        <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
+                      </>
+                    ) : (
+                      index + 1
+                    )}
+                  </button>
+                  <span className={`text-[10px] mt-1 ${
+                    index === currentStepIndex
+                      ? 'text-blue-600 font-medium'
+                      : 'text-muted-foreground'
                   }`}>
-                  {index < currentStepIndex ? (
-                    <>
-                      <Check className="w-4 h-4 group-hover:hidden" />
-                      <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
-                    </>
-                  ) : (
-                    index + 1
-                  )}
-                </button>
+                    {stepLabels[step]}
+                  </span>
+                </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-8 h-0.5 ${
+                  <div className={`w-8 h-0.5 mb-5 ${
                     index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
                   }`} />
                 )}
@@ -1679,7 +1730,20 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const renderDataType = () => {
     const selectedCategories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
+    // Check which Nova sources already exist in newDataSources
+    const existingNovaCategories = newDataSources
+      .filter(ds => ds.category?.startsWith('Nova '))
+      .map(ds => ds.category);
+
+    const isNovaCategory = (category: AgentDataType) =>
+      category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance' || category === 'Nova Sports';
+
     const toggleCategory = (category: AgentDataType) => {
+      // Don't allow selecting a Nova category if it already has a data source
+      if (isNovaCategory(category) && existingNovaCategories.includes(category) && !selectedCategories.includes(category)) {
+        return; // Already exists, don't allow adding again
+      }
+
       const isSelected = selectedCategories.includes(category);
       let newCategories: AgentDataType[];
 
@@ -1687,13 +1751,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Remove category
         newCategories = selectedCategories.filter(c => c !== category);
       } else {
-        // Special handling for Nova Weather, Nova Election, and Nova Finance - they should be exclusive
-        if (category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance') {
-          // Clear all other selections when Nova source is selected
-          newCategories = [category];
-        } else if (selectedCategories.includes('Nova Weather') || selectedCategories.includes('Nova Election') || selectedCategories.includes('Nova Finance')) {
-          // If a Nova source is currently selected, replace it with the new selection
-          newCategories = [category];
+        // Special handling for Nova sources - each Nova type is exclusive (only one of each)
+        if (isNovaCategory(category)) {
+          // Add this Nova category, keeping other non-duplicate selections
+          newCategories = [...selectedCategories.filter(c => c !== category), category];
         } else {
           // Normal addition for other categories
           newCategories = [...selectedCategories, category];
@@ -1712,35 +1773,50 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           {dataTypeCategories.map((category) => {
             const IconComponent = dataTypeIcons[category];
             const isSelected = selectedCategories.includes(category);
+            // Check if this Nova category already has a data source (and is not currently selected)
+            const isNovaAlreadyAdded = isNovaCategory(category) &&
+              existingNovaCategories.includes(category) &&
+              !isSelected;
+
             return (
               <Card
                 key={category}
-                className={`cursor-pointer transition-all ${
-                  isSelected
-                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950'
-                    : 'hover:border-gray-400 dark:hover:border-gray-600'
+                className={`transition-all ${
+                  isNovaAlreadyAdded
+                    ? 'opacity-50 cursor-not-allowed border-green-500 bg-green-50 dark:bg-green-950'
+                    : isSelected
+                      ? 'cursor-pointer border-blue-600 bg-blue-50 dark:bg-blue-950'
+                      : 'cursor-pointer hover:border-gray-400 dark:hover:border-gray-600'
                 }`}
                 onClick={() => toggleCategory(category)}
               >
                 <CardContent className="p-6 flex items-center gap-3">
                   <div className={`p-3 rounded-lg ${
-                    isSelected
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800'
+                    isNovaAlreadyAdded
+                      ? 'bg-green-600 text-white'
+                      : isSelected
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800'
                   }`}>
                     <IconComponent className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{category}</h3>
-                      {(category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance' || category === 'Nova Sports') && (
+                      {isNovaCategory(category) && (
                         <Badge className="bg-orange-500 text-white hover:bg-orange-600">
                           Nova
+                        </Badge>
+                      )}
+                      {isNovaAlreadyAdded && (
+                        <Badge variant="outline" className="text-green-600 border-green-600">
+                          Added
                         </Badge>
                       )}
                     </div>
                   </div>
                   {isSelected && <Check className="w-5 h-5 text-blue-600" />}
+                  {isNovaAlreadyAdded && <Check className="w-5 h-5 text-green-600" />}
                 </CardContent>
               </Card>
             );
@@ -2048,11 +2124,39 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           return (
             <Card key={index} className="p-4">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b">
-                  <Database className="w-5 h-5" />
-                  <h3 className="font-semibold">{source.name}</h3>
-                  <Badge variant="outline">{source.type}</Badge>
-                  {source.category && <Badge variant="secondary">{source.category}</Badge>}
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-5 h-5" />
+                    <h3 className="font-semibold">{source.name}</h3>
+                    <Badge variant="outline">{source.type}</Badge>
+                    {source.category && <Badge variant="secondary">{source.category}</Badge>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      const updated = newDataSources.filter((_, i) => i !== actualIndex);
+                      setNewDataSources(updated);
+                      // Also remove from formData.dataSources and update dataType if this was a Nova source
+                      const currentDataTypes = Array.isArray(formData.dataType) ? formData.dataType : [];
+                      const currentDataSources = formData.dataSources || [];
+                      setFormData(prev => ({
+                        ...prev,
+                        // Remove source from dataSources by matching id or feedId
+                        dataSources: currentDataSources.filter(ds =>
+                          ds.id !== source.id && ds.feedId !== source.id && ds.feedId !== source.feedId
+                        ),
+                        // Remove the data type selection if this was a Nova source
+                        dataType: source.category?.startsWith('Nova ')
+                          ? currentDataTypes.filter(dt => dt !== source.category)
+                          : currentDataTypes
+                      }));
+                    }}
+                    title="Delete data source"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 {/* API Configuration */}
@@ -3679,21 +3783,18 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       let responseData: any = null;
 
       // First, fetch the full data source from the database if we only have a reference
+      // Uses edge function API instead of direct Supabase client
       let fullSource = source;
       const sourceDbId = source.feedId || source.id;
       if (sourceDbId && !source.config && !source.api_config && !source.rss_config) {
-        const { data: dbSource, error } = await supabase
-          .from('data_sources')
-          .select('*')
-          .eq('id', sourceDbId)
-          .single();
+        const result = await agentWizardApi.getDataSource(sourceDbId);
 
-        if (error) {
-          throw new Error(`Failed to fetch data source: ${error.message}`);
+        if (result.error) {
+          throw new Error(`Failed to fetch data source: ${result.error}`);
         }
 
-        if (dbSource) {
-          const ds = dbSource as any;
+        if (result.data) {
+          const ds = result.data;
           fullSource = {
             ...source,
             type: ds.type,
@@ -4129,7 +4230,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             <div>
               <p className="text-sm text-muted-foreground mb-2">Generated Endpoint</p>
               <code className="text-xs bg-muted p-2 rounded block break-all">
-                {window.location.origin}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
+                {novaBaseUrl}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
               </code>
             </div>
           </CardContent>
@@ -4219,9 +4320,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               </DialogDescription>
             </div>
             {editAgent && (
-              <Button onClick={() => handleSave(false)} size="sm" className="ml-4 mr-4">
+              <Button onClick={() => handleSave(false)} size="sm" className="ml-4 mr-4" disabled={isSaving}>
                 <Check className="w-4 h-4 mr-2" />
-                Save
+                {isSaving ? 'Saving...' : 'Save'}
               </Button>
             )}
           </div>
@@ -4280,9 +4381,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             ) : (
-              <Button onClick={handleSave} disabled={!isStepValid()}>
+              <Button onClick={() => handleSave()} disabled={!isStepValid() || isSaving}>
                 <Check className="w-4 h-4 mr-2" />
-                {editAgent ? 'Save Changes' : 'Create Agent'}
+                {isSaving ? 'Saving...' : (editAgent ? 'Save Changes' : 'Create Agent')}
               </Button>
             )}
           </div>

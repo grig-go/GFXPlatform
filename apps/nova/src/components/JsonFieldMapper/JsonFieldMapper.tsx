@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -105,6 +105,20 @@ export const JsonFieldMapper: React.FC<JsonFieldMapperProps> = ({
       });
     }
   }, []);
+
+  // Track whether this is the initial mount to avoid calling onChange with initial value
+  const isFirstRender = useRef(true);
+
+  // Sync config changes back to parent immediately
+  // This ensures changes are persisted when navigating between steps
+  useEffect(() => {
+    // Skip calling onChange on first render to avoid infinite loops
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    onChange(config);
+  }, [config]);
 
   const updateSourceSelection = (selection: any) => {
     const newConfig = {

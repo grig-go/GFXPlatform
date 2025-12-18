@@ -111,7 +111,7 @@ export default defineConfig(({ mode }) => {
                 };
 
                 // Construct the full URL (use edgeFunctionsUrl for proxy)
-                const targetUrl = `${edgeFunctionsUrl}/functions/v1/weather_dashboard${queryString ? '?' + queryString : ''}`;
+                const targetUrl = `${edgeFunctionsUrl}/functions/v1/nova-weather${queryString ? '?' + queryString : ''}`;
                 console.log('Target URL:', targetUrl);
 
                 // Make request to Edge Function
@@ -472,6 +472,7 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    envDir: '../../', // Load .env from root
     build: {
       target: 'esnext',
       outDir: 'build',
