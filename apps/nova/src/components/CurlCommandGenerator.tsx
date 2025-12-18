@@ -6,6 +6,8 @@ import { Code, Copy, Download, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { useToast } from './ui/use-toast';
 
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
+
 interface CurlCommandGeneratorProps {
   endpoint: {
     slug: string;
@@ -16,7 +18,7 @@ interface CurlCommandGeneratorProps {
 
 export const CurlCommandGenerator: React.FC<CurlCommandGeneratorProps> = ({
   endpoint,
-  baseUrl = window.location.origin
+  baseUrl = novaBaseUrl
 }) => {
   const [activeTab, setActiveTab] = useState<string>('curl');
   const { toast } = useToast();

@@ -130,6 +130,13 @@ $LOG_DIR/*.log {
 }
 EOF
 
+# Start Supabase functions in background
+echo -e "${YELLOW}Starting Supabase functions...${NC}"
+cd "$SUPABASE_DIR"
+nohup supabase functions serve > "$LOG_DIR/functions.log" 2>&1 &
+echo $! > "$LOG_DIR/functions.pid"
+echo -e "${GREEN}✓ Supabase functions started (PID: $(cat $LOG_DIR/functions.pid))${NC}"
+
 # Build and start apps
 cd "$PROJECT_ROOT"
 

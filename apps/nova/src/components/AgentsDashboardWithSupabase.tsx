@@ -46,6 +46,8 @@ import { useToast } from "./ui/use-toast";
 import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from "../utils/constants";
 import { refreshAgentsData } from "../data/agentsData";
 
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
+
 interface AgentsDashboardWithSupabaseProps {
   feeds?: Feed[];
 }
@@ -280,7 +282,7 @@ export function AgentsDashboardWithSupabase({
   };
 
   // Load agents from database
-  const loadAgents = async () => {
+  const loadAgents = async (isMounted: { current: boolean } = { current: true }) => {
     const startTime = performance.now();
     console.log('[loadAgents] 🚀 Starting agents load...');
 
@@ -302,6 +304,12 @@ export function AgentsDashboardWithSupabase({
       const queryDuration = performance.now() - queryStart;
       console.log(`[loadAgents] 📥 Supabase query completed in ${queryDuration.toFixed(0)}ms`);
 
+      // Check if component is still mounted before updating state
+      if (!isMounted.current) {
+        console.log('[loadAgents] ⚠️ Component unmounted, skipping state update');
+        return;
+      }
+
       if (error) {
         console.error(`[loadAgents] ❌ Query failed after ${queryDuration.toFixed(0)}ms:`, error);
         toast({
@@ -320,6 +328,7 @@ export function AgentsDashboardWithSupabase({
       const convertDuration = performance.now() - convertStart;
       console.log(`[loadAgents] 🔄 Converted agents in ${convertDuration.toFixed(0)}ms`);
 
+      if (!isMounted.current) return;
       setAgents(convertedAgents);
 
       // Clean up unused Nova Weather sources after loading agents
@@ -335,19 +344,27 @@ export function AgentsDashboardWithSupabase({
     } catch (error) {
       const errorDuration = performance.now() - startTime;
       console.error(`[loadAgents] ❌ Failed after ${errorDuration.toFixed(0)}ms:`, error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred",
-        variant: "destructive"
-      });
+      if (isMounted.current) {
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive"
+        });
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
   // Load agents on component mount
   useEffect(() => {
-    loadAgents();
+    const isMounted = { current: true };
+    loadAgents(isMounted);
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   // Refresh agents
@@ -765,8 +782,7 @@ export function AgentsDashboardWithSupabase({
   };
 
   const getEndpointUrl = (agent: Agent) => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}${agent.url}`;
+    return `${novaBaseUrl}${agent.url}`;
   };
 
   const copyEndpointUrl = (agent: Agent) => {
@@ -968,6 +984,7 @@ export function AgentsDashboardWithSupabase({
 
       {/* Wizard Dialog */}
       <AgentWizard
+        key={editingAgent?.id || 'new'}
         open={wizardOpen}
         onClose={handleWizardClose}
         onSave={handleWizardSave}

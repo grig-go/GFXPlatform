@@ -15,6 +15,8 @@ import type { Agent } from '../types/agents';
 import { JSONTree } from 'react-json-tree';
 import { XMLParser } from 'fast-xml-parser';
 
+const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
+
 interface TestStepProps {
   formData: Partial<Agent>;
   onSaveTest?: (testAgentData: Partial<Agent>) => Promise<{ success: boolean; agentId?: string; error?: string }>; // Function to save a temporary test agent
@@ -75,9 +77,8 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
   }, []);
 
   const getEndpointUrl = () => {
-    const baseUrl = window.location.origin;
     const slug = formData.slug || 'endpoint';
-    return `${baseUrl}/api/${slug}`;
+    return `${novaBaseUrl}/api/${slug}`;
   };
 
   const addQueryParam = () => {
@@ -217,8 +218,7 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Build the test endpoint URL
-      const baseUrl = window.location.origin;
-      let testUrl = `${baseUrl}/api/${tempSlug}`;
+      let testUrl = `${novaBaseUrl}/api/${tempSlug}`;
 
       // Add query parameters
       const params = queryParams.filter(p => p.key && p.value);

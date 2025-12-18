@@ -562,6 +562,11 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       console.log(`[UPDATE INDEX] Mapping: ${mappingId}, Field: ${fieldName}, New Index: ${newIndex}`);
     }
 
+    // Save scroll position before state change
+    if (outputFieldsContainerRef.current) {
+      savedScrollPosition.current = outputFieldsContainerRef.current.scrollTop;
+    }
+
     const updatedMappings = mappingsWithIds.map(m => {
       if (m.id === mappingId) {
         const mapping = m as MappingWithConfig;
@@ -604,11 +609,23 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     });
 
     onChange(updatedMappings);
+
+    // Restore scroll position after state change
+    requestAnimationFrame(() => {
+      if (outputFieldsContainerRef.current) {
+        outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
+      }
+    });
   };
 
   const toggleMappingExpanded = (mappingId: string) => {
     if (debugMode) {
       console.log(`[TOGGLE] Before - Mapping ID: ${mappingId}, Currently expanded:`, expandedConfigs.has(mappingId));
+    }
+
+    // Save scroll position before state change
+    if (outputFieldsContainerRef.current) {
+      savedScrollPosition.current = outputFieldsContainerRef.current.scrollTop;
     }
 
     setExpandedConfigs(prev => {
@@ -625,6 +642,13 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       }
 
       return newSet;
+    });
+
+    // Restore scroll position after state change
+    requestAnimationFrame(() => {
+      if (outputFieldsContainerRef.current) {
+        outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
+      }
     });
   };
 

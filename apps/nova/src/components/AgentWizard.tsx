@@ -17,7 +17,7 @@ import {
   AgentFieldMapping,
   AgentTransform
 } from "../types/agents";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle, Trash2 } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
 
@@ -991,133 +991,149 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
       if (selectedDataTypes.includes('Nova Weather')) {
-        // Generate unique ID for Nova Weather
-        const uniqueId = Date.now().toString();
+        // Check if Nova Weather source already exists
+        const existingNovaWeather = newDataSources.find(ds => ds.category === 'Nova Weather');
+        if (!existingNovaWeather) {
+          // Generate unique ID for Nova Weather
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Weather data source with default filters
-        const novaWeatherSource = {
-          name: `Nova Weather ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Weather',
-          api_config: {
-            url: `${novaBaseUrl}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'locations',  // Use data_path for the actual field
-            dataPath: 'locations',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Weather filter settings
-            novaWeatherFilters: {
-              type: 'current',
-              channel: 'all',
-              dataProvider: 'all',
-              state: 'all'
+          // Create a Nova Weather data source with default filters
+          const novaWeatherSource = {
+            name: `Nova Weather ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Weather',
+            api_config: {
+              url: `${novaBaseUrl}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'locations',  // Use data_path for the actual field
+              dataPath: 'locations',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Weather filter settings
+              novaWeatherFilters: {
+                type: 'current',
+                channel: 'all',
+                dataProvider: 'all',
+                state: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaWeatherSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaWeatherSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Election')) {
-        // Generate unique ID for Nova Election
-        const uniqueId = Date.now().toString();
+        // Check if Nova Election source already exists
+        const existingNovaElection = newDataSources.find(ds => ds.category === 'Nova Election');
+        if (!existingNovaElection) {
+          // Generate unique ID for Nova Election
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Election data source with default filters
-        const novaElectionSource = {
-          name: `Nova Election ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Election',
-          api_config: {
-            url: `${novaBaseUrl}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'races',  // Use data_path for the actual field
-            dataPath: 'races',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Election filter settings
-            novaElectionFilters: {
-              year: currentElectionYear.toString(),
-              raceType: 'presidential',
-              level: 'state',
-              state: 'all'
+          // Create a Nova Election data source with default filters
+          const novaElectionSource = {
+            name: `Nova Election ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Election',
+            api_config: {
+              url: `${novaBaseUrl}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'races',  // Use data_path for the actual field
+              dataPath: 'races',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Election filter settings
+              novaElectionFilters: {
+                year: currentElectionYear.toString(),
+                raceType: 'presidential',
+                level: 'state',
+                state: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaElectionSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaElectionSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Finance')) {
-        // Generate unique ID for Nova Finance
-        const uniqueId = Date.now().toString();
+        // Check if Nova Finance source already exists
+        const existingNovaFinance = newDataSources.find(ds => ds.category === 'Nova Finance');
+        if (!existingNovaFinance) {
+          // Generate unique ID for Nova Finance
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Finance data source with default filters
-        const novaFinanceSource = {
-          name: `Nova Finance ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Finance',
-          api_config: {
-            url: `${novaBaseUrl}/nova/finance?type=all&change=all&symbol=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'securities',  // Use data_path for the actual field
-            dataPath: 'securities',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Finance filter settings
-            novaFinanceFilters: {
-              type: 'all',
-              change: 'all',
-              symbol: 'all'
+          // Create a Nova Finance data source with default filters
+          const novaFinanceSource = {
+            name: `Nova Finance ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Finance',
+            api_config: {
+              url: `${novaBaseUrl}/nova/finance?type=all&change=all&symbol=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'securities',  // Use data_path for the actual field
+              dataPath: 'securities',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Finance filter settings
+              novaFinanceFilters: {
+                type: 'all',
+                change: 'all',
+                symbol: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaFinanceSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaFinanceSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
 
       if (selectedDataTypes.includes('Nova Sports')) {
-        // Generate unique ID for Nova Sports
-        const uniqueId = Date.now().toString();
+        // Check if Nova Sports source already exists
+        const existingNovaSports = newDataSources.find(ds => ds.category === 'Nova Sports');
+        if (!existingNovaSports) {
+          // Generate unique ID for Nova Sports
+          const uniqueId = Date.now().toString();
 
-        // Create a Nova Sports data source with default filters
-        const novaSportsSource = {
-          name: `Nova Sports ${uniqueId}`,
-          type: 'api',
-          category: 'Nova Sports',
-          api_config: {
-            url: `${novaBaseUrl}/nova/sports?view=teams&league=all&provider=all`,
-            method: 'GET',
-            headers: {},
-            data_path: 'data',  // Use data_path for the actual field
-            dataPath: 'data',    // Keep both for compatibility
-            dynamicUrlParams: [],
-            // Store Nova Sports filter settings
-            novaSportsFilters: {
-              view: 'teams',
-              league: 'all',
-              provider: 'all',
-              position: 'all',
-              status: 'all',
-              season: 'all'
+          // Create a Nova Sports data source with default filters
+          const novaSportsSource = {
+            name: `Nova Sports ${uniqueId}`,
+            type: 'api',
+            category: 'Nova Sports',
+            api_config: {
+              url: `${novaBaseUrl}/nova/sports?view=teams&league=all&provider=all`,
+              method: 'GET',
+              headers: {},
+              data_path: 'data',  // Use data_path for the actual field
+              dataPath: 'data',    // Keep both for compatibility
+              dynamicUrlParams: [],
+              // Store Nova Sports filter settings
+              novaSportsFilters: {
+                view: 'teams',
+                league: 'all',
+                provider: 'all',
+                position: 'all',
+                status: 'all',
+                season: 'all'
+              }
             }
-          }
-        };
+          };
 
-        // Set the new data source and skip to configureNewSources
-        setNewDataSources([novaSportsSource]);
+          // Set the new data source and skip to configureNewSources
+          setNewDataSources([novaSportsSource]);
+        }
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
@@ -1419,7 +1435,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       authConfig: authData?.authConfig || formData.authConfig, // Use synchronously returned auth data
       status: formData.status || 'ACTIVE',
       cache: formData.cache || '15M',
-      url: `${window.location.origin}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
+      url: `${novaBaseUrl}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
       created: editAgent?.created || new Date().toISOString(),
       lastRun: editAgent?.lastRun,
       runCount: editAgent?.runCount || 0
@@ -1548,6 +1564,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
+  const stepLabels: Record<WizardStep, string> = {
+    basic: 'Info',
+    dataType: 'Type',
+    dataSources: 'Sources',
+    configureNewSources: 'Configure',
+    relationships: 'Relations',
+    outputFormat: 'Format',
+    transformations: 'Transform',
+    security: 'Security',
+    test: 'Test',
+    review: 'Review'
+  };
+
   const renderStepIndicator = () => {
     return (
       <div className="space-y-2">
@@ -1559,35 +1588,44 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             const isClickable = editAgent || visitedSteps.has(step);
             return (
               <div key={step} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => isClickable && setCurrentStep(step)}
-                  disabled={!isClickable}
-                  title={
-                    isClickable
-                      ? `Go to step ${index + 1}`
-                      : `Complete previous steps first`
-                  }
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
-                    isClickable ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-not-allowed opacity-50'
-                  } ${
-                    index < currentStepIndex
-                      ? 'bg-blue-600 text-white'
-                      : index === currentStepIndex
-                        ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => isClickable && setCurrentStep(step)}
+                    disabled={!isClickable}
+                    title={
+                      isClickable
+                        ? `Go to step ${index + 1}`
+                        : `Complete previous steps first`
+                    }
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
+                      isClickable ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-not-allowed opacity-50'
+                    } ${
+                      index < currentStepIndex
+                        ? 'bg-blue-600 text-white'
+                        : index === currentStepIndex
+                          ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}>
+                    {index < currentStepIndex ? (
+                      <>
+                        <Check className="w-4 h-4 group-hover:hidden" />
+                        <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
+                      </>
+                    ) : (
+                      index + 1
+                    )}
+                  </button>
+                  <span className={`text-[10px] mt-1 ${
+                    index === currentStepIndex
+                      ? 'text-blue-600 font-medium'
+                      : 'text-muted-foreground'
                   }`}>
-                  {index < currentStepIndex ? (
-                    <>
-                      <Check className="w-4 h-4 group-hover:hidden" />
-                      <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
-                    </>
-                  ) : (
-                    index + 1
-                  )}
-                </button>
+                    {stepLabels[step]}
+                  </span>
+                </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-8 h-0.5 ${
+                  <div className={`w-8 h-0.5 mb-5 ${
                     index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
                   }`} />
                 )}
@@ -1681,7 +1719,20 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const renderDataType = () => {
     const selectedCategories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
+    // Check which Nova sources already exist in newDataSources
+    const existingNovaCategories = newDataSources
+      .filter(ds => ds.category?.startsWith('Nova '))
+      .map(ds => ds.category);
+
+    const isNovaCategory = (category: AgentDataType) =>
+      category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance' || category === 'Nova Sports';
+
     const toggleCategory = (category: AgentDataType) => {
+      // Don't allow selecting a Nova category if it already has a data source
+      if (isNovaCategory(category) && existingNovaCategories.includes(category) && !selectedCategories.includes(category)) {
+        return; // Already exists, don't allow adding again
+      }
+
       const isSelected = selectedCategories.includes(category);
       let newCategories: AgentDataType[];
 
@@ -1689,13 +1740,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Remove category
         newCategories = selectedCategories.filter(c => c !== category);
       } else {
-        // Special handling for Nova Weather, Nova Election, and Nova Finance - they should be exclusive
-        if (category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance') {
-          // Clear all other selections when Nova source is selected
-          newCategories = [category];
-        } else if (selectedCategories.includes('Nova Weather') || selectedCategories.includes('Nova Election') || selectedCategories.includes('Nova Finance')) {
-          // If a Nova source is currently selected, replace it with the new selection
-          newCategories = [category];
+        // Special handling for Nova sources - each Nova type is exclusive (only one of each)
+        if (isNovaCategory(category)) {
+          // Add this Nova category, keeping other non-duplicate selections
+          newCategories = [...selectedCategories.filter(c => c !== category), category];
         } else {
           // Normal addition for other categories
           newCategories = [...selectedCategories, category];
@@ -1714,35 +1762,50 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           {dataTypeCategories.map((category) => {
             const IconComponent = dataTypeIcons[category];
             const isSelected = selectedCategories.includes(category);
+            // Check if this Nova category already has a data source (and is not currently selected)
+            const isNovaAlreadyAdded = isNovaCategory(category) &&
+              existingNovaCategories.includes(category) &&
+              !isSelected;
+
             return (
               <Card
                 key={category}
-                className={`cursor-pointer transition-all ${
-                  isSelected
-                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950'
-                    : 'hover:border-gray-400 dark:hover:border-gray-600'
+                className={`transition-all ${
+                  isNovaAlreadyAdded
+                    ? 'opacity-50 cursor-not-allowed border-green-500 bg-green-50 dark:bg-green-950'
+                    : isSelected
+                      ? 'cursor-pointer border-blue-600 bg-blue-50 dark:bg-blue-950'
+                      : 'cursor-pointer hover:border-gray-400 dark:hover:border-gray-600'
                 }`}
                 onClick={() => toggleCategory(category)}
               >
                 <CardContent className="p-6 flex items-center gap-3">
                   <div className={`p-3 rounded-lg ${
-                    isSelected
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800'
+                    isNovaAlreadyAdded
+                      ? 'bg-green-600 text-white'
+                      : isSelected
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800'
                   }`}>
                     <IconComponent className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{category}</h3>
-                      {(category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance' || category === 'Nova Sports') && (
+                      {isNovaCategory(category) && (
                         <Badge className="bg-orange-500 text-white hover:bg-orange-600">
                           Nova
+                        </Badge>
+                      )}
+                      {isNovaAlreadyAdded && (
+                        <Badge variant="outline" className="text-green-600 border-green-600">
+                          Added
                         </Badge>
                       )}
                     </div>
                   </div>
                   {isSelected && <Check className="w-5 h-5 text-blue-600" />}
+                  {isNovaAlreadyAdded && <Check className="w-5 h-5 text-green-600" />}
                 </CardContent>
               </Card>
             );
@@ -2050,11 +2113,39 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           return (
             <Card key={index} className="p-4">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b">
-                  <Database className="w-5 h-5" />
-                  <h3 className="font-semibold">{source.name}</h3>
-                  <Badge variant="outline">{source.type}</Badge>
-                  {source.category && <Badge variant="secondary">{source.category}</Badge>}
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-5 h-5" />
+                    <h3 className="font-semibold">{source.name}</h3>
+                    <Badge variant="outline">{source.type}</Badge>
+                    {source.category && <Badge variant="secondary">{source.category}</Badge>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      const updated = newDataSources.filter((_, i) => i !== actualIndex);
+                      setNewDataSources(updated);
+                      // Also remove from formData.dataSources and update dataType if this was a Nova source
+                      const currentDataTypes = Array.isArray(formData.dataType) ? formData.dataType : [];
+                      const currentDataSources = formData.dataSources || [];
+                      setFormData(prev => ({
+                        ...prev,
+                        // Remove source from dataSources by matching id or feedId
+                        dataSources: currentDataSources.filter(ds =>
+                          ds.id !== source.id && ds.feedId !== source.id && ds.feedId !== source.feedId
+                        ),
+                        // Remove the data type selection if this was a Nova source
+                        dataType: source.category?.startsWith('Nova ')
+                          ? currentDataTypes.filter(dt => dt !== source.category)
+                          : currentDataTypes
+                      }));
+                    }}
+                    title="Delete data source"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 {/* API Configuration */}
@@ -4131,7 +4222,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             <div>
               <p className="text-sm text-muted-foreground mb-2">Generated Endpoint</p>
               <code className="text-xs bg-muted p-2 rounded block break-all">
-                {window.location.origin}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
+                {novaBaseUrl}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
               </code>
             </div>
           </CardContent>
