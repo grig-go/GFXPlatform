@@ -5,7 +5,7 @@
  */
 
 // Supabase client
-export { supabase, getSupabaseClient } from './client';
+export { supabase, getSupabaseClient, withTimeout, withAutoRecovery, resetSupabaseClient, createFreshSupabaseClient, sessionReady } from './client';
 
 // Configuration helpers (with environment variable support)
 export {

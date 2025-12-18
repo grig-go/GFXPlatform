@@ -2,6 +2,7 @@
 import { fetchDataFromSource } from "../lib/data-fetcher.ts";
 import { applyTransformationPipeline } from "../lib/transformations.ts";
 import { getValueFromPath } from "../lib/transformations.ts";
+import { applyXmlComplexMapping } from "../lib/xml-complex-mapping.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { escapeXML, deepCleanObject } from "../lib/utils.ts";
 import type { APIEndpoint, DataSource } from "../types.ts";
@@ -13,11 +14,43 @@ export async function generateXMLResponse(
   queryParams: Record<string, string> = {}
 ): Promise<Response> {
   const metadata = endpoint.schema_config?.schema?.metadata || {};
+
+  console.log("XML Generation - Checking for xmlMappingConfig:", {
+    hasXmlMappingConfig: !!metadata.xmlMappingConfig,
+    hasFieldMappings: !!(metadata.xmlMappingConfig?.fieldMappings?.length),
+    fieldMappingCount: metadata.xmlMappingConfig?.fieldMappings?.length || 0
+  });
+
+  // Check for advanced XML mapping configuration
+  if (metadata.xmlMappingConfig &&
+      metadata.xmlMappingConfig.fieldMappings &&
+      metadata.xmlMappingConfig.fieldMappings.length > 0) {
+    console.log("Using advanced XML field mapping");
+
+    const xmlString = await applyXmlComplexMapping(
+      endpoint,
+      dataSources,
+      metadata.xmlMappingConfig,
+      supabase,
+      queryParams
+    );
+
+    return new Response(xmlString, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/xml; charset=utf-8"
+      }
+    });
+  }
+
+  // Fall back to simple XML generation
+  console.log("Using simple XML generation (no field mappings)");
+
   const {
     namespace = "",
     includeDeclaration = true,
     useAttributes = false,
-    rootElement = "root",
+    rootElement = "data",
     itemElement = "item",
     prettyPrint = true,
     encoding = "UTF-8",
@@ -27,7 +60,7 @@ export async function generateXMLResponse(
     textNodeName = "#text",
     cdataKeys = [] // Keys that should be wrapped in CDATA
   } = metadata;
-  
+
   console.log("XML Generation Config:", {
     rootElement,
     itemElement,

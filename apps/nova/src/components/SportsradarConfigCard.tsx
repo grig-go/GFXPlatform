@@ -313,56 +313,58 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
               </div>
               
               {newProviderType === "sportsradar" && (
-                <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="access">Access Level</Label>
-                  <Select value={newProviderAccess} onValueChange={setNewProviderAccess}>
-                    <SelectTrigger id="access">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="trial">Trial</SelectItem>
-                      <SelectItem value="production">Production</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="version">API Version</Label>
-                  <Select value={newProviderVersion} onValueChange={setNewProviderVersion}>
-                    <SelectTrigger id="version">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="v3">v3</SelectItem>
-                      <SelectItem value="v4">v4</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="locale">Locale</Label>
-                  <Select value={newProviderLocale} onValueChange={setNewProviderLocale}>
-                    <SelectTrigger id="locale">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English (en)</SelectItem>
-                      <SelectItem value="de">German (de)</SelectItem>
-                      <SelectItem value="es">Spanish (es)</SelectItem>
-                      <SelectItem value="fr">French (fr)</SelectItem>
-                      <SelectItem value="it">Italian (it)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <Alert>
-                <Info className="w-4 h-4" />
-                <AlertDescription className="text-xs">
-                  Base URL will be: <code className="text-xs bg-muted px-1 rounded">
-                    https://api.sportradar.com/{newProviderSport}/{newProviderAccess}/{newProviderVersion}/{newProviderLocale}
-                  </code>
-                </AlertDescription>
-              </Alert>
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="access">Access Level</Label>
+                      <Select value={newProviderAccess} onValueChange={setNewProviderAccess}>
+                        <SelectTrigger id="access">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="trial">Trial</SelectItem>
+                          <SelectItem value="production">Production</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="version">API Version</Label>
+                      <Select value={newProviderVersion} onValueChange={setNewProviderVersion}>
+                        <SelectTrigger id="version">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="v3">v3</SelectItem>
+                          <SelectItem value="v4">v4</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="locale">Locale</Label>
+                      <Select value={newProviderLocale} onValueChange={setNewProviderLocale}>
+                        <SelectTrigger id="locale">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="en">English (en)</SelectItem>
+                          <SelectItem value="de">German (de)</SelectItem>
+                          <SelectItem value="es">Spanish (es)</SelectItem>
+                          <SelectItem value="fr">French (fr)</SelectItem>
+                          <SelectItem value="it">Italian (it)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Alert>
+                    <Info className="w-4 h-4" />
+                    <AlertDescription className="text-xs">
+                      Base URL will be: <code className="text-xs bg-muted px-1 rounded">
+                        https://api.sportradar.com/{newProviderSport}/{newProviderAccess}/{newProviderVersion}/{newProviderLocale}
+                      </code>
+                    </AlertDescription>
+                  </Alert>
+                </>
               )}
               
               {newProviderType === "sportmonks" && (

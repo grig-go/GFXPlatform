@@ -32,7 +32,7 @@ import {
   Crown,
   Loader2,
 } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
 import { supabase } from "../utils/supabase";

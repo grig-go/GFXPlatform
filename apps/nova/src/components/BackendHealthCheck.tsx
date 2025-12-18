@@ -35,7 +35,7 @@ export function BackendHealthCheck() {
     try {
       // Fetch providers using secure RPC pattern (same as Finance Dashboard)
       const listResponse = await fetch(
-        `${getRestUrl('data_providers_public')?select=id,name,type,category,is_active')},
+        `${getRestUrl('data_providers_public')}?select=id,name,type,category,is_active`,
         {
           headers: {
             Authorization: `Bearer ${getSupabaseAnonKey()}`,
