@@ -637,6 +637,9 @@ export function Preview() {
   const [isConnected, setIsConnected] = useState(false);
   const lastMessageTimeRef = useRef<number>(Date.now());
 
+  // Data binding state - for external control of data record selection
+  const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
+
   // PostMessage handler for external control (from Pulsar GFX)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -804,6 +807,14 @@ export function Preview() {
           if (payload?.loop !== undefined) {
             setIsLooping(payload.loop);
             console.log('[Preview] Loop mode set to:', payload.loop);
+          }
+          break;
+
+        case 'setDataRecordIndex':
+          // Set data record index from external control (Pulsar GFX)
+          if (payload?.recordIndex !== undefined) {
+            setCurrentRecordIndex(payload.recordIndex);
+            console.log('[Preview] Data record index set to:', payload.recordIndex);
           }
           break;
 

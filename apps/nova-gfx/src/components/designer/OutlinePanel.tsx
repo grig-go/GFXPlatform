@@ -5,7 +5,7 @@ import {
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
   PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink, Spline,
-  Search, X,
+  Search, X, Database,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -48,6 +48,8 @@ import {
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { PropertiesPanel } from './PropertiesPanel';
+import { DataBindingTab } from './DataBindingTab';
+import { AddDataModal } from '@/components/dialogs/AddDataModal';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { Template, Element, Layer } from '@emergent-platform/types';
@@ -59,6 +61,7 @@ export function OutlinePanel() {
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
   const [showRenameProjectDialog, setShowRenameProjectDialog] = useState(false);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [showAddDataModal, setShowAddDataModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [selectedLayerType, setSelectedLayerType] = useState<string>('custom');
   const [selectedLayerId, setSelectedLayerId] = useState<string>('');
@@ -79,8 +82,19 @@ export function OutlinePanel() {
   const confirm = useConfirm();
   const {
     project, layers, addLayer, addTemplate, updateProjectSettings, isDirty, saveProject, isSaving, deleteLayer,
-    elements, selectedElementIds, groupElements, ungroupElements
+    elements, selectedElementIds, groupElements, ungroupElements, dataSourceId
   } = useDesignerStore();
+
+  // Listen for "open add data modal" events from child components
+  useEffect(() => {
+    const handleOpenAddDataModal = () => {
+      setShowAddDataModal(true);
+    };
+    window.addEventListener('open-add-data-modal', handleOpenAddDataModal);
+    return () => {
+      window.removeEventListener('open-add-data-modal', handleOpenAddDataModal);
+    };
+  }, []);
 
   // Check if we can group (2+ elements selected from same parent)
   const canGroup = useMemo(() => {
@@ -411,36 +425,70 @@ export function OutlinePanel() {
         </div>
       </div>
 
-      {/* Properties Section */}
+      {/* Bottom Panel - contextual based on selection and data state */}
       <div
         className="flex-shrink-0 overflow-hidden flex flex-col"
         style={{ height: propertiesHeight }}
       >
-        <div className="p-2 border-b border-border flex items-center justify-between gap-2">
-          <h3 className="text-[10px] font-medium text-muted-foreground">PROPERTIES</h3>
-          {/* Property Search */}
-          <div className="relative flex-1 max-w-32">
-            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-            <Input
-              type="text"
-              placeholder="Search..."
-              value={propertySearch}
-              onChange={(e) => setPropertySearch(e.target.value)}
-              className="h-5 text-[10px] pl-5 pr-5 bg-muted/50 border-transparent focus:border-input"
-            />
-            {propertySearch && (
-              <button
-                onClick={() => setPropertySearch('')}
-                className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+        {selectedElementIds.length > 0 ? (
+          /* Properties Panel - when elements are selected */
+          <>
+            <div className="p-2 border-b border-border flex items-center justify-between gap-2">
+              <h3 className="text-[10px] font-medium text-muted-foreground">PROPERTIES</h3>
+              {/* Property Search */}
+              <div className="relative flex-1 max-w-32">
+                <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Search..."
+                  value={propertySearch}
+                  onChange={(e) => setPropertySearch(e.target.value)}
+                  className="h-5 text-[10px] pl-5 pr-5 bg-muted/50 border-transparent focus:border-input"
+                />
+                {propertySearch && (
+                  <button
+                    onClick={() => setPropertySearch('')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <ScrollArea className="flex-1">
+              <PropertiesPanel searchFilter={propertySearch} />
+            </ScrollArea>
+          </>
+        ) : dataSourceId ? (
+          /* Data Binding Panel - when template selected (no elements) and data source connected */
+          <>
+            <div className="p-2 border-b border-border flex items-center gap-2">
+              <Database className="w-3 h-3 text-emerald-500" />
+              <h3 className="text-[10px] font-medium text-muted-foreground">DATA BINDING</h3>
+            </div>
+            <DataBindingTab />
+          </>
+        ) : (
+          /* Add Data Prompt - when template selected but no data source */
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3">
+              <Database className="w-6 h-6 text-emerald-500" />
+            </div>
+            <p className="text-sm font-medium text-muted-foreground mb-1">No Data Connected</p>
+            <p className="text-xs text-muted-foreground/70 mb-4 max-w-[200px]">
+              Connect a data source to create dynamic, data-driven graphics
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+              onClick={() => setShowAddDataModal(true)}
+            >
+              <Database className="w-4 h-4 mr-2" />
+              Add Data Source
+            </Button>
           </div>
-        </div>
-        <ScrollArea className="flex-1">
-          <PropertiesPanel searchFilter={propertySearch} />
-        </ScrollArea>
+        )}
       </div>
 
       {/* New Layer Dialog */}
@@ -609,9 +657,15 @@ export function OutlinePanel() {
       </Dialog>
 
       {/* New Project Dialog */}
-      <NewProjectDialog 
-        open={showNewProjectDialog} 
-        onOpenChange={setShowNewProjectDialog} 
+      <NewProjectDialog
+        open={showNewProjectDialog}
+        onOpenChange={setShowNewProjectDialog}
+      />
+
+      {/* Add Data Modal */}
+      <AddDataModal
+        open={showAddDataModal}
+        onOpenChange={setShowAddDataModal}
       />
     </div>
   );
@@ -990,6 +1044,10 @@ function LayersTree() {
                       onDelete={() => handleDeleteTemplate(template.id, template.name)}
                       onToggleVisibility={() => toggleTemplateVisibility(template.id)}
                       onToggleLock={() => toggleTemplateLock(template.id)}
+                      onAddData={() => {
+                        selectTemplate(template.id);
+                        window.dispatchEvent(new CustomEvent('open-add-data-modal'));
+                      }}
                     />
                   ))
                 )}
@@ -1015,6 +1073,7 @@ interface TemplateItemProps {
   onDelete: () => void;
   onToggleVisibility: () => void;
   onToggleLock: () => void;
+  onAddData: () => void;
 }
 
 function TemplateItem({
@@ -1030,6 +1089,7 @@ function TemplateItem({
   onDelete,
   onToggleVisibility,
   onToggleLock,
+  onAddData,
 }: TemplateItemProps) {
   const { updateTemplate } = useDesignerStore();
   const [isRenaming, setIsRenaming] = useState(false);
@@ -1238,6 +1298,13 @@ function TemplateItem({
             Play OUT
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            onAddData();
+          }}>
+            <Database className="mr-2 h-4 w-4 text-emerald-500" />
+            Add Data Source
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             onDuplicate();

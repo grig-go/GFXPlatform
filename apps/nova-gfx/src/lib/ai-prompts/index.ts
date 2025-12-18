@@ -21,6 +21,70 @@ import { ANIMATION_REFERENCE } from './animation-reference';
 import { BROADCAST_DESIGN_GUIDELINES } from './broadcast-guidelines';
 import type { AIContext } from '@emergent-platform/types';
 
+/**
+ * Data-driven design prompt - tells AI how to create templates with data bindings
+ */
+const DATA_DRIVEN_DESIGN_PROMPT = `## DATA-DRIVEN DESIGN MODE
+
+⚠️ **CRITICAL REQUIREMENTS:**
+1. You MUST include a "binding" object in EVERY element that displays data!
+2. You MUST use ALL relevant data fields from the schema - DO NOT cherry-pick or omit available data!
+
+### USE ALL AVAILABLE DATA
+When given a data schema, create elements for EVERY field that would be useful in the graphic:
+- For weather data: Include temperature (high AND low), precipitation/rain chance, conditions, humidity, wind, UV index, dates, etc.
+- For sports data: Include all scores, player names, team names, stats, times, etc.
+- For any data: If a field exists in the schema, it's there for a reason - USE IT!
+
+**DO NOT** skip fields just because they seem secondary. The user connected this data source because they want ALL the data displayed.
+
+### Required Binding Object
+Every text element that shows data from the schema MUST have a "binding" property:
+
+\`\`\`json
+{
+  "name": "Location Name",
+  "element_type": "text",
+  "content": { "text": "{{location.name}}", "type": "text" },
+  "binding": {
+    "field": "location.name",
+    "type": "text"
+  }
+}
+\`\`\`
+
+### Complete Example Element with Binding
+\`\`\`json
+{
+  "name": "Temperature High",
+  "element_type": "text",
+  "position_x": 100,
+  "position_y": 200,
+  "width": 150,
+  "height": 60,
+  "content": { "text": "{{weather.items[0].temperatureMax.valueAndUnit[0]}}", "type": "text" },
+  "styles": { "fontSize": 48, "fontWeight": "bold", "color": "#FFFFFF" },
+  "binding": {
+    "field": "weather.items[0].temperatureMax.valueAndUnit[0]",
+    "type": "text"
+  }
+}
+\`\`\`
+
+### Binding Types
+- \`text\`: For string values (names, titles, locations, temperatures with units)
+- \`number\`: For numeric values (raw numbers, percentages, scores)
+- \`boolean\`: For true/false values
+- \`image\`: For image URLs
+
+### Rules:
+1. The "binding.field" value MUST exactly match a field path from the schema
+2. Use the same field path in both "content.text" (as {{field}}) and "binding.field"
+3. Static elements (backgrounds, decorative shapes) do NOT need bindings
+4. Elements displaying data MUST have the binding object - this is NOT optional!
+5. **USE ALL DATA FIELDS** - Don't leave out precipitation, humidity, wind, or any other available fields!
+`;
+
 export interface PromptModule {
   id: string;
   name: string;
@@ -87,6 +151,16 @@ export function buildDynamicSystemPrompt(
       name: 'Animation Reference',
       content: ANIMATION_REFERENCE,
       priority: 40,
+    });
+  }
+
+  // Add data-driven design instructions when data context is provided
+  if (context.dataContext) {
+    modules.push({
+      id: 'data-driven',
+      name: 'Data-Driven Design',
+      content: DATA_DRIVEN_DESIGN_PROMPT,
+      priority: 3, // High priority - right after core, before broadcast guidelines
     });
   }
 
@@ -193,6 +267,22 @@ export function buildContextMessage(context: AIContext): string {
   if (context.selectedElements?.length > 0) {
     const selected = context.selectedElements.map(e => `"${e.name}" (${e.id.slice(0,8)})`).join(', ');
     parts.push(`SELECTED: ${selected}`);
+  }
+
+  // Include data context for data-driven design
+  if (context.dataContext) {
+    const { dataSourceName, schema, sampleData } = context.dataContext;
+
+    parts.push(`\n## DATA-DRIVEN DESIGN ACTIVE\nData Source: "${dataSourceName}"`);
+
+    // Show schema (field name -> type)
+    const schemaLines = Object.entries(schema).map(([field, type]) => `  • ${field}: ${type}`).join('\n');
+    parts.push(`Data Schema:\n${schemaLines}`);
+
+    // Show sample data (first record)
+    parts.push(`Sample Data (first record):\n\`\`\`json\n${JSON.stringify(sampleData, null, 2)}\n\`\`\``);
+
+    parts.push(`⚠️ IMPORTANT: Create elements for ALL data fields shown above with "binding" configuration. Do NOT skip any fields - use every piece of available data!`);
   }
 
   return parts.join('\n\n');

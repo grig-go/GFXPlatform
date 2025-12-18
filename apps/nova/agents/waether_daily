@@ -1,0 +1,2074 @@
+[
+  {
+    "location": {
+      "name": "Atlantic City",
+      "id": "atlantic-city-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "55°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "37°F",
+              "37°F",
+              "28°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            49,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Beach Haven",
+      "id": "beach-haven-new",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "47.8°F",
+              "51.6°F",
+              "39.7°F",
+              "46.3°F",
+              "34.8°F",
+              "34.8°F",
+              "43.9°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34.7°F",
+              "32.3°F",
+              "28°F",
+              "33.5°F",
+              "28.8°F",
+              "27.5°F",
+              "36.3°F"
+            ]
+          },
+          "icon": [
+            "cloudy ",
+            "heavy rain",
+            "sunny",
+            "sunny",
+            "sunny",
+            "partly cloudy ",
+            "partly cloudy "
+          ],
+          "precipitationProbability": [
+            0,
+            0.89,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 01:00"
+  },
+  {
+    "location": {
+      "name": "Boston",
+      "id": "boston-massachusetts",
+      "country": "United States of America",
+      "state": "Massachusetts"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "43.9°F",
+              "55.2°F",
+              "31.1°F",
+              "43.9°F",
+              "29.8°F",
+              "29.9°F",
+              "37°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "26.1°F",
+              "33.6°F",
+              "24.3°F",
+              "29.5°F",
+              "23.5°F",
+              "21.1°F",
+              "28.3°F"
+            ]
+          },
+          "icon": [
+            "sunny",
+            "heavy rain",
+            "sunny",
+            "patchy rain nearby",
+            "sunny",
+            "partly cloudy ",
+            "patchy moderate snow"
+          ],
+          "precipitationProbability": [
+            0,
+            0.86,
+            0,
+            0.86,
+            0,
+            0,
+            0.67
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 01:00"
+  },
+  {
+    "location": {
+      "name": "Bridgeport",
+      "id": "bridgeport-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "52°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "36°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            11,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Bronx",
+      "id": "bronx-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "50°F",
+              "55°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "37°F",
+              "27°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Brooklyn",
+      "id": "brooklyn-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "50°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "36°F",
+              "37°F",
+              "27°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Caldwell",
+      "id": "caldwell-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "64°F",
+              "50°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "30°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "mostly sunny",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            22,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Central Park",
+      "id": "central-park-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "48°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "36°F",
+              "27°F"
+            ]
+          },
+          "icon": [
+            "mostly sunny",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            22,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Chicago",
+      "id": "chicago-illinois",
+      "country": "United States of America",
+      "state": "Illinois"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "47.3°F",
+              "20.3°F",
+              "35.2°F",
+              "30.6°F",
+              "33.8°F",
+              "37.6°F",
+              "37.1°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28.4°F",
+              "12°F",
+              "21.7°F",
+              "29.1°F",
+              "28.5°F",
+              "31.4°F",
+              "33.7°F"
+            ]
+          },
+          "icon": [
+            "moderate rain",
+            "partly cloudy ",
+            "overcast ",
+            "light freezing rain",
+            "heavy snow",
+            "cloudy ",
+            "patchy rain nearby"
+          ],
+          "precipitationProbability": [
+            0.88,
+            0,
+            0,
+            0.81,
+            0.72,
+            0,
+            0.85
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 00:00"
+  },
+  {
+    "location": {
+      "name": "Cranford",
+      "id": "cranford-new",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "39.9°F",
+              "52.5°F",
+              "32.5°F",
+              "44.7°F",
+              "32.7°F",
+              "30.9°F",
+              "41.3°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "24.4°F",
+              "31.3°F",
+              "25.2°F",
+              "29.4°F",
+              "27.3°F",
+              "25.1°F",
+              "30.9°F"
+            ]
+          },
+          "icon": [
+            "mist",
+            "heavy rain",
+            "overcast ",
+            "partly cloudy ",
+            "sunny",
+            "light freezing rain",
+            "overcast "
+          ],
+          "precipitationProbability": [
+            0,
+            0.83,
+            0,
+            0,
+            0,
+            0.69,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 01:00"
+  },
+  {
+    "location": {
+      "name": "Danbury",
+      "id": "danbury-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "48°F",
+              "50°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28°F",
+              "32°F",
+              "19°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            10,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "East Hampton",
+      "id": "east-hampton-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "54°F",
+              "43°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            47,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Farmingdale",
+      "id": "farmingdale-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "48°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            33,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "name": "Freehold",
+      "id": "freehold-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "48°F",
+              "52°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "30°F",
+              "34°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            11,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Glen Ridge",
+      "id": "glen-ridge-new",
+      "country": "USA United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "40.6°F",
+              "52°F",
+              "31.8°F",
+              "44°F",
+              "31.9°F",
+              "30°F",
+              "41°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28.2°F",
+              "31°F",
+              "24.4°F",
+              "28.1°F",
+              "25.9°F",
+              "23.5°F",
+              "29.6°F"
+            ]
+          },
+          "icon": [
+            "cloudy ",
+            "heavy rain",
+            "partly cloudy ",
+            "partly cloudy ",
+            "sunny",
+            "light freezing rain",
+            "cloudy "
+          ],
+          "precipitationProbability": [
+            0,
+            0.89,
+            0,
+            0,
+            0,
+            0.62,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 01:00"
+  },
+  {
+    "location": {
+      "name": "Groton",
+      "id": "groton-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "57°F",
+              "46°F",
+              "48°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "30°F",
+              "32°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            20,
+            0,
+            7
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Hartford",
+      "id": "hartford-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "46°F",
+              "48°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "30°F",
+              "32°F",
+              "19°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "partly cloudy"
+          ],
+          "precipitationProbability": [
+            9,
+            0,
+            12
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Houston",
+      "id": "houston-texas",
+      "country": "United States of America",
+      "state": "Texas"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "78.4°F",
+              "71.1°F",
+              "68.7°F",
+              "79.9°F",
+              "77.9°F",
+              "78.3°F",
+              "76.7°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "61.2°F",
+              "51.4°F",
+              "53.4°F",
+              "66.1°F",
+              "68.4°F",
+              "65.9°F",
+              "65.6°F"
+            ]
+          },
+          "icon": [
+            "patchy rain nearby",
+            "sunny",
+            "overcast ",
+            "patchy rain nearby",
+            "patchy rain nearby",
+            "partly cloudy ",
+            "cloudy "
+          ],
+          "precipitationProbability": [
+            0.67,
+            0,
+            0,
+            0.8,
+            0.84,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 00:00"
+  },
+  {
+    "location": {
+      "name": "Islip",
+      "id": "islip-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "52°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "36°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            36,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Jackson Township",
+      "id": "jackson-township-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "66°F",
+              "50°F",
+              "57°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            46,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "JFK Airport",
+      "id": "jfk-airport-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "LGA Airport",
+      "id": "lga-airport-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "50°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "36°F",
+              "37°F",
+              "27°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Meriden",
+      "id": "meriden-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "46°F",
+              "48°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28°F",
+              "30°F",
+              "18°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            10,
+            0,
+            6
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Montauk",
+      "id": "montauk-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "52°F",
+              "43°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "36°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            46,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Montclair",
+      "id": "montclair-new",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20",
+            "2025-12-21",
+            "2025-12-22",
+            "2025-12-23",
+            "2025-12-24"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "40.6°F",
+              "52°F",
+              "31.8°F",
+              "44°F",
+              "31.9°F",
+              "30°F",
+              "41°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28.2°F",
+              "31°F",
+              "24.4°F",
+              "28.1°F",
+              "25.9°F",
+              "23.5°F",
+              "29.6°F"
+            ]
+          },
+          "icon": [
+            "cloudy ",
+            "heavy rain",
+            "partly cloudy ",
+            "partly cloudy ",
+            "sunny",
+            "light freezing rain",
+            "cloudy "
+          ],
+          "precipitationProbability": [
+            0,
+            0.89,
+            0,
+            0,
+            0,
+            0.62,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-18 01:00"
+  },
+  {
+    "location": {
+      "name": "Montgomery",
+      "id": "montgomery-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "46°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "27°F",
+              "30°F",
+              "18°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            9,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "name": "Morristown",
+      "id": "morristown-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "48°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28°F",
+              "32°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "mostly sunny",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            23,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "New Haven",
+      "id": "new-haven-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "50°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            12,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "New York/Central Park",
+      "id": "new-yorkcentral-park-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "35°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "23°F"
+            ]
+          },
+          "icon": [
+            "rain/snow",
+            "",
+            ""
+          ],
+          "precipitationProbability": [
+            80,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Newark",
+      "id": "newark-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "64°F",
+              "50°F",
+              "55°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Newburgh",
+      "id": "newburgh-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "46°F",
+              "48°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "30°F",
+              "32°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            9,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Oxford",
+      "id": "oxford-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "45°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "27°F",
+              "30°F",
+              "18°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            10,
+            0,
+            4
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Poughkeepsie",
+      "id": "poughkeepsie-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "46°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28°F",
+              "30°F",
+              "19°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "partly cloudy"
+          ],
+          "precipitationProbability": [
+            8,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Ridgewood",
+      "id": "ridgewood-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "66°F",
+              "50°F",
+              "55°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            45,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Shirley",
+      "id": "shirley-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "46°F",
+              "52°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            37,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Stewart",
+      "id": "stewart-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "52°F",
+              "39°F",
+              "41°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "21°F",
+              "27°F",
+              "14°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "partly cloudy"
+          ],
+          "precipitationProbability": [
+            9,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Sussex",
+      "id": "sussex-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "46°F",
+              "50°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "27°F",
+              "32°F",
+              "19°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            10,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Teterboro",
+      "id": "teterboro-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "63°F",
+              "48°F",
+              "52°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            19,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Trenton",
+      "id": "trenton-news12",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "64°F",
+              "50°F",
+              "57°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "36°F",
+              "25°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            41,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Wall Street - NYC",
+      "id": "wall-street-nyc-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "61°F",
+              "50°F",
+              "54°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "34°F",
+              "37°F",
+              "27°F"
+            ]
+          },
+          "icon": [
+            "am clouds/pm sun",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            24,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Waterbury",
+      "id": "waterbury-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "46°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "27°F",
+              "30°F",
+              "18°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            10,
+            0,
+            6
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "Westhampton Beach",
+      "id": "westhampton-beach-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "45°F",
+              "50°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "21°F"
+            ]
+          },
+          "icon": [
+            "am showers",
+            "sunny",
+            "mostly sunny"
+          ],
+          "precipitationProbability": [
+            42,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "name": "White Plains",
+      "id": "white-plains-news12",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "48°F",
+              "50°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "32°F",
+              "34°F",
+              "23°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "mostly sunny/wind"
+          ],
+          "precipitationProbability": [
+            13,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.906+00:00"
+  },
+  {
+    "location": {
+      "name": "Windsor Locks",
+      "id": "windsor-locks-news12",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "items": [
+        {
+          "date": [
+            "2025-12-18",
+            "2025-12-19",
+            "2025-12-20"
+          ],
+          "temperatureMax": {
+            "valueAndUnit": [
+              "59°F",
+              "45°F",
+              "46°F"
+            ]
+          },
+          "temperatureMin": {
+            "valueAndUnit": [
+              "28°F",
+              "30°F",
+              "19°F"
+            ]
+          },
+          "icon": [
+            "partly cloudy",
+            "sunny",
+            "partly cloudy"
+          ],
+          "precipitationProbability": [
+            8,
+            0,
+            12
+          ]
+        }
+      ]
+    },
+    "lastUpdated": "2025-12-17T01:45:00.906+00:00"
+  }
+]

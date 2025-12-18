@@ -81,12 +81,14 @@ export function sendBeaconUpdate(
  * Direct REST API call that completely bypasses the Supabase client.
  * Use this for critical operations when the Supabase client is unresponsive.
  * This is the most reliable way to interact with Supabase when connections are stale.
+ * @param accessToken - Optional JWT access token for authenticated operations (required for RLS-protected tables)
  */
 export async function directRestUpdate(
   table: string,
   data: Record<string, any>,
   filter: { column: string; value: string },
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  accessToken?: string
 ): Promise<{ success: boolean; error?: string }> {
   if (!supabaseUrl || !supabaseAnonKey) {
     return { success: false, error: 'Supabase not configured' };
@@ -94,6 +96,9 @@ export async function directRestUpdate(
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Use access token if provided, otherwise fall back to anon key
+  const authToken = accessToken || supabaseAnonKey;
 
   try {
     console.log(`[Supabase REST] PATCH ${table} where ${filter.column}=${filter.value}`);
@@ -105,7 +110,7 @@ export async function directRestUpdate(
         headers: {
           'Content-Type': 'application/json',
           'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Authorization': `Bearer ${authToken}`,
           'Prefer': 'return=minimal',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',

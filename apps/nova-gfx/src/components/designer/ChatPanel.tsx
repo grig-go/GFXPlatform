@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Image as ImageIcon, Wand2, Sparkles, Loader2, Bot, User,
-  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen, Zap
+  AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen, Zap, Database
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
 import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
+import { sampleDataSources, type DataSourceConfig, extractFieldsFromData } from '@/data/sampleDataSources';
 
 interface Attachment {
   id: string;
@@ -442,6 +443,8 @@ export function ChatPanel() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isDocsMode, setIsDocsMode] = useState(false);
+  const [isDataMode, setIsDataMode] = useState(false);
+  const [selectedDataSource, setSelectedDataSource] = useState<DataSourceConfig | null>(null);
   const [showQuickPrompts, setShowQuickPrompts] = useState(() => {
     const saved = localStorage.getItem('nova-chat-show-quick-prompts');
     return saved !== null ? saved === 'true' : true; // Default to showing
@@ -881,6 +884,12 @@ export function ChatPanel() {
             console.log(`✅ Expanded layer node: ${targetLayer.id}`);
           }
 
+          // Expand the template node so its elements are visible
+          if (!currentExpanded.has(templateId)) {
+            store.toggleNode(templateId);
+            console.log(`✅ Expanded template node: ${templateId}`);
+          }
+
           // Select the new template - use fresh state
           const freshStore = useDesignerStore.getState();
           freshStore.selectTemplate(templateId);
@@ -906,6 +915,18 @@ export function ChatPanel() {
               t.id === templateId ? { ...t, enabled: true } : t
             ));
             console.log(`✅ Enabled template: ${templateId}`);
+          }
+
+          // If in data mode, set the data source on the newly created template
+          if (isDataMode && selectedDataSource) {
+            const dataStore = useDesignerStore.getState();
+            await dataStore.setDataSource(
+              selectedDataSource.id,
+              selectedDataSource.name,
+              selectedDataSource.data,
+              selectedDataSource.displayField
+            );
+            console.log(`📊 Set data source "${selectedDataSource.name}" on new template`);
           }
         } else {
           console.error('❌ No layer available to create template in');
@@ -1226,6 +1247,40 @@ export function ChatPanel() {
 
             if (el.name && addedElement) {
               elementNameToId[el.name] = elementId;
+            }
+
+            // Create binding if element has binding configuration (data-driven design)
+            // Note: el.binding is set by AI in data-driven mode, though it's not part of the Element type
+            if (el.binding && addedElement) {
+              const bindingStore = useDesignerStore.getState();
+              const bindingField = el.binding.field;
+              const bindingType = el.binding.type || 'text';
+              const formatterOptions = el.binding.formatter_options || null;
+
+              // Determine target property based on element type
+              let targetProperty = 'content.text';
+              if (addedElement.element_type === 'image') {
+                targetProperty = 'content.src';
+              }
+
+              // Create the binding (pass templateId explicitly to ensure correct association)
+              bindingStore.addBinding(
+                elementId,
+                bindingField, // binding_key (e.g., "State", "Votes1")
+                targetProperty,
+                bindingType as 'text' | 'number' | 'boolean' | 'image' | 'color',
+                templateId // Explicitly pass templateId to avoid timing issues
+              );
+
+              // Update formatter options if provided
+              if (formatterOptions) {
+                const binding = bindingStore.bindings.find(b => b.element_id === elementId);
+                if (binding) {
+                  bindingStore.updateBinding(binding.id, { formatter_options: formatterOptions });
+                }
+              }
+
+              console.log(`🔗 Created binding: ${el.name} → ${bindingField} (${bindingType})`);
             }
           }
           } catch (elementError) {
@@ -1666,8 +1721,28 @@ export function ChatPanel() {
             verifyStore.selectTemplate(templateId);
           }
 
+          // Switch outline panel to Layers tab so user can see the selected template
+          window.dispatchEvent(new CustomEvent('outline-switch-tab', { detail: { tab: 'layers' } }));
+          console.log(`📑 Switched outline to Layers tab`);
+
+          // If there's a data source attached, switch to Data tab in bottom panel
+          if (verifyStore.dataSourceId) {
+            window.dispatchEvent(new CustomEvent('outline-switch-bottom-tab', { detail: { tab: 'data' } }));
+            console.log(`📊 Switched bottom panel to Data tab`);
+          }
+
           // Show success message with element count
           console.log(`✅ SUCCESS: Created ${templateElements.length} elements in template "${currentTemplate?.name}"`);
+
+          // Play the in-animation to show the user what they created
+          // Wait a moment for the UI to update, then play
+          setTimeout(() => {
+            const playStore = useDesignerStore.getState();
+            // Set phase to 'in' and play the preview
+            playStore.setPhase('in');
+            playStore.playFullPreview();
+            console.log(`▶️ Playing in-animation for new template`);
+          }, 200);
         }
       }, 100);
     } catch (error) {
@@ -1679,7 +1754,7 @@ export function ChatPanel() {
         error: true,
       });
     }
-  }, [markChangesApplied]);
+  }, [markChangesApplied, isDataMode, selectedDataSource]);
 
   // Build AI context from current state
   const buildContext = (): AIContext => {
@@ -1702,6 +1777,27 @@ export function ChatPanel() {
       hasTemplates: templates.some(t => t.layer_id === l.id),
     }));
 
+    // Build data context if in data mode
+    let dataContext: AIContext['dataContext'] = undefined;
+    if (isDataMode && selectedDataSource) {
+      // Extract schema from the first record
+      const firstRecord = selectedDataSource.data[0] || {};
+      const schema: Record<string, string> = {};
+
+      // Get field info using extractFieldsFromData
+      const fields = extractFieldsFromData(selectedDataSource.data);
+      fields.forEach(field => {
+        schema[field.path] = field.type;
+      });
+
+      dataContext = {
+        dataSourceId: selectedDataSource.id,
+        dataSourceName: selectedDataSource.name,
+        schema,
+        sampleData: firstRecord,
+      };
+    }
+
     return {
       project: project ? {
         name: project.name,
@@ -1720,6 +1816,7 @@ export function ChatPanel() {
       availableLayers, // Added: let AI know what layers are available
       availablePresets: [],
       availableLibraries: ['anime.js', 'GSAP'],
+      dataContext, // Include data context for data-driven design
     };
   };
 
@@ -2135,6 +2232,13 @@ Alternatively, configure your API key in Settings (⚙️).`,
             await applyAIChanges(response.changes!, streamingMessage.id);
             console.log('✅ applyAIChanges completed');
 
+            // Reset data mode after creating graphic (to prevent accidental re-sends)
+            if (isDataMode) {
+              setIsDataMode(false);
+              setSelectedDataSource(null);
+              console.log('📊 Data mode deselected after creating graphic');
+            }
+
             // Show completion briefly
             const doneText = totalElements > 0
               ? `✓ Created ${totalElements} element${totalElements !== 1 ? 's' : ''}`
@@ -2340,22 +2444,26 @@ Alternatively, configure your API key in Settings (⚙️).`,
             "h-5 w-5 rounded-lg flex items-center justify-center",
             isDocsMode
               ? "bg-gradient-to-br from-blue-500 to-blue-600"
-              : AI_MODELS[getAIModel()]?.provider === 'gemini'
-                ? "bg-gradient-to-br from-blue-500 to-cyan-400"
-                : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
+              : isDataMode
+                ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
+                : AI_MODELS[getAIModel()]?.provider === 'gemini'
+                  ? "bg-gradient-to-br from-blue-500 to-cyan-400"
+                  : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
           )}>
             {isDocsMode ? (
               <BookOpen className="w-3 h-3 text-white" />
+            ) : isDataMode ? (
+              <Database className="w-3 h-3 text-white" />
             ) : (
               <Sparkles className="w-3 h-3 text-white" />
             )}
           </div>
           <div>
             <h2 className="font-semibold text-xs leading-tight">
-              {isDocsMode ? 'Documentation Helper' : 'AI Assistant'}
+              {isDocsMode ? 'Documentation Helper' : isDataMode ? 'Data-Driven Design' : 'AI Assistant'}
             </h2>
             <p className="text-[9px] text-muted-foreground leading-tight">
-              {isDocsMode ? 'Ask about Nova/Pulsar GFX' : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
+              {isDocsMode ? 'Ask about Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
             </p>
           </div>
         </div>
@@ -2766,6 +2874,73 @@ Alternatively, configure your API key in Settings (⚙️).`,
             </Tooltip>
           )}
 
+          {/* Data-Driven Design Mode Toggle */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={isDataMode ? "default" : "ghost"}
+                    size="icon"
+                    className={cn(
+                      "h-6 w-6 transition-all",
+                      isDataMode && "bg-emerald-500 hover:bg-emerald-600 text-white"
+                    )}
+                    disabled={isLoading}
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isDataMode ? `Using: ${selectedDataSource?.name || 'Data'}` : "Design from data"}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start" className="w-64">
+              {/* Clear selection option */}
+              {isDataMode && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setIsDataMode(false);
+                    setSelectedDataSource(null);
+                  }}
+                  className="text-muted-foreground"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear data selection
+                </DropdownMenuItem>
+              )}
+              {/* Group data sources by category */}
+              {Array.from(new Set(sampleDataSources.map(ds => ds.category))).map(category => (
+                <div key={category}>
+                  <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {category}
+                  </div>
+                  {sampleDataSources.filter(ds => ds.category === category).map(ds => (
+                    <DropdownMenuItem
+                      key={ds.id}
+                      onClick={() => {
+                        setSelectedDataSource(ds);
+                        setIsDataMode(true);
+                        setIsDocsMode(false); // Turn off docs mode when data mode is on
+                      }}
+                      className={cn(
+                        "text-xs",
+                        selectedDataSource?.id === ds.id && "bg-emerald-500/10 text-emerald-600"
+                      )}
+                    >
+                      <Database className="w-3.5 h-3.5 mr-2" />
+                      {ds.name}
+                      {selectedDataSource?.id === ds.id && (
+                        <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-emerald-500" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Documentation Mode Toggle */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -2776,7 +2951,13 @@ Alternatively, configure your API key in Settings (⚙️).`,
                   "h-6 w-6 transition-all",
                   isDocsMode && "bg-blue-500 hover:bg-blue-600 text-white"
                 )}
-                onClick={() => setIsDocsMode(!isDocsMode)}
+                onClick={() => {
+                  setIsDocsMode(!isDocsMode);
+                  if (!isDocsMode) {
+                    setIsDataMode(false); // Turn off data mode when docs mode is on
+                    setSelectedDataSource(null);
+                  }
+                }}
                 disabled={isLoading}
               >
                 <BookOpen className="w-3.5 h-3.5" />
@@ -2801,7 +2982,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
             }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isListening ? "Listening... speak now" : isDocsMode ? "Ask about Nova GFX or Pulsar GFX..." : "Describe what you want... (paste images with Ctrl+V)"}
+            placeholder={isListening ? "Listening... speak now" : isDocsMode ? "Ask about Nova GFX or Pulsar GFX..." : isDataMode ? `Design a template for ${selectedDataSource?.name || 'this data'}...` : "Describe what you want... (paste images with Ctrl+V)"}
             className={cn(
               "min-h-[48px] max-h-[300px] bg-muted border-border resize-y text-xs transition-all",
               isListening && "border-red-500/50 bg-red-500/5"

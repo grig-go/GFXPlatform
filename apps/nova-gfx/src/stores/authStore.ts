@@ -191,107 +191,198 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
-        if (!isSupabaseConfigured() || !supabase) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseAnonKey) {
           set({ isInitialized: true, isLoading: false });
           return;
         }
 
         set({ isLoading: true });
 
-        try {
-          // Get current session with a timeout to prevent hanging
-          // If session fetch times out, continue without session (user can log in manually)
-          const sessionResult = await withTimeoutNull(
-            supabase.auth.getSession(),
-            5000 // 5 second timeout
-          );
-
-          const session = sessionResult?.data?.session;
-
-          if (session?.user) {
-            // Store the access token
-            set({ accessToken: session.access_token });
-
-            // Fetch user data from our users table (also with timeout)
-            try {
-              await withTimeout(
-                fetchAndSetUserData(session.user.id, set),
-                5000,
-                'Fetch user data'
-              );
-            } catch (userDataErr) {
-              console.warn('Failed to fetch user data (continuing):', userDataErr);
-              // Continue anyway - user is authenticated but we don't have their full profile
+        // Helper for fetch with timeout
+        const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 5000): Promise<Response | null> => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeoutId);
+            return response;
+          } catch (e) {
+            clearTimeout(timeoutId);
+            if (e instanceof Error && e.name === 'AbortError') {
+              console.warn('Auth request timed out');
             }
-          } else if (sessionResult === null) {
-            console.warn('Auth session check timed out - continuing without session');
+            return null;
+          }
+        };
+
+        try {
+          // Check localStorage for existing session (REST-based approach)
+          let storedSession: { access_token?: string; refresh_token?: string; user?: { id: string } } | null = null;
+          try {
+            const storedData = localStorage.getItem('sb-ihdoylhzekyluiiigxxc-auth-token');
+            if (storedData) {
+              storedSession = JSON.parse(storedData);
+            }
+          } catch (e) {
+            console.warn('Failed to read stored session:', e);
           }
 
-          // Set up auth listener only once
-          if (!authListenerSetup) {
-            authListenerSetup = true;
-            supabase.auth.onAuthStateChange(async (event, session) => {
-              if (event === 'SIGNED_OUT') {
-                set({ user: null, organization: null, accessToken: null });
-              } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-                // Store/refresh the access token
-                set({ accessToken: session.access_token });
-                // Refresh user data without re-initializing
-                await fetchAndSetUserData(session.user.id, set);
+          if (storedSession?.access_token && storedSession?.user?.id) {
+            // Verify token is still valid by fetching user data via REST (with 5s timeout)
+            const userResponse = await fetchWithTimeout(
+              `${supabaseUrl}/rest/v1/users?id=eq.${storedSession.user.id}&select=id,email,name,role,organization_id,organizations(id,name,slug,settings)`,
+              {
+                headers: {
+                  'apikey': supabaseAnonKey,
+                  'Authorization': `Bearer ${storedSession.access_token}`,
+                },
+              },
+              5000
+            );
+
+            if (userResponse?.ok) {
+              const users = await userResponse.json();
+              const userData = users[0];
+
+              if (userData) {
+                const org = userData.organizations as (Organization & { settings?: OrganizationSettings }) | null;
+                set({
+                  accessToken: storedSession.access_token,
+                  user: {
+                    id: userData.id,
+                    email: userData.email,
+                    name: userData.name,
+                    organizationId: userData.organization_id,
+                    organizationName: org?.name || null,
+                    role: userData.role,
+                    isEmergentUser: isEmergentEmail(userData.email),
+                    isAdmin: hasAdminRole(userData.role),
+                  },
+                  organization: org ? {
+                    id: org.id,
+                    name: org.name,
+                    slug: org.slug,
+                    settings: org.settings,
+                  } : null,
+                });
               }
-            });
+            } else if (userResponse?.status === 401) {
+              // Token expired, try to refresh
+              if (storedSession.refresh_token) {
+                const refreshResponse = await fetchWithTimeout(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': supabaseAnonKey,
+                  },
+                  body: JSON.stringify({ refresh_token: storedSession.refresh_token }),
+                }, 5000);
+
+                if (refreshResponse?.ok) {
+                  const refreshData = await refreshResponse.json();
+                  // Update stored session
+                  localStorage.setItem('sb-ihdoylhzekyluiiigxxc-auth-token', JSON.stringify({
+                    access_token: refreshData.access_token,
+                    refresh_token: refreshData.refresh_token,
+                    expires_at: refreshData.expires_at,
+                    user: refreshData.user,
+                  }));
+                  // Recursively initialize with new token
+                  set({ isInitialized: false });
+                  await get().initialize();
+                  return;
+                } else {
+                  // Refresh failed, clear session
+                  localStorage.removeItem('sb-ihdoylhzekyluiiigxxc-auth-token');
+                }
+              }
+            } else if (!userResponse) {
+              // Request timed out or failed - use cached data from Zustand persist if available
+              console.warn('Auth verification failed, using cached session data');
+              // Still set the access token so API calls can work
+              set({ accessToken: storedSession.access_token });
+            }
           }
         } catch (err) {
           console.error('Auth initialization error:', err);
-          set({ error: 'Failed to initialize authentication' });
+          // Don't set error - allow app to function with cached data
         } finally {
           set({ isLoading: false, isInitialized: true });
         }
       },
 
       signIn: async (email, password) => {
-        if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseAnonKey) {
           return { success: false, error: 'Supabase not configured' };
         }
 
         set({ isLoading: true, error: null });
 
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
+          // Sign in via REST API
+          const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': supabaseAnonKey,
+            },
+            body: JSON.stringify({ email, password }),
           });
 
-          if (error) {
-            set({ error: error.message, isLoading: false });
-            return { success: false, error: error.message };
+          if (!authResponse.ok) {
+            const errorData = await authResponse.json().catch(() => ({}));
+            const errorMessage = errorData.error_description || errorData.msg || 'Invalid login credentials';
+            set({ error: errorMessage, isLoading: false });
+            return { success: false, error: errorMessage };
           }
 
-          if (data.user && data.session) {
-            // Store access token
-            set({ accessToken: data.session.access_token });
+          const authData = await authResponse.json();
+          const accessToken = authData.access_token;
+          const userId = authData.user?.id;
 
-            // Fetch user data
-            const { data: userData } = await supabase
-              .from('users')
-              .select(`
-                id,
-                email,
-                name,
-                role,
-                organization_id,
-                organizations (
-                  id,
-                  name,
-                  slug,
-                  settings
-                )
-              `)
-              .eq('id', data.user.id)
-              .single();
+          if (!accessToken || !userId) {
+            set({ error: 'Invalid response from auth server', isLoading: false });
+            return { success: false, error: 'Invalid response from auth server' };
+          }
+
+          // Store access token
+          set({ accessToken });
+
+          // Store session in localStorage for persistence
+          try {
+            localStorage.setItem('sb-ihdoylhzekyluiiigxxc-auth-token', JSON.stringify({
+              access_token: accessToken,
+              refresh_token: authData.refresh_token,
+              expires_at: authData.expires_at,
+              user: authData.user,
+            }));
+          } catch (e) {
+            console.warn('Failed to persist session:', e);
+          }
+
+          // Fetch user data via REST API
+          const userResponse = await fetch(
+            `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=id,email,name,role,organization_id,organizations(id,name,slug,settings)`,
+            {
+              headers: {
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${accessToken}`,
+              },
+            }
+          );
+
+          if (userResponse.ok) {
+            const users = await userResponse.json();
+            const userData = users[0];
 
             if (userData) {
-              const org = userData.organizations as unknown as (Organization & { settings?: OrganizationSettings }) | null;
+              const org = userData.organizations as (Organization & { settings?: OrganizationSettings }) | null;
               set({
                 user: {
                   id: userData.id,
@@ -311,7 +402,11 @@ export const useAuthStore = create<AuthState>()(
                 } : null,
                 isLoading: false,
               });
+            } else {
+              set({ isLoading: false });
             }
+          } else {
+            set({ isLoading: false });
           }
 
           return { success: true };
@@ -478,10 +573,37 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
-        if (supabase) {
-          await supabase.auth.signOut();
+        const { accessToken } = get();
+
+        // Clear state first for immediate UI response
+        set({ user: null, organization: null, accessToken: null, error: null });
+
+        // Clear persisted auth storage
+        try {
+          localStorage.removeItem('emergent-auth');
+          localStorage.removeItem('sb-ihdoylhzekyluiiigxxc-auth-token');
+        } catch (e) {
+          console.warn('Failed to clear localStorage:', e);
         }
-        set({ user: null, organization: null, error: null });
+
+        // Sign out via REST API (non-blocking, fire-and-forget)
+        if (accessToken) {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+          if (supabaseUrl && supabaseAnonKey) {
+            fetch(`${supabaseUrl}/auth/v1/logout`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${accessToken}`,
+              },
+            }).catch(() => {
+              // Ignore errors - user is already logged out locally
+            });
+          }
+        }
       },
 
       clearError: () => set({ error: null }),
