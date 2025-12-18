@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -95,6 +95,52 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // Ref to SecurityStep to sync auth data before saving
   const securityStepRef = useRef<SecurityStepRef>(null);
+
+  // Ref to DialogContent for scroll position preservation
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef<number>(0);
+  const isRestoringScroll = useRef<boolean>(false);
+
+  // Save scroll position before state updates that might cause re-render
+  const saveScrollPosition = () => {
+    if (dialogContentRef.current && !isRestoringScroll.current) {
+      savedScrollPosition.current = dialogContentRef.current.scrollTop;
+    }
+  };
+
+  // Restore scroll position after re-render - uses multiple frames to ensure DOM is updated
+  const restoreScrollPosition = () => {
+    if (dialogContentRef.current && savedScrollPosition.current > 0) {
+      isRestoringScroll.current = true;
+
+      // Immediate restore
+      dialogContentRef.current.scrollTop = savedScrollPosition.current;
+
+      // Also restore on next frame in case React re-renders
+      requestAnimationFrame(() => {
+        if (dialogContentRef.current) {
+          dialogContentRef.current.scrollTop = savedScrollPosition.current;
+        }
+        // And one more frame for good measure
+        requestAnimationFrame(() => {
+          if (dialogContentRef.current) {
+            dialogContentRef.current.scrollTop = savedScrollPosition.current;
+          }
+          isRestoringScroll.current = false;
+        });
+      });
+    }
+  };
+
+  // Use useLayoutEffect for synchronous scroll restoration before paint
+  useLayoutEffect(() => {
+    restoreScrollPosition();
+  }, [formData]);
+
+  // Also restore on any formData.formatOptions change
+  useLayoutEffect(() => {
+    restoreScrollPosition();
+  }, [formData.formatOptions]);
 
   // State for adding new items in various steps
   const [newRelationship, setNewRelationship] = useState<Partial<AgentDataRelationship>>({});
@@ -4302,6 +4348,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     <Dialog open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) handleClose(); }}>
       <DialogContent
         className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto"
+        ref={dialogContentRef}
+        onScroll={saveScrollPosition}
         onInteractOutside={(e: Event) => {
           // Prevent closing on overlay click in create mode
           if (!editAgent) {
