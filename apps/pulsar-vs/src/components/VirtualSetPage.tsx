@@ -782,10 +782,11 @@ export default function VirtualSetPage({
       // If section has actors, create Actor:MaterialID combinations
       if (sectionActors.length > 0) {
         sectionActors.forEach((actor: any) => {
-          // Get actor blueprint name - try different property names used in schemas
-          // actorName: used in v1.1.0 schema (e.g., "BP_Floor", "BP_Columns4")
-          // name: fallback property
-          const actorId = actor.actorName || actor.name || actor.id;
+          // Get actor blueprint class name - try different property names used in schemas
+          // BlueprintClassName: v1.1.0 schema uses this (e.g., "BP_Back1_C", "BP_Columns2Back_C")
+          // blueprintClassName: camelCase fallback
+          // actorName / name: fallback to display name if no blueprint class
+          const actorId = actor.BlueprintClassName || actor.blueprintClassName || actor.actorName || actor.name || actor.id;
 
           if (!actorId) {
             console.warn('Actor missing identifier:', actor);
