@@ -15,6 +15,15 @@ const AI_TRANSFORM: TransformDefinition = {
   category: 'advanced'
 };
 
+// Script transformation for custom JavaScript code
+const SCRIPT_TRANSFORM: TransformDefinition = {
+  id: 'script',
+  name: 'Script Transform',
+  description: 'Apply custom JavaScript transformation logic',
+  icon: 'code-block',
+  category: 'advanced'
+};
+
 export const TRANSFORMATIONS: Record<string, Record<string, TransformDefinition[]>> = {
   string: {
     string: [
@@ -122,7 +131,7 @@ export function getAvailableTransformations(
   // Get type-specific transformations
   const typeSpecific = TRANSFORMATIONS[sourceType]?.[targetType] || [];
 
-  // Always include AI transformation as the first advanced option
+  // Always include AI and Script transformations as advanced options
   const allTransforms = [...typeSpecific];
 
   // Add AI transform if not already present
@@ -133,6 +142,17 @@ export function getAvailableTransformations(
       allTransforms.splice(advancedIndex, 0, AI_TRANSFORM);
     } else {
       allTransforms.push(AI_TRANSFORM);
+    }
+  }
+
+  // Add Script transform if not already present
+  if (!allTransforms.find(t => t.id === 'script')) {
+    // Insert Script transform after AI transform
+    const aiIndex = allTransforms.findIndex(t => t.id === 'ai-transform');
+    if (aiIndex >= 0) {
+      allTransforms.splice(aiIndex + 1, 0, SCRIPT_TRANSFORM);
+    } else {
+      allTransforms.push(SCRIPT_TRANSFORM);
     }
   }
 

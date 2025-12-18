@@ -118,17 +118,7 @@ export async function applyXmlComplexMapping(
       continue;
     }
 
-    // Apply transformations if configured
-    if (endpoint.transform_config?.transformations?.length > 0) {
-      console.log(`Applying transformations to source: ${dataSource.name}`);
-      sourceData = await applyTransformationPipeline(
-        sourceData,
-        endpoint.transform_config,
-        supabase
-      );
-    }
-
-    // Navigate to primary path
+    // Navigate to primary path FIRST (before transformations)
     let dataToProcess = sourceData;
     const primaryPath = sourceConfig.primaryPath || mappingConfig.sourceSelection?.primaryPath;
 
@@ -140,6 +130,17 @@ export async function applyXmlComplexMapping(
     if (!dataToProcess) {
       console.log(`No data at path for source: ${dataSource.name}`);
       continue;
+    }
+
+    // Apply transformations AFTER navigating to the data array
+    // This ensures script transforms receive individual items, not the full payload
+    if (endpoint.transform_config?.transformations?.length > 0) {
+      console.log(`Applying transformations to navigated data from: ${dataSource.name}`);
+      dataToProcess = await applyTransformationPipeline(
+        dataToProcess,
+        endpoint.transform_config,
+        supabase
+      );
     }
 
     // Add items with source tracking

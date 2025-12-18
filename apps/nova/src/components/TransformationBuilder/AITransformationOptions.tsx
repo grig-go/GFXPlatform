@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Switch } from '../ui/switch';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ChevronDown, ChevronUp, Trash2, Plus, Play, Info, ArrowRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Plus, Play, Info, ArrowRight, Database } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { useToast } from '../ui/use-toast';
 import { isDevelopment, SKIP_AUTH_IN_DEV } from '../../utils/constants';
@@ -19,6 +19,8 @@ interface AITransformationOptionsProps {
   systemPrompt?: string;
   outputFormat?: 'text' | 'json' | 'structured';
   fieldContext?: string[];
+  sampleData?: Record<string, any>;
+  sourceDataPaths?: Record<string, string>;
   examples?: Array<{ input: any; output: any }>;
   cacheResults?: boolean;
   onChange: (options: Record<string, any>) => void;
@@ -29,6 +31,8 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
   systemPrompt = '',
   outputFormat = 'text',
   fieldContext = [],
+  sampleData = {},
+  sourceDataPaths = {},
   examples = [],
   cacheResults = true,
   onChange
@@ -43,6 +47,88 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState('');
   const [testResult, setTestResult] = useState<any>(null);
+
+  // Helper to get value at a dot-separated path
+  const getValueAtPath = (obj: any, path: string): any => {
+    if (!path) return obj;
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  };
+
+  // Extract a single item from sample data for testing (respects user's data root selection)
+  const extractedSampleData = useMemo(() => {
+    const sourceIds = Object.keys(sampleData);
+    if (sourceIds.length === 0) {
+      return null;
+    }
+
+    // Get the first source's data
+    const firstSourceId = sourceIds[0];
+    const firstSourceData = sampleData[firstSourceId];
+    if (!firstSourceData) return null;
+
+    // Helper to extract first item from an array and clean it
+    const getFirstItem = (arr: any[]): any => {
+      if (arr.length === 0) return null;
+      const item = arr[0];
+      // Clean internal fields from the item
+      if (typeof item === 'object' && item !== null) {
+        const cleaned = { ...item };
+        delete cleaned._sourceInfo;
+        return cleaned;
+      }
+      return item;
+    };
+
+    // Use the configured data path for this source if available
+    const configuredPath = sourceDataPaths[firstSourceId];
+    if (configuredPath) {
+      const dataAtPath = getValueAtPath(firstSourceData, configuredPath);
+      if (Array.isArray(dataAtPath) && dataAtPath.length > 0) {
+        return getFirstItem(dataAtPath);
+      } else if (dataAtPath && typeof dataAtPath === 'object') {
+        const cleaned = { ...dataAtPath };
+        delete cleaned._sourceInfo;
+        return cleaned;
+      }
+    }
+
+    // Fallback: If the source data is directly an array, get first item
+    if (Array.isArray(firstSourceData)) {
+      return getFirstItem(firstSourceData);
+    }
+
+    // Fallback: If it's an object, look for nested arrays in common locations
+    if (typeof firstSourceData === 'object' && firstSourceData !== null) {
+      // Common keys that contain array data
+      const arrayKeys = ['items', 'data', 'results', 'records', 'events', 'entries', 'rows', 'list'];
+      for (const key of arrayKeys) {
+        if (Array.isArray(firstSourceData[key]) && firstSourceData[key].length > 0) {
+          return getFirstItem(firstSourceData[key]);
+        }
+      }
+
+      // Check for any array property
+      for (const key of Object.keys(firstSourceData)) {
+        if (Array.isArray(firstSourceData[key]) && firstSourceData[key].length > 0) {
+          return getFirstItem(firstSourceData[key]);
+        }
+      }
+
+      // If no arrays found, return the object itself (cleaned)
+      const cleaned = { ...firstSourceData };
+      delete cleaned._sourceInfo;
+      return cleaned;
+    }
+
+    return null;
+  }, [sampleData, sourceDataPaths]);
+
+  // Pre-populate test input with sample data on initial load
+  useEffect(() => {
+    if (extractedSampleData && !testInput) {
+      setTestInput(JSON.stringify(extractedSampleData, null, 2));
+    }
+  }, [extractedSampleData]);
 
   // Predefined prompt templates
   const promptTemplates = [
@@ -245,7 +331,7 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
   };
 
   return (
-    <div className="ai-transformation-options space-y-4">
+    <div className="ai-transformation-options space-y-4 w-full min-w-0 max-w-full overflow-hidden">
       {/* Template Selection */}
       <div>
         <Label>Template</Label>
@@ -379,20 +465,54 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
         </Card>
       )}
 
+      {/* Sample Data Preview */}
+      {extractedSampleData && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Database className="h-4 w-4 text-green-600" />
+              Sample Data Available
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-gray-600 mb-2">
+              Real data from your data sources is available for testing
+            </p>
+            <pre className="p-3 bg-white rounded border overflow-auto max-h-32 text-xs whitespace-pre-wrap break-all">
+              {JSON.stringify(extractedSampleData, null, 2)}
+            </pre>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setTestInput(JSON.stringify(extractedSampleData, null, 2))}
+            >
+              Use as Test Input
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Test Transformation */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Test Transformation</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
+          <div className="w-full">
             <Label>Test Input</Label>
             <Textarea
               value={testInput}
               onChange={(e) => setTestInput(e.target.value)}
               placeholder="Enter sample data to test the transformation..."
-              rows={2}
+              rows={4}
+              className="w-full resize-none"
             />
+            {!extractedSampleData && (
+              <p className="text-xs text-gray-500 mt-1">
+                Tip: Fetch data from your sources to auto-populate test input
+              </p>
+            )}
           </div>
 
           <Button
@@ -416,7 +536,7 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
             <Card className="bg-gray-50">
               <CardContent className="pt-4">
                 <strong className="text-sm">Result:</strong>
-                <pre className="mt-2 p-3 bg-white rounded border overflow-auto max-h-48 text-xs">
+                <pre className="mt-2 p-3 bg-white rounded border overflow-auto max-h-48 text-xs whitespace-pre-wrap break-all">
                   {typeof testResult === 'object'
                     ? JSON.stringify(testResult, null, 2)
                     : testResult}
