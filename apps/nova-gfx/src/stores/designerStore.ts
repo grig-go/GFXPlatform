@@ -508,6 +508,7 @@ function getDefaultElementName(type: ElementType): string {
     icon: 'Icon',
     table: 'Table',
     countdown: 'Countdown',
+    interactive: 'Interactive',
   };
   return names[type] || 'Element';
 }
@@ -648,6 +649,15 @@ function getDefaultContent(type: ElementType): Element['content'] {
         clockFormat: '24h', // '12h' | '24h' for clock mode
         showDate: false, // Show date in clock mode
         timezone: 'local', // 'local' or IANA timezone string
+      };
+    case 'interactive':
+      return {
+        type: 'interactive',
+        inputType: 'button',
+        name: 'button',
+        label: 'Button',
+        buttonVariant: 'primary',
+        buttonSize: 'md',
       };
     default:
       return { type: 'div' };

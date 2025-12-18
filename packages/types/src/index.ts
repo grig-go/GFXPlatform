@@ -32,6 +32,9 @@ export type {
 } from './designSystem';
 export { DEFAULT_DESIGN_SYSTEM } from './designSystem';
 
+// Interactive apps types
+export * from './interactive';
+
 // Pulsar GFX types (future)
 export * from './page';
 export * from './channel';

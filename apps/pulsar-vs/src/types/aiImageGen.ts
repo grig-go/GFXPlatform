@@ -86,23 +86,20 @@ export interface AISettings {
   };
 }
 
-// Google AI API key loaded from environment variables
-const googleAiKey = import.meta.env.VITE_PULSAR_VS_GOOGLE_AI_KEY || '';
-
-// Default Settings
+// Default Settings - API keys should come from backend ai_providers table, not env vars
 export const DEFAULT_AI_SETTINGS: AISettings = {
   gemini: {
-    apiKey: googleAiKey,
+    apiKey: '', // Loaded from backend ai_providers table
     textModel: 'gemini-2.5-flash-lite',
     baseUrl: 'https://generativelanguage.googleapis.com'
   },
   imagen: {
-    apiKey: googleAiKey,
+    apiKey: '', // Loaded from backend ai_providers table
     model: 'imagen-4.0-fast-generate-001',
     baseUrl: 'https://generativelanguage.googleapis.com'
   },
   imageEdit: {
-    apiKey: googleAiKey,
+    apiKey: '', // Loaded from backend ai_providers table
     model: 'gemini-3-pro-image-preview',
     baseUrl: 'https://generativelanguage.googleapis.com'
   },
@@ -424,12 +421,106 @@ export const callGoogleAPIViaProxy = async (
   return proxyResponse.data;
 };
 
-// Helper Functions for Generation
+// ============================================
+// BACKEND API CALL FUNCTIONS
+// ============================================
+
+/**
+ * Call the backend ai_provider/chat endpoint for text generation
+ * This uses the API key stored in the ai_providers table, not from env/settings
+ */
+export const generateTextViaBackend = async (
+  providerId: string,
+  message: string,
+  context?: string,
+  dashboard?: string
+): Promise<{ response: string; model: string }> => {
+  const { supabaseAnonKey } = await import('../src/supabaseConfig');
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/chat`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      providerId,
+      message,
+      context,
+      dashboard
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || errorData.error || `Backend chat request failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data.ok) {
+    throw new Error(data.detail || data.error || 'Backend chat request failed');
+  }
+
+  return {
+    response: data.response,
+    model: data.model
+  };
+};
+
+/**
+ * Call the backend ai_provider for image generation (Imagen)
+ * This uses the API key stored in the ai_providers table
+ */
+export const generateImageViaBackend = async (
+  providerId: string,
+  prompt: string,
+  options?: {
+    aspectRatio?: string;
+    numberOfImages?: number;
+    safetyLevel?: string;
+  }
+): Promise<{ base64?: string; error?: string }> => {
+  const { supabaseAnonKey } = await import('../src/supabaseConfig');
+
+  // Call the backend proxy that handles Imagen with backend API key
+  const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/generate-imagen`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      providerId,
+      prompt,
+      ...options
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    return { error: errorData.detail || errorData.error || `Image generation failed: ${response.status}` };
+  }
+
+  const data = await response.json();
+  if (!data.ok) {
+    return { error: data.detail || data.error || 'Image generation failed' };
+  }
+
+  return { base64: data.base64 };
+};
+
+// Helper Functions for Generation (legacy - uses local API keys, prefer generateTextViaBackend)
 export const generateWithGemini = async (
   prompt: string,
   settings?: Partial<AISettings>
 ): Promise<any> => {
   const config = { ...DEFAULT_AI_SETTINGS, ...settings };
+
+  // If no local API key configured, throw an error directing to use backend
+  if (!config.gemini.apiKey) {
+    throw new Error('No local API key configured. Use generateTextViaBackend() with backend provider instead.');
+  }
+
   const url = `${config.gemini.baseUrl}/v1beta/models/${config.gemini.textModel}:generateContent?key=${config.gemini.apiKey}`;
 
   const requestBody = {
