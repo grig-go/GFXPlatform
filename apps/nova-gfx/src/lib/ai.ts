@@ -1557,9 +1557,15 @@ export interface ChatMessage {
 export function isDrasticChange(changes: AIChanges | undefined): boolean {
   if (!changes) return false;
 
-  // Deletions always require confirmation
+  // Pure deletions always require confirmation
   if (changes.type === 'delete') return true;
-  if (changes.elementsToDelete && changes.elementsToDelete.length > 0) return true;
+
+  // For create actions, ignore elementsToDelete - we're making a new template anyway
+  // The AI sometimes includes elementsToDelete when it shouldn't
+  const isCreating = changes.type === 'create';
+
+  // Deletions during update/replace require confirmation
+  if (!isCreating && changes.elementsToDelete && changes.elementsToDelete.length > 0) return true;
 
   // Only flag as drastic if there are a huge number of elements (100+)
   // Broadcast graphics like standings, leaderboards can easily have 60-80 elements
@@ -2317,6 +2323,10 @@ function normalizeElement(el: any, index: number): any {
   let styles = el.styles || {};
   if (typeof styles !== 'object') styles = {};
 
+  // Preserve binding configuration for data-driven design
+  // AI generates binding objects on elements to specify which data field they should display
+  const binding = el.binding || undefined;
+
   return {
     id: el.id || undefined,
     name: el.name || `Element ${index + 1}`,
@@ -2333,6 +2343,8 @@ function normalizeElement(el: any, index: number): any {
     _zIndex: zIndex,
     content,
     styles,
+    // Include binding if AI provided one (for data-driven design)
+    ...(binding && { binding }),
   };
 }
 
@@ -3265,6 +3277,8 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
               content: el.content || { type: 'shape', shape: 'rectangle', fill: '#3B82F6' },
               _layerType: layerType,
               _zIndex: zIndex,
+              // Preserve binding for data-driven design
+              ...(el.binding && { binding: el.binding }),
             });
           }
         });

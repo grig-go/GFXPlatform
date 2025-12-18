@@ -51,25 +51,30 @@ Common: Star, Heart, Settings, Play, Pause, ChevronRight, Check, X, Menu, Search
 \`\`\`
 
 **Weather Icons** (for weather graphics):
+
+**PREFER ANIMATED ICONS** - They are the default and recommended:
 \`\`\`json
-{ "library": "weather", "iconName": "wi-day-sunny", "size": 64, "color": "#FFD700" }
+{ "library": "weather", "iconName": "animated-clear-day", "size": 64, "color": "#FFD700" }
 \`\`\`
 
-Weather icon collections:
+**Animated Weather Icons (RECOMMENDED)**:
+| Condition | Icon Name |
+|-----------|-----------|
+| Sunny Day | animated-clear-day |
+| Clear Night | animated-clear-night |
+| Partly Cloudy Day | animated-partly-cloudy-day |
+| Partly Cloudy Night | animated-partly-cloudy-night |
+| Cloudy | animated-cloudy |
+| Rain | animated-rain |
+| Sleet | animated-sleet |
+| Snow | animated-snow |
+| Wind | animated-wind |
+| Fog | animated-fog |
+
+**Alternative static icon collections**:
 - **Meteocons**: meteocons-1 (sun) to meteocons-47
 - **Weather Icons (wi-)**: wi-day-sunny, wi-night-clear, wi-cloud, wi-rain, wi-snow, wi-thunderstorm, wi-fog, wi-thermometer
 - **Basicons**: basicons-sun-day, basicons-cloud, basicons-rain-cloud-weather
-
-**Common Weather Icons**:
-| Condition | Icon Name |
-|-----------|-----------|
-| Sunny | wi-day-sunny, meteocons-1 |
-| Cloudy | wi-cloudy, meteocons-5 |
-| Partly Cloudy | wi-day-cloudy, meteocons-3 |
-| Rain | wi-rain, meteocons-8 |
-| Snow | wi-snow, meteocons-13 |
-| Thunderstorm | wi-thunderstorm, meteocons-19 |
-| Temperature | wi-thermometer, meteocons-31 |
 
 #### Lottie Animation:
 \`\`\`json

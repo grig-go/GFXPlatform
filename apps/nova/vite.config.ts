@@ -484,5 +484,6 @@ export default defineConfig(({ mode }) => {
         ignored: ['**/logs/**'],
       },
     },
+	 envDir: '../../', // Load .env from root
   };
 });

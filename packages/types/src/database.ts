@@ -173,6 +173,13 @@ export interface Folder {
   created_at: string;
 }
 
+// Data source configuration for templates
+export interface TemplateDataSourceConfig {
+  displayField: string;        // Field to show in record dropdown (e.g., "location.name")
+  refreshInterval?: number;    // Auto-refresh interval in ms (optional)
+  defaultRecordIndex?: number; // Default record to show (optional)
+}
+
 // Templates
 export interface Template {
   id: string;
@@ -201,6 +208,9 @@ export interface Template {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  // Data binding
+  data_source_id: string | null;              // Reference to api_endpoints (Nova agent)
+  data_source_config: TemplateDataSourceConfig | null;  // Display field, refresh settings, etc.
 }
 
 // Elements

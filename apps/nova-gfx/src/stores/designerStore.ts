@@ -29,6 +29,7 @@ import {
 import { supabase, markSupabaseSuccess, markSupabaseFailure, directRestUpdate } from '@emergent-platform/supabase-client';
 import { useAuthStore } from '@/stores/authStore';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
+import { getDataSourceById } from '@/data/sampleDataSources';
 
 /**
  * Wrap a promise with a timeout
@@ -162,16 +163,22 @@ async function directRestUpsert(
 }
 
 /**
- * Upload a thumbnail to Supabase Storage
+ * Upload a thumbnail to Supabase Storage using REST API directly
+ * This bypasses the Supabase client to avoid timeout/hanging issues
  * @param projectId - The project ID (used as filename)
  * @param dataUrl - Base64 data URL of the image
+ * @param timeoutMs - Timeout in milliseconds (default: 10000)
  * @returns The public URL of the uploaded image, or null on failure
  */
-async function uploadThumbnailToStorage(projectId: string, dataUrl: string): Promise<string | null> {
-  if (!supabase || !dataUrl) return null;
+async function uploadThumbnailToStorage(projectId: string, dataUrl: string, timeoutMs: number = 10000): Promise<string | null> {
+  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey || !dataUrl) return null;
 
   try {
-    console.log('[Thumbnail] Starting upload for project:', projectId);
+    console.log('[Thumbnail] Starting REST upload for project:', projectId);
+
     // Convert base64 data URL to Blob
     const base64Data = dataUrl.split(',')[1];
     if (!base64Data) {
@@ -187,33 +194,48 @@ async function uploadThumbnailToStorage(projectId: string, dataUrl: string): Pro
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
-    // Upload to storage bucket "thumbnails"
     const fileName = `${projectId}.jpg`;
-    console.log('[Thumbnail] Uploading to storage bucket, file:', fileName, 'size:', blob.size);
-    const { error } = await supabase.storage
-      .from('thumbnails')
-      .upload(fileName, blob, {
-        cacheControl: '3600',
-        upsert: true, // Overwrite if exists
-        contentType: 'image/jpeg',
-      });
+    console.log('[Thumbnail] Uploading via REST API, file:', fileName, 'size:', blob.size);
 
-    if (error) {
-      console.error('[Thumbnail] Error uploading to storage:', error.message, error);
-      // Fall back to storing base64 directly (not ideal but works)
-      console.log('Falling back to base64 storage for thumbnail');
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Upload using Supabase Storage REST API
+    // POST to /storage/v1/object/{bucket}/{path} for upload
+    // Use upsert by adding x-upsert header
+    const response = await fetch(`${supabaseUrl}/storage/v1/object/thumbnails/${fileName}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'true',
+        'Cache-Control': 'max-age=3600',
+      },
+      body: blob,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Thumbnail] REST upload failed:', response.status, errorText);
+      // Fall back to storing base64 directly
       return dataUrl;
     }
 
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from('thumbnails')
-      .getPublicUrl(fileName);
-
-    console.log('✅ Thumbnail uploaded to storage:', urlData.publicUrl);
-    return urlData.publicUrl;
+    // Construct the public URL
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/thumbnails/${fileName}`;
+    console.log('✅ Thumbnail uploaded via REST:', publicUrl);
+    return publicUrl;
   } catch (err) {
-    console.error('Error in uploadThumbnailToStorage:', err);
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error('[Thumbnail] Upload timed out after', timeoutMs, 'ms');
+    } else {
+      console.error('Error in uploadThumbnailToStorage:', err);
+    }
     // Fall back to base64 on any error
     return dataUrl;
   }
@@ -308,6 +330,13 @@ interface DesignerState {
   // Loading states
   isLoading: boolean;
   error: string | null;
+
+  // Data binding state
+  dataSourceId: string | null;
+  dataSourceName: string | null;
+  dataPayload: Record<string, unknown>[] | null;
+  currentRecordIndex: number;
+  dataDisplayField: string | null;
 }
 
 interface DesignerActions {
@@ -372,8 +401,10 @@ interface DesignerActions {
     elementId: string,
     bindingKey: string,
     targetProperty: string,
-    bindingType: BindingType
+    bindingType: BindingType,
+    templateId?: string
   ) => string;
+  updateBinding: (bindingId: string, updates: Partial<Binding>) => void;
   deleteBinding: (bindingId: string) => void;
 
   // Layer operations
@@ -429,6 +460,8 @@ interface DesignerActions {
   clearOnAir: (layerId: string) => void;
 
   // Outline panel
+  outlineTab: 'elements' | 'layers';
+  setOutlineTab: (tab: 'elements' | 'layers') => void;
   toggleNode: (nodeId: string) => void;
   expandAll: () => void;
   collapseAll: () => void;
@@ -446,6 +479,14 @@ interface DesignerActions {
   redo: () => void;
   pushHistory: (description: string) => void;
   clearHistory: () => void;
+
+  // Data binding operations
+  setDataSource: (id: string, name: string, data: Record<string, unknown>[], displayField: string) => Promise<void>;
+  clearDataSource: () => Promise<void>;
+  setCurrentRecordIndex: (index: number) => void;
+  setDefaultRecordIndex: (index: number) => Promise<void>;
+  nextRecord: () => void;
+  prevRecord: () => void;
 }
 
 // Helper functions
@@ -683,6 +724,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         chatMessages: [],
         isChatLoading: false,
         expandedNodes: new Set(),
+        outlineTab: 'elements',
         history: [],
         historyIndex: -1,
         isDirty: false,
@@ -690,6 +732,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         lastSaved: null,
         isLoading: false,
         error: null,
+
+        // Data binding state
+        dataSourceId: null,
+        dataSourceName: null,
+        dataPayload: null,
+        currentRecordIndex: 0,
+        dataDisplayField: null,
 
         // Project operations
         loadProject: async (projectId) => {
@@ -735,6 +784,27 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                   const savedPhaseDurations = safeData.project?.settings?.phaseDurations;
                   const phaseDurations = savedPhaseDurations || { in: 1500, loop: 3000, out: 1500 };
 
+                  // Hydrate data source state for the first template if it has one
+                  const firstTemplate = safeData.templates?.[0];
+                  let localDataSourceId: string | null = null;
+                  let localDataSourceName: string | null = null;
+                  let localDataPayload: Record<string, unknown>[] | null = null;
+                  let localDataDisplayField: string | null = null;
+                  let localDefaultRecordIndex = 0;
+
+                  if (firstTemplate?.data_source_id) {
+                    const dataSource = getDataSourceById(firstTemplate.data_source_id);
+                    if (dataSource) {
+                      localDataSourceId = dataSource.id;
+                      localDataSourceName = dataSource.name;
+                      localDataPayload = dataSource.data;
+                      const config = firstTemplate.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
+                      localDataDisplayField = config?.displayField || dataSource.displayField;
+                      localDefaultRecordIndex = config?.defaultRecordIndex ?? 0;
+                      console.log(`📊 Auto-hydrated data source "${dataSource.name}" for template "${firstTemplate.name}" (default record: ${localDefaultRecordIndex})`);
+                    }
+                  }
+
                   set({
                     ...safeData,
                     currentTemplateId: safeData.templates?.[0]?.id || null,
@@ -743,6 +813,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                     error: null,
                     tool: 'select', // Reset tool to select on project load
                     phaseDurations, // Restore saved phase durations
+                    // Hydrate data source state for first template
+                    dataSourceId: localDataSourceId,
+                    dataSourceName: localDataSourceName,
+                    dataPayload: localDataPayload,
+                    dataDisplayField: localDataDisplayField,
+                    currentRecordIndex: localDefaultRecordIndex,
                   });
                   console.log('✅ Loaded project from localStorage:', safeData.project?.name);
                   return;
@@ -1206,6 +1282,35 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             const savedPhaseDurations = project.settings?.phaseDurations;
             const phaseDurations = savedPhaseDurations || { in: 1500, loop: 3000, out: 1500 };
 
+            // Find the first template with a data source, and use that as the selected template
+            // This ensures data binding loads on project open
+            console.log(`🔍 Checking ${templates.length} templates for data sources...`);
+            templates.forEach((t, i) => {
+              console.log(`  [${i}] "${t.name}" - data_source_id: ${t.data_source_id || 'null'}`);
+            });
+
+            const templateWithDataSource = templates.find(t => t.data_source_id);
+            const selectedTemplateId = templateWithDataSource?.id || templates[0]?.id || null;
+
+            let dataSourceId: string | null = null;
+            let dataSourceName: string | null = null;
+            let dataPayload: Record<string, unknown>[] | null = null;
+            let dataDisplayField: string | null = null;
+            let defaultRecordIndex = 0;
+
+            if (templateWithDataSource?.data_source_id) {
+              const dataSource = getDataSourceById(templateWithDataSource.data_source_id);
+              if (dataSource) {
+                dataSourceId = dataSource.id;
+                dataSourceName = dataSource.name;
+                dataPayload = dataSource.data;
+                const config = templateWithDataSource.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
+                dataDisplayField = config?.displayField || dataSource.displayField;
+                defaultRecordIndex = config?.defaultRecordIndex ?? 0;
+                console.log(`📊 Auto-hydrated data source "${dataSource.name}" for template "${templateWithDataSource.name}" (default record: ${defaultRecordIndex})`);
+              }
+            }
+
             set({
               project,
               layers,
@@ -1215,7 +1320,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               keyframes: allKeyframes,
               bindings: allBindings,
               chatMessages,
-              currentTemplateId: templates[0]?.id || null,
+              currentTemplateId: selectedTemplateId,
               isLoading: false,
               isDirty: false,
               error: null,
@@ -1229,6 +1334,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 templates: [],
                 layers: [],
               },
+              // Hydrate data source state for first template
+              dataSourceId,
+              dataSourceName,
+              dataPayload,
+              dataDisplayField,
+              currentRecordIndex: defaultRecordIndex,
             });
 
             console.log(`✅ Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements, ${allAnimations.length} animations, ${allKeyframes.length} keyframes`);
@@ -1261,12 +1372,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           if (thumbnailDataUrl && isValidUUID && projectId !== 'demo') {
             try {
-              // Use 5s timeout for thumbnail upload - don't block save on slow uploads
-              const uploadedUrl = await withTimeout(
-                uploadThumbnailToStorage(projectId, thumbnailDataUrl),
-                5000,
-                'Upload thumbnail'
-              );
+              // Upload thumbnail via REST API with 10s timeout - function handles its own timeout
+              const uploadedUrl = await uploadThumbnailToStorage(projectId, thumbnailDataUrl, 10000);
               if (uploadedUrl) {
                 thumbnailUrl = uploadedUrl;
               }
@@ -1677,11 +1784,59 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         // Template operations
         selectTemplate: (id) => {
+          const { templates, currentTemplateId, dataSourceId: currentDataSourceId } = get();
+          const template = templates.find(t => t.id === id);
+
+          // Hydrate data source state from template if available
+          let dataSourceId: string | null = null;
+          let dataSourceName: string | null = null;
+          let dataPayload: Record<string, unknown>[] | null = null;
+          let dataDisplayField: string | null = null;
+
+          // Get default record index from config
+          const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
+          const defaultRecordIndex = config?.defaultRecordIndex ?? 0;
+
+          if (template?.data_source_id) {
+            const dataSource = getDataSourceById(template.data_source_id);
+            if (dataSource) {
+              dataSourceId = dataSource.id;
+              dataSourceName = dataSource.name;
+              dataPayload = dataSource.data;
+              dataDisplayField = config?.displayField || dataSource.displayField;
+            }
+          }
+
+          // If clicking on the same template, just clear element selection (to show Data tab)
+          // but don't reset playhead position - still hydrate data source if not already loaded
+          if (id === currentTemplateId) {
+            // Only update data source if it's not already loaded
+            if (!currentDataSourceId && dataSourceId) {
+              set({
+                selectedElementIds: [],
+                dataSourceId,
+                dataSourceName,
+                dataPayload,
+                dataDisplayField,
+                currentRecordIndex: defaultRecordIndex,
+              });
+            } else {
+              set({ selectedElementIds: [] });
+            }
+            return;
+          }
+
           set({
             currentTemplateId: id,
             selectedElementIds: [],
             currentPhase: 'in',
             playheadPosition: 0,
+            // Hydrate data source state
+            dataSourceId,
+            dataSourceName,
+            dataPayload,
+            dataDisplayField,
+            currentRecordIndex: defaultRecordIndex,
           });
         },
 
@@ -2727,8 +2882,35 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           if (ids.length > 0 && !options.skipTemplateSwitch) {
             const firstElement = state.elements.find(e => e.id === ids[0]);
             if (firstElement && firstElement.template_id !== state.currentTemplateId) {
-              // Switch to the element's template
-              set({ currentTemplateId: firstElement.template_id });
+              // Switch to the element's template and hydrate data source state
+              const template = state.templates.find(t => t.id === firstElement.template_id);
+
+              // Hydrate data source state from template if available
+              let dataSourceId: string | null = null;
+              let dataSourceName: string | null = null;
+              let dataPayload: Record<string, unknown>[] | null = null;
+              let dataDisplayField: string | null = null;
+              const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
+              const defaultRecordIndex = config?.defaultRecordIndex ?? 0;
+
+              if (template?.data_source_id) {
+                const dataSource = getDataSourceById(template.data_source_id);
+                if (dataSource) {
+                  dataSourceId = dataSource.id;
+                  dataSourceName = dataSource.name;
+                  dataPayload = dataSource.data;
+                  dataDisplayField = config?.displayField || dataSource.displayField;
+                }
+              }
+
+              set({
+                currentTemplateId: firstElement.template_id,
+                dataSourceId,
+                dataSourceName,
+                dataPayload,
+                dataDisplayField,
+                currentRecordIndex: defaultRecordIndex,
+              });
             }
           }
 
@@ -2948,13 +3130,20 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set({ bindings, isDirty: true });
         },
 
-        addBinding: (elementId, bindingKey, targetProperty, bindingType) => {
+        addBinding: (elementId, bindingKey, targetProperty, bindingType, templateId) => {
           const id = crypto.randomUUID();
           const state = get();
 
+          // Use provided templateId or fall back to currentTemplateId
+          const resolvedTemplateId = templateId || state.currentTemplateId;
+          if (!resolvedTemplateId) {
+            console.error('❌ Cannot add binding: no template ID available');
+            return id;
+          }
+
           const newBinding: Binding = {
             id,
-            template_id: state.currentTemplateId!,
+            template_id: resolvedTemplateId,
             element_id: elementId,
             binding_key: bindingKey,
             target_property: targetProperty,
@@ -2968,15 +3157,28 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((state) => {
             state.bindings.push(newBinding);
             state.isDirty = true;
+            console.log(`🔗 Added binding: ${bindingKey} → ${elementId}, isDirty: ${state.isDirty}`);
           });
 
           return id;
         },
 
+        updateBinding: (bindingId, updates) => {
+          set((state) => {
+            const idx = state.bindings.findIndex((b) => b.id === bindingId);
+            if (idx !== -1) {
+              state.bindings[idx] = { ...state.bindings[idx], ...updates };
+              state.isDirty = true;
+            }
+          });
+        },
+
         deleteBinding: (bindingId) => {
           set((state) => {
             state.bindings = state.bindings.filter((b) => b.id !== bindingId);
+            state.pendingDeletions.bindings.push(bindingId);
             state.isDirty = true;
+            console.log(`🗑️ Deleted binding: ${bindingId}, isDirty: ${state.isDirty}`);
           });
         },
 
@@ -3382,6 +3584,10 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         // Outline panel
+        setOutlineTab: (tab) => {
+          set({ outlineTab: tab });
+        },
+
         toggleNode: (nodeId) => {
           set((state) => {
             const expanded = new Set(state.expandedNodes);
@@ -3619,6 +3825,159 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         clearHistory: () => {
           set({ history: [], historyIndex: -1 });
+        },
+
+        // Data binding operations
+        setDataSource: async (id, name, data, displayField) => {
+          const { currentTemplateId } = get();
+
+          // Update local state AND update the template record in the local store
+          set((draft) => {
+            draft.dataSourceId = id;
+            draft.dataSourceName = name;
+            draft.dataPayload = data;
+            draft.currentRecordIndex = 0;
+            draft.dataDisplayField = displayField;
+            draft.isDirty = true;
+
+            // Also update the template's data_source_id in the local templates array
+            // This ensures selectTemplate will hydrate correctly when switching back
+            if (currentTemplateId) {
+              const template = draft.templates.find(t => t.id === currentTemplateId);
+              if (template) {
+                template.data_source_id = id;
+                template.data_source_config = { displayField };
+              }
+            }
+          });
+
+          // Persist to template in database via REST API
+          if (currentTemplateId) {
+            const accessToken = useAuthStore.getState().accessToken;
+            console.log(`💾 Saving data source "${id}" to template ${currentTemplateId}...`);
+            const result = await directRestUpdate(
+              'gfx_templates',
+              {
+                data_source_id: id,
+                data_source_config: { displayField },
+              },
+              { column: 'id', value: currentTemplateId },
+              10000,
+              accessToken || undefined
+            );
+            if (!result.success) {
+              console.error('❌ Failed to save data source to template:', result.error);
+            } else {
+              console.log(`✅ Data source "${id}" saved to template ${currentTemplateId}`);
+            }
+          }
+        },
+
+        clearDataSource: async () => {
+          const { currentTemplateId } = get();
+
+          // Update local state AND update the template record in the local store
+          set((draft) => {
+            draft.dataSourceId = null;
+            draft.dataSourceName = null;
+            draft.dataPayload = null;
+            draft.currentRecordIndex = 0;
+            draft.dataDisplayField = null;
+            draft.isDirty = true;
+
+            // Also clear the template's data_source_id in the local templates array
+            if (currentTemplateId) {
+              const template = draft.templates.find(t => t.id === currentTemplateId);
+              if (template) {
+                template.data_source_id = null;
+                template.data_source_config = null;
+              }
+            }
+          });
+
+          // Clear from template in database via REST API
+          if (currentTemplateId) {
+            const accessToken = useAuthStore.getState().accessToken;
+            const result = await directRestUpdate(
+              'gfx_templates',
+              {
+                data_source_id: null,
+                data_source_config: null,
+              },
+              { column: 'id', value: currentTemplateId },
+              10000,
+              accessToken || undefined
+            );
+            if (!result.success) {
+              console.error('Failed to clear data source from template:', result.error);
+            }
+          }
+        },
+
+        setCurrentRecordIndex: (index) => {
+          const { dataPayload } = get();
+          if (!dataPayload) return;
+          const validIndex = Math.max(0, Math.min(index, dataPayload.length - 1));
+          set({ currentRecordIndex: validIndex });
+        },
+
+        setDefaultRecordIndex: async (index) => {
+          const { currentTemplateId, dataDisplayField, templates } = get();
+          if (!currentTemplateId) return;
+
+          const template = templates.find(t => t.id === currentTemplateId);
+          if (!template) return;
+
+          // Get current config and add defaultRecordIndex
+          const currentConfig = (template.data_source_config as { displayField?: string; defaultRecordIndex?: number }) || {};
+          const newConfig = {
+            ...currentConfig,
+            displayField: dataDisplayField || currentConfig.displayField,
+            defaultRecordIndex: index,
+          };
+
+          // Update template in local state
+          set((state) => {
+            const idx = state.templates.findIndex(t => t.id === currentTemplateId);
+            if (idx !== -1) {
+              state.templates[idx] = {
+                ...state.templates[idx],
+                data_source_config: newConfig,
+              };
+              state.isDirty = true;
+            }
+          });
+
+          // Persist to database
+          const accessToken = useAuthStore.getState().accessToken;
+          const result = await directRestUpdate(
+            'gfx_templates',
+            { data_source_config: newConfig },
+            { column: 'id', value: currentTemplateId },
+            10000,
+            accessToken || undefined
+          );
+          if (!result.success) {
+            console.error('Failed to save default record index:', result.error);
+          } else {
+            console.log(`✅ Set default record index to ${index}`);
+          }
+        },
+
+        nextRecord: () => {
+          const { dataPayload, currentRecordIndex } = get();
+          if (!dataPayload) return;
+          const nextIndex = currentRecordIndex + 1;
+          if (nextIndex < dataPayload.length) {
+            set({ currentRecordIndex: nextIndex });
+          }
+        },
+
+        prevRecord: () => {
+          const { currentRecordIndex } = get();
+          if (currentRecordIndex > 0) {
+            set({ currentRecordIndex: currentRecordIndex - 1 });
+          }
         },
       }))
     )

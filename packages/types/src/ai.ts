@@ -28,6 +28,13 @@ export interface AIContext {
   }[];
   availablePresets: string[];
   availableLibraries: string[];
+  // Data-driven design context
+  dataContext?: {
+    dataSourceId: string;
+    dataSourceName: string;
+    schema: Record<string, string>; // field name -> type (string, number, boolean)
+    sampleData: Record<string, unknown>; // first record from the data source
+  };
 }
 
 // AI Request

@@ -37,6 +37,12 @@ export interface Template {
   height: number;
   createdAt: Date;
   updatedAt: Date;
+  // Data binding fields
+  dataSourceId?: string | null;
+  dataSourceConfig?: {
+    displayField?: string;
+    defaultRecordIndex?: number;
+  } | null;
 }
 
 export interface TemplateElement {
@@ -215,6 +221,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           height: t.height || 1080,
           createdAt: new Date(t.created_at),
           updatedAt: new Date(t.updated_at),
+          // Data binding fields
+          dataSourceId: t.data_source_id || null,
+          dataSourceConfig: t.data_source_config || null,
         };
       });
 

@@ -15,7 +15,7 @@ import {
   DialogTitle,
   ScrollArea,
 } from '@emergent-platform/ui';
-import { Type, Image, Hash, Save, RotateCcw, FileText, Library, MapPin, Palette, FilePlus, Search, ImagePlus, Loader2, Navigation, Clock, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Trash2, Edit2, Check, X, ScrollText } from 'lucide-react';
+import { Type, Image, Hash, Save, RotateCcw, FileText, Library, MapPin, Palette, FilePlus, Search, ImagePlus, Loader2, Navigation, Clock, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Filter, Plus, Trash2, Edit2, Check, X, ScrollText, Database } from 'lucide-react';
 import type { TickerItem, TickerTopic } from '@emergent-platform/types';
 import { TOPIC_BADGE_STYLES } from '@emergent-platform/types';
 import * as LucideIcons from 'lucide-react';
@@ -26,6 +26,8 @@ import { usePlaylistStore } from '@/stores/playlistStore';
 import { useChannelStore } from '@/stores/channelStore';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
+import { getDataSourceById, getNestedValue } from '@/data/sampleDataSources';
+import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
 
 // Common Lucide icons for the icon picker
 const COMMON_LUCIDE_ICONS = [
@@ -107,7 +109,7 @@ function getElementsFromLocalStorage(templateId: string): any[] {
 
 export function ContentEditor() {
   const { pages, updatePagePayload, createPage } = usePageStore();
-  const { selectedTemplateId, selectedPageId, updatePreviewField, setPreviewPayload } = usePreviewStore();
+  const { selectedTemplateId, selectedPageId, updatePreviewField, setPreviewPayload, dataRecordIndex, setDataRecordIndex } = usePreviewStore();
   const { templates } = useProjectStore();
   const { currentPlaylist } = usePlaylistStore();
   const { selectedChannel } = useChannelStore();
@@ -153,6 +155,9 @@ export function ContentEditor() {
   const [locationSearchResults, setLocationSearchResults] = useState<Array<{ id: string; name: string; lng: number; lat: number; zoom?: number }>>([]);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
 
+  // Data binding state - use store's dataRecordIndex
+  const currentRecordIndex = dataRecordIndex;
+
   // Keyframe location picker state
   const [showKeyframeLocationPicker, setShowKeyframeLocationPicker] = useState(false);
   const [keyframePickerFieldId, setKeyframePickerFieldId] = useState<string | null>(null);
@@ -176,6 +181,91 @@ export function ContentEditor() {
     { id: 'sydney', name: 'Sydney', lng: 151.2093, lat: -33.8688, zoom: 11 },
     { id: 'dubai', name: 'Dubai', lng: 55.2708, lat: 25.2048, zoom: 11 },
   ], []);
+
+  // Data source for template with bindings
+  const dataSource = useMemo(() => {
+    const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
+    if (!template?.dataSourceId) return null;
+    return getDataSourceById(template.dataSourceId);
+  }, [selectedTemplate, previewPage?.templateId, templates]);
+
+  // Data payload (array of records)
+  const dataPayload = useMemo(() => {
+    return dataSource?.data || null;
+  }, [dataSource]);
+
+  // Display field for record selector dropdown
+  const dataDisplayField = useMemo(() => {
+    const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
+    return template?.dataSourceConfig?.displayField || dataSource?.displayField || null;
+  }, [selectedTemplate, previewPage?.templateId, templates, dataSource]);
+
+  // Current record based on index
+  const currentRecord = useMemo(() => {
+    if (!dataPayload || dataPayload.length === 0) return null;
+    const safeIndex = Math.max(0, Math.min(currentRecordIndex, dataPayload.length - 1));
+    return dataPayload[safeIndex];
+  }, [dataPayload, currentRecordIndex]);
+
+  // Display value for current record in selector
+  const recordDisplayValue = useMemo(() => {
+    if (!currentRecord || !dataDisplayField) return `Record ${currentRecordIndex + 1}`;
+    const value = getNestedValue(currentRecord, dataDisplayField);
+    return value ? String(value) : `Record ${currentRecordIndex + 1}`;
+  }, [currentRecord, dataDisplayField, currentRecordIndex]);
+
+  // Reset record index when template changes
+  useEffect(() => {
+    const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
+    const defaultIndex = template?.dataSourceConfig?.defaultRecordIndex ?? 0;
+    setDataRecordIndex(defaultIndex);
+  }, [selectedTemplate?.id, previewPage?.templateId, setDataRecordIndex]);
+
+  // Navigation handlers
+  const prevRecord = useCallback(() => {
+    setDataRecordIndex(Math.max(0, currentRecordIndex - 1));
+  }, [currentRecordIndex, setDataRecordIndex]);
+
+  const nextRecord = useCallback(() => {
+    if (!dataPayload) return;
+    setDataRecordIndex(Math.min(dataPayload.length - 1, currentRecordIndex + 1));
+  }, [dataPayload, currentRecordIndex, setDataRecordIndex]);
+
+  // Get bindings for the current template from localStorage
+  const templateBindings = useMemo(() => {
+    const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
+    if (!template) return [];
+
+    try {
+      const previewDataStr = localStorage.getItem('nova-preview-data');
+      if (!previewDataStr) return [];
+      const previewData = JSON.parse(previewDataStr);
+      const allBindings = previewData.bindings || [];
+      return allBindings.filter((b: Binding) => b.template_id === template.id);
+    } catch {
+      return [];
+    }
+  }, [selectedTemplate, previewPage?.templateId, templates]);
+
+  // Resolve bindings and update preview when record changes
+  useEffect(() => {
+    if (!currentRecord || templateBindings.length === 0) return;
+
+    // Resolve bindings using the current record's data
+    const resolvedValues = resolvePayloadBindings({}, templateBindings, currentRecord);
+
+    // Send resolved binding values to preview
+    // These will be merged with the localPayload as content overrides
+    if (Object.keys(resolvedValues).length > 0) {
+      console.log('[ContentEditor] Resolved bindings for record:', currentRecordIndex, resolvedValues);
+      // Update the preview with resolved binding values
+      Object.entries(resolvedValues).forEach(([elementId, value]) => {
+        if (value !== null) {
+          updatePreviewField(elementId, value);
+        }
+      });
+    }
+  }, [currentRecord, templateBindings, currentRecordIndex, updatePreviewField]);
 
   // Search for locations using Mapbox Geocoding API
   const searchLocation = useCallback(async (query: string) => {
@@ -973,6 +1063,64 @@ export function ContentEditor() {
           )}
         </div>
       </div>
+
+      {/* Data Record Selector - shown when template has data bindings */}
+      {dataSource && dataPayload && dataPayload.length > 0 && (
+        <div className="px-2 sm:px-3 py-2 border-b border-border bg-cyan-500/5">
+          <div className="flex items-center gap-2 mb-2">
+            <Database className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-medium text-cyan-300">{dataSource.name}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={prevRecord}
+              disabled={currentRecordIndex === 0}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+
+            <Select
+              value={String(currentRecordIndex)}
+              onValueChange={(val) => setDataRecordIndex(parseInt(val, 10))}
+            >
+              <SelectTrigger className="h-7 flex-1 text-xs">
+                <SelectValue>
+                  {recordDisplayValue}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {dataPayload.map((record, idx) => {
+                  const displayVal = dataDisplayField
+                    ? getNestedValue(record, dataDisplayField)
+                    : null;
+                  return (
+                    <SelectItem key={idx} value={String(idx)}>
+                      {displayVal ? String(displayVal) : `Record ${idx + 1}`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={nextRecord}
+              disabled={currentRecordIndex === dataPayload.length - 1}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {currentRecordIndex + 1}/{dataPayload.length}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Fields */}
       <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3 flex flex-col">

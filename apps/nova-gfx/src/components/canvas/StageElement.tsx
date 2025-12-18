@@ -4,6 +4,7 @@ import { useDrag } from '@/hooks/useDrag';
 import { useResize, RESIZE_CURSORS, type ResizeHandle } from '@/hooks/useResize';
 import { useRotate } from '@/hooks/useRotate';
 import { getAnimatedProperties } from '@/lib/animation';
+import { resolveElementBindings, shouldHideElement } from '@/lib/bindingResolver';
 import { ChartElement } from './ChartElement';
 import { MapElement } from './MapElement';
 import { VideoElement } from './VideoElement';
@@ -239,11 +240,30 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     isPlaying,
     selectedKeyframeIds,
     phaseDurations,
+    bindings,
+    dataPayload,
+    currentRecordIndex,
   } = useDesignerStore();
 
   const { isDragging, handleMouseDown: handleDragStart } = useDrag();
   const { isResizing, handleResizeStart } = useResize();
   const { isRotating, handleRotateStart } = useRotate();
+
+  // Get current data record for bindings
+  const currentRecord = useMemo(() => {
+    if (!dataPayload || dataPayload.length === 0) return null;
+    return dataPayload[currentRecordIndex];
+  }, [dataPayload, currentRecordIndex]);
+
+  // Resolve bindings - apply data values to element content
+  const resolvedElement = useMemo(() => {
+    return resolveElementBindings(element, bindings, currentRecord);
+  }, [element, bindings, currentRecord]);
+
+  // Check if element should be hidden based on binding options (hideOnZero, hideOnNull)
+  const isHiddenByBinding = useMemo(() => {
+    return shouldHideElement(element.id, bindings, currentRecord);
+  }, [element.id, bindings, currentRecord]);
 
   const isSelected = selectedElementIds.includes(element.id);
   const isHovered = hoveredElementId === element.id;
@@ -653,11 +673,12 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   };
 
   // Render content based on type
+  // Use resolvedElement for content (has data bindings applied)
   const renderContent = () => {
-    switch (element.content.type) {
+    switch (resolvedElement.content.type) {
       case 'text':
         // Apply text-specific styles from element.styles (textShadow, fontWeight, etc.)
-        const textContent = element.content;
+        const textContent = resolvedElement.content;
         const verticalAlign = element.styles?.verticalAlign || 'middle';
         const alignItemsMap: Record<string, string> = {
           top: 'flex-start',
@@ -726,7 +747,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       case 'image':
         return (
           <ImageElement
-            content={element.content}
+            content={resolvedElement.content}
             width={element.width}
             height={element.height}
             elementId={element.id}
@@ -1437,6 +1458,12 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         return null;
     }
   };
+
+  // Hide element if binding options dictate (hideOnZero, hideOnNull)
+  // Data changes will cause this to re-evaluate, making it responsive
+  if (isHiddenByBinding) {
+    return null;
+  }
 
   return (
     <div

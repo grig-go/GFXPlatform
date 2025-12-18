@@ -30,6 +30,7 @@ interface PreviewData {
   elements: any[];
   animations: any[];
   keyframes: any[];
+  bindings: any[];
   currentTemplateId: string | null;
   project: any | null;
 }
@@ -47,6 +48,7 @@ export function PreviewPanel() {
     previewPayload,
     loadedProjectId,
     setLoadedProjectId,
+    dataRecordIndex,
   } = usePreviewStore();
 
   const { getTemplate, templates, currentProject } = useProjectStore();
@@ -196,6 +198,21 @@ export function PreviewPanel() {
         keyframesData = data || [];
       }
 
+      // Load bindings for all templates (for data binding support)
+      let bindingsData: any[] = [];
+      if (templateIds.length > 0) {
+        const { data, error: bindingsError } = await supabase
+          .from('gfx_bindings')
+          .select('*')
+          .in('template_id', templateIds);
+
+        if (bindingsError) {
+          console.warn('[PreviewPanel] Error loading bindings:', bindingsError);
+        } else {
+          bindingsData = data || [];
+        }
+      }
+
       // Check if project changed during loading (race condition protection)
       if (loadingProjectIdRef.current !== projectIdToLoad) {
         console.log('[PreviewPanel] Project changed during load, discarding stale data for:', projectIdToLoad);
@@ -235,6 +252,7 @@ export function PreviewPanel() {
         elements: elementsData || [],
         animations: animationsData || [],
         keyframes: keyframesData,
+        bindings: bindingsData,
         currentTemplateId: null, // Template will be set via postMessage
         project: projectData,
       };
@@ -339,6 +357,14 @@ export function PreviewPanel() {
     // Send content updates immediately via postMessage
     sendToPreview('updateContent', activePayload || {});
   }, [activePayload, iframeLoaded, previewReady, sendToPreview]);
+
+  // Send data record index changes to Nova GFX for data binding preview
+  useEffect(() => {
+    if (!iframeLoaded || !previewReady) return;
+
+    // Send data record index to Nova GFX
+    sendToPreview('setDataRecordIndex', { recordIndex: dataRecordIndex });
+  }, [dataRecordIndex, iframeLoaded, previewReady, sendToPreview]);
 
   // Handle template change via postMessage (no iframe reload!)
   // This handles both direct template selection AND page selection (which changes pageTemplate)

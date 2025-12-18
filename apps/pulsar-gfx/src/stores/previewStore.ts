@@ -25,6 +25,10 @@ interface PreviewStore {
   previewPayload: Record<string, any>;
   animationPhase: AnimationPhase;
 
+  // Data binding state
+  dataRecordIndex: number;
+  setDataRecordIndex: (index: number) => void;
+
   // Composite mode state
   compositeLayers: CompositeLayer[];
 
@@ -60,6 +64,7 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
   selectedPageId: null,
   previewPayload: {},
   animationPhase: 'idle',
+  dataRecordIndex: 0,
   compositeLayers: [
     { layerIndex: 0, isVisible: true },
     { layerIndex: 1, isVisible: true },
@@ -69,6 +74,7 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
 
   setMode: (mode) => set({ mode }),
   setLoadedProjectId: (projectId) => set({ loadedProjectId: projectId }),
+  setDataRecordIndex: (index) => set({ dataRecordIndex: index }),
 
   selectTemplate: (templateId) => {
     set({
@@ -185,6 +191,7 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
       selectedPageId: null,
       previewPayload: {},
       animationPhase: 'idle',
+      dataRecordIndex: 0,
       compositeLayers: [
         { layerIndex: 0, isVisible: true },
         { layerIndex: 1, isVisible: true },

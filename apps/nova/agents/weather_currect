@@ -1,0 +1,750 @@
+[
+  {
+    "location": {
+      "id": "atlantic-city-news12",
+      "name": "Atlantic City",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 55,
+        "unit": "°F",
+        "valueAndUnit": "55°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "beach-haven-new",
+      "name": "Beach Haven",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 28.9,
+        "unit": "°F",
+        "valueAndUnit": "28.9°F"
+      },
+      "icon": "clear"
+    },
+    "lastUpdated": "2025-12-18 00:45"
+  },
+  {
+    "location": {
+      "id": "boston-massachusetts",
+      "name": "Boston",
+      "country": "United States of America",
+      "state": "Massachusetts"
+    },
+    "weather": {
+      "temperature": {
+        "value": 32.4,
+        "unit": "°F",
+        "valueAndUnit": "32.4°F"
+      },
+      "icon": "clear"
+    },
+    "lastUpdated": "2025-12-18 00:45"
+  },
+  {
+    "location": {
+      "id": "bridgeport-news12",
+      "name": "Bridgeport",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "bronx-news12",
+      "name": "Bronx",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "brooklyn-news12",
+      "name": "Brooklyn",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "caldwell-news12",
+      "name": "Caldwell",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "central-park-news12",
+      "name": "Central Park",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "fair"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "chicago-illinois",
+      "name": "Chicago",
+      "country": "United States of America",
+      "state": "Illinois"
+    },
+    "weather": {
+      "temperature": {
+        "value": 37.9,
+        "unit": "°F",
+        "valueAndUnit": "37.9°F"
+      },
+      "icon": "overcast"
+    },
+    "lastUpdated": "2025-12-17 23:45"
+  },
+  {
+    "location": {
+      "id": "cranford-new",
+      "name": "Cranford",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 36,
+        "unit": "°F",
+        "valueAndUnit": "36°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-18 00:45"
+  },
+  {
+    "location": {
+      "id": "danbury-news12",
+      "name": "Danbury",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "east-hampton-news12",
+      "name": "East Hampton",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "farmingdale-news12",
+      "name": "Farmingdale",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 50,
+        "unit": "°F",
+        "valueAndUnit": "50°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.903+00:00"
+  },
+  {
+    "location": {
+      "id": "freehold-news12",
+      "name": "Freehold",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "fair"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "glen-ridge-new",
+      "name": "Glen Ridge",
+      "country": "USA United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 30.9,
+        "unit": "°F",
+        "valueAndUnit": "30.9°F"
+      },
+      "icon": "clear"
+    },
+    "lastUpdated": "2025-12-18 00:45"
+  },
+  {
+    "location": {
+      "id": "groton-news12",
+      "name": "Groton",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "fair"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "hartford-news12",
+      "name": "Hartford",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "mostly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "houston-texas",
+      "name": "Houston",
+      "country": "United States of America",
+      "state": "Texas"
+    },
+    "weather": {
+      "temperature": {
+        "value": 61.2,
+        "unit": "°F",
+        "valueAndUnit": "61.2°F"
+      },
+      "icon": "fog"
+    },
+    "lastUpdated": "2025-12-17 23:45"
+  },
+  {
+    "location": {
+      "id": "islip-news12",
+      "name": "Islip",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "jackson-township-news12",
+      "name": "Jackson Township",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 57,
+        "unit": "°F",
+        "valueAndUnit": "57°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "jfk-airport-news12",
+      "name": "JFK Airport",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 50,
+        "unit": "°F",
+        "valueAndUnit": "50°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "lga-airport-news12",
+      "name": "LGA Airport",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "meriden-news12",
+      "name": "Meriden",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "mostly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "montauk-news12",
+      "name": "Montauk",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "montclair-new",
+      "name": "Montclair",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 30.9,
+        "unit": "°F",
+        "valueAndUnit": "30.9°F"
+      },
+      "icon": "clear"
+    },
+    "lastUpdated": "2025-12-18 00:45"
+  },
+  {
+    "location": {
+      "id": "montgomery-news12",
+      "name": "Montgomery",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 43,
+        "unit": "°F",
+        "valueAndUnit": "43°F"
+      },
+      "icon": "cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.904+00:00"
+  },
+  {
+    "location": {
+      "id": "morristown-news12",
+      "name": "Morristown",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "new-haven-news12",
+      "name": "New Haven",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "mostly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "new-yorkcentral-park-news12",
+      "name": "New York/Central Park",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 21,
+        "unit": "°F",
+        "valueAndUnit": "21°F"
+      },
+      "icon": "clear"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "newark-news12",
+      "name": "Newark",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "newburgh-news12",
+      "name": "Newburgh",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 45,
+        "unit": "°F",
+        "valueAndUnit": "45°F"
+      },
+      "icon": "fog"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "oxford-news12",
+      "name": "Oxford",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "fog"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "poughkeepsie-news12",
+      "name": "Poughkeepsie",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "ridgewood-news12",
+      "name": "Ridgewood",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 55,
+        "unit": "°F",
+        "valueAndUnit": "55°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "shirley-news12",
+      "name": "Shirley",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 50,
+        "unit": "°F",
+        "valueAndUnit": "50°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "stewart-news12",
+      "name": "Stewart",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 45,
+        "unit": "°F",
+        "valueAndUnit": "45°F"
+      },
+      "icon": "mostly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "sussex-news12",
+      "name": "Sussex",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 45,
+        "unit": "°F",
+        "valueAndUnit": "45°F"
+      },
+      "icon": "partly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "teterboro-news12",
+      "name": "Teterboro",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "fair"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "trenton-news12",
+      "name": "Trenton",
+      "country": "United States of America",
+      "state": "New Jersey"
+    },
+    "weather": {
+      "temperature": {
+        "value": 52,
+        "unit": "°F",
+        "valueAndUnit": "52°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "wall-street-nyc-news12",
+      "name": "Wall Street - NYC",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 54,
+        "unit": "°F",
+        "valueAndUnit": "54°F"
+      },
+      "icon": "fair"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "waterbury-news12",
+      "name": "Waterbury",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 46,
+        "unit": "°F",
+        "valueAndUnit": "46°F"
+      },
+      "icon": "fog"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "westhampton-beach-news12",
+      "name": "Westhampton Beach",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "sunny"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.905+00:00"
+  },
+  {
+    "location": {
+      "id": "white-plains-news12",
+      "name": "White Plains",
+      "country": "United States of America",
+      "state": "New York"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "haze"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.906+00:00"
+  },
+  {
+    "location": {
+      "id": "windsor-locks-news12",
+      "name": "Windsor Locks",
+      "country": "United States of America",
+      "state": "Connecticut"
+    },
+    "weather": {
+      "temperature": {
+        "value": 48,
+        "unit": "°F",
+        "valueAndUnit": "48°F"
+      },
+      "icon": "mostly cloudy"
+    },
+    "lastUpdated": "2025-12-17T01:45:00.906+00:00"
+  }
+]
