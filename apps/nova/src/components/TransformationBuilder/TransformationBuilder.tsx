@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { getAvailableTransformations } from '../../utils/transformations';
 import AITransformationOptions from './AITransformationOptions';
+import ScriptTransformationOptions from './ScriptTransformationOptions';
 
 // Icon mapping from Blueprint.js to Lucide React
 const iconMap: Record<string, any> = {
@@ -81,6 +82,8 @@ interface TransformationBuilderProps {
   value?: TransformationType;
   options?: Record<string, any>;
   availableFields?: string[];
+  sampleData?: Record<string, any>;
+  sourceDataPaths?: Record<string, string>;
   onChange: (transform: TransformationType, options?: Record<string, any>) => void;
 }
 
@@ -90,6 +93,8 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
   value,
   options = {},
   availableFields = [],
+  sampleData = {},
+  sourceDataPaths = {},
   onChange
 }) => {
   const availableTransforms = getAvailableTransformations(sourceType, targetType);
@@ -425,8 +430,24 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
             systemPrompt={transformOptions.systemPrompt}
             outputFormat={transformOptions.outputFormat}
             fieldContext={availableFields}
+            sampleData={sampleData}
+            sourceDataPaths={sourceDataPaths}
             examples={transformOptions.examples}
             cacheResults={transformOptions.cacheResults}
+            onChange={handleOptionsChange}
+          />
+        );
+
+      case 'script':
+        return (
+          <ScriptTransformationOptions
+            script={transformOptions.script || ''}
+            language={transformOptions.language || 'javascript'}
+            applyTo={transformOptions.applyTo || 'item'}
+            timeout={transformOptions.timeout || 5000}
+            fieldContext={availableFields}
+            sampleData={sampleData}
+            sourceDataPaths={sourceDataPaths}
             onChange={handleOptionsChange}
           />
         );
@@ -474,6 +495,12 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
                   <Badge variant="default" className="mt-3 text-xs">
                     <Sparkles className="h-3 w-3 mr-1" />
                     AI
+                  </Badge>
+                )}
+                {transform.id === 'script' && (
+                  <Badge variant="secondary" className="mt-3 text-xs">
+                    <Code className="h-3 w-3 mr-1" />
+                    Script
                   </Badge>
                 )}
               </CardContent>

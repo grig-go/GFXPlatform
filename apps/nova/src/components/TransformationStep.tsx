@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
@@ -50,6 +50,42 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
   const [newFieldName, setNewFieldName] = useState<string>('');
   const [availableFields, setAvailableFields] = useState<FieldInfo[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
+
+  // Compute source data paths from formData (respects user's data root selections)
+  const sourceDataPaths = useMemo(() => {
+    const paths: Record<string, string> = {};
+
+    const isRSSEndpoint = formData.format === 'RSS';
+    const sourceMappings = (formData.formatOptions as any)?.outputSchema?.metadata?.sourceMappings || [];
+    const jsonMappingConfig = (formData.formatOptions as any)?.jsonMappingConfig;
+    const sourceSelectionPrimaryPath = jsonMappingConfig?.sourceSelection?.primaryPath || '';
+    const selectedSources = jsonMappingConfig?.sourceSelection?.sources || [];
+
+    for (const source of formData.dataSources || []) {
+      // Check if this source has a specific path in jsonMappingConfig
+      const sourceConfig = selectedSources.find((s: any) => s.id === source.id);
+      let primaryPath = sourceConfig?.primaryPath || sourceSelectionPrimaryPath;
+
+      // Check RSS source mappings
+      if (isRSSEndpoint && !primaryPath) {
+        const mapping = sourceMappings.find((m: any) => m.sourceId === source.id);
+        if (mapping?.itemsPath) {
+          primaryPath = mapping.itemsPath;
+        }
+      }
+
+      // Fallback to API config data_path
+      if (!primaryPath && source.type === 'api' && (source as any).api_config?.data_path) {
+        primaryPath = (source as any).api_config.data_path;
+      }
+
+      if (primaryPath) {
+        paths[source.id] = primaryPath;
+      }
+    }
+
+    return paths;
+  }, [formData.dataSources, formData.format, formData.formatOptions]);
 
   // Sync transformations TO parent formData when local state changes
   useEffect(() => {
@@ -600,6 +636,8 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
                     value={editingTransform.type}
                     options={editingTransform.config}
                     availableFields={availableFields.map(f => f.path)}
+                    sampleData={sampleData}
+                    sourceDataPaths={sourceDataPaths}
                     onChange={(type, options) => setEditingTransform({
                       ...editingTransform,
                       type,

@@ -53,20 +53,21 @@ export async function applyComplexMapping(
       console.log(`Fetching from source: ${dataSource.name}`);
       let sourceData = await fetchDataFromSource(dataSource, supabase, queryParams);
       if (!sourceData) continue;
-      
-      // Apply transformations BEFORE navigation
-      if (endpoint.transform_config?.transformations) {
-        console.log(`Applying transformations to source data from ${dataSource.name}...`);
-        sourceData = await applyTransformationPipeline(sourceData, endpoint.transform_config, supabase);
-      }
-      
-      // Navigate to primary path
+
+      // Navigate to primary path FIRST (before transformations)
       let dataToProcess = sourceData;
       if (sourceConfig.primaryPath) {
         console.log(`Navigating to path: ${sourceConfig.primaryPath}`);
         dataToProcess = getValueFromPath(sourceData, sourceConfig.primaryPath);
       }
-      
+
+      // Apply transformations AFTER navigating to the data array
+      // This ensures script transforms receive individual items, not the full payload
+      if (endpoint.transform_config?.transformations) {
+        console.log(`Applying transformations to navigated data from ${dataSource.name}...`);
+        dataToProcess = await applyTransformationPipeline(dataToProcess, endpoint.transform_config, supabase);
+      }
+
       // Add source tracking
       if (Array.isArray(dataToProcess)) {
         dataToProcess.forEach((item) => {
