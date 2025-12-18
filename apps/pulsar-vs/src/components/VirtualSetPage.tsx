@@ -251,9 +251,9 @@ interface ChannelConfig {
   name: string;
   host: string;
   port: number;
-  objectPath?: string;
   active?: boolean;
   type?: string;
+  // Note: objectPath is now obtained from instanceData.object_path (pulsar_connections table)
 }
 
 interface RCPObject {
@@ -270,7 +270,7 @@ interface RCPFunction {
   presetName?: string;
 }
 
-// Pulsar Instance data from Supabase (UPDATED with project_type)
+// Pulsar Instance data from Supabase (UPDATED with project_type and object_path)
 interface PulsarInstance {
   instance_id: string;
   friendly_name: string;
@@ -279,6 +279,7 @@ interface PulsarInstance {
   set_manager_json: any;
   project_type: ProjectType;
   updated_at: string;
+  object_path?: string;  // UE5 object path from pulsar_connections table
 }
 
 import { sampleSceneDescriptor } from "./sampleData";
@@ -542,13 +543,31 @@ export default function VirtualSetPage({
         return;
       }
 
-      const instance = data.data as PulsarInstance;
+      let instance = data.data as PulsarInstance;
+
+      // If object_path is not in the RPC response, fetch it directly from pulsar_connections table
+      if (!instance.object_path && instance.id) {
+        console.log(`📡 object_path not in RPC response, fetching from pulsar_connections table for id: ${instance.id}`);
+        const { data: connectionData, error: connectionError } = await supabase
+          .from('pulsar_connections')
+          .select('object_path')
+          .eq('id', instance.id)
+          .single();
+
+        if (!connectionError && connectionData?.object_path) {
+          instance = { ...instance, object_path: connectionData.object_path };
+          console.log(`✅ Fetched object_path: ${connectionData.object_path}`);
+        } else if (connectionError) {
+          console.warn(`⚠️ Could not fetch object_path: ${connectionError.message}`);
+        }
+      }
+
       setInstanceData(instance);
-      
+
       // Set project type from instance data (NEW)
       const projectType = instance.project_type || "VirtualSet";
       setCurrentProjectType(projectType);
-      addDebugLog(`Instance loaded: ${instance.friendly_name}, Project Type: ${projectType}`);
+      addDebugLog(`Instance loaded: ${instance.friendly_name}, Project Type: ${projectType}, object_path: ${instance.object_path || 'not set'}`);
 
       // Parse and process the set_manager_json based on project type
       processSetManagerJson(instance.set_manager_json, projectType);
@@ -743,6 +762,11 @@ export default function VirtualSetPage({
       actorsBySection[section].push(actor);
     });
 
+    // Debug: log first actor to see its properties
+    if (schema.actors && schema.actors.length > 0) {
+      console.log('📋 First actor properties:', Object.keys(schema.actors[0]), schema.actors[0]);
+    }
+
     // Build available options from sections
     // All values use Actor:MaterialID format for both display and commands
     const options: Record<string, string[]> = {};
@@ -758,21 +782,31 @@ export default function VirtualSetPage({
       // If section has actors, create Actor:MaterialID combinations
       if (sectionActors.length > 0) {
         sectionActors.forEach((actor: any) => {
+          // Get actor blueprint name - try different property names used in schemas
+          // actorName: used in v1.1.0 schema (e.g., "BP_Floor", "BP_Columns4")
+          // name: fallback property
+          const actorId = actor.actorName || actor.name || actor.id;
+
+          if (!actorId) {
+            console.warn('Actor missing identifier:', actor);
+            return;
+          }
+
           // Check if actor has specific allowedMaterials
           if (actor.allowedMaterials && actor.allowedMaterials.length > 0) {
             // Use only allowed materials for this actor
             actor.allowedMaterials.forEach((matId: string) => {
               const material = allMaterials.find((m: any) => m.materialid === matId);
               if (material) {
-                // Use Actor:MaterialID format
-                actorMaterialOptions.push(`${actor.name}:${material.materialid}`);
+                // Use Actor:MaterialID format (e.g., "BP_Floor:Wood1")
+                actorMaterialOptions.push(`${actorId}:${material.materialid}`);
               }
             });
           } else {
             // No specific materials restricted - use ALL materials
             allMaterials.forEach((material: any) => {
-              // Use Actor:MaterialID format
-              const optionValue = `${actor.name}:${material.materialid}`;
+              // Use Actor:MaterialID format (e.g., "BP_Floor:Wood1")
+              const optionValue = `${actorId}:${material.materialid}`;
               if (!actorMaterialOptions.includes(optionValue)) {
                 actorMaterialOptions.push(optionValue);
               }
@@ -1310,7 +1344,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
   };
 
   // UPDATED: Apply scene via object based on project type
-  // Now uses dynamic objectPath from channel and dynamic parameters from schema
+  // Now uses object_path from instanceData (pulsar_connections table) and dynamic parameters from schema
   const applySceneParametersViaObject = async (params: SceneParameters) => {
     const channel = availableChannels.find((c) => c.id === selectedChannel);
     if (!channel) {
@@ -1318,15 +1352,15 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       throw new Error("No channel selected");
     }
 
-    // Get objectPath from channel config (from pulsar_connections table)
-    const objectPath = channel.objectPath;
+    // Get objectPath from instanceData (from pulsar_connections table)
+    const objectPath = instanceData?.object_path;
     if (!objectPath) {
-      console.error("❌ No objectPath configured for channel:", channel.name);
-      showSnackbar(`Channel "${channel.name}" has no objectPath configured`, "error");
-      throw new Error("No objectPath configured for this channel");
+      console.error("❌ No object_path configured in pulsar_connections for channel:", channel.name);
+      showSnackbar(`No object_path configured in pulsar_connections for "${channel.name}"`, "error");
+      throw new Error("No object_path configured in pulsar_connections");
     }
 
-    console.log("📡 Using channel:", { id: channel.id, name: channel.name, objectPath });
+    console.log("📡 Using channel:", { id: channel.id, name: channel.name, objectPath: objectPath });
 
     try {
       // Build parameters dynamically from the schema keys
@@ -1383,9 +1417,9 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         name: channel.name,
         host: channel.config?.host || "localhost",
         port: channel.config?.port || 30010,
-        objectPath: channel.config?.object_path || undefined,
         active: channel.active,
         type: channel.type,
+        // Note: objectPath comes from instanceData.object_path (pulsar_connections table), not channels
       }));
 
       setAvailableChannels(unrealChannels);
@@ -1637,11 +1671,11 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     const channel = availableChannels.find((c) => c.id === selectedChannel);
     if (!channel) return;
 
-    // Get objectPath from channel config (from pulsar_connections table)
-    const objectPath = channel.objectPath;
+    // Get objectPath from instanceData (from pulsar_connections table)
+    const objectPath = instanceData?.object_path;
     if (!objectPath) {
-      console.error("❌ No objectPath configured for channel:", channel.name);
-      showSnackbar(`Channel "${channel.name}" has no objectPath configured`, "error");
+      console.error("❌ No object_path configured in pulsar_connections for channel:", channel.name);
+      showSnackbar(`No object_path configured in pulsar_connections for "${channel.name}"`, "error");
       return;
     }
 
