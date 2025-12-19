@@ -42,15 +42,24 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   onTestDataSource
 }) => {
   const [selectedSources, setSelectedSources] = useState<Set<string>>(() => {
-    const initialSelected = selection.sources && selection.sources.length > 0
-      ? new Set<string>(selection.sources.map((s: any) => s.id))
-      : new Set<string>();
-    return initialSelected;
+    // If we have saved sources, use them
+    if (selection.sources && selection.sources.length > 0) {
+      return new Set<string>(selection.sources.map((s: any) => s.id));
+    }
+    // Otherwise, auto-select all data sources from previous steps
+    if (dataSources && dataSources.length > 0) {
+      return new Set<string>(dataSources.map((ds: any) => ds.id));
+    }
+    return new Set<string>();
   });
 
   const [expandedSources, setExpandedSources] = useState<Set<string>>(() => {
     if (selection.sources && selection.sources.length > 0) {
       return new Set(selection.sources.map((s: any) => s.id));
+    }
+    // Auto-expand all data sources when they're auto-selected
+    if (dataSources && dataSources.length > 0) {
+      return new Set(dataSources.map((ds: any) => ds.id));
     }
     return new Set();
   });
@@ -139,6 +148,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
 
   useEffect(() => {
     if (selection.sources && selection.sources.length > 0) {
+      // Restore saved sources
       const savedSources = new Set<string>();
       const savedPaths: Record<string, string> = {};
       const shouldExpand = new Set<string>();
@@ -154,6 +164,14 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
       setSelectedSources(savedSources);
       setSourcePaths(savedPaths);
       setExpandedSources(shouldExpand);
+    } else if (dataSources && dataSources.length > 0) {
+      // Auto-select all data sources and propagate to parent
+      const allIds = new Set<string>(dataSources.map((ds: any) => ds.id));
+      setSelectedSources(allIds);
+      setExpandedSources(allIds);
+
+      // Propagate the selection to parent
+      updateSelection(allIds, {});
     }
   }, []);
 

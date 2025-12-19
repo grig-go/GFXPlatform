@@ -6,9 +6,26 @@ import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Input } from './ui/input';
-import { Loader2, Info, Plus, Edit, Trash2, X, ArrowRight, AlertCircle, Repeat } from 'lucide-react';
+import { Loader2, Info, Plus, Edit, Trash2, X, ArrowRight, AlertCircle, Repeat, GripVertical } from 'lucide-react';
 import { Agent, AgentTransform } from '../types/agents';
 import TransformationBuilder from './TransformationBuilder/TransformationBuilder';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface TransformationStepProps {
   formData: Partial<Agent>;
@@ -31,6 +48,125 @@ interface Transformation {
   target_field: string;
 }
 
+// Sortable transformation card component
+interface SortableTransformCardProps {
+  transform: Transformation;
+  index: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  getTransformIcon: (type: string) => string;
+}
+
+const SortableTransformCard: React.FC<SortableTransformCardProps> = ({
+  transform,
+  index,
+  isSelected,
+  onSelect,
+  onEdit,
+  onRemove,
+  getTransformIcon,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform: dragTransform,
+    transition,
+    isDragging,
+  } = useSortable({ id: transform.id });
+
+  const style = {
+    transform: CSS.Transform.toString(dragTransform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style as React.CSSProperties}
+      className={`cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-blue-50' : ''} ${isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}
+      onClick={onSelect}
+    >
+      <CardContent className="p-4">
+        <div className="transform-header flex justify-between items-start">
+          <div className="transform-info flex gap-3 items-start flex-1">
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-gray-100 rounded flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="h-5 w-5 text-gray-400" />
+            </div>
+            <div className="w-8 h-8 rounded bg-gray-200 flex items-center justify-center font-semibold flex-shrink-0">
+              {getTransformIcon(transform.type)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <strong className="block">
+                Step {index + 1}: {transform.type.replace('-', ' ').replace('_', ' ')}
+              </strong>
+              {transform.source_field && (
+                <div className="field-mapping mt-2 flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="truncate max-w-xs" title={transform.source_field}>
+                    {transform.source_field.length > 30
+                      ? `...${transform.source_field.slice(-28)}`
+                      : transform.source_field}
+                  </Badge>
+                  <ArrowRight className="h-3 w-3 flex-shrink-0" />
+                  <Badge variant="default" className="truncate max-w-xs" title={transform.target_field || transform.source_field}>
+                    {(transform.target_field || transform.source_field).length > 30
+                      ? `...${(transform.target_field || transform.source_field).slice(-28)}`
+                      : (transform.target_field || transform.source_field)}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="transform-actions flex gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        {transform.config && Object.keys(transform.config).length > 0 && (
+          <div className="transform-config-preview mt-3 ml-9 flex gap-2 flex-wrap">
+            {Object.entries(transform.config).slice(0, 3).map(([key, value]) => (
+              <Badge key={key} variant="secondary" className="text-xs">
+                {key}: {String(value).length > 20 ? `${String(value).substring(0, 20)}...` : String(value)}
+              </Badge>
+            ))}
+            {Object.keys(transform.config).length > 3 && (
+              <Badge variant="secondary" className="text-xs">+{Object.keys(transform.config).length - 3} more</Badge>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 const TransformationStep: React.FC<TransformationStepProps> = ({
   formData,
   setFormData,
@@ -50,6 +186,31 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
   const [newFieldName, setNewFieldName] = useState<string>('');
   const [availableFields, setAvailableFields] = useState<FieldInfo[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
+
+  // DnD sensors for drag-and-drop reordering
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px of movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end - reorder transformations
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setTransformations((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   // Compute source data paths from formData (respects user's data root selections)
   const sourceDataPaths = useMemo(() => {
@@ -412,77 +573,37 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
               </CardContent>
             </Card>
           ) : transformations.length > 0 ? (
-            <div className="pipeline-list space-y-3">
-              {transformations.map((transform, index) => (
-                <Card
-                  key={transform.id}
-                  className={`cursor-pointer transition-colors ${selectedTransform === transform.id ? 'border-blue-500 bg-blue-50' : ''}`}
-                  onClick={() => setSelectedTransform(transform.id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="transform-header flex justify-between items-start">
-                      <div className="transform-info flex gap-3 items-start flex-1">
-                        <div className="w-8 h-8 rounded bg-gray-200 flex items-center justify-center font-semibold flex-shrink-0">
-                          {getTransformIcon(transform.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <strong className="block">
-                            Step {index + 1}: {transform.type.replace('-', ' ').replace('_', ' ')}
-                          </strong>
-                          {transform.source_field && (
-                            <div className="field-mapping mt-2 flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="truncate max-w-xs" title={transform.source_field}>
-                                {transform.source_field.length > 30
-                                  ? `...${transform.source_field.slice(-28)}`
-                                  : transform.source_field}
-                              </Badge>
-                              <ArrowRight className="h-3 w-3 flex-shrink-0" />
-                              <Badge variant="default" className="truncate max-w-xs" title={transform.target_field || transform.source_field}>
-                                {(transform.target_field || transform.source_field).length > 30
-                                  ? `...${(transform.target_field || transform.source_field).slice(-28)}`
-                                  : (transform.target_field || transform.source_field)}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="transform-actions flex gap-1 flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingTransform(transform);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeTransformation(transform.id);
-                          }}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    {transform.config && Object.keys(transform.config).length > 0 && (
-                      <div className="transform-config-preview mt-3 flex gap-2 flex-wrap">
-                        {Object.entries(transform.config).map(([key, value]) => (
-                          <Badge key={key} variant="secondary">
-                            {key}: {String(value)}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={transformations.map(t => t.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="pipeline-list space-y-3">
+                  {transformations.length > 1 && (
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mb-2">
+                      <GripVertical className="h-3 w-3" />
+                      Drag to reorder transformations. Order matters!
+                    </p>
+                  )}
+                  {transformations.map((transform, index) => (
+                    <SortableTransformCard
+                      key={transform.id}
+                      transform={transform}
+                      index={index}
+                      isSelected={selectedTransform === transform.id}
+                      onSelect={() => setSelectedTransform(transform.id)}
+                      onEdit={() => setEditingTransform(transform)}
+                      onRemove={() => removeTransformation(transform.id)}
+                      getTransformIcon={getTransformIcon}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           ) : (
             <Card>
               <CardContent className="p-12 pt-6 text-center">

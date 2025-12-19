@@ -37,7 +37,6 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useToast } from './ui/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { JsonFieldMapper } from './JsonFieldMapper/JsonFieldMapper';
-import { OpenAPIImport } from './JsonFieldMapper/components/OpenAPIImport';
 import { XmlFieldMapper } from './XmlFieldMapper/XmlFieldMapper';
 
 // Helper function to extract field paths with data examples
@@ -288,6 +287,178 @@ function getValueFromPath(obj: any, path: string): any {
   return current;
 }
 
+// Helper function to convert XML mapping config to JSON mapping config
+function convertXmlToJsonConfig(xmlConfig: any): any {
+  if (!xmlConfig) return null;
+
+  // Convert source selection (nearly identical)
+  const jsonSourceSelection = {
+    type: xmlConfig.sourceSelection?.type || 'object',
+    primaryPath: xmlConfig.sourceSelection?.primaryPath || '',
+    sources: (xmlConfig.sourceSelection?.sources || []).map((source: any) => ({
+      id: source.id,
+      name: source.name,
+      path: source.path,
+      category: source.category,
+      primaryPath: source.primaryPath,
+      alias: source.alias,
+      type: source.type
+    }))
+  };
+
+  // Convert output fields (XML XmlOutputField -> JSON OutputField)
+  const jsonOutputFields = (xmlConfig.outputTemplate?.fields || []).map((field: any) => ({
+    path: field.path,
+    type: field.type || 'string',
+    required: field.required,
+    defaultValue: field.defaultValue,
+    description: field.description
+  }));
+
+  // Convert output template
+  const jsonOutputTemplate = {
+    structure: xmlConfig.outputTemplate?.structure || {},
+    fields: jsonOutputFields
+  };
+
+  // Convert field mappings (XML XmlFieldMapping -> JSON JsonFieldMapping)
+  const jsonFieldMappings = (xmlConfig.fieldMappings || []).map((mapping: any) => ({
+    id: mapping.id,
+    targetPath: mapping.targetPath,
+    sourcePath: mapping.sourcePath,
+    sourceId: mapping.sourceId,
+    sourceName: mapping.sourceName,
+    sourceCategory: mapping.sourceCategory,
+    sourceType: mapping.sourceType,
+    sourceTimestamp: mapping.sourceTimestamp,
+    transformId: mapping.transformId,
+    fallbackValue: mapping.fallbackValue,
+    conditional: mapping.conditional
+  }));
+
+  // Convert transformations (nearly identical)
+  const jsonTransformations = (xmlConfig.transformations || []).map((transform: any) => ({
+    id: transform.id,
+    name: transform.name,
+    type: transform.type,
+    config: transform.config
+  }));
+
+  // Convert output wrapper
+  const jsonOutputWrapper = {
+    enabled: xmlConfig.outputWrapper?.enabled ?? false,
+    wrapperKey: xmlConfig.outputWrapper?.rootElement || 'data',
+    includeMetadata: xmlConfig.outputWrapper?.includeMetadata || false,
+    metadataFields: xmlConfig.outputWrapper?.metadataFields || {
+      timestamp: true,
+      source: true,
+      count: true,
+      version: false
+    },
+    customMetadata: {}
+  };
+
+  return {
+    sourceSelection: jsonSourceSelection,
+    outputTemplate: jsonOutputTemplate,
+    fieldMappings: jsonFieldMappings,
+    transformations: jsonTransformations,
+    outputWrapper: jsonOutputWrapper
+  };
+}
+
+// Helper function to convert JSON mapping config to XML mapping config
+function convertJsonToXmlConfig(jsonConfig: any): any {
+  if (!jsonConfig) return null;
+
+  // Convert source selection (nearly identical)
+  const xmlSourceSelection = {
+    type: jsonConfig.sourceSelection?.type || 'object',
+    primaryPath: jsonConfig.sourceSelection?.primaryPath || '',
+    sources: (jsonConfig.sourceSelection?.sources || []).map((source: any) => ({
+      id: source.id,
+      name: source.name,
+      path: source.path,
+      category: source.category,
+      primaryPath: source.primaryPath,
+      alias: source.alias,
+      type: source.type
+    })),
+    unwrapSingleItems: false
+  };
+
+  // Convert output fields (JSON OutputField -> XML XmlOutputField)
+  const xmlOutputFields = (jsonConfig.outputTemplate?.fields || []).map((field: any) => ({
+    path: field.path,
+    name: field.path, // Use path as display name
+    elementName: field.path, // Use path as element name
+    type: field.type || 'string',
+    xmlType: 'element' as const, // Default to element (not attribute)
+    required: field.required,
+    defaultValue: field.defaultValue,
+    description: field.description,
+    cdata: false
+  }));
+
+  // Convert output template
+  const xmlOutputTemplate = {
+    structure: jsonConfig.outputTemplate?.structure || {},
+    fields: xmlOutputFields,
+    rootElement: jsonConfig.outputWrapper?.wrapperKey || 'data',
+    itemElement: 'item'
+  };
+
+  // Convert field mappings (JSON JsonFieldMapping -> XML XmlFieldMapping)
+  const xmlFieldMappings = (jsonConfig.fieldMappings || []).map((mapping: any) => ({
+    id: mapping.id,
+    targetPath: mapping.targetPath,
+    targetElementName: mapping.targetPath, // Use target path as element name
+    xmlType: 'element' as const,
+    sourcePath: mapping.sourcePath,
+    sourceId: mapping.sourceId,
+    sourceName: mapping.sourceName,
+    sourceCategory: mapping.sourceCategory,
+    sourceType: mapping.sourceType,
+    sourceTimestamp: mapping.sourceTimestamp,
+    transformId: mapping.transformId,
+    fallbackValue: mapping.fallbackValue,
+    conditional: mapping.conditional,
+    cdata: false
+  }));
+
+  // Convert transformations (nearly identical, just ensure type compatibility)
+  const xmlTransformations = (jsonConfig.transformations || []).map((transform: any) => ({
+    id: transform.id,
+    name: transform.name,
+    type: transform.type,
+    config: transform.config
+  }));
+
+  // Convert output wrapper
+  const xmlOutputWrapper = {
+    enabled: jsonConfig.outputWrapper?.enabled ?? true,
+    rootElement: jsonConfig.outputWrapper?.wrapperKey || 'data',
+    includeDeclaration: true,
+    encoding: 'UTF-8',
+    version: '1.0',
+    includeMetadata: jsonConfig.outputWrapper?.includeMetadata || false,
+    metadataFields: jsonConfig.outputWrapper?.metadataFields || {
+      timestamp: true,
+      source: true,
+      count: true,
+      version: false
+    }
+  };
+
+  return {
+    sourceSelection: xmlSourceSelection,
+    outputTemplate: xmlOutputTemplate,
+    fieldMappings: xmlFieldMappings,
+    transformations: xmlTransformations,
+    outputWrapper: xmlOutputWrapper
+  };
+}
+
 // MultiSourceRSSPreview component - shows live RSS preview
 const MultiSourceRSSPreview: React.FC<{
   sourceMappings: RSSSourceMapping[];
@@ -515,21 +686,6 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   });
 
   const [testingSource, setTestingSource] = useState<string | null>(null);
-  const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced' | 'openapi'>(() => {
-    // If we have saved jsonMappingConfig, start in advanced mode
-    if (formData.formatOptions?.jsonMappingConfig) {
-      return 'advanced';
-    }
-    return 'simple';
-  });
-  const [xmlConfigMode, setXmlConfigMode] = useState<'simple' | 'advanced'>(() => {
-    // If we have saved xmlMappingConfig, start in advanced mode
-    if (formData.formatOptions?.xmlMappingConfig) {
-      return 'advanced';
-    }
-    return 'simple';
-  });
-  const [importedOpenAPISchema, setImportedOpenAPISchema] = useState<any>(null);
 
   // RSS Multi-source state
   const [sourceMappings, setSourceMappings] = useState<RSSSourceMapping[]>(() => {
@@ -612,6 +768,40 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   }, [autoSelectSourceId, sourceMappings]);
 
   useEffect(() => {
+    // When switching to XML format, sync JSON mappings to XML if XML config is empty
+    if (format === 'XML' && formatOptions.jsonMappingConfig) {
+      const hasXmlConfig = formatOptions.xmlMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                           formatOptions.xmlMappingConfig?.fieldMappings?.length > 0;
+
+      if (!hasXmlConfig) {
+        const convertedConfig = convertJsonToXmlConfig(formatOptions.jsonMappingConfig);
+        if (convertedConfig) {
+          setFormatOptions((prev: any) => ({
+            ...prev,
+            xmlMappingConfig: convertedConfig
+          }));
+          console.log('Synced JSON mapping config to XML format');
+        }
+      }
+    }
+
+    // When switching to JSON format, sync XML mappings to JSON if JSON config is empty
+    if (format === 'JSON' && formatOptions.xmlMappingConfig) {
+      const hasJsonConfig = formatOptions.jsonMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                            formatOptions.jsonMappingConfig?.fieldMappings?.length > 0;
+
+      if (!hasJsonConfig) {
+        const convertedConfig = convertXmlToJsonConfig(formatOptions.xmlMappingConfig);
+        if (convertedConfig) {
+          setFormatOptions((prev: any) => ({
+            ...prev,
+            jsonMappingConfig: convertedConfig
+          }));
+          console.log('Synced XML mapping config to JSON format');
+        }
+      }
+    }
+
     setFormData((prevFormData: any) => ({
       ...prevFormData,
       format,
@@ -909,88 +1099,6 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
         </div>
       </div>
 
-      {/* Data Source Testing */}
-      {formData.dataSources && formData.dataSources.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-base">Data Source Fields</CardTitle>
-                <CardDescription>Test your data sources to discover available fields</CardDescription>
-              </div>
-              {formData.dataSources.length > 0 && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={testAndDiscoverAll}
-                  disabled={testingSource !== null}
-                >
-                  {testingSource === 'all' ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Testing...
-                    </>
-                  ) : formData.dataSources.every((source: any) => {
-                      // Check both discoveredFieldsRef and source.fields
-                      const fields = discoveredFieldsRef.current[source.id] || source.fields;
-                      return fields && fields.length > 0;
-                    }) ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Re-test All
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      Test & Discover All
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {formData.dataSources.map((source: any) => {
-              // Use fields from ref if available, otherwise from source
-              const fields = discoveredFieldsRef.current[source.id] || source.fields;
-              const hasFields = fields && fields.length > 0;
-
-              return (
-                <div key={source.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <div className="font-medium">{source.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {source.type} • {hasFields ? `${fields.length} fields` : 'Not tested'}
-                      </div>
-                    </div>
-                    {hasFields && (
-                      <Badge variant="secondary">
-                        {fields.slice(0, 3).join(', ')}
-                        {fields.length > 3 && `... +${fields.length - 3}`}
-                      </Badge>
-                    )}
-                  </div>
-                  <Button
-                    variant={hasFields ? 'outline' : 'default'}
-                    size="sm"
-                    onClick={() => testDataSource(source)}
-                    disabled={testingSource === source.id}
-                  >
-                    {testingSource === source.id ? (
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Search className="w-4 h-4 mr-2" />
-                    )}
-                    {hasFields ? 'Re-test' : 'Test & Discover'}
-                  </Button>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Format Configuration */}
       <Card>
         <CardHeader>
@@ -999,644 +1107,363 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
         <CardContent className="space-y-4">
           {format === 'JSON' && (
             <>
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Configuration Mode</Label>
-                <p className="text-sm text-gray-500 mb-3">Choose between simple options or advanced field-by-field mapping</p>
-                <RadioGroup value={jsonConfigMode} onValueChange={(v: any) => setJsonConfigMode(v)}>
-                  <div className="flex items-start space-x-2 mb-3">
-                    <RadioGroupItem value="simple" id="simple" className="border-2 border-gray-700 mt-0.5" />
-                    <Label htmlFor="simple" className="font-normal cursor-pointer">
-                      <div>
-                        <span className="font-semibold">Simple Configuration</span>
-                        <p className="text-sm text-gray-500">Basic JSON output with formatting options</p>
-                      </div>
-                    </Label>
-                  </div>
-                  <div className="flex items-start space-x-2 mb-3">
-                    <RadioGroupItem value="advanced" id="advanced" className="border-2 border-gray-700 mt-0.5" />
-                    <Label htmlFor="advanced" className="font-normal cursor-pointer">
-                      <div>
-                        <span className="font-semibold">Advanced Field Mapping</span>
-                        <p className="text-sm text-gray-500">Visual field mapping with transformations, conditions, and custom output structure</p>
-                      </div>
-                    </Label>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="openapi" id="openapi" className="border-2 border-gray-700 mt-0.5" />
-                    <Label htmlFor="openapi" className="font-normal cursor-pointer">
-                      <div>
-                        <span className="font-semibold">Import from OpenAPI/Swagger</span>
-                        <p className="text-sm text-gray-500">Import an existing API specification (OpenAPI 3.0, Swagger 2.0, or JSON Schema)</p>
-                      </div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
+              <JsonFieldMapper
+                dataSources={formData.dataSources || []}
+                sampleData={sampleData}
+                initialConfig={(() => {
+                  // If we have saved JSON config with fields or mappings, use it
+                  const hasJsonConfig = formatOptions.jsonMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                                        formatOptions.jsonMappingConfig?.fieldMappings?.length > 0 ||
+                                        formatOptions.jsonMappingConfig?.sourceSelection?.sources?.length > 0;
 
-              {jsonConfigMode === 'simple' && (
-                <div className="space-y-4">
-                  <Alert className="bg-blue-50 border-blue-200 flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                    <AlertDescription className="flex-1">
-                      Configure basic JSON output settings. Your data sources will be combined into a single JSON response.
-                    </AlertDescription>
-                  </Alert>
+                  if (hasJsonConfig) {
+                    return formatOptions.jsonMappingConfig;
+                  }
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        id="pretty"
-                        checked={formatOptions.prettyPrint}
-                        onCheckedChange={(v) => updateFormatOption('prettyPrint', v)}
-                      />
-                      <Label htmlFor="pretty">Pretty print (formatted output)</Label>
-                    </div>
-                    <p className="text-xs text-gray-500">Format JSON with indentation for better readability</p>
-                  </div>
+                  // If we have XML config, convert it to JSON config
+                  const hasXmlConfig = formatOptions.xmlMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                                       formatOptions.xmlMappingConfig?.fieldMappings?.length > 0 ||
+                                       formatOptions.xmlMappingConfig?.sourceSelection?.sources?.length > 0;
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        id="metadata"
-                        checked={formatOptions.includeMetadata}
-                        onCheckedChange={(v) => updateFormatOption('includeMetadata', v)}
-                      />
-                      <Label htmlFor="metadata">Include response metadata</Label>
-                    </div>
-                    <p className="text-xs text-gray-500">Adds timestamp, version, and source information to the response</p>
-                  </div>
+                  if (hasXmlConfig) {
+                    const converted = convertXmlToJsonConfig(formatOptions.xmlMappingConfig);
+                    if (converted) {
+                      // Also update formatOptions so changes persist
+                      setTimeout(() => updateFormatOption('jsonMappingConfig', converted), 0);
+                      return converted;
+                    }
+                  }
 
-                  <div className="space-y-2">
-                    <Label htmlFor="root-wrapper">Root wrapper element</Label>
-                    <Input
-                      id="root-wrapper"
-                      value={formatOptions.rootWrapper}
-                      onChange={(e) => updateFormatOption('rootWrapper', e.target.value)}
-                      placeholder="e.g., data, response, items, results"
-                    />
-                    <p className="text-xs text-gray-500">The top-level key that will contain your data</p>
-                  </div>
+                  // Otherwise, create default config with default fields for "create new agent" mode
+                  return {
+                    sourceSelection: {
+                      type: 'object',
+                      primaryPath: '',
+                      sources: []
+                    },
+                    outputTemplate: {
+                      structure: {},
+                      fields: [
+                        { path: 'id', name: 'ID', type: 'string', required: false, defaultValue: null },
+                        { path: 'title', name: 'Title', type: 'string', required: true, defaultValue: null },
+                        { path: 'description', name: 'Description', type: 'string', required: false, defaultValue: null },
+                        { path: 'value', name: 'Value', type: 'string', required: false, defaultValue: null }
+                      ]
+                    },
+                    fieldMappings: [],
+                    transformations: [],
+                    outputWrapper: {
+                      enabled: false,
+                      wrapperKey: 'data',
+                      includeMetadata: false,
+                      metadataFields: {
+                        timestamp: true,
+                        source: true,
+                        count: true,
+                        version: false
+                      },
+                      customMetadata: {}
+                    }
+                  };
+                })()}
+                onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
+                onTestDataSource={onTestDataSource}
+              />
 
-                  {formData.dataSources && formData.dataSources.length > 0 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="source-id">Primary Data Source *</Label>
-                      <Select
-                        value={formatOptions.sourceId || '__none__'}
-                        onValueChange={(v) => updateFormatOption('sourceId', v === '__none__' ? '' : v)}
-                      >
-                        <SelectTrigger id="source-id">
-                          <SelectValue placeholder="Select a data source..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Select a data source...</SelectItem>
-                          {formData.dataSources.map((source: any) => (
-                            <SelectItem key={source.id} value={source.id}>
-                              {source.name} ({source.type})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-gray-500">Select which data source to use as the main response body</p>
-                    </div>
-                  )}
+              {/* Quick Actions */}
+              <Card className="mt-4 bg-gray-50">
+                <CardContent className="pt-6">
+                  <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (formatOptions.jsonMappingConfig) {
+                          const configJson = JSON.stringify(formatOptions.jsonMappingConfig, null, 2);
+                          const blob = new Blob([configJson], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'json-mapping-config.json';
+                          a.click();
+                          URL.revokeObjectURL(url);
 
-                  {formatOptions.sourceId && sampleData[formatOptions.sourceId] && (
-                    <div className="space-y-2">
-                      <Label>Response Structure Preview</Label>
-                      <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap break-words">
-                        {JSON.stringify(
-                          {
-                            ...(formatOptions.includeMetadata && {
-                              metadata: {
-                                timestamp: new Date().toISOString(),
-                                version: "1.0",
-                                source: formatOptions.sourceId
-                              }
-                            }),
-                            [formatOptions.rootWrapper || 'data']: Array.isArray(sampleData[formatOptions.sourceId])
-                              ? `[${sampleData[formatOptions.sourceId].length} items...]`
-                              : '{...}'
-                          },
-                          null,
-                          2
-                        )}
-                      </pre>
-                    </div>
-                  )}
-
-                  <div className="border-t pt-4">
-                    <Label className="mb-3">Additional Options</Label>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            id="include-nulls"
-                            checked={formatOptions.includeNulls}
-                            onCheckedChange={(v) => updateFormatOption('includeNulls', v)}
-                          />
-                          <Label htmlFor="include-nulls" className="font-normal">Include null values</Label>
-                        </div>
-                        <p className="text-xs text-gray-500 pl-11">Keep fields with null values in the output</p>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            id="sort-keys"
-                            checked={formatOptions.sortKeys}
-                            onCheckedChange={(v) => updateFormatOption('sortKeys', v)}
-                          />
-                          <Label htmlFor="sort-keys" className="font-normal">Sort object keys alphabetically</Label>
-                        </div>
-                        <p className="text-xs text-gray-500 pl-11">Order object properties alphabetically</p>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            id="iso-dates"
-                            checked={formatOptions.isoDates}
-                            onCheckedChange={(v) => updateFormatOption('isoDates', v)}
-                          />
-                          <Label htmlFor="iso-dates" className="font-normal">Convert dates to ISO strings</Label>
-                        </div>
-                        <p className="text-xs text-gray-500 pl-11">Format date values as ISO 8601 strings</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="encoding">Character Encoding</Label>
-                    <Select
-                      value={formatOptions.encoding}
-                      onValueChange={(v) => updateFormatOption('encoding', v)}
-                    >
-                      <SelectTrigger id="encoding">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UTF-8">UTF-8 (Default)</SelectItem>
-                        <SelectItem value="UTF-16">UTF-16</SelectItem>
-                        <SelectItem value="ASCII">ASCII</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {jsonConfigMode === 'advanced' && (
-                <div className="mt-4">
-                  <Alert className="bg-blue-50 border-blue-200 mb-4">
-                    <Info className="h-4 w-4 text-blue-600" />
-                    <AlertTitle>Advanced Field Mapping</AlertTitle>
-                    <AlertDescription>
-                      Create a custom JSON structure by mapping fields from your data sources.
-                      Add transformations, conditions, and define exactly how your output should look.
-                    </AlertDescription>
-                  </Alert>
-
-                  <JsonFieldMapper
-                    dataSources={formData.dataSources || []}
-                    sampleData={sampleData}
-                    initialConfig={(() => {
-                      // If we have saved config, use it
-                      if (formatOptions.jsonMappingConfig?.outputTemplate?.fields?.length > 0) {
-                        return formatOptions.jsonMappingConfig;
-                      }
-
-                      // Otherwise, create default config with default fields for "create new agent" mode
-                      return {
-                        sourceSelection: {
-                          type: 'object',
-                          primaryPath: '',
-                          sources: []
-                        },
-                        outputTemplate: {
-                          structure: {},
-                          fields: [
-                            { path: 'id', name: 'ID', type: 'string', required: false, defaultValue: null },
-                            { path: 'title', name: 'Title', type: 'string', required: true, defaultValue: null },
-                            { path: 'description', name: 'Description', type: 'string', required: false, defaultValue: null },
-                            { path: 'value', name: 'Value', type: 'string', required: false, defaultValue: null }
-                          ]
-                        },
-                        fieldMappings: [],
-                        transformations: [],
-                        outputWrapper: {
-                          enabled: false,
-                          wrapperKey: 'data',
-                          includeMetadata: false,
-                          metadataFields: {
-                            timestamp: true,
-                            source: true,
-                            count: true,
-                            version: false
-                          },
-                          customMetadata: {}
+                          toast({
+                            title: 'Success',
+                            description: 'Configuration exported',
+                          });
                         }
-                      };
-                    })()}
-                    onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
-                    onTestDataSource={onTestDataSource}
-                  />
-
-                  {/* Quick Actions */}
-                  <Card className="mt-4 bg-gray-50">
-                    <CardContent className="pt-6">
-                      <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (formatOptions.jsonMappingConfig) {
-                              const configJson = JSON.stringify(formatOptions.jsonMappingConfig, null, 2);
-                              const blob = new Blob([configJson], { type: 'application/json' });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = 'json-mapping-config.json';
-                              a.click();
-                              URL.revokeObjectURL(url);
+                      }}
+                      disabled={!formatOptions.jsonMappingConfig}
+                    >
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Export Configuration
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.json';
+                        input.onchange = async (e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0];
+                          if (file) {
+                            try {
+                              const text = await file.text();
+                              const config = JSON.parse(text);
+                              updateFormatOption('jsonMappingConfig', config);
 
                               toast({
                                 title: 'Success',
-                                description: 'Configuration exported',
+                                description: 'Configuration imported successfully',
                               });
-                            }
-                          }}
-                          disabled={!formatOptions.jsonMappingConfig}
-                        >
-                          <FileCode className="w-4 h-4 mr-2" />
-                          Export Configuration
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.json';
-                            input.onchange = async (e) => {
-                              const file = (e.target as HTMLInputElement).files?.[0];
-                              if (file) {
-                                try {
-                                  const text = await file.text();
-                                  const config = JSON.parse(text);
-                                  updateFormatOption('jsonMappingConfig', config);
-
-                                  toast({
-                                    title: 'Success',
-                                    description: 'Configuration imported successfully',
-                                  });
-                                } catch (error) {
-                                  toast({
-                                    title: 'Error',
-                                    description: 'Failed to import configuration',
-                                    variant: 'destructive',
-                                  });
-                                }
-                              }
-                            };
-                            input.click();
-                          }}
-                        >
-                          <FileCode className="w-4 h-4 mr-2" />
-                          Import Configuration
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm('Are you sure you want to reset the mapping configuration?')) {
-                              updateFormatOption('jsonMappingConfig', null);
+                            } catch (error) {
                               toast({
-                                title: 'Warning',
-                                description: 'Configuration reset',
+                                title: 'Error',
+                                description: 'Failed to import configuration',
+                                variant: 'destructive',
                               });
                             }
-                          }}
-                          disabled={!formatOptions.jsonMappingConfig}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Reset Configuration
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {jsonConfigMode === 'openapi' && (
-                <div className="mt-4">
-                  {!importedOpenAPISchema ? (
-                    <OpenAPIImport
-                      onImport={(schema, mappingConfig) => {
-                        setImportedOpenAPISchema(schema);
-                        updateFormatOption('importedSchema', schema);
-                        updateFormatOption('mappingConfig', mappingConfig);
-
-                        toast({
-                          title: 'Success',
-                          description: 'Schema imported successfully',
-                        });
+                          }
+                        };
+                        input.click();
                       }}
-                      onCancel={() => setJsonConfigMode('simple')}
-                    />
-                  ) : (
-                    <div className="space-y-4">
-                      <Alert className="bg-green-50 border-green-200">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <AlertTitle>Schema Imported</AlertTitle>
-                        <AlertDescription>
-                          Your OpenAPI/Swagger schema has been imported. You can now use it to define your output structure.
-                        </AlertDescription>
-                      </Alert>
-
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setImportedOpenAPISchema(null);
-                            updateFormatOption('importedSchema', null);
-                            updateFormatOption('mappingConfig', null);
-                          }}
-                        >
-                          Import Different Schema
-                        </Button>
-                      </div>
-
-                      {/* TODO: Show field mapping interface for imported schema */}
-                      <Alert className="bg-blue-50 border-blue-200">
-                        <Info className="h-4 w-4 text-blue-600" />
-                        <AlertDescription>
-                          Field mapping interface for imported schemas is coming soon.
-                          For now, you can use the Advanced Field Mapping mode to manually configure your output.
-                        </AlertDescription>
-                      </Alert>
-                    </div>
-                  )}
-                </div>
-              )}
+                    >
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Import Configuration
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (formatOptions.xmlMappingConfig) {
+                          const convertedConfig = convertXmlToJsonConfig(formatOptions.xmlMappingConfig);
+                          if (convertedConfig) {
+                            updateFormatOption('jsonMappingConfig', convertedConfig);
+                            toast({
+                              title: 'Success',
+                              description: 'Imported field mappings from XML configuration',
+                            });
+                          }
+                        } else {
+                          toast({
+                            title: 'No XML config',
+                            description: 'Configure XML output format first to import mappings',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      disabled={!formatOptions.xmlMappingConfig}
+                    >
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Import from XML
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to reset the mapping configuration?')) {
+                          updateFormatOption('jsonMappingConfig', null);
+                          toast({
+                            title: 'Warning',
+                            description: 'Configuration reset',
+                          });
+                        }
+                      }}
+                      disabled={!formatOptions.jsonMappingConfig}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Reset Configuration
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           )}
 
           {format === 'XML' && (
             <>
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Configuration Mode</Label>
-                <p className="text-sm text-gray-500 mb-3">Choose between simple options or advanced field-by-field mapping with element/attribute control</p>
-                <RadioGroup value={xmlConfigMode} onValueChange={(v: any) => setXmlConfigMode(v)}>
-                  <div className="flex items-start space-x-2 mb-3">
-                    <RadioGroupItem value="simple" id="xml-simple" className="border-2 border-gray-700 mt-0.5" />
-                    <Label htmlFor="xml-simple" className="font-normal cursor-pointer">
-                      <div>
-                        <span className="font-semibold">Simple Configuration</span>
-                        <p className="text-sm text-gray-500">Basic XML output with root element and namespace settings</p>
-                      </div>
-                    </Label>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="advanced" id="xml-advanced" className="border-2 border-gray-700 mt-0.5" />
-                    <Label htmlFor="xml-advanced" className="font-normal cursor-pointer">
-                      <div>
-                        <span className="font-semibold">Advanced Field Mapping</span>
-                        <p className="text-sm text-gray-500">Visual field mapping with element/attribute control, CDATA support, and custom XML structure</p>
-                      </div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
+              <XmlFieldMapper
+                dataSources={formData.dataSources || []}
+                sampleData={sampleData}
+                initialConfig={(() => {
+                  // If we have saved XML config with fields or mappings, use it
+                  const hasXmlConfig = formatOptions.xmlMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                                       formatOptions.xmlMappingConfig?.fieldMappings?.length > 0 ||
+                                       formatOptions.xmlMappingConfig?.sourceSelection?.sources?.length > 0;
 
-              {xmlConfigMode === 'simple' && (
-                <div className="space-y-4">
-                  <Alert className="bg-blue-50 border-blue-200 flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                    <AlertDescription className="flex-1">
-                      Configure basic XML output settings. Your data sources will be converted to a standard XML structure.
-                    </AlertDescription>
-                  </Alert>
+                  if (hasXmlConfig) {
+                    return formatOptions.xmlMappingConfig;
+                  }
 
-                  <div className="space-y-2">
-                    <Label htmlFor="xml-root">Root element name</Label>
-                    <Input
-                      id="xml-root"
-                      value={formatOptions.xmlRootElement}
-                      onChange={(e) => updateFormatOption('xmlRootElement', e.target.value)}
-                      placeholder="response"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="namespace">XML namespace (optional)</Label>
-                    <Input
-                      id="namespace"
-                      value={formatOptions.namespace}
-                      onChange={(e) => updateFormatOption('namespace', e.target.value)}
-                      placeholder="http://example.com/ns"
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="declaration"
-                      checked={formatOptions.includeDeclaration}
-                      onCheckedChange={(v) => updateFormatOption('includeDeclaration', v)}
-                    />
-                    <Label htmlFor="declaration">Include XML declaration</Label>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="attributes"
-                      checked={formatOptions.useAttributes}
-                      onCheckedChange={(v) => updateFormatOption('useAttributes', v)}
-                    />
-                    <Label htmlFor="attributes">Use attributes instead of elements</Label>
-                  </div>
+                  // If we have JSON config, convert it to XML config
+                  const hasJsonConfig = formatOptions.jsonMappingConfig?.outputTemplate?.fields?.length > 0 ||
+                                        formatOptions.jsonMappingConfig?.fieldMappings?.length > 0 ||
+                                        formatOptions.jsonMappingConfig?.sourceSelection?.sources?.length > 0;
 
-                  {formData.dataSources && formData.dataSources.length > 0 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="xml-source-id">Primary Data Source *</Label>
-                      <Select
-                        value={formatOptions.sourceId || '__none__'}
-                        onValueChange={(v) => updateFormatOption('sourceId', v === '__none__' ? '' : v)}
-                      >
-                        <SelectTrigger id="xml-source-id">
-                          <SelectValue placeholder="Select a data source..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Select a data source...</SelectItem>
-                          {formData.dataSources.map((source: any) => (
-                            <SelectItem key={source.id} value={source.id}>
-                              {source.name} ({source.type})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-gray-500">Select which data source to use as the main response body</p>
-                    </div>
-                  )}
+                  if (hasJsonConfig) {
+                    const converted = convertJsonToXmlConfig(formatOptions.jsonMappingConfig);
+                    if (converted) {
+                      // Also update formatOptions so changes persist
+                      setTimeout(() => updateFormatOption('xmlMappingConfig', converted), 0);
+                      return converted;
+                    }
+                  }
 
-                  {formatOptions.sourceId && sampleData[formatOptions.sourceId] && (
-                    <div className="space-y-2">
-                      <Label>XML Structure Preview</Label>
-                      <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap break-words">
-{`<?xml version="1.0" encoding="UTF-8"?>
-<${formatOptions.xmlRootElement || 'response'}${formatOptions.namespace ? ` xmlns="${formatOptions.namespace}"` : ''}>
-  <item>
-    <!-- Your data fields will appear here -->
-  </item>
-</${formatOptions.xmlRootElement || 'response'}>`}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {xmlConfigMode === 'advanced' && (
-                <div className="mt-4">
-                  <Alert className="bg-blue-50 border-blue-200 mb-4">
-                    <Info className="h-4 w-4 text-blue-600" />
-                    <AlertTitle>Advanced XML Field Mapping</AlertTitle>
-                    <AlertDescription>
-                      Create a custom XML structure by mapping fields from your data sources.
-                      Define which fields become elements or attributes, add CDATA sections, and control the exact XML output.
-                    </AlertDescription>
-                  </Alert>
-
-                  <XmlFieldMapper
-                    dataSources={formData.dataSources || []}
-                    sampleData={sampleData}
-                    initialConfig={(() => {
-                      // If we have saved config, use it
-                      if (formatOptions.xmlMappingConfig?.outputTemplate?.fields?.length > 0) {
-                        return formatOptions.xmlMappingConfig;
+                  // Otherwise, create default config
+                  return {
+                    sourceSelection: {
+                      type: 'object',
+                      primaryPath: '',
+                      sources: []
+                    },
+                    outputTemplate: {
+                      structure: {},
+                      fields: [
+                        { path: 'id', name: 'ID', elementName: 'id', type: 'string', xmlType: 'attribute', required: false },
+                        { path: 'title', name: 'Title', elementName: 'title', type: 'string', xmlType: 'element', required: true },
+                        { path: 'description', name: 'Description', elementName: 'description', type: 'string', xmlType: 'element', required: false, cdata: true },
+                        { path: 'value', name: 'Value', elementName: 'value', type: 'string', xmlType: 'element', required: false }
+                      ],
+                      rootElement: 'data',
+                      itemElement: 'item'
+                    },
+                    fieldMappings: [],
+                    transformations: [],
+                    outputWrapper: {
+                      enabled: true,
+                      rootElement: 'data',
+                      includeDeclaration: true,
+                      encoding: 'UTF-8',
+                      version: '1.0',
+                      includeMetadata: false,
+                      metadataFields: {
+                        timestamp: true,
+                        source: true,
+                        count: true,
+                        version: false
                       }
+                    }
+                  };
+                })()}
+                onChange={(config: any) => updateFormatOption('xmlMappingConfig', config)}
+                onTestDataSource={onTestDataSource}
+              />
 
-                      // Otherwise, create default config
-                      return {
-                        sourceSelection: {
-                          type: 'object',
-                          primaryPath: '',
-                          sources: []
-                        },
-                        outputTemplate: {
-                          structure: {},
-                          fields: [
-                            { path: 'id', name: 'ID', elementName: 'id', type: 'string', xmlType: 'attribute', required: false },
-                            { path: 'title', name: 'Title', elementName: 'title', type: 'string', xmlType: 'element', required: true },
-                            { path: 'description', name: 'Description', elementName: 'description', type: 'string', xmlType: 'element', required: false, cdata: true },
-                            { path: 'value', name: 'Value', elementName: 'value', type: 'string', xmlType: 'element', required: false }
-                          ],
-                          rootElement: 'data',
-                          itemElement: 'item'
-                        },
-                        fieldMappings: [],
-                        transformations: [],
-                        outputWrapper: {
-                          enabled: true,
-                          rootElement: 'data',
-                          includeDeclaration: true,
-                          encoding: 'UTF-8',
-                          version: '1.0',
-                          includeMetadata: false,
-                          metadataFields: {
-                            timestamp: true,
-                            source: true,
-                            count: true,
-                            version: false
-                          }
+              {/* Quick Actions */}
+              <Card className="mt-4 bg-gray-50">
+                <CardContent className="pt-6">
+                  <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (formatOptions.xmlMappingConfig) {
+                          const configJson = JSON.stringify(formatOptions.xmlMappingConfig, null, 2);
+                          const blob = new Blob([configJson], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'xml-mapping-config.json';
+                          a.click();
+                          URL.revokeObjectURL(url);
+
+                          toast({
+                            title: 'Success',
+                            description: 'Configuration exported',
+                          });
                         }
-                      };
-                    })()}
-                    onChange={(config: any) => updateFormatOption('xmlMappingConfig', config)}
-                    onTestDataSource={onTestDataSource}
-                  />
-
-                  {/* Quick Actions */}
-                  <Card className="mt-4 bg-gray-50">
-                    <CardContent className="pt-6">
-                      <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (formatOptions.xmlMappingConfig) {
-                              const configJson = JSON.stringify(formatOptions.xmlMappingConfig, null, 2);
-                              const blob = new Blob([configJson], { type: 'application/json' });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = 'xml-mapping-config.json';
-                              a.click();
-                              URL.revokeObjectURL(url);
+                      }}
+                      disabled={!formatOptions.xmlMappingConfig}
+                    >
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Export Configuration
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.json';
+                        input.onchange = async (e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0];
+                          if (file) {
+                            try {
+                              const text = await file.text();
+                              const config = JSON.parse(text);
+                              updateFormatOption('xmlMappingConfig', config);
 
                               toast({
                                 title: 'Success',
-                                description: 'Configuration exported',
+                                description: 'Configuration imported successfully',
                               });
-                            }
-                          }}
-                          disabled={!formatOptions.xmlMappingConfig}
-                        >
-                          <FileCode className="w-4 h-4 mr-2" />
-                          Export Configuration
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.json';
-                            input.onchange = async (e) => {
-                              const file = (e.target as HTMLInputElement).files?.[0];
-                              if (file) {
-                                try {
-                                  const text = await file.text();
-                                  const config = JSON.parse(text);
-                                  updateFormatOption('xmlMappingConfig', config);
-
-                                  toast({
-                                    title: 'Success',
-                                    description: 'Configuration imported successfully',
-                                  });
-                                } catch (error) {
-                                  toast({
-                                    title: 'Error',
-                                    description: 'Failed to import configuration',
-                                    variant: 'destructive',
-                                  });
-                                }
-                              }
-                            };
-                            input.click();
-                          }}
-                        >
-                          <FileCode className="w-4 h-4 mr-2" />
-                          Import Configuration
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm('Are you sure you want to reset the mapping configuration?')) {
-                              updateFormatOption('xmlMappingConfig', null);
+                            } catch (error) {
                               toast({
-                                title: 'Warning',
-                                description: 'Configuration reset',
+                                title: 'Error',
+                                description: 'Failed to import configuration',
+                                variant: 'destructive',
                               });
                             }
-                          }}
-                          disabled={!formatOptions.xmlMappingConfig}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Reset Configuration
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+                          }
+                        };
+                        input.click();
+                      }}
+                    >
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Import Configuration
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (formatOptions.jsonMappingConfig) {
+                          const convertedConfig = convertJsonToXmlConfig(formatOptions.jsonMappingConfig);
+                          if (convertedConfig) {
+                            updateFormatOption('xmlMappingConfig', convertedConfig);
+                            toast({
+                              title: 'Success',
+                              description: 'Imported field mappings from JSON configuration',
+                            });
+                          }
+                        } else {
+                          toast({
+                            title: 'No JSON config',
+                            description: 'Configure JSON output format first to import mappings',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      disabled={!formatOptions.jsonMappingConfig}
+                    >
+                      <Code className="w-4 h-4 mr-2" />
+                      Import from JSON
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to reset the mapping configuration?')) {
+                          updateFormatOption('xmlMappingConfig', null);
+                          toast({
+                            title: 'Warning',
+                            description: 'Configuration reset',
+                          });
+                        }
+                      }}
+                      disabled={!formatOptions.xmlMappingConfig}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Reset Configuration
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           )}
 
