@@ -227,11 +227,66 @@ app.patch("/update", async (c) => {
 
       for (const update of updates) {
         if (!update.id) continue;
-        // Skip virtual IDs (home-*, data-*)
+
+        // Handle virtual IDs (home-*, data-*) - create actual records
         if (update.id.startsWith("home-") || update.id.startsWith("data-")) {
-          console.log("⚠️ Skipping virtual ID:", update.id);
+          const dashboardId = update.id.replace("home-", "").replace("data-", "");
+          const category = update.id.startsWith("home-") ? "home" : "data";
+
+          console.log("📝 Creating/updating virtual dashboard:", update.id, "->", dashboardId);
+
+          // Find the default config for this dashboard
+          const defaults = category === "home" ? HOME_PAGE_DEFAULTS : DATA_PAGE_DEFAULTS;
+          const defaultConfig = defaults.find(d => d.dashboard_id === dashboardId);
+
+          if (defaultConfig) {
+            // Check if record already exists
+            const { data: existing } = await supabase
+              .from("customer_dashboards")
+              .select("id")
+              .eq("dashboard_id", dashboardId)
+              .eq("category", category)
+              .single();
+
+            if (existing) {
+              // Update existing record
+              await supabase
+                .from("customer_dashboards")
+                .update({
+                  visible: update.visible ?? defaultConfig.visible,
+                  order_index: update.order_index ?? defaultConfig.order_index,
+                  is_default: update.is_default ?? false,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("id", existing.id);
+              console.log("✅ Updated existing record:", existing.id);
+            } else {
+              // Insert new record
+              const { data: inserted, error: insertError } = await supabase
+                .from("customer_dashboards")
+                .insert({
+                  dashboard_id: dashboardId,
+                  name: defaultConfig.name,
+                  visible: update.visible ?? defaultConfig.visible,
+                  order_index: update.order_index ?? defaultConfig.order_index,
+                  category: category,
+                  is_subcategory: defaultConfig.is_subcategory ?? false,
+                  is_default: update.is_default ?? false,
+                  access_level: "admin"
+                })
+                .select()
+                .single();
+
+              if (insertError) {
+                console.error("❌ Insert error:", insertError);
+              } else {
+                console.log("✅ Inserted new record:", inserted?.id);
+              }
+            }
+          }
           continue;
         }
+
         await supabase
           .from("customer_dashboards")
           .update(update)

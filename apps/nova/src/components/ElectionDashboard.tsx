@@ -23,7 +23,7 @@ import {
 } from "./ui/dialog";
 import { getFilteredElectionData, clearElectionDataCache } from "../data/electionData";
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
-import { supabase } from '../utils/supabase/client';
+import { supabase, withAutoRecovery } from '../utils/supabase/client';
 import { SyntheticGroup } from '../utils/useSyntheticRaceWorkflow';
 import { currentElectionYear } from '../utils/constants';
 import { motion } from "framer-motion";
@@ -1083,7 +1083,12 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   useEffect(() => {
     const fetchSyntheticGroups = async () => {
       try {
-        const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+        console.log('📦 Starting fetch of synthetic groups...');
+        const { data, error } = await withAutoRecovery(
+          (client) => client.rpc('e_list_synthetic_groups'),
+          10000,
+          'fetchSyntheticGroups'
+        );
         if (error) {
           console.error('Error fetching synthetic groups:', error);
           return;
@@ -1101,7 +1106,11 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   // Function to refresh synthetic groups (after creating a new group)
   const refreshSyntheticGroups = async () => {
     try {
-      const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+      const { data, error } = await withAutoRecovery(
+        (client) => client.rpc('e_list_synthetic_groups'),
+        10000,
+        'refreshSyntheticGroups'
+      );
       if (error) {
         console.error('Error refreshing synthetic groups:', error);
         return;
@@ -1116,10 +1125,14 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   // Function to create a new synthetic group
   const handleCreateSyntheticGroup = async (name: string, description?: string): Promise<string | null> => {
     try {
-      const { data, error } = await supabase.rpc('e_create_synthetic_group', {
-        p_name: name,
-        p_description: description || null
-      });
+      const { data, error } = await withAutoRecovery(
+        (client) => client.rpc('e_create_synthetic_group', {
+          p_name: name,
+          p_description: description || null
+        }),
+        10000,
+        'createSyntheticGroup'
+      );
 
       if (error) {
         console.error('Error creating synthetic group:', error);

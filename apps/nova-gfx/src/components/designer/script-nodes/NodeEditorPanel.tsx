@@ -23,6 +23,7 @@ import {
   Play,
 } from 'lucide-react';
 import { useDesignerStore } from '@/stores/designerStore';
+import { setDropdownOpen } from '../ScriptEditorPanel';
 import type { Node } from '@xyflow/react';
 
 // Event types available
@@ -139,9 +140,13 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
     : nodeType === 'animation' ? 'purple'
     : 'purple';
 
-  // Stop events from propagating to React Flow (allows input to work)
-  const stopPropagation = (e: React.MouseEvent | React.KeyboardEvent) => {
+  // Stop events from propagating to React Flow and parent components
+  const stopPropagation = (e: React.MouseEvent | React.KeyboardEvent | React.PointerEvent) => {
     e.stopPropagation();
+    // Also prevent default for pointer events to avoid unintended interactions
+    if ('nativeEvent' in e && e.nativeEvent) {
+      e.nativeEvent.stopImmediatePropagation?.();
+    }
   };
 
   return (
@@ -172,6 +177,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Select
                 value={localData.eventType as string || 'click'}
                 onValueChange={(v) => handleUpdate('eventType', v)}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue />
@@ -197,6 +203,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                     elementName: el?.name || 'Unknown',
                   });
                 }}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue placeholder="Select element..." />
@@ -234,6 +241,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Select
                 value={localData.actionType as string || 'setState'}
                 onValueChange={(v) => handleUpdate('actionType', v)}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue />
@@ -281,6 +289,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                 <Select
                   value={localData.target as string || ''}
                   onValueChange={(v) => handleUpdate('target', v)}
+                  onOpenChange={setDropdownOpen}
                 >
                   <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                     <SelectValue placeholder="Select..." />
@@ -310,6 +319,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                         templateName: template?.name || 'Unknown',
                       });
                     }}
+                    onOpenChange={setDropdownOpen}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue placeholder="Select..." />
@@ -334,6 +344,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                         layerName: layer?.name || 'Unknown',
                       });
                     }}
+                    onOpenChange={setDropdownOpen}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue placeholder="Select..." />
@@ -359,6 +370,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                 <Select
                   value={localData.elementId as string || ''}
                   onValueChange={(v) => handleUpdate('elementId', v)}
+                  onOpenChange={setDropdownOpen}
                 >
                   <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                     <SelectValue placeholder="Select..." />
@@ -382,6 +394,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                   <Select
                     value={localData.elementId as string || ''}
                     onValueChange={(v) => handleUpdate('elementId', v)}
+                    onOpenChange={setDropdownOpen}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue placeholder="Select..." />
@@ -400,6 +413,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                   <Select
                     value={localData.phase as string || 'in'}
                     onValueChange={(v) => handleUpdate('phase', v)}
+                    onOpenChange={setDropdownOpen}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue />
@@ -475,6 +489,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Select
                 value={localData.operator as string || 'equals'}
                 onValueChange={(v) => handleUpdate('operator', v)}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue />
@@ -511,6 +526,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Select
                 value={localData.operation as string || 'get'}
                 onValueChange={(v) => handleUpdate('operation', v)}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue />
@@ -587,6 +603,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                     templateName: template?.name || 'Unknown',
                   });
                 }}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue placeholder="Select..." />
@@ -612,6 +629,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                     layerName: layer?.name || 'Unknown',
                   });
                 }}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue placeholder="Select..." />
@@ -631,6 +649,7 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Select
                 value={localData.phase as string || 'in'}
                 onValueChange={(v) => handleUpdate('phase', v)}
+                onOpenChange={setDropdownOpen}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue />

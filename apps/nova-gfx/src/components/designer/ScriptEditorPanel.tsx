@@ -349,6 +349,13 @@ function getDefaultNodeData(type: NodeType): Record<string, unknown> {
   }
 }
 
+// Track if a dropdown is open to prevent pane click from closing the editor
+let isDropdownOpen = false;
+
+export function setDropdownOpen(open: boolean) {
+  isDropdownOpen = open;
+}
+
 // Inner component that has access to ReactFlow context
 function VisualEditor({
   nodes,
@@ -387,8 +394,12 @@ function VisualEditor({
     setSelectedNodeId(node.id);
   }, [setSelectedNodeId]);
 
-  // Handle pane click to deselect
+  // Handle pane click to deselect - but not if a dropdown is open
   const onPaneClick = useCallback(() => {
+    // Don't close the editor panel if a dropdown is open
+    if (isDropdownOpen) {
+      return;
+    }
     setSelectedNodeId(null);
   }, [setSelectedNodeId]);
 

@@ -341,6 +341,16 @@ interface DesignerState {
   dataPayload: Record<string, unknown>[] | null;
   currentRecordIndex: number;
   dataDisplayField: string | null;
+
+  // Cache of data payloads per template (templateId -> payload data)
+  // This preserves data bindings when switching between templates
+  templateDataCache: Record<string, {
+    dataSourceId: string;
+    dataSourceName: string;
+    dataPayload: Record<string, unknown>[];
+    dataDisplayField: string | null;
+    currentRecordIndex: number;
+  }>;
 }
 
 interface DesignerActions {
@@ -496,6 +506,9 @@ interface DesignerActions {
   setDefaultRecordIndex: (index: number) => Promise<void>;
   nextRecord: () => void;
   prevRecord: () => void;
+
+  // Get data record for a specific template (used by StageElement)
+  getDataRecordForTemplate: (templateId: string) => Record<string, unknown> | null;
 }
 
 // Helper functions
@@ -759,6 +772,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         dataPayload: null,
         currentRecordIndex: 0,
         dataDisplayField: null,
+        templateDataCache: {},
 
         // Project operations
         loadProject: async (projectId) => {
@@ -2014,31 +2028,70 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
         // Template operations
         selectTemplate: (id) => {
-          const { templates, currentTemplateId, dataSourceId: currentDataSourceId } = get();
+          const {
+            templates,
+            currentTemplateId,
+            dataSourceId: currentDataSourceId,
+            dataSourceName: currentDataSourceName,
+            dataPayload: currentDataPayload,
+            dataDisplayField: currentDataDisplayField,
+            currentRecordIndex: currentRecordIdx,
+            templateDataCache
+          } = get();
           const template = templates.find(t => t.id === id);
 
-          // Hydrate data source state from template if available
+          // Cache the current template's data before switching (if it has data)
+          let newCache = { ...templateDataCache };
+          if (currentTemplateId && currentDataSourceId && currentDataPayload) {
+            newCache[currentTemplateId] = {
+              dataSourceId: currentDataSourceId,
+              dataSourceName: currentDataSourceName || '',
+              dataPayload: currentDataPayload,
+              dataDisplayField: currentDataDisplayField,
+              currentRecordIndex: currentRecordIdx,
+            };
+          }
+
+          // Try to restore from cache first, then fall back to loading from data source
           let dataSourceId: string | null = null;
           let dataSourceName: string | null = null;
           let dataPayload: Record<string, unknown>[] | null = null;
           let dataDisplayField: string | null = null;
+          let recordIndex = 0;
 
-          // Get default record index from config
-          const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-          const defaultRecordIndex = config?.defaultRecordIndex ?? 0;
-
-          if (template?.data_source_id) {
+          // Check cache first (id is guaranteed to be a string by the action signature)
+          if (id && newCache[id]) {
+            const cached = newCache[id];
+            dataSourceId = cached.dataSourceId;
+            dataSourceName = cached.dataSourceName;
+            dataPayload = cached.dataPayload;
+            dataDisplayField = cached.dataDisplayField;
+            recordIndex = cached.currentRecordIndex;
+          } else if (template?.data_source_id) {
+            // Load from data source
             const dataSource = getDataSourceById(template.data_source_id);
+            const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
             if (dataSource) {
               dataSourceId = dataSource.id;
               dataSourceName = dataSource.name;
               dataPayload = dataSource.data;
               dataDisplayField = config?.displayField || dataSource.displayField;
+              recordIndex = config?.defaultRecordIndex ?? 0;
+
+              // Also populate cache for this template so StageElement can use it
+              if (id) {
+                newCache[id] = {
+                  dataSourceId: dataSource.id,
+                  dataSourceName: dataSource.name,
+                  dataPayload: dataSource.data,
+                  dataDisplayField: dataDisplayField,
+                  currentRecordIndex: recordIndex,
+                };
+              }
             }
           }
 
           // If clicking on the same template, just clear element selection (to show Data tab)
-          // but don't reset playhead position - still hydrate data source if not already loaded
           if (id === currentTemplateId) {
             // Only update data source if it's not already loaded
             if (!currentDataSourceId && dataSourceId) {
@@ -2048,10 +2101,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 dataSourceName,
                 dataPayload,
                 dataDisplayField,
-                currentRecordIndex: defaultRecordIndex,
+                currentRecordIndex: recordIndex,
+                templateDataCache: newCache,
               });
             } else {
-              set({ selectedElementIds: [] });
+              set({ selectedElementIds: [], templateDataCache: newCache });
             }
             return;
           }
@@ -2066,7 +2120,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             dataSourceName,
             dataPayload,
             dataDisplayField,
-            currentRecordIndex: defaultRecordIndex,
+            currentRecordIndex: recordIndex,
+            templateDataCache: newCache,
           });
         },
 
@@ -3114,32 +3169,63 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             if (firstElement && firstElement.template_id !== state.currentTemplateId) {
               // Switch to the element's template and hydrate data source state
               const template = state.templates.find(t => t.id === firstElement.template_id);
+              const targetTemplateId = firstElement.template_id;
 
-              // Hydrate data source state from template if available
+              // Cache the current template's data before switching (if it has data)
+              let newCache = { ...state.templateDataCache };
+              if (state.currentTemplateId && state.dataSourceId && state.dataPayload) {
+                newCache[state.currentTemplateId] = {
+                  dataSourceId: state.dataSourceId,
+                  dataSourceName: state.dataSourceName || '',
+                  dataPayload: state.dataPayload,
+                  dataDisplayField: state.dataDisplayField,
+                  currentRecordIndex: state.currentRecordIndex,
+                };
+              }
+
+              // Try to restore from cache first, then fall back to loading from data source
               let dataSourceId: string | null = null;
               let dataSourceName: string | null = null;
               let dataPayload: Record<string, unknown>[] | null = null;
               let dataDisplayField: string | null = null;
-              const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-              const defaultRecordIndex = config?.defaultRecordIndex ?? 0;
+              let recordIndex = 0;
 
-              if (template?.data_source_id) {
+              if (newCache[targetTemplateId]) {
+                const cached = newCache[targetTemplateId];
+                dataSourceId = cached.dataSourceId;
+                dataSourceName = cached.dataSourceName;
+                dataPayload = cached.dataPayload;
+                dataDisplayField = cached.dataDisplayField;
+                recordIndex = cached.currentRecordIndex;
+              } else if (template?.data_source_id) {
                 const dataSource = getDataSourceById(template.data_source_id);
+                const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
                 if (dataSource) {
                   dataSourceId = dataSource.id;
                   dataSourceName = dataSource.name;
                   dataPayload = dataSource.data;
                   dataDisplayField = config?.displayField || dataSource.displayField;
+                  recordIndex = config?.defaultRecordIndex ?? 0;
+
+                  // Also populate cache for this template so StageElement can use it
+                  newCache[targetTemplateId] = {
+                    dataSourceId: dataSource.id,
+                    dataSourceName: dataSource.name,
+                    dataPayload: dataSource.data,
+                    dataDisplayField: dataDisplayField,
+                    currentRecordIndex: recordIndex,
+                  };
                 }
               }
 
               set({
-                currentTemplateId: firstElement.template_id,
+                currentTemplateId: targetTemplateId,
                 dataSourceId,
                 dataSourceName,
                 dataPayload,
                 dataDisplayField,
-                currentRecordIndex: defaultRecordIndex,
+                currentRecordIndex: recordIndex,
+                templateDataCache: newCache,
               });
             }
           }
@@ -4088,6 +4174,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 template.data_source_id = id;
                 template.data_source_config = { displayField };
               }
+
+              // Update the template data cache - this is the resilient storage
+              // that persists data even when switching templates
+              draft.templateDataCache[currentTemplateId] = {
+                dataSourceId: id,
+                dataSourceName: name,
+                dataPayload: data,
+                dataDisplayField: displayField,
+                currentRecordIndex: 0,
+              };
             }
           });
 
@@ -4132,6 +4228,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 template.data_source_id = null;
                 template.data_source_config = null;
               }
+
+              // Also clear from template data cache
+              delete draft.templateDataCache[currentTemplateId];
             }
           });
 
@@ -4218,6 +4317,42 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           if (currentRecordIndex > 0) {
             set({ currentRecordIndex: currentRecordIndex - 1 });
           }
+        },
+
+        // Get data record for a specific template - looks up from cache or loads from data source
+        // This allows StageElement to get data for ANY template, not just the current one
+        getDataRecordForTemplate: (templateId: string) => {
+          const {
+            currentTemplateId,
+            dataPayload,
+            currentRecordIndex,
+            templateDataCache,
+            templates,
+          } = get();
+
+          // If asking for current template's data, use global state (it's always up to date)
+          if (templateId === currentTemplateId && dataPayload) {
+            return dataPayload[currentRecordIndex] || null;
+          }
+
+          // Check template data cache first
+          if (templateDataCache[templateId]) {
+            const cached = templateDataCache[templateId];
+            return cached.dataPayload[cached.currentRecordIndex] || null;
+          }
+
+          // Fallback: try to load from data source
+          const template = templates.find(t => t.id === templateId);
+          if (template?.data_source_id) {
+            const dataSource = getDataSourceById(template.data_source_id);
+            if (dataSource?.data?.length > 0) {
+              const config = template.data_source_config as { defaultRecordIndex?: number } | null;
+              const recordIndex = config?.defaultRecordIndex ?? 0;
+              return dataSource.data[recordIndex] || null;
+            }
+          }
+
+          return null;
         },
       }))
     )

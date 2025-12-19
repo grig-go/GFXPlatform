@@ -276,9 +276,36 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save data dashboards to backend
+      // Save HOME categories to backend (include virtual IDs - backend handles creating records)
+      const homeUpdates = homeCategories
+        .filter(cat => cat.dbRecordId) // Include all with dbRecordId (including virtual home-* IDs)
+        .map(cat => ({
+          id: cat.dbRecordId,
+          visible: cat.enabled,
+          order_index: cat.order,
+        }));
+
+      if (homeUpdates.length > 0) {
+        console.log("📤 Sending home updates:", homeUpdates);
+        const homeResponse = await fetch(
+          getEdgeFunctionUrl('dashboard_config/update'),
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(homeUpdates),
+          }
+        );
+
+        const homeData = await homeResponse.json();
+        console.log("✅ Saved home config:", homeData);
+      }
+
+      // Save DATA dashboards to backend (include virtual IDs - backend handles creating records)
       const dataUpdates = dataDashboards
-        .filter(dash => dash.dbRecordId && !dash.dbRecordId.startsWith("data-"))
+        .filter(dash => dash.dbRecordId) // Include all with dbRecordId (including virtual data-* IDs)
         .map(dash => ({
           id: dash.dbRecordId,
           visible: dash.enabled,

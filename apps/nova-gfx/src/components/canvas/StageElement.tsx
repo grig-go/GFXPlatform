@@ -243,9 +243,13 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     selectedKeyframeIds,
     phaseDurations,
     bindings,
+    isScriptPlayMode,
+    getDataRecordForTemplate,
+    // Keep templateDataCache in selector to trigger re-renders when data changes
+    templateDataCache,
+    currentTemplateId,
     dataPayload,
     currentRecordIndex,
-    isScriptPlayMode,
   } = useDesignerStore();
 
   // Get interactive store for dispatching events in play mode
@@ -255,11 +259,12 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   const { isResizing, handleResizeStart } = useResize();
   const { isRotating, handleRotateStart } = useRotate();
 
-  // Get current data record for bindings
+  // Get current data record for bindings - now uses element's template_id
+  // This ensures each element gets data from ITS template, not the globally selected one
   const currentRecord = useMemo(() => {
-    if (!dataPayload || dataPayload.length === 0) return null;
-    return dataPayload[currentRecordIndex];
-  }, [dataPayload, currentRecordIndex]);
+    return getDataRecordForTemplate(element.template_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [element.template_id, getDataRecordForTemplate, templateDataCache, currentTemplateId, dataPayload, currentRecordIndex]);
 
   // Resolve bindings - apply data values to element content
   const resolvedElement = useMemo(() => {
