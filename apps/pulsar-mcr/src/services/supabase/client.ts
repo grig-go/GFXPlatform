@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '../../lib/cookieStorage';
 
 // Supabase URL and public anon key (app-specific with fallback)
 const supabaseUrl = import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
@@ -16,7 +17,10 @@ const options = {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: false,
+    flowType: 'pkce' as const,
+    storage: cookieStorage,
+    storageKey: SHARED_AUTH_STORAGE_KEY
   },
   global: {
     headers: { 'x-application-name': 'template-manager' },
@@ -24,6 +28,57 @@ const options = {
 };
 
 export const supabase = createClient(supabaseUrl, supabaseKey, options);
+
+/**
+ * Ensure session is properly initialized from cookie storage
+ */
+const ensureSessionInitialized = async (): Promise<void> => {
+  try {
+    // First check if Supabase already has a session
+    const { data: { session: existingSession } } = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Session init timeout')), 5000)
+      )
+    ]);
+
+    if (existingSession) {
+      console.log('[Supabase] Session already initialized');
+      return;
+    }
+
+    // If no session but cookie exists, manually set it
+    const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+    if (storedSession) {
+      try {
+        const sessionData = JSON.parse(storedSession);
+        console.log('[Supabase] Found stored session data, keys:', Object.keys(sessionData));
+
+        const accessToken = sessionData.access_token;
+        const refreshToken = sessionData.refresh_token;
+
+        if (accessToken && refreshToken) {
+          console.log('[Supabase] Restoring session from cookie storage');
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+      } catch (e) {
+        console.error('[Supabase] Error restoring session from cookie:', e);
+      }
+    } else {
+      console.log('[Supabase] No stored session cookie found');
+    }
+  } catch (error) {
+    console.warn('[Supabase] Session initialization timed out');
+  }
+};
+
+/**
+ * Promise that resolves when session is ready
+ */
+export const sessionReady = ensureSessionInitialized();
 
 // Helper function to handle Supabase errors gracefully
 export const handleSupabaseError = (error: any, defaultMessage = 'An unexpected error occurred') => {

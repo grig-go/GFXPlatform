@@ -23,7 +23,7 @@ const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
     flowType: 'pkce',
     storage: cookieStorage,
     storageKey: SHARED_AUTH_STORAGE_KEY
@@ -112,28 +112,53 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 
 // Ensure session is properly initialized from cookie storage
 // This fixes issues where Supabase reads the cookie but doesn't set the auth headers
+// IMPORTANT: We check the cookie FIRST before calling any Supabase auth methods,
+// because getSession() can hang if the internal auth lock is stuck.
 const ensureSessionInitialized = async () => {
-  // First check if Supabase already has a session
-  const { data: { session: existingSession } } = await supabaseClient.auth.getSession();
-
-  if (existingSession) {
-    return;
-  }
-
-  // If no session but cookie exists, manually set it
+  // First, check if there's a session in cookie storage
   const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+
   if (storedSession) {
     try {
       const sessionData = JSON.parse(storedSession);
-      if (sessionData.access_token && sessionData.refresh_token) {
-        await supabaseClient.auth.setSession({
-          access_token: sessionData.access_token,
-          refresh_token: sessionData.refresh_token,
+      console.log('[Supabase] Found stored session data, keys:', Object.keys(sessionData));
+
+      const accessToken = sessionData.access_token;
+      const refreshToken = sessionData.refresh_token;
+
+      if (accessToken && refreshToken) {
+        console.log('[Supabase] Restoring session from cookie storage');
+        try {
+          await Promise.race([
+            supabaseClient.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('setSession timeout')), 5000)
+            )
+          ]);
+          console.log('[Supabase] Session restored successfully');
+        } catch (e) {
+          console.warn('[Supabase] setSession timed out or failed:', e);
+          // Clear the potentially corrupted cookie
+          cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        }
+      } else {
+        console.warn('[Supabase] Cookie exists but missing tokens:', {
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken
         });
+        // Clear invalid cookie
+        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
       }
     } catch (e) {
-      console.error('[Supabase] Error restoring session from cookie:', e);
+      console.error('[Supabase] Error parsing session from cookie:', e);
+      // Clear corrupted cookie
+      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
     }
+  } else {
+    console.log('[Supabase] No stored session cookie found');
   }
 };
 

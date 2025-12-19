@@ -6,7 +6,8 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '../utils/supabase';
+import { supabase, sessionReady } from '../utils/supabase';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '../lib/cookieStorage';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import type {
   AuthState,
@@ -268,6 +269,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.log('[Auth] Starting initialization...');
       initializingRef.current = true;
       try {
+        // Wait for session to be restored from cookie storage before proceeding
+        console.log('[Auth] Waiting for session restoration from cookie storage...');
+        await sessionReady;
+        console.log('[Auth] Session restoration complete');
+
         // Check system lock state
         console.log('[Auth] Checking system lock...');
         const isLocked = await checkSystemLocked();
@@ -379,7 +385,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }));
     setChannelAccess([]);
 
-    // Always clear all Supabase localStorage keys to ensure clean logout
+    // Clear the shared auth cookie (this is where the session is stored)
+    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+
+    // Also clear any legacy localStorage keys for backwards compatibility
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('sb-')) {
         localStorage.removeItem(key);
@@ -390,7 +399,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await supabase.auth.signOut({ scope: 'local' });
     } catch {
-      // Ignore errors - localStorage is already cleared
+      // Ignore errors - storage is already cleared
     }
   }, []);
 

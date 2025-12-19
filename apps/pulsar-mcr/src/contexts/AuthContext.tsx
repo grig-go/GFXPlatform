@@ -415,7 +415,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign out
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    // Clear React state immediately
+    setState(prev => ({
+      ...prev,
+      user: null,
+      session: null,
+      isAuthenticated: false,
+      isSuperuser: false,
+      isAdmin: false,
+      isPending: false,
+    }));
+    setChannelAccess([]);
+
+    // Clear the shared auth cookie
+    const { cookieStorage, SHARED_AUTH_STORAGE_KEY } = await import('../lib/cookieStorage');
+    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+
+    // Also clear any legacy localStorage keys
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // Call official signOut to clear server-side session
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Ignore errors - storage is already cleared
+    }
   }, []);
 
   // Refresh user data (e.g., after permission changes)

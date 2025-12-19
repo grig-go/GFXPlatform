@@ -163,47 +163,57 @@ export const supabase = getSupabaseClient();
  * Ensure session is properly initialized from cookie storage
  * This fixes issues where Supabase reads the cookie but doesn't set the auth headers
  *
- * IMPORTANT: This is the key difference from pulsar-mcr - we need to ensure the
- * auth session is properly initialized before making queries, otherwise the client
- * can get stuck in an internal lock state.
+ * IMPORTANT: We check the cookie FIRST before calling any Supabase auth methods,
+ * because getSession() can hang if the internal auth lock is stuck.
  */
 const ensureSessionInitialized = async (): Promise<void> => {
   const client = getSupabaseClient();
 
-  try {
-    // First check if Supabase already has a session
-    const { data: { session: existingSession } } = await Promise.race([
-      client.auth.getSession(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Session init timeout')), 5000)
-      )
-    ]);
+  // First, check if there's a session in cookie storage
+  const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
 
-    if (existingSession) {
-      console.log('[Supabase] Session already initialized');
-      return;
-    }
+  if (storedSession) {
+    try {
+      const sessionData = JSON.parse(storedSession);
+      console.log('[Supabase] Found stored session data, keys:', Object.keys(sessionData));
 
-    // If no session but cookie exists, manually set it
-    const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
-    if (storedSession) {
-      try {
-        const sessionData = JSON.parse(storedSession);
-        if (sessionData.access_token && sessionData.refresh_token) {
-          console.log('[Supabase] Restoring session from cookie storage');
-          await client.auth.setSession({
-            access_token: sessionData.access_token,
-            refresh_token: sessionData.refresh_token,
-          });
+      const accessToken = sessionData.access_token;
+      const refreshToken = sessionData.refresh_token;
+
+      if (accessToken && refreshToken) {
+        console.log('[Supabase] Restoring session from cookie storage');
+        try {
+          await Promise.race([
+            client.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('setSession timeout')), 5000)
+            )
+          ]);
+          console.log('[Supabase] Session restored successfully');
+        } catch (e) {
+          console.warn('[Supabase] setSession timed out or failed:', e);
+          // Clear the potentially corrupted cookie
+          cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+          resetSupabaseClient();
         }
-      } catch (e) {
-        console.error('[Supabase] Error restoring session from cookie:', e);
+      } else {
+        console.warn('[Supabase] Cookie exists but missing tokens:', {
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken
+        });
+        // Clear invalid cookie
+        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
       }
+    } catch (e) {
+      console.error('[Supabase] Error parsing session from cookie:', e);
+      // Clear corrupted cookie
+      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
     }
-  } catch (error) {
-    console.warn('[Supabase] Session initialization timed out, resetting client...');
-    // If session init times out, reset the client to prevent stuck state
-    resetSupabaseClient();
+  } else {
+    console.log('[Supabase] No stored session cookie found');
   }
 };
 
