@@ -305,11 +305,14 @@ interface DesignerState {
   showEasingEditor: boolean; // Show/hide the bezier curve easing editor panel
 
   // On-Air state (for preview/playback testing)
-  onAirTemplates: Record<string, { 
-    templateId: string; 
+  onAirTemplates: Record<string, {
+    templateId: string;
     state: 'idle' | 'in' | 'loop' | 'out';
     pendingSwitch?: string; // Template ID to switch to after OUT completes
   }>;
+
+  // Script play mode (for testing interactive scripts in canvas)
+  isScriptPlayMode: boolean;
 
   // Chat state
   chatMessages: ChatMessage[];
@@ -343,8 +346,9 @@ interface DesignerActions {
   // Project operations
   loadProject: (projectId: string) => Promise<void>;
   saveProject: () => Promise<void>;
+  saveProjectAs: (newName: string) => Promise<string | null>;
   setProject: (project: Project) => void;
-  updateProjectSettings: (updates: Partial<Project>) => Promise<void>;
+  updateProjectSettings: (updates: Partial<Project>, options?: { skipSave?: boolean }) => Promise<void>;
   updateDesignSystem: (designSystem: ProjectDesignSystem) => void;
 
   // Template operations
@@ -458,6 +462,10 @@ interface DesignerActions {
   switchTemplate: (newTemplateId: string, layerId: string) => void;
   setOnAirState: (layerId: string, state: 'idle' | 'in' | 'loop' | 'out') => void;
   clearOnAir: (layerId: string) => void;
+
+  // Script play mode (for testing interactive scripts in canvas)
+  setScriptPlayMode: (enabled: boolean) => void;
+  toggleScriptPlayMode: () => void;
 
   // Outline panel
   outlineTab: 'elements' | 'layers';
@@ -731,6 +739,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         phaseDurations: { in: 1500, loop: 3000, out: 1500 }, // Default durations in ms
         showEasingEditor: false,
         onAirTemplates: {},
+        isScriptPlayMode: false,
         chatMessages: [],
         isChatLoading: false,
         expandedNodes: new Set(),
@@ -1724,10 +1733,213 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               console.error('❌ localStorage fallback also failed:', localError);
             }
             
-            set({ 
-              isSaving: false, 
-              error: error instanceof Error ? error.message : 'Failed to save project' 
+            set({
+              isSaving: false,
+              error: error instanceof Error ? error.message : 'Failed to save project'
             });
+          }
+        },
+
+        saveProjectAs: async (newName: string) => {
+          const state = get();
+          if (!state.project) {
+            console.warn('No project to save');
+            return null;
+          }
+
+          set({ isSaving: true, error: null });
+
+          try {
+            // Get current user and organization
+            const currentUser = useAuthStore.getState().user;
+            const organizationId = state.project.organization_id || currentUser?.organizationId;
+
+            if (!organizationId) {
+              throw new Error('Organization ID required to create project');
+            }
+
+            // Create a new project with the new name
+            const { createProject, createLayer, createTemplate, createElement, createAnimation, createKeyframe, createBinding } = await import('@/services/projectService');
+
+            const newProject = await createProject({
+              name: newName,
+              description: state.project.description || '',
+              canvas_width: state.project.canvas_width,
+              canvas_height: state.project.canvas_height,
+              frame_rate: state.project.frame_rate,
+              background_color: state.project.background_color,
+              organization_id: organizationId,
+              created_by: currentUser?.id,
+            });
+
+            if (!newProject) {
+              throw new Error('Failed to create new project');
+            }
+
+            // Create layer ID mapping
+            const layerIdMap = new Map<string, string>();
+            for (const layer of state.layers) {
+              const newLayer = await createLayer({
+                project_id: newProject.id,
+                name: layer.name,
+                layer_type: layer.layer_type,
+                z_index: layer.z_index,
+                sort_order: layer.sort_order,
+                position_anchor: layer.position_anchor,
+                position_offset_x: layer.position_offset_x,
+                position_offset_y: layer.position_offset_y,
+                width: layer.width,
+                height: layer.height,
+                auto_out: layer.auto_out,
+                allow_multiple: layer.allow_multiple,
+                transition_in: layer.transition_in,
+                transition_in_duration: layer.transition_in_duration,
+                transition_out: layer.transition_out,
+                transition_out_duration: layer.transition_out_duration,
+                enabled: layer.enabled,
+                locked: layer.locked,
+                always_on: layer.always_on,
+              });
+              if (newLayer) {
+                layerIdMap.set(layer.id, newLayer.id);
+              }
+            }
+
+            // Create template ID mapping
+            const templateIdMap = new Map<string, string>();
+            for (const template of state.templates) {
+              const newLayerId = layerIdMap.get(template.layer_id);
+              if (!newLayerId) continue;
+
+              const newTemplate = await createTemplate({
+                project_id: newProject.id,
+                layer_id: newLayerId,
+                folder_id: template.folder_id,
+                name: template.name,
+                description: template.description,
+                tags: template.tags,
+                html_template: template.html_template,
+                css_styles: template.css_styles,
+                width: template.width,
+                height: template.height,
+                in_duration: template.in_duration,
+                loop_duration: template.loop_duration,
+                loop_iterations: template.loop_iterations,
+                out_duration: template.out_duration,
+                libraries: template.libraries,
+                custom_script: template.custom_script,
+                enabled: template.enabled,
+                locked: template.locked,
+                sort_order: template.sort_order,
+              });
+              if (newTemplate) {
+                templateIdMap.set(template.id, newTemplate.id);
+              }
+            }
+
+            // Create element ID mapping
+            const elementIdMap = new Map<string, string>();
+            for (const element of state.elements) {
+              const newTemplateId = templateIdMap.get(element.template_id);
+              if (!newTemplateId) continue;
+
+              const newElement = await createElement({
+                template_id: newTemplateId,
+                name: element.name,
+                element_id: element.element_id,
+                element_type: element.element_type,
+                parent_element_id: element.parent_element_id ? elementIdMap.get(element.parent_element_id) : null,
+                sort_order: element.sort_order,
+                z_index: element.z_index,
+                position_x: element.position_x,
+                position_y: element.position_y,
+                width: element.width,
+                height: element.height,
+                rotation: element.rotation,
+                scale_x: element.scale_x,
+                scale_y: element.scale_y,
+                anchor_x: element.anchor_x,
+                anchor_y: element.anchor_y,
+                opacity: element.opacity,
+                content: element.content,
+                styles: element.styles,
+                classes: element.classes,
+                visible: element.visible,
+                locked: element.locked,
+                screenMask: element.screenMask,
+              });
+              if (newElement) {
+                elementIdMap.set(element.id, newElement.id);
+              }
+            }
+
+            // Create animation ID mapping
+            const animationIdMap = new Map<string, string>();
+            for (const anim of state.animations) {
+              const newElementId = elementIdMap.get(anim.element_id);
+              const newTemplateId = templateIdMap.get(anim.template_id);
+              if (!newElementId || !newTemplateId) continue;
+
+              const newAnim = await createAnimation({
+                template_id: newTemplateId,
+                element_id: newElementId,
+                phase: anim.phase,
+                delay: anim.delay,
+                duration: anim.duration,
+                iterations: anim.iterations,
+                direction: anim.direction,
+                easing: anim.easing,
+                preset_id: anim.preset_id,
+              });
+              if (newAnim) {
+                animationIdMap.set(anim.id, newAnim.id);
+              }
+            }
+
+            // Duplicate keyframes
+            for (const kf of state.keyframes) {
+              const newAnimationId = animationIdMap.get(kf.animation_id);
+              if (!newAnimationId) continue;
+
+              await createKeyframe({
+                animation_id: newAnimationId,
+                name: kf.name,
+                position: kf.position,
+                easing: kf.easing,
+                properties: kf.properties,
+                sort_order: kf.sort_order,
+              });
+            }
+
+            // Duplicate bindings
+            for (const binding of state.bindings) {
+              const newElementId = elementIdMap.get(binding.element_id);
+              const newTemplateId = templateIdMap.get(binding.template_id);
+              if (!newElementId || !newTemplateId) continue;
+
+              await createBinding({
+                template_id: newTemplateId,
+                element_id: newElementId,
+                binding_key: binding.binding_key,
+                target_property: binding.target_property,
+                binding_type: binding.binding_type,
+                default_value: binding.default_value,
+                formatter: binding.formatter,
+                formatter_options: binding.formatter_options,
+                required: binding.required,
+              });
+            }
+
+            set({ isSaving: false });
+            console.log('✅ Project saved as:', newProject.name, newProject.id);
+            return newProject.id;
+          } catch (error) {
+            console.error('❌ Error saving project as:', error);
+            set({
+              isSaving: false,
+              error: error instanceof Error ? error.message : 'Failed to save project as'
+            });
+            return null;
           }
         },
 
@@ -1735,13 +1947,18 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set({ project });
         },
 
-        updateProjectSettings: async (updates) => {
+        updateProjectSettings: async (updates, options?: { skipSave?: boolean }) => {
           const state = get();
           if (!state.project) return;
 
           // Update local state immediately
           const updatedProject = { ...state.project, ...updates };
           set({ project: updatedProject, isDirty: true });
+
+          // If skipSave is true, only update local state (useful for tracking pending changes)
+          if (options?.skipSave) {
+            return;
+          }
 
           // Get current user for updated_by tracking
           const currentUserId = useAuthStore.getState().user?.id;
@@ -1758,6 +1975,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 canvas_height: updatedProject.canvas_height,
                 frame_rate: updatedProject.frame_rate,
                 background_color: updatedProject.background_color,
+                interactive_enabled: updatedProject.interactive_enabled,
+                interactive_config: updatedProject.interactive_config,
                 settings: updatedProject.settings,
                 updated_at: new Date().toISOString(),
                 updated_by: currentUserId || null,
@@ -3591,6 +3810,15 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((state) => {
             delete state.onAirTemplates[layerId];
           });
+        },
+
+        // Script play mode
+        setScriptPlayMode: (enabled) => {
+          set({ isScriptPlayMode: enabled });
+        },
+
+        toggleScriptPlayMode: () => {
+          set((state) => ({ isScriptPlayMode: !state.isScriptPlayMode }));
         },
 
         // Outline panel

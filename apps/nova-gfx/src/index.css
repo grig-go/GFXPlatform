@@ -143,6 +143,23 @@
   background: hsl(240 3.7% 35%);
 }
 
+/* Hide scrollbar in timeline canvas container - left element list scrollbar is the main one */
+.timeline-canvas-container ::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.timeline-canvas-container {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.timeline-canvas-container * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
 /* Prevent text selection during drag */
 .no-select {
   user-select: none;

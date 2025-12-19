@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -7,19 +6,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Button,
-  Input,
-  Label,
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@emergent-platform/ui';
-import { createProject } from '@/services/projectService';
-import { useDesignerStore } from '@/stores/designerStore';
-import { useAuthStore } from '@/stores/authStore';
+} from '../ui/select';
 import { Loader2, Monitor, Smartphone, Film, MonitorPlay, Zap } from 'lucide-react';
+import { createProject } from '../../services/gfxProjectService';
 
 // Resolution presets
 const RESOLUTION_PRESETS = [
@@ -40,16 +39,19 @@ const FRAME_RATES = [
   { value: '60', label: '60 fps' },
 ] as const;
 
-interface NewProjectDialogProps {
+interface NewGfxProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  organizationId?: string;
+  onProjectCreated?: (projectId: string) => void;
 }
 
-export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) {
-  const navigate = useNavigate();
-  const loadProject = useDesignerStore((s) => s.loadProject);
-  const { user, accessToken } = useAuthStore();
-  
+export function NewGfxProjectDialog({
+  open,
+  onOpenChange,
+  organizationId,
+  onProjectCreated,
+}: NewGfxProjectDialogProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState('Untitled Project');
   const [selectedPreset, setSelectedPreset] = useState('1080p');
@@ -73,11 +75,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   const handleCreate = async () => {
     if (!name.trim()) return;
 
-    // Ensure user has an organization
-    if (!user?.organizationId) {
-      console.error('Cannot create project: user has no organization');
-      return;
-    }
+    // Use default organization if not provided
+    const orgId = organizationId || '00000000-0000-0000-0000-000000000001';
 
     setIsCreating(true);
 
@@ -90,21 +89,24 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         frame_rate: parseInt(frameRate),
         background_color: backgroundColor,
         interactive_enabled: interactiveEnabled,
-        organization_id: user.organizationId,
-        created_by: user.id,
-      }, accessToken || undefined);
+        organization_id: orgId,
+      });
 
       if (newProject) {
         // Close dialog first
         onOpenChange(false);
         // Reset form
         resetForm();
-        // Small delay to ensure database writes complete
-        await new Promise(resolve => setTimeout(resolve, 100));
-        // Navigate to the new project
-        navigate(`/projects/${newProject.id}`, { replace: true });
-        // Load the project (will fetch layers from database)
-        await loadProject(newProject.id);
+        // Notify parent
+        if (onProjectCreated) {
+          onProjectCreated(newProject.id);
+        }
+        // Open in Nova GFX
+        const novaGfxPort = import.meta.env.VITE_NOVA_GFX_PORT || 3003;
+        window.open(
+          `http://localhost:${novaGfxPort}/projects/${newProject.id}`,
+          `nova-gfx-${newProject.id}`
+        );
       }
     } catch (error) {
       console.error('Failed to create project:', error);
@@ -169,11 +171,12 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
                 return (
                   <button
                     key={preset.id}
+                    type="button"
                     onClick={() => handlePresetChange(preset.id)}
                     className={`
                       p-3 rounded-lg border-2 transition-all text-left
-                      ${isSelected 
-                        ? 'border-violet-500 bg-violet-500/10' 
+                      ${isSelected
+                        ? 'border-violet-500 bg-violet-500/10'
                         : 'border-border hover:border-muted-foreground/50 bg-background'
                       }
                     `}
@@ -323,7 +326,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
           <div className="rounded-lg border bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground mb-2">Preview</div>
             <div className="flex items-center gap-4">
-              <div 
+              <div
                 className="border rounded"
                 style={{
                   width: Math.min(120, (width / height) * 60),
@@ -331,9 +334,9 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
                   aspectRatio: `${width} / ${height}`,
                   backgroundColor: backgroundColor === 'transparent' ? undefined : backgroundColor,
                   backgroundImage: backgroundColor === 'transparent'
-                    ? `linear-gradient(45deg, #333 25%, transparent 25%), 
-                       linear-gradient(-45deg, #333 25%, transparent 25%), 
-                       linear-gradient(45deg, transparent 75%, #333 75%), 
+                    ? `linear-gradient(45deg, #333 25%, transparent 25%),
+                       linear-gradient(-45deg, #333 25%, transparent 25%),
+                       linear-gradient(45deg, transparent 75%, #333 75%),
                        linear-gradient(-45deg, transparent 75%, #333 75%)`
                     : 'none',
                   backgroundSize: '8px 8px',
@@ -359,8 +362,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
           <Button variant="outline" onClick={handleCancel} disabled={isCreating}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleCreate} 
+          <Button
+            onClick={handleCreate}
             disabled={!name.trim() || isCreating}
             className="bg-gradient-to-r from-violet-500 to-fuchsia-400 hover:from-violet-600 hover:to-fuchsia-500"
           >
@@ -378,4 +381,3 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
     </Dialog>
   );
 }
-

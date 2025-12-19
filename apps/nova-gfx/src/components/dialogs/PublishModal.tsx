@@ -421,6 +421,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
               classes: el.classes,
               visible: el.visible,
               locked: el.locked,
+              // Include interactions for interactive elements
+              interactions: el.interactions,
             })),
             // Include animation data
             animations: animations.filter(a =>
@@ -431,13 +433,17 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
                 templateElements.some(e => e.id === a.element_id))
             ),
           },
+          // Include interactive mode configuration for interactive projects
+          interactive_enabled: project?.interactive_enabled || false,
+          interactive_config: project?.interactive_enabled ? project?.interactive_config : undefined,
           payload: buildPayload(),
           timestamp: new Date().toISOString(),
         };
       } else {
         // Publishing different project - send initialize command with project ID
-        // NovaPlayer will load the project data from DB
+        // NovaPlayer will load the project data from DB (including interactive_config)
         console.log(`[PublishModal] Publishing project ${selectedProjectId} (initialize mode)...`);
+        // For initialize mode, the player will fetch interactive_enabled and interactive_config from DB
         command = {
           type: 'initialize',
           projectId: selectedProjectId,

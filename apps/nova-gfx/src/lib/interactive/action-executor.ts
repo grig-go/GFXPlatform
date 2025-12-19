@@ -37,10 +37,13 @@ import type {
 import {
   evaluateExpression,
   executeScript,
+  executeScriptAsync,
   resolveValue,
   evaluateCondition,
   getNestedValue,
   setNestedValue,
+  ScriptTimeoutError,
+  LoopIterationError,
 } from './script-engine';
 
 // ============================================================================
@@ -203,11 +206,11 @@ async function executeAction(
 
     // Scripts
     case 'runScript':
-      executeRunScript(action as RunScriptAction, context, scriptContext);
+      await executeRunScript(action as RunScriptAction, context, scriptContext);
       break;
 
     case 'callFunction':
-      executeCallFunction(action as CallFunctionAction, context, scriptContext);
+      await executeCallFunction(action as CallFunctionAction, context, scriptContext);
       break;
 
     // Control Flow
@@ -703,11 +706,11 @@ function executeResetForm(
   }
 }
 
-function executeRunScript(
+async function executeRunScript(
   action: RunScriptAction,
   context: ActionExecutorContext,
   scriptContext: Partial<ScriptContext>
-): void {
+): Promise<void> {
   // Create actions object for script context
   const actions: ScriptContext['actions'] = {
     navigate: (templateId, params) => context.onNavigate(templateId, params),
@@ -723,17 +726,33 @@ function executeRunScript(
     log: (message, data) => context.onLog(message, data),
   };
 
-  executeScript(action.target.code, {
-    ...scriptContext,
-    actions,
-  });
+  try {
+    // Use async script execution with timeout protection
+    await executeScriptAsync(action.target.code, {
+      ...scriptContext,
+      actions,
+    });
+  } catch (error) {
+    // Handle script safety errors gracefully
+    if (error instanceof ScriptTimeoutError) {
+      context.onLog('Script timeout', { code: action.target.code.substring(0, 100) + '...' });
+      console.error('[Script] Execution timed out:', error.message);
+    } else if (error instanceof LoopIterationError) {
+      context.onLog('Infinite loop detected', { code: action.target.code.substring(0, 100) + '...' });
+      console.error('[Script] Infinite loop:', error.message);
+    } else {
+      context.onLog('Script error', { error: (error as Error).message });
+      console.error('[Script] Execution failed:', error);
+    }
+    // Don't rethrow - script errors shouldn't break the entire event handling chain
+  }
 }
 
-function executeCallFunction(
+async function executeCallFunction(
   action: CallFunctionAction,
   context: ActionExecutorContext,
   scriptContext: Partial<ScriptContext>
-): void {
+): Promise<void> {
   const fn = context.functions.find(f => f.name === action.target.name);
   if (!fn) {
     context.onLog(`Function not found: ${action.target.name}`, null);
@@ -751,9 +770,23 @@ function executeCallFunction(
     })
     .join('\n');
 
-  // Execute function body
+  // Execute function body with timeout protection
   const code = `${paramAssignments}\n${fn.body}`;
-  executeScript(code, scriptContext);
+
+  try {
+    await executeScriptAsync(code, scriptContext);
+  } catch (error) {
+    if (error instanceof ScriptTimeoutError) {
+      context.onLog('Function timeout', { name: action.target.name });
+      console.error(`[Function] ${action.target.name} timed out:`, error.message);
+    } else if (error instanceof LoopIterationError) {
+      context.onLog('Infinite loop in function', { name: action.target.name });
+      console.error(`[Function] ${action.target.name} infinite loop:`, error.message);
+    } else {
+      context.onLog('Function error', { name: action.target.name, error: (error as Error).message });
+      console.error(`[Function] ${action.target.name} failed:`, error);
+    }
+  }
 }
 
 async function executeConditional(

@@ -26,7 +26,10 @@ import { TopicBadgeElement } from '@/components/canvas/TopicBadgeElement';
 import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
+import { InteractiveElement } from '@/components/canvas/InteractiveElement';
+import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
+import type { Node, Edge } from '@xyflow/react';
 
 // NOTE: withTimeout was previously used but is now replaced by directRestSelect with built-in timeout
 
@@ -94,6 +97,7 @@ interface PlayerCommand {
       width?: number;
       height?: number;
       styles?: Record<string, any>;
+      interactions?: any;
     }>;
     // Animation data for direct rendering
     animations?: any[];
@@ -104,6 +108,14 @@ interface PlayerCommand {
   // Pulsar GFX uses layerIndex (0-3) instead of layerId
   layerIndex?: number;
   payload?: Record<string, string | null>;
+  // Interactive project settings
+  interactive_enabled?: boolean;
+  interactive_config?: {
+    visualNodes?: Node[];
+    visualEdges?: Edge[];
+    mode?: string;
+    script?: string;
+  };
   timestamp: string;
 }
 
@@ -133,6 +145,15 @@ export function NovaPlayer() {
   // Connection state
   const [isReady, setIsReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+
+  // Interactive mode support
+  const {
+    enableInteractiveMode,
+    disableInteractiveMode,
+    setVisualNodes,
+    isInteractiveMode,
+    dispatchEvent,
+  } = useInteractiveStore();
 
   // Project data (from Supabase)
   const [project, setProject] = useState<Project | null>(null);
@@ -228,6 +249,71 @@ export function NovaPlayer() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Check if project is interactive
+  const isInteractiveProject = project?.interactive_enabled === true;
+
+  // Enable/disable interactive mode based on project type
+  useEffect(() => {
+    console.log('[Nova Player] Interactive mode check:', {
+      isInteractiveProject,
+      interactive_enabled: project?.interactive_enabled,
+      hasConfig: !!project?.interactive_config,
+      projectId: project?.id
+    });
+
+    if (isInteractiveProject) {
+      console.log('[Nova Player] Enabling interactive mode for interactive project');
+      enableInteractiveMode();
+
+      // Load visual nodes from project's interactive_config
+      const interactiveConfig = project?.interactive_config as {
+        visualNodes?: Node[];
+        visualEdges?: Edge[];
+      } | null;
+
+      console.log('[Nova Player] Interactive config:', interactiveConfig);
+
+      if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
+        console.log('[Nova Player] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
+        // Log the event nodes specifically
+        const eventNodes = interactiveConfig.visualNodes.filter(n => n.type === 'event');
+        console.log('[Nova Player] Event nodes:', eventNodes.map(n => ({ id: n.id, eventType: (n.data as any)?.eventType })));
+        setVisualNodes(interactiveConfig.visualNodes, interactiveConfig.visualEdges);
+      } else {
+        console.log('[Nova Player] No visual nodes/edges found in config');
+      }
+    } else {
+      console.log('[Nova Player] Not an interactive project, disabling interactive mode');
+      disableInteractiveMode();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      disableInteractiveMode();
+    };
+  }, [isInteractiveProject, project?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes]);
+
+  // Log interactive mode state changes
+  useEffect(() => {
+    console.log('[Nova Player] isInteractiveMode state changed:', isInteractiveMode);
+  }, [isInteractiveMode]);
+
+  // Handle element clicks in interactive mode - dispatches to visual node runtime
+  const handleElementClick = useCallback((elementId: string, elementName?: string) => {
+    if (!isInteractiveMode) return;
+
+    console.log('[Nova Player] handleElementClick - dispatching click event:', {
+      elementId,
+      elementName,
+      isInteractiveMode
+    });
+
+    // Create and dispatch a click event
+    const event = createInteractionEvent('click', elementId, undefined);
+    // The dispatchEvent will route this to the visual node runtime
+    dispatchEvent(event, []);
+  }, [isInteractiveMode, dispatchEvent]);
 
   // Track loaded project ID to prevent redundant loads
   const loadedProjectIdRef = useRef<string | null>(null);
@@ -409,6 +495,47 @@ export function NovaPlayer() {
             const embeddedElements = cmd.template.elements;
             console.log(`[Nova Player] Using embedded command data for real-time playback (${embeddedElements.length} elements)`);
 
+            // Also add/update the template in templates state (needed for alwaysOnTemplateIds check)
+            setTemplates(prev => {
+              const exists = prev.some(t => t.id === templateId);
+              if (!exists) {
+                // Add a minimal template entry with all required fields
+                const newTemplate: Template = {
+                  id: templateId,
+                  name: cmd.template!.name || 'Template',
+                  layer_id: cmd.template!.layerId || '',
+                  project_id: cmd.template!.projectId || '',
+                  folder_id: null,
+                  description: null,
+                  tags: [],
+                  thumbnail_url: null,
+                  html_template: '',
+                  css_styles: '',
+                  width: null,
+                  height: null,
+                  in_duration: 1500,
+                  loop_duration: null,
+                  loop_iterations: 1,
+                  out_duration: 1500,
+                  libraries: [],
+                  custom_script: null,
+                  enabled: true,
+                  locked: false,
+                  archived: false,
+                  version: 1,
+                  sort_order: 0,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  created_by: null,
+                  data_source_id: null,
+                  data_source_config: null,
+                };
+                console.log(`[Nova Player] Adding template to state:`, newTemplate.id);
+                return [...prev, newTemplate];
+              }
+              return prev;
+            });
+
             // Merge embedded elements into state (use command data directly)
             // This ensures we have the element data immediately available for rendering
             setElements(prev => {
@@ -538,7 +665,24 @@ export function NovaPlayer() {
               return next;
             });
           } else {
-            console.warn(`[Nova Player] No layerId found for template ${templateId}, falling back to legacy mode`);
+            // No layerId found - create a fallback layer to ensure elements still render
+            console.warn(`[Nova Player] No layerId found for template ${templateId}, using fallback layer`);
+            const fallbackLayerId = '__fallback_layer__';
+
+            setLayerTemplates(prev => {
+              const next = new Map(prev);
+              // Clear any existing fallback layer state and add new template
+              next.set(fallbackLayerId, [{
+                templateId,
+                instanceId: newInstanceId,
+                phase: 'in' as AnimationPhase,
+                playheadPosition: 0,
+                lastTime: 0,
+                isOutgoing: false,
+              }]);
+              console.log(`[Nova Player] Using fallback layer for template ${templateId}`);
+              return next;
+            });
           }
 
           setCurrentTemplateId(templateId);
@@ -551,6 +695,24 @@ export function NovaPlayer() {
               next.set(newInstanceId, cmd.payload!);
               return next;
             });
+          }
+
+          // Handle interactive mode from command (for real-time embedded playback)
+          console.log('[Nova Player] Play command interactive check:', {
+            interactive_enabled: cmd.interactive_enabled,
+            hasConfig: !!cmd.interactive_config,
+            visualNodesCount: cmd.interactive_config?.visualNodes?.length || 0,
+            visualEdgesCount: cmd.interactive_config?.visualEdges?.length || 0
+          });
+          if (cmd.interactive_enabled) {
+            console.log('[Nova Player] Enabling interactive mode from command');
+            enableInteractiveMode();
+            if (cmd.interactive_config?.visualNodes && cmd.interactive_config?.visualEdges) {
+              console.log('[Nova Player] Setting visual nodes from command:', cmd.interactive_config.visualNodes.length, 'nodes,', cmd.interactive_config.visualEdges.length, 'edges');
+              const eventNodes = cmd.interactive_config.visualNodes.filter((n: any) => n.type === 'event');
+              console.log('[Nova Player] Event nodes from command:', eventNodes.map((n: any) => ({ id: n.id, eventType: n.data?.eventType })));
+              setVisualNodes(cmd.interactive_config.visualNodes, cmd.interactive_config.visualEdges);
+            }
           }
         }
         setIsOnAir(true);
@@ -575,6 +737,15 @@ export function NovaPlayer() {
               next.set(loadInstanceId, cmd.payload!);
               return next;
             });
+          }
+          // Handle interactive mode from command
+          if (cmd.interactive_enabled) {
+            console.log('[Nova Player] Enabling interactive mode from load command');
+            enableInteractiveMode();
+            if (cmd.interactive_config?.visualNodes && cmd.interactive_config?.visualEdges) {
+              console.log('[Nova Player] Setting visual nodes from command:', cmd.interactive_config.visualNodes.length, 'nodes');
+              setVisualNodes(cmd.interactive_config.visualNodes, cmd.interactive_config.visualEdges);
+            }
           }
         }
         // Don't play yet
@@ -1548,6 +1719,8 @@ export function NovaPlayer() {
               isPlaying={isPlaying}
               isAlwaysOn={true}
               phaseDuration={phaseDurations.loop}
+              isInteractiveMode={isInteractiveMode}
+              onElementClick={handleElementClick}
             />
           ))}
 
@@ -1581,6 +1754,8 @@ export function NovaPlayer() {
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
                 phaseDuration={phaseDurations[instance.phase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
               />
             ));
         })}
@@ -1602,6 +1777,8 @@ export function NovaPlayer() {
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
                 phaseDuration={phaseDurations[currentPhase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
               />
             ))
         )}
@@ -1622,6 +1799,8 @@ interface PlayerElementProps {
   isPlaying: boolean;
   isAlwaysOn?: boolean;
   phaseDuration: number;
+  isInteractiveMode?: boolean;
+  onElementClick?: (elementId: string, elementName?: string) => void;
 }
 
 function PlayerElement({
@@ -1634,6 +1813,8 @@ function PlayerElement({
   isPlaying,
   isAlwaysOn = false,
   phaseDuration,
+  isInteractiveMode = false,
+  onElementClick,
 }: PlayerElementProps) {
   // For always-on elements, use 'loop' phase at position 0 (static display)
   const effectivePhase = isAlwaysOn ? 'loop' : currentPhase;
@@ -1719,6 +1900,15 @@ function PlayerElement({
   };
 
   const renderContent = () => {
+    // Debug logging for element rendering
+    console.log('[Nova Player] renderContent:', {
+      elementId: element.id,
+      elementType: (element as any).type,
+      contentType: element.content?.type,
+      hasInteractions: !!element.interactions,
+      content: element.content
+    });
+
     switch (element.content.type) {
       case 'text': {
         const textContent = element.content;
@@ -2211,6 +2401,27 @@ function PlayerElement({
           />
         );
 
+      case 'interactive':
+        console.log('[Nova Player] Rendering InteractiveElement:', {
+          elementId: element.id,
+          isInteractiveMode,
+          isPreview: !isInteractiveMode,
+          hasInteractions: !!element.interactions,
+          hasHandlers: !!element.interactions?.handlers,
+          handlers: element.interactions?.handlers,
+          inputType: (element.content as any)?.type || (element.content as any)?.inputType
+        });
+        return (
+          <InteractiveElement
+            config={element.content}
+            elementId={element.id}
+            className="w-full h-full"
+            style={element.styles as React.CSSProperties}
+            isPreview={!isInteractiveMode}
+            handlers={element.interactions?.handlers}
+          />
+        );
+
       case 'group':
       case 'div':
         return <div style={{ width: '100%', height: '100%', ...element.styles }} />;
@@ -2220,8 +2431,30 @@ function PlayerElement({
     }
   };
 
+  // Handle click on this element
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (!isInteractiveMode || !onElementClick) return;
+
+    // Stop propagation so parent elements don't also trigger
+    e.stopPropagation();
+
+    console.log('[Nova Player] Element clicked:', {
+      elementId: element.id,
+      elementName: element.name,
+      contentType: element.content?.type
+    });
+
+    onElementClick(element.id, element.name);
+  }, [isInteractiveMode, onElementClick, element.id, element.name, element.content?.type]);
+
   return (
-    <div style={style}>
+    <div
+      style={{
+        ...style,
+        cursor: isInteractiveMode ? 'pointer' : undefined,
+      }}
+      onClick={handleClick}
+    >
       {renderContent()}
       {children.map((child) => (
         <PlayerElement
@@ -2235,6 +2468,8 @@ function PlayerElement({
           isPlaying={isPlaying}
           isAlwaysOn={isAlwaysOn}
           phaseDuration={phaseDuration}
+          isInteractiveMode={isInteractiveMode}
+          onElementClick={onElementClick}
         />
       ))}
     </div>

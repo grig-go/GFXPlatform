@@ -87,6 +87,8 @@ export function Canvas() {
     playheadPosition,
     selectedKeyframeIds,
     phaseDurations,
+    // Script play mode
+    isScriptPlayMode,
   } = useDesignerStore();
 
   // Wrapper for addElement that automatically parents to selected group
@@ -1765,19 +1767,23 @@ export function Canvas() {
       <div
         ref={containerRef}
         data-canvas-area
-        className="flex-1 overflow-hidden relative bg-neutral-200/50 dark:bg-neutral-950/50"
+        data-script-play-mode={isScriptPlayMode}
+        className={cn(
+          "flex-1 overflow-hidden relative bg-neutral-200/50 dark:bg-neutral-950/50",
+          isScriptPlayMode && "ring-4 ring-green-500 ring-inset"
+        )}
         style={{
-          cursor: getCursor(),
+          cursor: isScriptPlayMode ? 'default' : getCursor(),
           backgroundImage: `
             radial-gradient(circle at center, hsl(var(--border)) 1px, transparent 1px)
           `,
           backgroundSize: '24px 24px',
         }}
-        onClick={handleClick}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
+        onClick={isScriptPlayMode ? undefined : handleClick}
+        onMouseDown={isScriptPlayMode ? undefined : handleMouseDown}
+        onMouseMove={isScriptPlayMode ? undefined : handleMouseMove}
+        onMouseUp={isScriptPlayMode ? undefined : handleMouseUp}
+        onMouseLeave={isScriptPlayMode ? undefined : () => {
           setIsPanning(false);
           setDrawState(null);
         }}

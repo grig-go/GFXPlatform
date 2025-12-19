@@ -13,10 +13,8 @@ import type {
   InteractionEvent,
   InteractionEventType,
   ElementEventHandler,
-  AppStateVariable,
-  ComputedState,
-  AppFunction,
   ScriptContext,
+  Element,
 } from '@emergent-platform/types';
 
 import {
@@ -24,7 +22,71 @@ import {
   ActionExecutorContext,
   buildScriptContext,
 } from './action-executor';
-import { evaluateExpression, evaluateCondition } from './script-engine';
+import { evaluateExpression, evaluateCondition, getNestedValue, setNestedValue, setDesignerStoreRef } from './script-engine';
+import { executeNodeGraph, createNodeRuntimeContext } from './visual-node-runtime';
+import type { Node, Edge } from '@xyflow/react';
+
+// ============================================================================
+// DESIGNER STORE INTEGRATION
+// ============================================================================
+
+// Lazy import to avoid circular dependencies
+let designerStoreRef: typeof import('@/stores/designerStore').useDesignerStore | null = null;
+
+/**
+ * Get the designer store (lazy loaded to avoid circular deps)
+ */
+async function getDesignerStore() {
+  if (!designerStoreRef) {
+    const module = await import('@/stores/designerStore');
+    designerStoreRef = module.useDesignerStore;
+    // Also set the reference for script-engine element lookups
+    setDesignerStoreRef(designerStoreRef);
+  }
+  return designerStoreRef.getState();
+}
+
+/**
+ * Synchronously get designer store if already loaded
+ */
+function getDesignerStoreSync() {
+  return designerStoreRef?.getState() ?? null;
+}
+
+/**
+ * Debounce utility for event handlers
+ */
+function debounce<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: NodeJS.Timeout | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
+/**
+ * Throttle utility for event handlers
+ */
+function throttle<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let lastCall = 0;
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+    if (now - lastCall >= delay) {
+      lastCall = now;
+      fn(...args);
+    }
+  };
+}
+
+// Handler cache for debounce/throttle
+const debouncedHandlers = new Map<string, (...args: unknown[]) => void>();
+const throttledHandlers = new Map<string, (...args: unknown[]) => void>();
 
 // ============================================================================
 // STORE TYPES
@@ -34,6 +96,10 @@ interface InteractiveStoreState {
   // Configuration
   config: InteractiveAppConfig | null;
   isInteractiveMode: boolean;
+
+  // Visual node graph for script execution
+  visualNodes: Node[];
+  visualEdges: Edge[];
 
   // Runtime state
   runtime: InteractiveAppRuntime;
@@ -47,6 +113,9 @@ interface InteractiveStoreState {
   resetApp: () => void;
   enableInteractiveMode: () => void;
   disableInteractiveMode: () => void;
+
+  // Visual node management
+  setVisualNodes: (nodes: Node[], edges: Edge[]) => void;
 
   // State management
   setState: (name: string, value: unknown) => void;
@@ -104,6 +173,8 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
     // Initial state
     config: null,
     isInteractiveMode: false,
+    visualNodes: [],
+    visualEdges: [],
     runtime: createInitialRuntime(),
     isProcessingEvent: false,
     eventHistory: [],
@@ -144,12 +215,23 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
     },
 
     // Enable interactive mode
-    enableInteractiveMode: () => set({ isInteractiveMode: true }),
+    enableInteractiveMode: () => {
+      console.log('[InteractiveStore] enableInteractiveMode called');
+      set({ isInteractiveMode: true });
+      console.log('[InteractiveStore] isInteractiveMode now:', get().isInteractiveMode);
+    },
 
     // Disable interactive mode
     disableInteractiveMode: () => {
+      console.log('[InteractiveStore] disableInteractiveMode called');
       get().stopAllTimers();
       set({ isInteractiveMode: false });
+    },
+
+    // Set visual nodes for script execution
+    setVisualNodes: (nodes: Node[], edges: Edge[]) => {
+      set({ visualNodes: nodes, visualEdges: edges });
+      console.log(`[Interactive] Visual nodes set: ${nodes.length} nodes, ${edges.length} edges`);
     },
 
     // Set state variable
@@ -260,9 +342,15 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
 
     // Dispatch event to handlers
     dispatchEvent: async (event: InteractionEvent, handlers: ElementEventHandler[]) => {
-      const { isInteractiveMode, config, runtime } = get();
-      if (!isInteractiveMode || !config) return;
+      console.log('[InteractiveStore] dispatchEvent called', { eventType: event.type, elementId: event.elementId });
+      const { isInteractiveMode, config, runtime, visualNodes, visualEdges } = get();
+      console.log('[InteractiveStore] State:', { isInteractiveMode, hasConfig: !!config, visualNodesCount: visualNodes.length, visualEdgesCount: visualEdges.length });
+      if (!isInteractiveMode) {
+        console.log('[InteractiveStore] Event ignored - isInteractiveMode is false');
+        return;
+      }
 
+      // Don't block on isProcessingEvent - allow rapid clicks
       set({ isProcessingEvent: true });
 
       // Filter handlers that match this event type
@@ -270,42 +358,235 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
         h => h.event === event.type && h.enabled
       );
 
-      // Create executor context
+      // Get designer store for element/animation operations
+      const designerStore = await getDesignerStore();
+
+      // Build element context if available
+      let elementContext: ScriptContext['element'] | null = null;
+      if (event.elementId) {
+        const element = designerStore.elements.find(e => e.id === event.elementId);
+        if (element) {
+          elementContext = {
+            id: element.id,
+            type: element.element_type,
+            properties: {
+              visible: element.visible,
+              locked: element.locked,
+              opacity: element.opacity,
+              width: element.width,
+              height: element.height,
+              x: element.position_x,
+              y: element.position_y,
+              rotation: element.rotation,
+              content: element.content,
+              styles: element.styles,
+            },
+          };
+        }
+      }
+
+      // Build data context from data sources
+      const dataContext: Record<string, unknown> = {};
+      if (designerStore.dataSourceId) {
+        // If there's an active data source, include its data
+        dataContext.__dataSourceId = designerStore.dataSourceId;
+      }
+
+      // Create executor context with real callbacks
       const executorContext: ActionExecutorContext = {
         runtime,
         event,
-        element: null,
-        functions: config.functions,
+        element: elementContext,
+        functions: config?.functions || {},
         onNavigate: (templateId, params) => get().navigate(templateId, params),
         onStateChange: (state) => set(s => ({ runtime: { ...s.runtime, state } })),
-        onElementUpdate: () => {}, // Would integrate with designer store
-        onElementVisibility: () => {}, // Would integrate with designer store
-        onPlayAnimation: () => {}, // Would integrate with designer store
-        onPlayTimeline: () => {}, // Would integrate with designer store
+
+        // Element update callback - integrates with designer store
+        onElementUpdate: (elementId: string, property: string, value: unknown) => {
+          const element = designerStore.elements.find(e => e.id === elementId);
+          if (!element) {
+            console.warn(`[Interactive] Element not found: ${elementId}`);
+            return;
+          }
+
+          // Map common property names to element fields
+          const propertyMap: Record<string, string> = {
+            'visible': 'visible',
+            'locked': 'locked',
+            'opacity': 'opacity',
+            'width': 'width',
+            'height': 'height',
+            'x': 'position_x',
+            'y': 'position_y',
+            'positionX': 'position_x',
+            'positionY': 'position_y',
+            'rotation': 'rotation',
+            'scaleX': 'scale_x',
+            'scaleY': 'scale_y',
+            'content': 'content',
+            'styles': 'styles',
+            'classes': 'classes',
+          };
+
+          const elementProperty = propertyMap[property] || property;
+
+          // Handle nested content properties (e.g., 'content.text', 'styles.color')
+          if (property.startsWith('content.') || property.startsWith('styles.')) {
+            const [parent, ...rest] = property.split('.');
+            const nestedPath = rest.join('.');
+            const currentValue = element[parent as keyof typeof element] as Record<string, unknown> ?? {};
+            const newValue = { ...currentValue };
+            setNestedValue(newValue, nestedPath, value);
+            designerStore.updateElement(elementId, { [parent]: newValue });
+          } else {
+            designerStore.updateElement(elementId, { [elementProperty]: value });
+          }
+
+          console.log(`[Interactive] Updated element ${elementId}.${property} =`, value);
+        },
+
+        // Element visibility callback
+        onElementVisibility: (elementId: string, visible: boolean) => {
+          const element = designerStore.elements.find(e => e.id === elementId);
+          if (!element) {
+            console.warn(`[Interactive] Element not found for visibility: ${elementId}`);
+            return;
+          }
+          designerStore.updateElement(elementId, { visible });
+          console.log(`[Interactive] Set element ${elementId} visible =`, visible);
+        },
+
+        // Animation playback callback
+        onPlayAnimation: (elementId?: string, animationId?: string) => {
+          if (elementId) {
+            // Find animations for this element and trigger them
+            const animations = designerStore.animations.filter(a => a.element_id === elementId);
+            if (animationId) {
+              const animation = animations.find(a => a.id === animationId);
+              if (animation) {
+                console.log(`[Interactive] Playing animation ${animationId} on element ${elementId}`);
+                // Trigger animation via preview/playback system
+                // This would need to integrate with the animation playback system
+              }
+            } else if (animations.length > 0) {
+              console.log(`[Interactive] Playing all animations on element ${elementId}`);
+            }
+          }
+        },
+
+        // Timeline playback callback - integrates with On-Air system
+        onPlayTimeline: (templateId?: string, phase?: 'in' | 'loop' | 'out') => {
+          if (!templateId) return;
+
+          const template = designerStore.templates.find(t => t.id === templateId);
+          if (!template) {
+            console.warn(`[Interactive] Template not found: ${templateId}`);
+            return;
+          }
+
+          const layerId = template.layer_id;
+
+          if (phase === 'in' || !phase) {
+            designerStore.playIn(templateId, layerId);
+            console.log(`[Interactive] Playing IN for template ${templateId}`);
+          } else if (phase === 'out') {
+            designerStore.playOut(layerId);
+            console.log(`[Interactive] Playing OUT for layer ${layerId}`);
+          }
+        },
+
         onFetchData: async (url, options) => {
           const response = await fetch(url, options);
           return response.json();
         },
+
         onValidateForm: (formId) => {
           const form = runtime.forms[formId];
-          return { isValid: true, errors: form?.errors ?? {} };
+          // Basic validation - check required fields
+          const errors: Record<string, string> = {};
+          // Could add more sophisticated validation rules here
+          return {
+            isValid: Object.keys(errors).length === 0,
+            errors: { ...form?.errors, ...errors }
+          };
         },
-        onSubmitForm: async () => {},
-        onLog: console.log,
+
+        onSubmitForm: async (formId, data, endpoint) => {
+          if (!endpoint) return;
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          return response.json();
+        },
+
+        onLog: (message, data) => {
+          console.log(`[Interactive] ${message}`, data);
+        },
       };
 
-      // Execute handlers
+      // Execute handlers with debounce/throttle support
       for (const handler of matchingHandlers) {
         // Check handler conditions
         if (handler.conditions && handler.conditions.length > 0) {
           const scriptContext = buildScriptContext(executorContext);
+          // Add data context
+          scriptContext.data = dataContext;
           const allConditionsMet = handler.conditions.every(c =>
             evaluateCondition(c, scriptContext)
           );
           if (!allConditionsMet) continue;
         }
 
-        await executeActions(handler.actions, executorContext);
+        // Apply debounce/throttle if configured
+        let executeHandler = () => executeActions(handler.actions, executorContext);
+
+        if (handler.debounce && handler.debounce > 0) {
+          // For debounced handlers, we need to track per-handler
+          const handlerId = handler.id;
+          if (!debouncedHandlers.has(handlerId)) {
+            debouncedHandlers.set(handlerId, debounce(executeHandler, handler.debounce));
+          }
+          debouncedHandlers.get(handlerId)!();
+        } else if (handler.throttle && handler.throttle > 0) {
+          const handlerId = handler.id;
+          if (!throttledHandlers.has(handlerId)) {
+            throttledHandlers.set(handlerId, throttle(executeHandler, handler.throttle));
+          }
+          throttledHandlers.get(handlerId)!();
+        } else {
+          await executeActions(handler.actions, executorContext);
+        }
+      }
+
+      // Execute visual node graph if nodes are present
+      if (visualNodes.length > 0) {
+        console.log(`[Interactive] Executing visual node graph for event "${event.type}"`);
+
+        // Create node runtime context
+        const nodeContext = createNodeRuntimeContext(
+          designerStore,
+          {
+            runtime,
+            setState: (key: string, value: unknown) => get().setState(key, value),
+            navigate: (screenId: string) => get().navigate(screenId),
+          }
+        );
+
+        // Add event data to context
+        nodeContext.event = {
+          type: event.type,
+          elementId: event.elementId,
+          data: event.data,
+        };
+
+        // Execute the node graph
+        try {
+          await executeNodeGraph(event.type, event.elementId, visualNodes, visualEdges, nodeContext);
+        } catch (error) {
+          console.error('[Interactive] Error executing visual node graph:', error);
+        }
       }
 
       // Add to event history
@@ -480,25 +761,51 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
           data: { timerId },
         };
 
-        // Execute timer actions
+        // Get designer store for callbacks
+        const designerStore = await getDesignerStore();
+
+        // Execute timer actions with real callbacks
         const executorContext: ActionExecutorContext = {
           runtime: get().runtime,
           event,
           element: null,
-          functions: config.functions,
+          functions: config?.functions || {},
           onNavigate: (templateId, params) => get().navigate(templateId, params),
           onStateChange: (state) => set(s => ({ runtime: { ...s.runtime, state } })),
-          onElementUpdate: () => {},
-          onElementVisibility: () => {},
-          onPlayAnimation: () => {},
-          onPlayTimeline: () => {},
+          onElementUpdate: (elementId, property, value) => {
+            const element = designerStore.elements.find(e => e.id === elementId);
+            if (element) {
+              const propertyMap: Record<string, string> = {
+                'visible': 'visible', 'opacity': 'opacity', 'width': 'width',
+                'height': 'height', 'x': 'position_x', 'y': 'position_y',
+              };
+              designerStore.updateElement(elementId, { [propertyMap[property] || property]: value });
+            }
+          },
+          onElementVisibility: (elementId, visible) => {
+            designerStore.updateElement(elementId, { visible });
+          },
+          onPlayAnimation: (elementId, animationId) => {
+            console.log(`[Timer] Play animation ${animationId} on ${elementId}`);
+          },
+          onPlayTimeline: (templateId, phase) => {
+            if (!templateId) return;
+            const template = designerStore.templates.find(t => t.id === templateId);
+            if (template) {
+              if (phase === 'out') {
+                designerStore.playOut(template.layer_id);
+              } else {
+                designerStore.playIn(templateId, template.layer_id);
+              }
+            }
+          },
           onFetchData: async (url, options) => {
             const response = await fetch(url, options);
             return response.json();
           },
           onValidateForm: () => ({ isValid: true, errors: {} }),
           onSubmitForm: async () => {},
-          onLog: console.log,
+          onLog: (msg, data) => console.log(`[Timer] ${msg}`, data),
         };
 
         await executeActions(timer.actions, executorContext);

@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, Plus, Layers, LayoutTemplate, Folder,
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
-  PenLine, FilePlus, Save, Pin, GripHorizontal, ExternalLink, Spline,
+  PenLine, FilePlus, Save, SaveAll, Pin, GripHorizontal, ExternalLink, Spline,
   Search, X, Database,
 } from 'lucide-react';
 import {
@@ -61,6 +61,9 @@ export function OutlinePanel() {
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
   const [showRenameProjectDialog, setShowRenameProjectDialog] = useState(false);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
+  const [isSavingAs, setIsSavingAs] = useState(false);
   const [showAddDataModal, setShowAddDataModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [selectedLayerType, setSelectedLayerType] = useState<string>('custom');
@@ -82,7 +85,7 @@ export function OutlinePanel() {
   const confirm = useConfirm();
   const {
     project, layers, addLayer, addTemplate, updateProjectSettings, isDirty, saveProject, isSaving, deleteLayer,
-    elements, selectedElementIds, groupElements, ungroupElements, dataSourceId
+    elements, selectedElementIds, groupElements, ungroupElements, dataSourceId, saveProjectAs,
   } = useDesignerStore();
 
   // Listen for "open add data modal" events from child components
@@ -235,6 +238,20 @@ export function OutlinePanel() {
     }
   };
 
+  // Handle Save As - create a copy of the project with a new name
+  const handleSaveAs = async () => {
+    if (!saveAsName.trim()) return;
+    setIsSavingAs(true);
+    const newProjectId = await saveProjectAs(saveAsName.trim());
+    setIsSavingAs(false);
+    if (newProjectId) {
+      setShowSaveAsDialog(false);
+      setSaveAsName('');
+      // Navigate to the new project
+      navigate(`/projects/${newProjectId}`);
+    }
+  };
+
   return (
     <div ref={containerRef} className="h-full w-full min-w-0 min-h-0 flex flex-col bg-card border-l border-border overflow-hidden">
       {/* Header with Project Name */}
@@ -258,12 +275,22 @@ export function OutlinePanel() {
               <Settings className="mr-2 h-4 w-4" />
               Project Settings
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => saveProject()}
               disabled={isSaving || !isDirty}
             >
               <Save className="mr-2 h-4 w-4" />
               {isSaving ? 'Saving...' : 'Save Project'}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSaveAsName(project?.name ? `${project.name} (Copy)` : '');
+                setShowSaveAsDialog(true);
+              }}
+              disabled={isSaving}
+            >
+              <SaveAll className="mr-2 h-4 w-4" />
+              Save As...
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleNewProject}>
@@ -291,7 +318,7 @@ export function OutlinePanel() {
           </DropdownMenuContent>
         </DropdownMenu>
         
-        {/* Unsaved indicator with Save button */}
+        {/* Unsaved indicator with Save/Save As buttons */}
         {isDirty && (
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-amber-500 flex items-center gap-0.5">
@@ -307,6 +334,19 @@ export function OutlinePanel() {
             >
               <Save className="w-3 h-3 mr-0.5" />
               {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSaveAsName(project?.name ? `${project.name} (Copy)` : '');
+                setShowSaveAsDialog(true);
+              }}
+              disabled={isSaving || isSavingAs}
+              className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              title="Save As..."
+            >
+              <SaveAll className="w-3 h-3" />
             </Button>
           </div>
         )}
@@ -651,6 +691,40 @@ export function OutlinePanel() {
             </Button>
             <Button onClick={handleRenameProject} disabled={!newItemName.trim()}>
               Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save As Dialog */}
+      <Dialog open={showSaveAsDialog} onOpenChange={setShowSaveAsDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Save Project As</DialogTitle>
+            <DialogDescription>
+              Create a copy of this project with a new name
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="save-as-name">New Project Name</Label>
+              <Input
+                id="save-as-name"
+                value={saveAsName}
+                onChange={(e) => setSaveAsName(e.target.value)}
+                placeholder="My Project (Copy)"
+                onKeyDown={(e) => e.key === 'Enter' && !isSavingAs && handleSaveAs()}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveAsDialog(false)} disabled={isSavingAs}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAs} disabled={!saveAsName.trim() || isSavingAs}>
+              <SaveAll className="mr-2 h-4 w-4" />
+              {isSavingAs ? 'Saving...' : 'Save As'}
             </Button>
           </DialogFooter>
         </DialogContent>

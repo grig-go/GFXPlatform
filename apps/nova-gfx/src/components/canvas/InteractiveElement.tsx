@@ -5,9 +5,9 @@
  * Used for building interactive apps in Nova GFX.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { cn } from '@emergent-platform/ui';
-import type { InteractiveInputType } from '@emergent-platform/types';
+import type { InteractiveInputType, ElementEventHandler } from '@emergent-platform/types';
 import {
   useInteractiveStore,
   createInteractionEvent,
@@ -50,6 +50,10 @@ interface InteractiveElementProps {
   className?: string;
   style?: React.CSSProperties;
   isPreview?: boolean;
+  /** Event handlers configured for this element */
+  handlers?: ElementEventHandler[];
+  /** Form ID this element belongs to (for form state sync) */
+  formId?: string;
 }
 
 export function InteractiveElement({
@@ -58,6 +62,8 @@ export function InteractiveElement({
   className,
   style,
   isPreview = false,
+  handlers = [],
+  formId,
 }: InteractiveElementProps) {
   const {
     inputType,
@@ -84,8 +90,22 @@ export function InteractiveElement({
   // Local state for unbound inputs
   const [localValue, setLocalValue] = useState<string | number | boolean>(defaultValue ?? '');
 
-  // Interactive store for bound inputs
-  const { isInteractiveMode, runtime, setState, dispatchEvent } = useInteractiveStore();
+  // Interactive store for bound inputs and form state
+  const { isInteractiveMode, runtime, setState, dispatchEvent, setFormValue } = useInteractiveStore();
+
+  // Debug logging on mount and prop changes
+  useEffect(() => {
+    console.log('[InteractiveElement] Mounted/Updated:', {
+      elementId,
+      inputType,
+      isPreview,
+      isInteractiveMode,
+      disabled,
+      buttonDisabled: disabled || (!isPreview && !isInteractiveMode),
+      hasHandlers: handlers?.length > 0,
+      handlers
+    });
+  }, [elementId, inputType, isPreview, isInteractiveMode, disabled, handlers]);
 
   // Get value from state if bound, otherwise use local state
   const value = useMemo(() => {
@@ -97,30 +117,72 @@ export function InteractiveElement({
 
   // Handle value change
   const handleChange = useCallback((newValue: string | number | boolean) => {
+    const previousValue = value;
+
     if (bindTo && isInteractiveMode) {
       setState(bindTo, newValue);
     } else {
       setLocalValue(newValue);
     }
 
-    // Dispatch change event
-    if (isInteractiveMode) {
-      dispatchEvent(
-        createInteractionEvent('change', elementId, undefined),
-        [] // handlers would be passed in from parent
-      );
+    // Sync form state if this element belongs to a form
+    if (formId && name && isInteractiveMode) {
+      setFormValue(formId, name, newValue);
     }
-  }, [bindTo, isInteractiveMode, setState, elementId, dispatchEvent]);
+
+    // Dispatch change event with value data
+    if (isInteractiveMode) {
+      const event = createInteractionEvent('change', elementId, undefined);
+      // Add value data to the event
+      event.data = {
+        ...event.data,
+        value: newValue,
+        previousValue,
+        field: name,
+      };
+      dispatchEvent(event, handlers);
+    }
+  }, [bindTo, isInteractiveMode, setState, elementId, dispatchEvent, handlers, value, formId, name, setFormValue]);
 
   // Handle click (for buttons)
   const handleClick = useCallback(() => {
+    console.log('[InteractiveElement] handleClick called', { elementId, isInteractiveMode, isPreview });
     if (isInteractiveMode) {
+      console.log('[InteractiveElement] Dispatching click event for element:', elementId);
       dispatchEvent(
         createInteractionEvent('click', elementId, undefined),
-        []
+        handlers
+      );
+    } else {
+      console.log('[InteractiveElement] Click ignored - isInteractiveMode is false');
+    }
+  }, [isInteractiveMode, isPreview, elementId, dispatchEvent, handlers]);
+
+  // Handle focus event
+  const handleFocus = useCallback(() => {
+    if (isInteractiveMode) {
+      dispatchEvent(
+        createInteractionEvent('focus', elementId, undefined),
+        handlers
       );
     }
-  }, [isInteractiveMode, elementId, dispatchEvent]);
+  }, [isInteractiveMode, elementId, dispatchEvent, handlers]);
+
+  // Handle blur event
+  const handleBlur = useCallback(() => {
+    if (isInteractiveMode) {
+      const event = createInteractionEvent('blur', elementId, undefined);
+      event.data = { ...event.data, value, field: name };
+      dispatchEvent(event, handlers);
+    }
+  }, [isInteractiveMode, elementId, dispatchEvent, handlers, value, name]);
+
+  // Sync initial value with form state on mount
+  useEffect(() => {
+    if (formId && name && isInteractiveMode && defaultValue !== undefined) {
+      setFormValue(formId, name, value);
+    }
+  }, [formId, name, isInteractiveMode]); // Only run on mount/mode change
 
   // Common styles
   const commonStyles: React.CSSProperties = {
@@ -177,6 +239,8 @@ export function InteractiveElement({
             pattern={validation?.pattern}
             step={inputType === 'number-input' ? step : undefined}
             onChange={(e) => handleChange(inputType === 'number-input' ? Number(e.target.value) : e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             className={cn(
               'w-full px-3 py-2 border border-gray-300 rounded-md',
               'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
@@ -203,6 +267,8 @@ export function InteractiveElement({
             minLength={validation?.minLength}
             maxLength={validation?.maxLength}
             onChange={(e) => handleChange(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             className={cn(
               'w-full px-3 py-2 border border-gray-300 rounded-md resize-none',
               'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
@@ -225,6 +291,8 @@ export function InteractiveElement({
             value={String(value)}
             disabled={disabled || (!isPreview && !isInteractiveMode)}
             onChange={(e) => handleChange(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             className={cn(
               'w-full px-3 py-2 border border-gray-300 rounded-md',
               'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',

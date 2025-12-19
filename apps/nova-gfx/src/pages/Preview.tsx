@@ -16,7 +16,9 @@ import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import { InteractiveElement } from '@/components/canvas/InteractiveElement';
+import { useInteractiveStore, createNodeRuntimeContext, executeNodeGraph } from '@/lib/interactive';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
+import type { Node, Edge } from '@xyflow/react';
 
 // Helper to convert color to rgba with opacity
 function colorToRgba(color: string, opacity: number): string {
@@ -158,6 +160,63 @@ export function Preview() {
     || localData?.phaseDurations
     || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined)
     || defaultPhaseDurations;
+
+  // Interactive mode support
+  const {
+    enableInteractiveMode,
+    disableInteractiveMode,
+    setVisualNodes,
+    isInteractiveMode,
+  } = useInteractiveStore();
+
+  // Check if project is interactive
+  const isInteractiveProject = currentProject?.interactive_enabled === true;
+
+  // Enable/disable interactive mode based on project type
+  useEffect(() => {
+    console.log('[Preview] Interactive mode check:', {
+      isInteractiveProject,
+      interactive_enabled: currentProject?.interactive_enabled,
+      hasConfig: !!currentProject?.interactive_config,
+      projectId: currentProject?.id
+    });
+
+    if (isInteractiveProject) {
+      console.log('[Preview] Enabling interactive mode for interactive project');
+      enableInteractiveMode();
+
+      // Load visual nodes from project's interactive_config
+      const interactiveConfig = currentProject?.interactive_config as {
+        visualNodes?: Node[];
+        visualEdges?: Edge[];
+      } | null;
+
+      console.log('[Preview] Interactive config:', interactiveConfig);
+
+      if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
+        console.log('[Preview] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
+        // Log the event nodes specifically
+        const eventNodes = interactiveConfig.visualNodes.filter(n => n.type === 'event');
+        console.log('[Preview] Event nodes:', eventNodes.map(n => ({ id: n.id, eventType: (n.data as any)?.eventType })));
+        setVisualNodes(interactiveConfig.visualNodes, interactiveConfig.visualEdges);
+      } else {
+        console.log('[Preview] No visual nodes/edges found in config');
+      }
+    } else {
+      console.log('[Preview] Not an interactive project, disabling interactive mode');
+      disableInteractiveMode();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      disableInteractiveMode();
+    };
+  }, [isInteractiveProject, currentProject?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes]);
+
+  // Log interactive mode state changes
+  useEffect(() => {
+    console.log('[Preview] isInteractiveMode state changed:', isInteractiveMode);
+  }, [isInteractiveMode]);
 
   // Keep templatesRef updated with the actual templates array (for event handler access)
   useEffect(() => {
@@ -965,6 +1024,7 @@ export function Preview() {
               currentPhase={currentPhase}
               isPlaying={isPlaying}
               phaseDuration={phaseDurations[currentPhase]}
+              isInteractiveMode={isInteractiveMode}
             />
           ))}
         </div>
@@ -1009,6 +1069,7 @@ export function Preview() {
               currentPhase={currentPhase}
               isPlaying={isPlaying}
               phaseDuration={phaseDurations[currentPhase]}
+              isInteractiveMode={isInteractiveMode}
             />
           ))}
         </div>
@@ -1096,7 +1157,8 @@ export function Preview() {
         />
       )}
 
-      {/* Controls Bar */}
+      {/* Controls Bar - hidden for interactive projects */}
+      {!isInteractiveProject && (
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-lg rounded-xl px-4 py-2 flex items-center gap-4 text-white border border-white/10 z-30">
         {/* Back to Designer */}
         <button
@@ -1221,6 +1283,25 @@ export function Preview() {
           <span><kbd className="bg-white/20 px-1 rounded">Space</kbd> Play</span>
         </div>
       </div>
+      )}
+
+      {/* Interactive mode back button - simple control bar for interactive projects */}
+      {isInteractiveProject && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-lg rounded-xl px-4 py-2 flex items-center gap-4 text-white border border-white/10 z-30">
+          <button
+            onClick={() => navigate('/')}
+            className="p-2 text-white/60 hover:text-white rounded-lg transition-colors hover:bg-white/10"
+            title="Back to Designer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <div className="text-xs text-white/60">
+            Interactive Mode
+          </div>
+        </div>
+      )}
 
       {/* Info overlay showing what's being previewed */}
       <div className="fixed top-4 right-4 text-white/40 text-xs z-20">
@@ -1240,6 +1321,7 @@ interface PreviewElementProps {
   currentPhase: AnimationPhase;
   isPlaying: boolean;
   phaseDuration: number;
+  isInteractiveMode?: boolean;
 }
 
 function PreviewElement({
@@ -1251,6 +1333,7 @@ function PreviewElement({
   currentPhase,
   isPlaying,
   phaseDuration,
+  isInteractiveMode = false,
 }: PreviewElementProps) {
   // Calculate animated properties - pass phaseDuration for correct keyframe interpolation
   const animatedProps = useMemo(() => {
@@ -1892,13 +1975,22 @@ function PreviewElement({
         );
 
       case 'interactive':
+        console.log('[Preview] Rendering InteractiveElement:', {
+          elementId: element.id,
+          isInteractiveMode,
+          isPreview: !isInteractiveMode,
+          hasHandlers: !!element.interactions?.handlers,
+          handlers: element.interactions?.handlers,
+          inputType: element.content?.type
+        });
         return (
           <InteractiveElement
             config={element.content}
             elementId={element.id}
             className="w-full h-full"
             style={element.styles as React.CSSProperties}
-            isPreview={true}
+            isPreview={!isInteractiveMode}
+            handlers={element.interactions?.handlers}
           />
         );
 
@@ -1934,6 +2026,7 @@ function PreviewElement({
           currentPhase={currentPhase}
           isPlaying={isPlaying}
           phaseDuration={phaseDuration}
+          isInteractiveMode={isInteractiveMode}
         />
       ))}
     </div>

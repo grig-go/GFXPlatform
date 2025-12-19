@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useDesignerStore } from '@/stores/designerStore';
+import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
 import { useDrag } from '@/hooks/useDrag';
 import { useResize, RESIZE_CURSORS, type ResizeHandle } from '@/hooks/useResize';
 import { useRotate } from '@/hooks/useRotate';
@@ -244,7 +245,11 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     bindings,
     dataPayload,
     currentRecordIndex,
+    isScriptPlayMode,
   } = useDesignerStore();
+
+  // Get interactive store for dispatching events in play mode
+  const { dispatchEvent, isInteractiveMode } = useInteractiveStore();
 
   const { isDragging, handleMouseDown: handleDragStart } = useDrag();
   const { isResizing, handleResizeStart } = useResize();
@@ -359,6 +364,9 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   // Handle click for selection
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      // In script play mode, don't handle selection - let interactive elements work
+      if (isScriptPlayMode) return;
+
       // If parent is selected, let clicks bubble up to the parent for dragging
       if (isParentSelected) {
         return; // Don't stop propagation - let parent handle it
@@ -377,12 +385,15 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       }
       // If already selected without shift, do nothing - allows group dragging
     },
-    [element.id, selectElements, tool, isSelected, isParentSelected]
+    [element.id, selectElements, tool, isSelected, isParentSelected, isScriptPlayMode]
   );
 
   // Handle mouse down for dragging
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // In script play mode, don't handle dragging - let interactive elements work
+      if (isScriptPlayMode) return;
+
       // If parent is selected, let the parent handle the drag
       if (isParentSelected) {
         return; // Don't stop propagation - parent will handle drag
@@ -395,7 +406,23 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         handleDragStart(e, element.id);
       }
     },
-    [element.id, element.locked, handleDragStart, tool, isParentSelected]
+    [element.id, element.locked, handleDragStart, tool, isParentSelected, isScriptPlayMode]
+  );
+
+  // Handle click in script play mode - dispatches events to interactive system
+  const handleScriptPlayClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      console.log('[StageElement] Script play click on element:', element.id, element.name, { isInteractiveMode });
+
+      if (isInteractiveMode) {
+        // Dispatch click event to the interactive system
+        const event = createInteractionEvent('click', element.id, undefined);
+        console.log('[StageElement] Dispatching click event:', event);
+        dispatchEvent(event, []);
+      }
+    },
+    [element.id, element.name, isInteractiveMode, dispatchEvent]
   );
 
   // Build transform style with animated properties
@@ -1407,7 +1434,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             elementId={element.id}
             className="w-full h-full"
             style={element.styles as React.CSSProperties}
-            isPreview={isPlaying}
+            isPreview={isPlaying || isScriptPlayMode}
           />
         );
 
@@ -1481,15 +1508,16 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     <div
       data-element-id={element.id}
       style={transformStyle}
-      onClick={handleClick}
-      onMouseDown={handleMouseDown}
-      onMouseEnter={() => setHoveredElement(element.id)}
-      onMouseLeave={() => setHoveredElement(null)}
+      onClick={isScriptPlayMode ? handleScriptPlayClick : handleClick}
+      onMouseDown={isScriptPlayMode ? undefined : handleMouseDown}
+      onMouseEnter={isScriptPlayMode ? undefined : () => setHoveredElement(element.id)}
+      onMouseLeave={isScriptPlayMode ? undefined : () => setHoveredElement(null)}
       className={cn(
         'group transition-shadow',
-        !element.locked && 'cursor-pointer',
-        isHovered && !isSelected && 'ring-1 ring-violet-400/50',
-        isSelected && 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20'
+        !element.locked && !isScriptPlayMode && 'cursor-pointer',
+        isScriptPlayMode && 'cursor-pointer',
+        !isScriptPlayMode && isHovered && !isSelected && 'ring-1 ring-violet-400/50',
+        !isScriptPlayMode && isSelected && 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20'
       )}
     >
       {renderContent()}
@@ -1500,7 +1528,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
       ))}
 
       {/* Drag overlay for selected elements - captures clicks/drags on children */}
-      {isSelected && !element.locked && tool === 'select' && children.length > 0 && (
+      {!isScriptPlayMode && isSelected && !element.locked && tool === 'select' && children.length > 0 && (
         <div
           className="absolute inset-0 z-[9998] cursor-grab active:cursor-grabbing"
           style={{ background: 'transparent' }}
@@ -1512,8 +1540,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         />
       )}
 
-      {/* Selection handles */}
-      {isSelected && !element.locked && tool === 'select' && (
+      {/* Selection handles - hidden in script play mode */}
+      {!isScriptPlayMode && isSelected && !element.locked && tool === 'select' && (
         <SelectionHandles
           elementId={element.id}
           width={element.width ?? 100}
@@ -1522,8 +1550,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         />
       )}
 
-      {/* Rotation handles - shown when rotate tool is active */}
-      {isSelected && !element.locked && tool === 'rotate' && (
+      {/* Rotation handles - shown when rotate tool is active, hidden in script play mode */}
+      {!isScriptPlayMode && isSelected && !element.locked && tool === 'rotate' && (
         <RotationHandles
           elementId={element.id}
           width={element.width ?? 100}

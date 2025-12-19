@@ -19,6 +19,7 @@ export * from './components/scroll-area';
 export * from './components/select';
 export * from './components/separator';
 export * from './components/slider';
+export * from './components/switch';
 export * from './components/tabs';
 export * from './components/textarea';
 export * from './components/tooltip';

@@ -66,6 +66,14 @@ export interface BrandingConfig {
   showTitle?: boolean;
 }
 
+export interface UserMenuConfig {
+  name?: string;
+  email?: string;
+  role?: string;
+  initials: string;
+  sections: MenuSection[];
+}
+
 export interface SharedTopMenuBarProps {
   branding: BrandingConfig;
   menus: {
@@ -74,6 +82,7 @@ export interface SharedTopMenuBarProps {
     settings?: MenuDropdown;
     help?: MenuDropdown;
   };
+  userMenu?: UserMenuConfig;
   darkMode?: boolean;
   onDarkModeToggle?: () => void;
   accountSettingsDialog?: ReactNode;
@@ -83,6 +92,7 @@ export interface SharedTopMenuBarProps {
 export function SharedTopMenuBar({
   branding,
   menus,
+  userMenu,
   darkMode: externalDarkMode,
   onDarkModeToggle,
   accountSettingsDialog,
@@ -248,6 +258,85 @@ export function SharedTopMenuBar({
 
             {/* Custom Menus */}
             {customMenus.map((menu) => renderMenuDropdown(menu))}
+
+            {/* User Avatar Dropdown */}
+            {userMenu && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full p-0 ml-1">
+                    <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-medium text-violet-400">
+                      {userMenu.initials}
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {/* User Info Header */}
+                  {(userMenu.name || userMenu.email) && (
+                    <>
+                      <DropdownMenuLabel className="font-normal">
+                        {userMenu.role && (
+                          <p className="text-xs text-muted-foreground mb-0.5">{userMenu.role}</p>
+                        )}
+                        {userMenu.name && (
+                          <p className="text-sm font-medium">{userMenu.name}</p>
+                        )}
+                        {userMenu.email && (
+                          <p className="text-xs text-muted-foreground truncate">{userMenu.email}</p>
+                        )}
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+
+                  {/* Menu Sections */}
+                  {userMenu.sections.map((section, sectionIndex) => (
+                    <div key={`user-section-${sectionIndex}`}>
+                      {section.label && <DropdownMenuLabel>{section.label}</DropdownMenuLabel>}
+                      {section.items.map((item) => {
+                        // Special handling for dark mode toggle
+                        if (item.id === 'dark-mode-toggle') {
+                          return (
+                            <DropdownMenuItem
+                              key={item.id}
+                              onClick={handleDarkModeToggle}
+                              className="gap-2 cursor-pointer"
+                            >
+                              {darkMode ? (
+                                <>
+                                  <Sun className="w-4 h-4" />
+                                  Light Mode
+                                </>
+                              ) : (
+                                <>
+                                  <Moon className="w-4 h-4" />
+                                  Dark Mode
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        }
+
+                        const ItemIcon = item.icon;
+                        return (
+                          <DropdownMenuItem
+                            key={item.id}
+                            onClick={item.onClick}
+                            disabled={item.disabled}
+                            className={`gap-2 ${item.disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${
+                              item.variant === 'destructive' ? 'text-destructive' : ''
+                            }`}
+                          >
+                            {ItemIcon && <ItemIcon className="w-4 h-4" />}
+                            {item.label}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                      {sectionIndex < userMenu.sections.length - 1 && <DropdownMenuSeparator />}
+                    </div>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </div>
