@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
-import { Save } from 'lucide-react';
 
 // Types
 import {
@@ -189,15 +188,6 @@ export const JsonFieldMapper: React.FC<JsonFieldMapperProps> = ({
 
   return (
     <div className="json-field-mapper space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>JSON Field Mapping Configuration</CardTitle>
-          <CardDescription className="pb-4">
-            Configure how your data sources map to the JSON output structure
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
       {/* Output Wrapper Configuration */}
       <Card>
         <CardHeader>
@@ -419,13 +409,6 @@ ${config.outputWrapper.metadataFields?.timestamp !== false ? '    "timestamp": "
           />
         </TabsContent>
       </Tabs>
-
-      <div className="flex justify-end mt-4">
-        <Button onClick={() => onChange(config)}>
-          <Save className="w-4 h-4 mr-2" />
-          Save Configuration
-        </Button>
-      </div>
     </div>
   );
 };

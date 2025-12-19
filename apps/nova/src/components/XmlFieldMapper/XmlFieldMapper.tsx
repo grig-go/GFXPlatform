@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
-import { Save } from 'lucide-react';
 
 // Types
 import {
@@ -182,16 +181,6 @@ export const XmlFieldMapper: React.FC<XmlFieldMapperProps> = ({
 
   return (
     <div className="xml-field-mapper space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>XML Field Mapping Configuration</CardTitle>
-          <CardDescription className="pb-4">
-            Configure how your data sources map to the XML output structure.
-            Define elements and attributes for your XML schema.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
       {/* Output Wrapper Configuration */}
       <Card>
         <CardHeader>
@@ -387,13 +376,6 @@ ${config.outputWrapper?.includeMetadata ? `  <metadata>
           />
         </TabsContent>
       </Tabs>
-
-      <div className="flex justify-end mt-4">
-        <Button onClick={() => onChange(config)}>
-          <Save className="w-4 h-4 mr-2" />
-          Save Configuration
-        </Button>
-      </div>
     </div>
   );
 };
