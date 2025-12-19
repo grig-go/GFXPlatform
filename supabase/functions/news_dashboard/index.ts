@@ -125,9 +125,33 @@ app.post("/news-articles", async (c)=>{
   try {
     console.log("[NEWS FETCH] ========== NEW REQUEST ==========");
     const body = await safeJson(c);
-    const { providers, q, country, language, perProviderLimit = 10, totalLimit = 50 } = body;
-    console.log("[NEWS FETCH] Request body:", JSON.stringify(body, null, 2));
-    console.log("[NEWS FETCH] Providers array:", JSON.stringify(providers, null, 2));
+    const { providers: clientProviders, q, country, language, perProviderLimit = 10, totalLimit = 50 } = body;
+
+    const supabase = getSupabaseClient();
+
+    // SECURE: Fetch providers directly from database instead of trusting client data
+    // This ensures API keys come from the secure database, not the frontend
+    const { data: dbProviders, error: providerError } = await supabase
+      .from("data_providers")
+      .select("id, name, type, api_key, config, is_active")
+      .eq("category", "news")
+      .eq("is_active", true);
+
+    if (providerError) {
+      console.error("[NEWS FETCH] ❌ Error fetching providers from DB:", providerError);
+      return jsonErr(c, 500, "PROVIDER_FETCH_FAILED", providerError.message);
+    }
+
+    // Use database providers, but allow client to filter which ones to use
+    let providers = dbProviders || [];
+
+    // If client specified providers, filter to only those (but still use DB credentials)
+    if (Array.isArray(clientProviders) && clientProviders.length > 0) {
+      const clientProviderNames = clientProviders.map((p: any) => p.name?.toLowerCase());
+      providers = providers.filter(p => clientProviderNames.includes(p.name?.toLowerCase()));
+    }
+
+    console.log("[NEWS FETCH] DB providers found:", providers.map(p => ({ name: p.name, type: p.type, hasKey: !!p.api_key })));
     console.log("[NEWS FETCH] Request params:", {
       providerCount: providers?.length,
       q,
@@ -136,15 +160,18 @@ app.post("/news-articles", async (c)=>{
       perProviderLimit,
       totalLimit
     });
-    if (!Array.isArray(providers) || providers.length === 0) {
-      console.error("[NEWS FETCH] ❌ Invalid providers array");
-      return jsonErr(c, 400, "INVALID_PROVIDERS", "providers array is required");
+
+    if (providers.length === 0) {
+      console.error("[NEWS FETCH] ❌ No active news providers found");
+      return jsonErr(c, 400, "NO_PROVIDERS", "No active news providers configured");
     }
-    const supabase = getSupabaseClient();
     // Fetch from all providers in parallel
     const fetchPromises = providers.map(async (provider)=>{
       try {
-        const { name, type, apiKey, country: providerCountry, language: providerLanguage } = provider;
+        // DB fields use snake_case
+        const { name, type, api_key: apiKey, config } = provider;
+        const providerCountry = config?.country;
+        const providerLanguage = config?.language;
         if (!apiKey) {
           console.log(`[NEWS FETCH] Skipping ${name} - no API key`);
           return [];
@@ -172,8 +199,9 @@ app.post("/news-articles", async (c)=>{
           if (language || providerLanguage) url += `&lang=${language || providerLanguage}`;
           url += `&max=${perProviderLimit}`;
         } else if (type === "newsdata") {
-          const fromDate = new Date(now.getTime() - 1000 * 60 * 60 * 3).toISOString().split("T")[0];
-          url = `https://newsdata.io/api/1/news?apikey=${apiKey}&from_date=${fromDate}`;
+          // NewsData.io: use /latest endpoint for recent news (free tier friendly)
+          // from_date requires paid plan
+          url = `https://newsdata.io/api/1/latest?apikey=${apiKey}`;
           if (q) url += `&q=${encodeURIComponent(q)}`;
           if (country || providerCountry) url += `&country=${country || providerCountry}`;
           if (language || providerLanguage) url += `&language=${language || providerLanguage}`;
@@ -190,7 +218,9 @@ app.post("/news-articles", async (c)=>{
           return [];
         }
         console.log(`[NEWS FETCH] Fetching from ${name} (${type})`);
-        console.log(`[NEWS FETCH] URL → ${url}`);
+        // Don't log full URL with API key in production - mask it
+        const maskedUrl = url.replace(/(apiKey=|token=|apikey=)[^&]+/, '$1***MASKED***');
+        console.log(`[NEWS FETCH] URL → ${maskedUrl}`);
         const response = await fetch(url);
         if (!response.ok) {
           const errorText = await response.text();
@@ -198,6 +228,14 @@ app.post("/news-articles", async (c)=>{
           return [];
         }
         const data = await response.json();
+
+        // Check for API-level errors (some APIs return 200 with error in body)
+        if (data.status === 'error' || data.error) {
+          console.error(`[NEWS FETCH] ${name} API error:`, data.message || data.error || JSON.stringify(data));
+          return [];
+        }
+
+        console.log(`[NEWS FETCH] ${name} response status:`, data.status, 'totalResults:', data.totalResults || data.total || 'N/A');
         // -----------------------------------------------------------------------
         // Normalize articles based on provider type
         // -----------------------------------------------------------------------
@@ -212,7 +250,7 @@ app.post("/news-articles", async (c)=>{
               url: a.url,
               image_url: a.urlToImage,
               published_at: a.publishedAt,
-              source: a.source?.name || name,
+              source_name: a.source?.name || name,
               author: a.author,
               country: country || providerCountry || null,
               language: language || providerLanguage || null
@@ -227,7 +265,7 @@ app.post("/news-articles", async (c)=>{
               url: a.url,
               image_url: a.image,
               published_at: a.publishedAt,
-              source: a.source?.name || name,
+              source_name: a.source?.name || name,
               author: null,
               country: country || providerCountry || null,
               language: language || providerLanguage || null
@@ -242,7 +280,7 @@ app.post("/news-articles", async (c)=>{
               url: a.link,
               image_url: a.image_url,
               published_at: a.pubDate,
-              source: a.source_id || name,
+              source_name: a.source_id || name,
               author: a.creator?.[0],
               country: country || providerCountry || null,
               language: language || providerLanguage || null
@@ -257,7 +295,7 @@ app.post("/news-articles", async (c)=>{
               url: a.url,
               image_url: a.image,
               published_at: a.published,
-              source: name,
+              source_name: name,
               author: a.author,
               country: country || providerCountry || null,
               language: language || providerLanguage || null

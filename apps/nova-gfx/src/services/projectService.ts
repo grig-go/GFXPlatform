@@ -70,6 +70,7 @@ export async function createProject(
     canvas_height: canvasHeight,
     frame_rate: project.frame_rate || 30,
     background_color: project.background_color || 'transparent',
+    interactive_enabled: project.interactive_enabled || false,
     organization_id: project.organization_id,
     created_by: project.created_by || null,
   }, TIMEOUT, accessToken);
@@ -332,6 +333,8 @@ export async function duplicateProject(projectId: string): Promise<Project | nul
       canvas_height: projectData.project.canvas_height,
       frame_rate: projectData.project.frame_rate,
       background_color: projectData.project.background_color,
+      interactive_enabled: projectData.project.interactive_enabled,
+      organization_id: projectData.project.organization_id,
     });
 
     if (!newProject) {

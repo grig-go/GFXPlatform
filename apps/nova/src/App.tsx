@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./components/ui/button";
-import { Loader2, Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, ImageIcon, School } from "lucide-react";
+import { Card, CardContent } from "./components/ui/card";
+import { Loader2, Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, ImageIcon, School, Database, Palette } from "lucide-react";
 import { ElectionDashboard } from "./components/ElectionDashboard";
 import { FinanceDashboard } from "./components/FinanceDashboard";
 import { SportsDashboard } from "./components/SportsDashboard";
@@ -49,11 +50,16 @@ import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
 import { useSchoolClosingsData } from "./utils/useSchoolClosingsData";
 import { getEdgeFunctionUrl, getRestUrl, getSupabaseHeaders } from "./utils/supabase/config";
+import { gfxRestSelect } from "./utils/supabase/gfxConfig";
 import SchoolClosingsDashboard from "./components/SchoolClosingsDashboard";
 import { WeatherDataViewer } from "./components/WeatherDataViewer";
+import { GraphicsProjectsDashboard } from "./components/GraphicsProjectsDashboard";
 import { Toaster } from "./components/ui/sonner";
 
-type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels' | 'school-closings';
+type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels' | 'school-closings' | 'graphics';
+
+// Home page category type
+type HomeCategory = 'data' | 'graphics' | 'agents' | 'media_library';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -70,6 +76,10 @@ export default function App() {
   const [showDashboardConfig, setShowDashboardConfig] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
   const [dashboardConfigLoading, setDashboardConfigLoading] = useState(true);
+  const [homeConfig, setHomeConfig] = useState<any[]>([]);
+  const [homeConfigLoading, setHomeConfigLoading] = useState(true);
+  const [defaultDataDashboard, setDefaultDataDashboard] = useState<string>('election');
+  const [gfxProjectsStats, setGfxProjectsStats] = useState<{ projectsCount: number; loading: boolean }>({ projectsCount: 0, loading: true });
 
   // Keyboard shortcut listener for dashboard config (CTRL + SHIFT + G + M)
   useEffect(() => {
@@ -248,16 +258,36 @@ export default function App() {
       }
     };
     
+    const fetchGfxProjectsStats = async () => {
+      try {
+        const result = await gfxRestSelect<{ id: string; archived: boolean }>('gfx_projects', 'id,archived');
+        if (!mounted) return;
+
+        if (result.data) {
+          const activeProjects = result.data.filter(p => !p.archived);
+          setGfxProjectsStats({ projectsCount: activeProjects.length, loading: false });
+        } else {
+          setGfxProjectsStats({ projectsCount: 0, loading: false });
+        }
+      } catch (err) {
+        console.error('Error fetching GFX projects stats:', err);
+        if (mounted) {
+          setGfxProjectsStats({ projectsCount: 0, loading: false });
+        }
+      }
+    };
+
     fetchNewsStats();
     fetchMediaStats();
+    fetchGfxProjectsStats();
     return () => { mounted = false; };
   }, []);
 
-  // Fetch dashboard configuration for home page
+  // Fetch dashboard configuration for home page and data page
   useEffect(() => {
-    const fetchDashboardConfig = async () => {
+    const fetchHomeConfig = async () => {
       try {
-        setDashboardConfigLoading(true);
+        setHomeConfigLoading(true);
         const response = await fetch(
           getEdgeFunctionUrl('dashboard_config?page=home'),
           {
@@ -266,31 +296,60 @@ export default function App() {
         );
 
         const data = await response.json();
-        console.log("📊 Fetched dashboard config for home:", data);
-        console.log("📊 Dashboard config OK:", data.ok);
-        console.log("📊 Dashboard config dashboards:", data.dashboards);
-        console.log("📊 Dashboard config dashboards length:", data.dashboards?.length);
+        console.log("📊 Fetched home config:", data);
+
+        if (data.ok && data.dashboards && data.dashboards.length > 0) {
+          setHomeConfig(data.dashboards);
+        } else {
+          setHomeConfig([]);
+        }
+      } catch (error) {
+        console.error("Error fetching home config:", error);
+        setHomeConfig([]);
+      } finally {
+        setHomeConfigLoading(false);
+      }
+    };
+
+    const fetchDataConfig = async () => {
+      try {
+        setDashboardConfigLoading(true);
+        const response = await fetch(
+          getEdgeFunctionUrl('dashboard_config?page=data'),
+          {
+            headers: getSupabaseHeaders()
+          }
+        );
+
+        const data = await response.json();
+        console.log("📊 Fetched data dashboard config:", data);
 
         if (data.ok && data.dashboards && data.dashboards.length > 0) {
           setDashboardConfig(data.dashboards);
+          // Find the default dashboard
+          const defaultDash = data.dashboards.find((d: any) => d.is_default);
+          if (defaultDash) {
+            setDefaultDataDashboard(defaultDash.dashboard_id);
+          }
         } else {
-          // No config or error - set empty array to trigger fallback
           setDashboardConfig([]);
         }
       } catch (error) {
-        console.error("Error fetching dashboard config:", error);
-        setDashboardConfig([]); // Fallback to showing all dashboards
+        console.error("Error fetching data dashboard config:", error);
+        setDashboardConfig([]);
       } finally {
         setDashboardConfigLoading(false);
       }
     };
 
-    fetchDashboardConfig();
+    fetchHomeConfig();
+    fetchDataConfig();
 
     // Listen for dashboard config updates (when user saves in config modal)
     const handleConfigUpdate = () => {
       console.log("📊 Dashboard config updated, reloading...");
-      fetchDashboardConfig();
+      fetchHomeConfig();
+      fetchDataConfig();
     };
 
     window.addEventListener('dashboardConfigUpdated', handleConfigUpdate);
@@ -425,26 +484,29 @@ export default function App() {
     setCurrentView('feeds');
   };
 
+  // Check if current view is a data dashboard
+  const isDataDashboard = (view: AppView) => {
+    return ['election', 'finance', 'sports', 'weather', 'news', 'school-closings'].includes(view);
+  };
+
   const renderNavigation = () => {
-    // Get active dashboards from config
-    const defaultDashboards = [
+    // Get active data dashboards from config
+    const defaultDataDashboards = [
       { dashboard_id: "election", visible: true, order_index: 0 },
       { dashboard_id: "finance", visible: true, order_index: 1 },
-      { dashboard_id: "sports", visible: true, order_index: 2 },
-      { dashboard_id: "weather", visible: true, order_index: 3 },
-      { dashboard_id: "news", visible: true, order_index: 4 },
-      { dashboard_id: "agents", visible: true, order_index: 5 },
-      { dashboard_id: "school_closings", visible: true, order_index: 6 },
-      { dashboard_id: "media_library", visible: true, order_index: 7 }
+      { dashboard_id: "weather", visible: true, order_index: 2 },
+      { dashboard_id: "sports", visible: true, order_index: 3 },
+      { dashboard_id: "school_closings", visible: true, order_index: 4 },
+      { dashboard_id: "news", visible: true, order_index: 5 }
     ];
-    
-    const activeDashboards = dashboardConfig.length > 0 ? dashboardConfig : defaultDashboards;
-    
+
+    const activeDashboards = dashboardConfig.length > 0 ? dashboardConfig : defaultDataDashboards;
+
     // Filter visible dashboards and sort by order_index
     const visibleDashboards = activeDashboards
-      .filter(d => d.visible)
-      .sort((a, b) => a.order_index - b.order_index);
-    
+      .filter((d: any) => d.visible)
+      .sort((a: any, b: any) => a.order_index - b.order_index);
+
     // Map dashboard IDs to their button data
     const dashboardButtons: Record<string, { view: AppView; icon: any; label: string }> = {
       election: { view: 'election', icon: Vote, label: 'Elections' },
@@ -453,18 +515,16 @@ export default function App() {
       weather: { view: 'weather', icon: Cloud, label: 'Weather' },
       news: { view: 'news', icon: Newspaper, label: 'News' },
       school_closings: { view: 'school-closings', icon: School, label: 'School Closings' },
-      agents: { view: 'agents', icon: Bot, label: 'Agents' },
-      media_library: { view: 'media', icon: ImageIcon, label: 'Media' },
     };
-    
+
     return (
-      <div className="flex items-center gap-2 mb-8">
-        {visibleDashboards.map(dashboard => {
+      <div className="flex items-center gap-2 mb-8 flex-wrap">
+        {visibleDashboards.map((dashboard: any) => {
           const buttonData = dashboardButtons[dashboard.dashboard_id];
           if (!buttonData) return null;
-          
+
           const Icon = buttonData.icon;
-          
+
           return (
             <Button
               key={dashboard.dashboard_id}
@@ -482,135 +542,285 @@ export default function App() {
   };
 
   const renderHome = () => {
-    // Calculate visible dashboard count for dynamic grid layout
-    const defaultDashboards = [
-      { dashboard_id: "election", visible: true, order_index: 0 },
-      { dashboard_id: "finance", visible: true, order_index: 1 },
-      { dashboard_id: "sports", visible: true, order_index: 2 },
-      { dashboard_id: "weather", visible: true, order_index: 3 },
-      { dashboard_id: "news", visible: true, order_index: 4 },
-      { dashboard_id: "agents", visible: true, order_index: 5 },
-      { dashboard_id: "school_closings", visible: true, order_index: 6 },
-      { dashboard_id: "media_library", visible: true, order_index: 7 }
+    // Home page category configuration
+    const defaultHomeCategories = [
+      { dashboard_id: "data", name: "Data", visible: true, order_index: 0 },
+      { dashboard_id: "graphics", name: "Graphics", visible: true, order_index: 1 },
+      { dashboard_id: "agents", name: "Agent", visible: true, order_index: 2 },
+      { dashboard_id: "media_library", name: "Media Library", visible: true, order_index: 3 }
     ];
-    
-    const activeDashboards = dashboardConfig.length > 0 ? dashboardConfig : defaultDashboards;
-    const visibleCount = activeDashboards.filter(d => d.visible).length;
-    
-    // Dynamic grid layout based on card count
-    const getGridClass = () => {
-      if (visibleCount === 1) return 'grid grid-cols-1 gap-6 max-w-2xl mx-auto';
-      if (visibleCount === 2) return 'grid grid-cols-1 md:grid-cols-6 gap-6 max-w-6xl mx-auto';
-      if (visibleCount === 3) return 'grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto';
-      if (visibleCount === 4) return 'grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto';
-      if (visibleCount === 5) return 'grid grid-cols-1 md:grid-cols-6 gap-6 max-w-6xl mx-auto';
-      if (visibleCount === 6) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto';
-      if (visibleCount === 7) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-6 max-w-7xl mx-auto';
-      if (visibleCount === 8) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto';
-      return 'grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto';
+
+    const activeCategories = homeConfig.length > 0 ? homeConfig : defaultHomeCategories;
+    const visibleCategories = activeCategories.filter((c: any) => c.visible).sort((a: any, b: any) => a.order_index - b.order_index);
+
+    // Category card data with stats (main categories + sub-categories)
+    const categoryCards: Record<string, {
+      id: string;
+      title: string;
+      description: string;
+      icon: any;
+      bgColor: string;
+      iconColor: string;
+      onClick: () => void;
+      stats?: Array<{ label: string; value: string | number | React.ReactNode; loading?: boolean }>;
+    }> = {
+      // Main categories
+      data: {
+        id: 'data',
+        title: 'Data',
+        description: 'Access election results, financial markets, sports scores, weather, news, and school closings data with real-time updates.',
+        icon: Database,
+        bgColor: 'bg-blue-500/10',
+        iconColor: 'text-blue-600',
+        onClick: () => handleNavigate(defaultDataDashboard as AppView),
+        stats: [
+          { label: 'dashboards', value: 6 }
+        ]
+      },
+      graphics: {
+        id: 'graphics',
+        title: 'Graphics',
+        description: 'Create and manage broadcast graphics, templates, and visual assets for your productions.',
+        icon: Palette,
+        bgColor: 'bg-purple-500/10',
+        iconColor: 'text-purple-600',
+        onClick: () => handleNavigate('graphics'),
+        stats: [
+          {
+            label: 'projects',
+            value: gfxProjectsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : gfxProjectsStats.projectsCount,
+            loading: gfxProjectsStats.loading
+          }
+        ]
+      },
+      agents: {
+        id: 'agents',
+        title: 'Agent',
+        description: 'Configure and manage AI agents for data collection, transformation, and automation tasks.',
+        icon: Bot,
+        bgColor: 'bg-indigo-500/10',
+        iconColor: 'text-indigo-600',
+        onClick: () => handleNavigate('agents'),
+        stats: [
+          { label: 'total agents', value: agentsData.totalCount },
+          { label: 'active', value: agentsData.activeCount }
+        ]
+      },
+      media_library: {
+        id: 'media_library',
+        title: 'Media Library',
+        description: 'Upload, organize, and manage images, videos, and audio files with tagging and search.',
+        icon: ImageIcon,
+        bgColor: 'bg-pink-500/10',
+        iconColor: 'text-pink-600',
+        onClick: () => handleNavigate('media'),
+        stats: [
+          {
+            label: 'assets',
+            value: mediaStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : mediaStats.totalAssets,
+            loading: mediaStats.loading
+          }
+        ]
+      },
+      // Sub-categories (data dashboards that can be shown on home)
+      election: {
+        id: 'election',
+        title: 'Elections',
+        description: 'Monitor real-time election results, candidate profiles, and party data with advanced override capabilities.',
+        icon: Vote,
+        bgColor: 'bg-blue-500/10',
+        iconColor: 'text-blue-600',
+        onClick: () => handleNavigate('election'),
+        stats: [
+          {
+            label: 'races',
+            value: electionLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : electionData.races.length,
+            loading: electionLoading
+          }
+        ]
+      },
+      finance: {
+        id: 'finance',
+        title: 'Finance',
+        description: 'Track stock prices, cryptocurrency values, and market trends with real-time data.',
+        icon: TrendingUp,
+        bgColor: 'bg-green-500/10',
+        iconColor: 'text-green-600',
+        onClick: () => handleNavigate('finance'),
+        stats: [
+          {
+            label: 'securities',
+            value: financeStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : financeStats.totalSecurities,
+            loading: financeStats.loading
+          }
+        ]
+      },
+      weather: {
+        id: 'weather',
+        title: 'Weather',
+        description: 'Track weather conditions, forecasts, and alerts for multiple locations.',
+        icon: Cloud,
+        bgColor: 'bg-sky-500/10',
+        iconColor: 'text-sky-600',
+        onClick: () => handleNavigate('weather'),
+        stats: [
+          {
+            label: 'locations',
+            value: weatherStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : weatherStats.totalLocations,
+            loading: weatherStats.loading
+          }
+        ]
+      },
+      sports: {
+        id: 'sports',
+        title: 'Sports',
+        description: 'Manage sports teams, players, games, venues, and tournaments.',
+        icon: Trophy,
+        bgColor: 'bg-orange-500/10',
+        iconColor: 'text-orange-600',
+        onClick: () => handleNavigate('sports'),
+        stats: [
+          {
+            label: 'teams',
+            value: sportsLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : sportsStats.totalTeams,
+            loading: sportsLoading
+          }
+        ]
+      },
+      school_closings: {
+        id: 'school_closings',
+        title: 'School Closings',
+        description: 'Monitor school closures and delays due to weather or emergencies.',
+        icon: School,
+        bgColor: 'bg-amber-500/10',
+        iconColor: 'text-amber-600',
+        onClick: () => handleNavigate('school-closings'),
+        stats: [
+          {
+            label: 'active closings',
+            value: schoolClosingsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : schoolClosingsStats.activeClosings,
+            loading: schoolClosingsStats.loading
+          }
+        ]
+      },
+      news: {
+        id: 'news',
+        title: 'News',
+        description: 'Aggregate and manage news articles from multiple sources.',
+        icon: Newspaper,
+        bgColor: 'bg-purple-500/10',
+        iconColor: 'text-purple-600',
+        onClick: () => handleNavigate('news'),
+        stats: [
+          {
+            label: 'articles',
+            value: newsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : newsStats.articlesCount,
+            loading: newsStats.loading
+          }
+        ]
+      }
     };
-    
-    // Transform hook stats to match expected interface
-    const transformedFinanceStats = {
-      securitiesCount: financeStats.totalSecurities,
-      loading: financeStats.loading,
-      error: financeStats.error
-    };
-    
-    const transformedWeatherStats = {
-      locationsCount: weatherStats.totalLocations,
-      loading: weatherStats.loading,
-      error: weatherStats.error
-    };
-    
-    const transformedSportsStats = {
-      teamsCount: sportsStats.totalTeams,
-      playersCount: sportsStats.totalPlayers,
-      gamesCount: sportsStats.totalGames,
-      venuesCount: sportsStats.totalVenues,
-      loading: sportsLoading,
-      error: sportsError
-    };
-    
+
     return (
-    <div className="space-y-8">
-      <div className="text-center space-y-4">
-        <div className="flex items-center justify-center gap-3">
-          <motion.div 
-            className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center"
-            animate={{ 
-              rotate: [0, -5, 5, -5, 0],
-              scale: [1, 1.05, 1.05, 1.05, 1]
-            }}
-            transition={{
-              duration: 0.5,
-              repeat: Infinity,
-              repeatDelay: 3,
-              ease: "easeInOut"
-            }}
-          >
-            <span className="text-white font-semibold">N</span>
-          </motion.div>
-          <h1 className="text-3xl font-semibold font-bold">Nova Dashboard</h1>
-        </div>
-        <motion.p 
-          className="text-muted-foreground max-w-2xl mx-auto"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-        >
-          Comprehensive data management and analysis tools for elections, financial markets, and sports. 
-          Features real-time editing, override tracking, and advanced filtering capabilities.
-        </motion.p>
-      </div>
-      
-      <div className={getGridClass()}>
-        {dashboardConfigLoading ? (
-          // Show loading state
-          <div className="col-span-full text-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
-            <p className="text-muted-foreground mt-4">Loading dashboards...</p>
+      <div className="space-y-8">
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-3">
+            <motion.div
+              className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center"
+              animate={{
+                rotate: [0, -5, 5, -5, 0],
+                scale: [1, 1.05, 1.05, 1.05, 1]
+              }}
+              transition={{
+                duration: 0.5,
+                repeat: Infinity,
+                repeatDelay: 3,
+                ease: "easeInOut"
+              }}
+            >
+              <span className="text-white font-semibold">N</span>
+            </motion.div>
+            <h1 className="text-3xl font-semibold font-bold">Nova Dashboard</h1>
           </div>
-        ) : dashboardConfig.length === 0 ? (
-          // No config found - show all dashboards in default order
-          <DashboardCardRenderer
-            dashboards={defaultDashboards}
-            cardDataMap={getDashboardCardsData({
-              handleNavigate,
-              electionLoading,
-              electionRacesCount: electionData.races.length,
-              financeStats: transformedFinanceStats,
-              sportsStats: transformedSportsStats,
-              weatherStats: transformedWeatherStats,
-              newsStats,
-              agentsCount: agentsData.totalCount,
-              activeAgentsCount: agentsData.activeCount,
-              mediaStats,
-              schoolClosingsStats
-            })}
-          />
-        ) : (
-          // Use dynamic dashboard renderer based on backend config
-          <DashboardCardRenderer
-            dashboards={dashboardConfig}
-            cardDataMap={getDashboardCardsData({
-              handleNavigate,
-              electionLoading,
-              electionRacesCount: electionData.races.length,
-              financeStats: transformedFinanceStats,
-              sportsStats: transformedSportsStats,
-              weatherStats: transformedWeatherStats,
-              newsStats,
-              agentsCount: agentsData.totalCount,
-              activeAgentsCount: agentsData.activeCount,
-              mediaStats,
-              schoolClosingsStats
-            })}
-          />
-        )}
+          <motion.p
+            className="text-muted-foreground max-w-2xl mx-auto"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+          >
+            Comprehensive data management and broadcast graphics platform.
+            Access real-time data, create graphics, manage AI agents, and organize your media library.
+          </motion.p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          {homeConfigLoading ? (
+            <div className="col-span-full text-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+              <p className="text-muted-foreground mt-4">Loading...</p>
+            </div>
+          ) : (
+            visibleCategories.map((category: any, index: number) => {
+              const cardData = categoryCards[category.dashboard_id];
+              if (!cardData) return null;
+
+              const Icon = cardData.icon;
+
+              return (
+                <motion.div
+                  key={cardData.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <Card
+                    className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border min-h-[200px]"
+                    onClick={cardData.onClick}
+                  >
+                    <CardContent className="p-6 h-full flex flex-col">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`${cardData.bgColor} p-3 rounded-lg`}>
+                          <Icon className={`w-6 h-6 ${cardData.iconColor}`} />
+                        </div>
+                        <h3 className="font-semibold text-xl">{cardData.title}</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground flex-grow">
+                        {cardData.description}
+                      </p>
+
+                      {/* Stats Section */}
+                      {cardData.stats && cardData.stats.length > 0 && (
+                        <>
+                          <div className="border-t mb-4 mt-4"></div>
+                          <div className="flex items-center gap-3 flex-wrap text-sm">
+                            {cardData.stats.map((stat, idx) => (
+                              <div key={idx} className="flex items-baseline gap-1.5">
+                                {stat.loading ? (
+                                  stat.value
+                                ) : (
+                                  <>
+                                    <span className="font-medium text-foreground">{stat.value}</span>
+                                    {stat.label && (
+                                      <span className="text-muted-foreground whitespace-nowrap">
+                                        {stat.label}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
   };
 
   const renderContent = () => {
@@ -728,9 +938,13 @@ export default function App() {
         );
       case 'school-closings':
         return (
-          <SchoolClosingsDashboard 
+          <SchoolClosingsDashboard
             onNavigateToProviders={handleNavigateToProvidersFromSchoolClosings}
           />
+        );
+      case 'graphics':
+        return (
+          <GraphicsProjectsDashboard />
         );
       default:
         return renderHome();
@@ -761,7 +975,7 @@ export default function App() {
           dashboardConfig={dashboardConfig}
         />
         <div className="container mx-auto px-4 py-8">
-          {currentView !== 'home' && currentView !== 'users-groups' && currentView !== 'feeds' && currentView !== 'ai-connections' && renderNavigation()}
+          {isDataDashboard(currentView) && renderNavigation()}
           {renderContent()}
         </div>
         <DashboardConfigDialog

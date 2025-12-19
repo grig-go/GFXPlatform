@@ -45,3 +45,10 @@ export {
   selectIsProcessingEvent,
   createInteractionEvent,
 } from './interactive-store';
+
+// Visual node runtime
+export {
+  executeNodeGraph,
+  createNodeRuntimeContext,
+  type NodeRuntimeContext,
+} from './visual-node-runtime';

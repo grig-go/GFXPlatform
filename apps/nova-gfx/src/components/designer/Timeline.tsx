@@ -1573,12 +1573,15 @@ export function Timeline() {
                     <TabsTrigger
                       value={phase.id}
                       className={cn(
-                        'text-xs h-7 data-[state=active]:text-white gap-1.5',
-                        currentPhase === phase.id && phase.color
+                        'text-xs h-7 gap-1.5',
+                        currentPhase === phase.id && `${phase.color} text-white`
                       )}
                     >
                       <span>{phase.label}</span>
-                      <span className="opacity-60 text-[10px]">
+                      <span className={cn(
+                        "text-[10px]",
+                        currentPhase === phase.id ? "opacity-80" : "opacity-60"
+                      )}>
                         {(phaseDurations[phase.id] / 1000).toFixed(1)}s
                       </span>
                     </TabsTrigger>

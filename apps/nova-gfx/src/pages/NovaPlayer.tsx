@@ -26,7 +26,11 @@ import { TopicBadgeElement } from '@/components/canvas/TopicBadgeElement';
 import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
+import { InteractiveElement } from '@/components/canvas/InteractiveElement';
+import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
+import { useDesignerStore } from '@/stores/designerStore';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
+import type { Node, Edge } from '@xyflow/react';
 
 // NOTE: withTimeout was previously used but is now replaced by directRestSelect with built-in timeout
 
@@ -94,6 +98,7 @@ interface PlayerCommand {
       width?: number;
       height?: number;
       styles?: Record<string, any>;
+      interactions?: any;
     }>;
     // Animation data for direct rendering
     animations?: any[];
@@ -104,6 +109,14 @@ interface PlayerCommand {
   // Pulsar GFX uses layerIndex (0-3) instead of layerId
   layerIndex?: number;
   payload?: Record<string, string | null>;
+  // Interactive project settings
+  interactive_enabled?: boolean;
+  interactive_config?: {
+    visualNodes?: Node[];
+    visualEdges?: Edge[];
+    mode?: string;
+    script?: string;
+  };
   timestamp: string;
 }
 
@@ -133,6 +146,18 @@ export function NovaPlayer() {
   // Connection state
   const [isReady, setIsReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+
+  // Interactive mode support
+  const {
+    enableInteractiveMode,
+    disableInteractiveMode,
+    setVisualNodes,
+    isInteractiveMode,
+    dispatchEvent,
+  } = useInteractiveStore();
+
+  // Designer store - needed to sync templates for visual node runtime
+  const { setTemplates: setDesignerTemplates, setElements: setDesignerElements, setLayers: setDesignerLayers } = useDesignerStore();
 
   // Project data (from Supabase)
   const [project, setProject] = useState<Project | null>(null);
@@ -229,6 +254,141 @@ export function NovaPlayer() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Check if project is interactive
+  const isInteractiveProject = project?.interactive_enabled === true;
+
+  // Enable/disable interactive mode based on project type
+  useEffect(() => {
+    console.log('[Nova Player] Interactive mode check:', {
+      isInteractiveProject,
+      interactive_enabled: project?.interactive_enabled,
+      hasConfig: !!project?.interactive_config,
+      projectId: project?.id
+    });
+
+    if (isInteractiveProject) {
+      console.log('[Nova Player] Enabling interactive mode for interactive project');
+      enableInteractiveMode();
+
+      // Load visual nodes from project's interactive_config
+      const interactiveConfig = project?.interactive_config as {
+        visualNodes?: Node[];
+        visualEdges?: Edge[];
+      } | null;
+
+      console.log('[Nova Player] Interactive config:', interactiveConfig);
+
+      if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
+        console.log('[Nova Player] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
+        // Log the event nodes specifically
+        const eventNodes = interactiveConfig.visualNodes.filter(n => n.type === 'event');
+        console.log('[Nova Player] Event nodes:', eventNodes.map(n => ({ id: n.id, eventType: (n.data as any)?.eventType })));
+        setVisualNodes(interactiveConfig.visualNodes, interactiveConfig.visualEdges);
+      } else {
+        console.log('[Nova Player] No visual nodes/edges found in config');
+      }
+    } else {
+      console.log('[Nova Player] Not an interactive project, disabling interactive mode');
+      disableInteractiveMode();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      disableInteractiveMode();
+    };
+  }, [isInteractiveProject, project?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes]);
+
+  // Log interactive mode state changes
+  useEffect(() => {
+    console.log('[Nova Player] isInteractiveMode state changed:', isInteractiveMode);
+  }, [isInteractiveMode]);
+
+  // Subscribe to designer store's onAirTemplates changes (for visual node runtime playback)
+  // When visual node scripts call designerStore.playIn(), we need to sync to local layerTemplates
+  useEffect(() => {
+    if (!isInteractiveMode) return;
+
+    // Subscribe to onAirTemplates changes in designer store
+    const unsubscribe = useDesignerStore.subscribe(
+      (state) => state.onAirTemplates,
+      (onAirTemplates, prevOnAirTemplates) => {
+        console.log('[Nova Player] onAirTemplates changed:', onAirTemplates);
+
+        // Find new or changed entries
+        for (const [layerId, onAirState] of Object.entries(onAirTemplates)) {
+          const prevState = prevOnAirTemplates?.[layerId];
+
+          // If this is a new entry or state changed
+          if (!prevState || prevState.state !== onAirState.state || prevState.templateId !== onAirState.templateId) {
+            console.log('[Nova Player] Processing onAirTemplates change for layer:', layerId, onAirState);
+
+            if (onAirState.state === 'in') {
+              // Play IN animation via local layerTemplates state
+              setLayerTemplates(prev => {
+                const next = new Map(prev);
+                const instanceId = `${onAirState.templateId}-${Date.now()}`;
+                const existing = next.get(layerId) || [];
+
+                // Create new template state
+                const newState: LayerTemplateState = {
+                  templateId: onAirState.templateId,
+                  instanceId,
+                  phase: 'in',
+                  playheadPosition: 0,
+                  lastTime: performance.now(),
+                };
+
+                // If there's already a template, mark it as outgoing
+                if (existing.length > 0 && existing[0].phase !== 'out') {
+                  const outgoing = existing.map(s => ({ ...s, phase: 'out' as const, playheadPosition: 0, lastTime: performance.now(), isOutgoing: true }));
+                  next.set(layerId, [...outgoing, newState]);
+                } else {
+                  next.set(layerId, [newState]);
+                }
+
+                console.log('[Nova Player] Set layerTemplates for interactive playIn:', next);
+                return next;
+              });
+            } else if (onAirState.state === 'out') {
+              // Play OUT animation
+              setLayerTemplates(prev => {
+                const next = new Map(prev);
+                const existing = next.get(layerId);
+
+                if (existing && existing.length > 0) {
+                  const updated = existing.map(s => ({ ...s, phase: 'out' as const, playheadPosition: 0, lastTime: performance.now(), isOutgoing: true }));
+                  next.set(layerId, updated);
+                  console.log('[Nova Player] Set layerTemplates for interactive playOut:', next);
+                }
+
+                return next;
+              });
+            }
+          }
+        }
+      },
+      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+    );
+
+    return unsubscribe;
+  }, [isInteractiveMode]);
+
+  // Handle element clicks in interactive mode - dispatches to visual node runtime
+  const handleElementClick = useCallback((elementId: string, elementName?: string) => {
+    if (!isInteractiveMode) return;
+
+    console.log('[Nova Player] handleElementClick - dispatching click event:', {
+      elementId,
+      elementName,
+      isInteractiveMode
+    });
+
+    // Create and dispatch a click event
+    const event = createInteractionEvent('click', elementId, undefined);
+    // The dispatchEvent will route this to the visual node runtime
+    dispatchEvent(event, []);
+  }, [isInteractiveMode, dispatchEvent]);
+
   // Track loaded project ID to prevent redundant loads
   const loadedProjectIdRef = useRef<string | null>(null);
   // Cache loaded data in refs for immediate access (React state updates are async)
@@ -300,6 +460,11 @@ export function NovaPlayer() {
       setLayers(layersData);
       setTemplates(templatesData);
 
+      // Sync to designer store for visual node runtime to access
+      setDesignerLayers(layersData);
+      setDesignerTemplates(templatesData);
+      console.log('[Nova Player] Synced templates to designer store:', templatesData.length);
+
       // Fetch elements for all templates via direct REST
       // We need to use a different approach since directRestSelect doesn't support IN queries
       // Fetch elements for each template in parallel
@@ -360,6 +525,10 @@ export function NovaPlayer() {
       setAnimations(allAnimations);
       setKeyframes(allKeyframes);
 
+      // Sync elements to designer store for visual node runtime
+      setDesignerElements(allElements);
+      console.log('[Nova Player] Synced elements to designer store:', allElements.length);
+
       // Mark as loaded
       loadedProjectIdRef.current = projectId;
 
@@ -371,7 +540,7 @@ export function NovaPlayer() {
       console.error(`[Nova Player] Failed to load project after ${totalTime}ms:`, err);
     }
     return { success: false, templates: [], layers: [] };
-  }, []);
+  }, [setDesignerLayers, setDesignerTemplates, setDesignerElements]);
 
 
   // Helper to resolve layerIndex to layerId (Pulsar GFX uses numeric indices)
@@ -409,6 +578,53 @@ export function NovaPlayer() {
             const embeddedElements = cmd.template.elements;
             console.log(`[Nova Player] Using embedded command data for real-time playback (${embeddedElements.length} elements)`);
 
+            // Also add/update the template in templates state (needed for alwaysOnTemplateIds check)
+            // AND sync to designer store for visual node runtime
+            const newTemplate: Template = {
+              id: templateId,
+              name: cmd.template!.name || 'Template',
+              layer_id: cmd.template!.layerId || '',
+              project_id: cmd.template!.projectId || '',
+              folder_id: null,
+              description: null,
+              tags: [],
+              thumbnail_url: null,
+              html_template: '',
+              css_styles: '',
+              width: null,
+              height: null,
+              in_duration: 1500,
+              loop_duration: null,
+              loop_iterations: 1,
+              out_duration: 1500,
+              libraries: [],
+              custom_script: null,
+              enabled: true,
+              locked: false,
+              archived: false,
+              version: 1,
+              sort_order: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              created_by: null,
+              data_source_id: null,
+              data_source_config: null,
+            };
+
+            setTemplates(prev => {
+              const exists = prev.some(t => t.id === templateId);
+              if (!exists) {
+                console.log(`[Nova Player] Adding template to state:`, newTemplate.id);
+                const updated = [...prev, newTemplate];
+                // Sync to designer store for visual node runtime
+                setDesignerTemplates(updated);
+                return updated;
+              }
+              // Also sync existing templates
+              setDesignerTemplates(prev);
+              return prev;
+            });
+
             // Merge embedded elements into state (use command data directly)
             // This ensures we have the element data immediately available for rendering
             setElements(prev => {
@@ -418,7 +634,10 @@ export function NovaPlayer() {
                 ...el,
                 template_id: templateId,
               }));
-              return [...otherElements, ...newElements];
+              const updated = [...otherElements, ...newElements];
+              // Sync to designer store for visual node runtime
+              setDesignerElements(updated);
+              return updated;
             });
 
             // Merge embedded animations if present
@@ -538,7 +757,24 @@ export function NovaPlayer() {
               return next;
             });
           } else {
-            console.warn(`[Nova Player] No layerId found for template ${templateId}, falling back to legacy mode`);
+            // No layerId found - create a fallback layer to ensure elements still render
+            console.warn(`[Nova Player] No layerId found for template ${templateId}, using fallback layer`);
+            const fallbackLayerId = '__fallback_layer__';
+
+            setLayerTemplates(prev => {
+              const next = new Map(prev);
+              // Clear any existing fallback layer state and add new template
+              next.set(fallbackLayerId, [{
+                templateId,
+                instanceId: newInstanceId,
+                phase: 'in' as AnimationPhase,
+                playheadPosition: 0,
+                lastTime: 0,
+                isOutgoing: false,
+              }]);
+              console.log(`[Nova Player] Using fallback layer for template ${templateId}`);
+              return next;
+            });
           }
 
           setCurrentTemplateId(templateId);
@@ -551,6 +787,24 @@ export function NovaPlayer() {
               next.set(newInstanceId, cmd.payload!);
               return next;
             });
+          }
+
+          // Handle interactive mode from command (for real-time embedded playback)
+          console.log('[Nova Player] Play command interactive check:', {
+            interactive_enabled: cmd.interactive_enabled,
+            hasConfig: !!cmd.interactive_config,
+            visualNodesCount: cmd.interactive_config?.visualNodes?.length || 0,
+            visualEdgesCount: cmd.interactive_config?.visualEdges?.length || 0
+          });
+          if (cmd.interactive_enabled) {
+            console.log('[Nova Player] Enabling interactive mode from command');
+            enableInteractiveMode();
+            if (cmd.interactive_config?.visualNodes && cmd.interactive_config?.visualEdges) {
+              console.log('[Nova Player] Setting visual nodes from command:', cmd.interactive_config.visualNodes.length, 'nodes,', cmd.interactive_config.visualEdges.length, 'edges');
+              const eventNodes = cmd.interactive_config.visualNodes.filter((n: any) => n.type === 'event');
+              console.log('[Nova Player] Event nodes from command:', eventNodes.map((n: any) => ({ id: n.id, eventType: n.data?.eventType })));
+              setVisualNodes(cmd.interactive_config.visualNodes, cmd.interactive_config.visualEdges);
+            }
           }
         }
         setIsOnAir(true);
@@ -575,6 +829,15 @@ export function NovaPlayer() {
               next.set(loadInstanceId, cmd.payload!);
               return next;
             });
+          }
+          // Handle interactive mode from command
+          if (cmd.interactive_enabled) {
+            console.log('[Nova Player] Enabling interactive mode from load command');
+            enableInteractiveMode();
+            if (cmd.interactive_config?.visualNodes && cmd.interactive_config?.visualEdges) {
+              console.log('[Nova Player] Setting visual nodes from command:', cmd.interactive_config.visualNodes.length, 'nodes');
+              setVisualNodes(cmd.interactive_config.visualNodes, cmd.interactive_config.visualEdges);
+            }
           }
         }
         // Don't play yet
@@ -985,6 +1248,62 @@ export function NovaPlayer() {
     return [];
   }, [elements, templates, localStorageData]);
 
+  // Merge templates from DB and localStorage
+  const mergedTemplates = useMemo((): Template[] => {
+    if (templates.length > 0) {
+      // Check if localStorage has templates not in DB
+      if (localStorageData?.templates) {
+        const dbTemplateIds = new Set(templates.map(t => t.id));
+        const localOnlyTemplates = localStorageData.templates.filter(t => !dbTemplateIds.has(t.id));
+        if (localOnlyTemplates.length > 0) {
+          console.log(`[Nova Player] Merging ${templates.length} DB templates + ${localOnlyTemplates.length} localStorage templates`);
+          return [...templates, ...localOnlyTemplates];
+        }
+      }
+      return templates;
+    }
+    if (localStorageData?.templates && localStorageData.templates.length > 0) {
+      console.log(`[Nova Player] Using ${localStorageData.templates.length} templates from localStorage`);
+      return localStorageData.templates;
+    }
+    return [];
+  }, [templates, localStorageData]);
+
+  // Resolve template ID - finds the correct template ID that has elements
+  // This handles cases where Animation node stored a stale template ID
+  const resolveTemplateId = useCallback((requestedId: string): string => {
+    // Check if elements exist with this template ID
+    const hasElements = mergedElements.some(e => e.template_id === requestedId);
+    if (hasElements) {
+      return requestedId;
+    }
+
+    // Try to find the template to get its name
+    const template = mergedTemplates.find(t => t.id === requestedId);
+    if (template && template.name) {
+      // Find a template with the same name that has elements
+      const templateIdsInElements = [...new Set(mergedElements.map(e => e.template_id))];
+      for (const existingId of templateIdsInElements) {
+        const existingTemplate = mergedTemplates.find(t => t.id === existingId);
+        if (existingTemplate && existingTemplate.name === template.name) {
+          console.log(`[Nova Player] Resolved template ID by name: "${template.name}" - ${requestedId} -> ${existingId}`);
+          return existingId;
+        }
+      }
+    }
+
+    // If only one template has elements, use that as fallback
+    const templateIdsInElements = [...new Set(mergedElements.map(e => e.template_id))];
+    if (templateIdsInElements.length === 1) {
+      console.log(`[Nova Player] Using only available template ID: ${templateIdsInElements[0]} (requested: ${requestedId})`);
+      return templateIdsInElements[0];
+    }
+
+    // Return original if no resolution found
+    console.warn(`[Nova Player] Could not resolve template ID: ${requestedId}, elements exist for: ${templateIdsInElements.join(', ')}`);
+    return requestedId;
+  }, [mergedElements, mergedTemplates]);
+
   // Merge DB animations with localStorage data (same approach as Preview.tsx)
   const mergedAnimations = useMemo((): Animation[] => {
     if (animations.length > 0) {
@@ -1205,6 +1524,7 @@ export function NovaPlayer() {
         instances.push(state);
       }
     }
+    console.log('[Nova Player] activeInstances computed:', instances.length, 'instances:', instances.map(i => ({ templateId: i.templateId, phase: i.phase })));
     return instances;
   }, [layerTemplates]);
 
@@ -1548,6 +1868,8 @@ export function NovaPlayer() {
               isPlaying={isPlaying}
               isAlwaysOn={true}
               phaseDuration={phaseDurations.loop}
+              isInteractiveMode={isInteractiveMode}
+              onElementClick={handleElementClick}
             />
           ))}
 
@@ -1555,13 +1877,27 @@ export function NovaPlayer() {
         {/* This renders BOTH outgoing (animating OUT) and incoming (animating IN) instances */}
         {/* Each instance gets its own payload overrides applied - critical for same template back-to-back */}
         {activeInstances.map((instance) => {
+          // Resolve template ID - handles cases where Animation node stored a stale ID
+          const resolvedTemplateId = resolveTemplateId(instance.templateId);
+
           // Get elements for this template and apply instance-specific overrides
           const templateElements = mergedElements.filter(
-            e => e.template_id === instance.templateId &&
+            e => e.template_id === resolvedTemplateId &&
                  !alwaysOnTemplateIds.has(e.template_id) &&
                  e.visible !== false &&
                  !e.parent_element_id
           );
+
+          // Debug: log what elements we found for this instance
+          if (templateElements.length === 0) {
+            const availableTemplateIds = [...new Set(mergedElements.map(e => e.template_id))];
+            console.warn('[Nova Player] ⚠️ No elements found for template:', instance.templateId, '(resolved:', resolvedTemplateId, ')');
+            console.warn('[Nova Player] Available template IDs with elements:', availableTemplateIds);
+            console.warn('[Nova Player] Check that your Animation node is configured to play a template that has elements.');
+          } else {
+            console.log('[Nova Player] Rendering instance:', resolvedTemplateId, 'with', templateElements.length, 'elements');
+          }
+
           // Apply this instance's payload overrides (each instance has its own payload data)
           const instanceElements = applyInstanceOverrides(templateElements, instance.instanceId);
           // Also apply overrides to allElements for child element lookups
@@ -1581,6 +1917,8 @@ export function NovaPlayer() {
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
                 phaseDuration={phaseDurations[instance.phase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
               />
             ));
         })}
@@ -1602,6 +1940,8 @@ export function NovaPlayer() {
                 isPlaying={isPlaying}
                 isAlwaysOn={false}
                 phaseDuration={phaseDurations[currentPhase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
               />
             ))
         )}
@@ -1622,6 +1962,8 @@ interface PlayerElementProps {
   isPlaying: boolean;
   isAlwaysOn?: boolean;
   phaseDuration: number;
+  isInteractiveMode?: boolean;
+  onElementClick?: (elementId: string, elementName?: string) => void;
 }
 
 function PlayerElement({
@@ -1634,6 +1976,8 @@ function PlayerElement({
   isPlaying,
   isAlwaysOn = false,
   phaseDuration,
+  isInteractiveMode = false,
+  onElementClick,
 }: PlayerElementProps) {
   // For always-on elements, use 'loop' phase at position 0 (static display)
   const effectivePhase = isAlwaysOn ? 'loop' : currentPhase;
@@ -1719,6 +2063,15 @@ function PlayerElement({
   };
 
   const renderContent = () => {
+    // Debug logging for element rendering
+    console.log('[Nova Player] renderContent:', {
+      elementId: element.id,
+      elementType: (element as any).type,
+      contentType: element.content?.type,
+      hasInteractions: !!element.interactions,
+      content: element.content
+    });
+
     switch (element.content.type) {
       case 'text': {
         const textContent = element.content;
@@ -2211,6 +2564,27 @@ function PlayerElement({
           />
         );
 
+      case 'interactive':
+        console.log('[Nova Player] Rendering InteractiveElement:', {
+          elementId: element.id,
+          isInteractiveMode,
+          isPreview: !isInteractiveMode,
+          hasInteractions: !!element.interactions,
+          hasHandlers: !!element.interactions?.handlers,
+          handlers: element.interactions?.handlers,
+          inputType: (element.content as any)?.type || (element.content as any)?.inputType
+        });
+        return (
+          <InteractiveElement
+            config={element.content}
+            elementId={element.id}
+            className="w-full h-full"
+            style={element.styles as React.CSSProperties}
+            isPreview={!isInteractiveMode}
+            handlers={element.interactions?.handlers}
+          />
+        );
+
       case 'group':
       case 'div':
         return <div style={{ width: '100%', height: '100%', ...element.styles }} />;
@@ -2220,8 +2594,30 @@ function PlayerElement({
     }
   };
 
+  // Handle click on this element
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (!isInteractiveMode || !onElementClick) return;
+
+    // Stop propagation so parent elements don't also trigger
+    e.stopPropagation();
+
+    console.log('[Nova Player] Element clicked:', {
+      elementId: element.id,
+      elementName: element.name,
+      contentType: element.content?.type
+    });
+
+    onElementClick(element.id, element.name);
+  }, [isInteractiveMode, onElementClick, element.id, element.name, element.content?.type]);
+
   return (
-    <div style={style}>
+    <div
+      style={{
+        ...style,
+        cursor: isInteractiveMode ? 'pointer' : undefined,
+      }}
+      onClick={handleClick}
+    >
       {renderContent()}
       {children.map((child) => (
         <PlayerElement
@@ -2235,6 +2631,8 @@ function PlayerElement({
           isPlaying={isPlaying}
           isAlwaysOn={isAlwaysOn}
           phaseDuration={phaseDuration}
+          isInteractiveMode={isInteractiveMode}
+          onElementClick={onElementClick}
         />
       ))}
     </div>

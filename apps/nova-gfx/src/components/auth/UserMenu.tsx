@@ -1,12 +1,9 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  User,
   Settings,
   LogOut,
   Building2,
   Shield,
-  HelpCircle,
   Sun,
   Moon,
   Monitor,
@@ -26,7 +23,6 @@ import {
 } from '@emergent-platform/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore, type Theme } from '@/stores/themeStore';
-import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -38,7 +34,6 @@ export function UserMenu() {
   const navigate = useNavigate();
   const { user, organization, signOut } = useAuthStore();
   const { theme, setTheme } = useThemeStore();
-  const [showSupportDialog, setShowSupportDialog] = useState(false);
 
   const handleThemeChange = (newTheme: Theme) => {
     if (user?.id) {
@@ -145,23 +140,11 @@ export function UserMenu() {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={() => setShowSupportDialog(true)}>
-          <HelpCircle className="w-4 h-4 mr-2" />
-          Help & Support
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
-
-      <SupportRequestDialog
-        open={showSupportDialog}
-        onOpenChange={setShowSupportDialog}
-      />
     </DropdownMenu>
   );
 }

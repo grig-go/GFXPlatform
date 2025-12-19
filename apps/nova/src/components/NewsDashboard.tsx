@@ -252,6 +252,16 @@ export function NewsDashboard({
       }
 
       // Step 3: Format providers for edge function (map snake_case to camelCase)
+      // Debug: log raw provider details to see what fields are available
+      console.log('🔍 [NEWS] Raw provider details:', providerDetails.map((p: any) => ({
+        name: p.name,
+        type: p.type,
+        has_api_key: !!p.api_key,
+        has_config_api_key: !!p.config?.api_key,
+        config_keys: p.config ? Object.keys(p.config) : [],
+        all_keys: Object.keys(p)
+      })));
+
       const formattedProviders = providerDetails.map((p: any) => ({
         name: p.name,
         type: p.type,
@@ -260,7 +270,7 @@ export function NewsDashboard({
         language: p.config?.language
       }));
 
-      console.log('📡 [NEWS] Formatted providers:', formattedProviders.map(p => ({ name: p.name, type: p.type, hasKey: !!p.apiKey })));
+      console.log('📡 [NEWS] Formatted providers:', formattedProviders.map(p => ({ name: p.name, type: p.type, hasKey: !!p.apiKey, keyLength: p.apiKey?.length })));
 
       // Step 4: Fetch articles from backend endpoint
       const url = getEdgeFunctionUrl('news_dashboard/news-articles');

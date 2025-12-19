@@ -443,7 +443,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
       });
       
       const response = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}'),
+        getEdgeFunctionUrl(`ai_provider/providers/${selectedProvider.id}`),
         {
           method: "PUT",
           headers: {
@@ -647,7 +647,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}/reveal'),
+        getEdgeFunctionUrl(`ai_provider/providers/${selectedProvider.id}/reveal`),
         {
           method: "POST",
           headers: {
@@ -691,7 +691,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}/reveal'),
+        getEdgeFunctionUrl(`ai_provider/providers/${selectedProvider.id}/reveal`),
         {
           method: "POST",
           headers: {
@@ -762,18 +762,18 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     }
   };
 
-  const handleDashboardAssignmentToggle = (dashboard: AssignableDashboardType, role: 'textProvider' | 'imageProvider' | 'videoProvider') => {
+  const handleDashboardAssignmentToggle = (dashboard: AssignableDashboardType, role: 'textProvider' | 'imageProvider' | 'videoProvider' | 'imageEditProvider') => {
     const existingAssignment = formData.dashboardAssignments.find(a => a.dashboard === dashboard);
-    
+
     if (existingAssignment) {
       // Toggle the role
       const updatedAssignment = {
         ...existingAssignment,
         [role]: !existingAssignment[role],
       };
-      
+
       // Remove assignment if all roles are false
-      if (!updatedAssignment.textProvider && !updatedAssignment.imageProvider && !updatedAssignment.videoProvider) {
+      if (!updatedAssignment.textProvider && !updatedAssignment.imageProvider && !updatedAssignment.videoProvider && !updatedAssignment.imageEditProvider) {
         setFormData({
           ...formData,
           dashboardAssignments: formData.dashboardAssignments.filter(a => a.dashboard !== dashboard),
@@ -1295,9 +1295,34 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
                           <span className="text-xs text-muted-foreground">Unassigned</span>
                         ) : (
                           provider.dashboardAssignments.map((assignment) => (
-                            <Badge key={assignment.dashboard} variant="outline" className="text-xs">
-                              {DASHBOARD_LABELS[assignment.dashboard]}
-                            </Badge>
+                            <div key={assignment.dashboard} className="flex flex-col gap-0.5">
+                              <Badge variant="outline" className="text-xs">
+                                {DASHBOARD_LABELS[assignment.dashboard]}
+                              </Badge>
+                              {/* Show sub-function badges */}
+                              <div className="flex gap-0.5">
+                                {assignment.textProvider && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                    Text
+                                  </Badge>
+                                )}
+                                {assignment.imageProvider && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                    Image
+                                  </Badge>
+                                )}
+                                {assignment.videoProvider && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                    Video
+                                  </Badge>
+                                )}
+                                {assignment.imageEditProvider && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-purple-500/20 text-purple-400">
+                                    Image Edit
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           ))
                         )}
                       </div>
@@ -1645,6 +1670,19 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
                                 <Label className="text-xs cursor-pointer flex items-center gap-1">
                                   <Video className="w-3 h-3" />
                                   Video
+                                </Label>
+                              </div>
+                            )}
+                            {/* Image Edit toggle - show for Pulsar VS and image-edit type providers */}
+                            {dashboard === 'pulsar-vs' && (formData.type === 'image-edit' || metadata.supportsImage) && (
+                              <div className="flex items-center gap-1.5">
+                                <Switch
+                                  checked={assignment?.imageEditProvider || false}
+                                  onCheckedChange={() => handleDashboardAssignmentToggle(dashboard as AssignableDashboardType, 'imageEditProvider')}
+                                />
+                                <Label className="text-xs cursor-pointer flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" />
+                                  Image Edit
                                 </Label>
                               </div>
                             )}
@@ -2001,6 +2039,19 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
                                 </Label>
                               </div>
                             )}
+                            {/* Image Edit toggle - show for Pulsar VS and image-edit type providers */}
+                            {dashboard === 'pulsar-vs' && (formData.type === 'image-edit' || metadata.supportsImage) && (
+                              <div className="flex items-center gap-1.5">
+                                <Switch
+                                  checked={assignment?.imageEditProvider || false}
+                                  onCheckedChange={() => handleDashboardAssignmentToggle(dashboard as AssignableDashboardType, 'imageEditProvider')}
+                                />
+                                <Label className="text-xs cursor-pointer flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" />
+                                  Image Edit
+                                </Label>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -2278,6 +2329,12 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
                                         <Badge variant="outline" className="text-xs gap-1">
                                           <Video className="w-3 h-3" />
                                           Video
+                                        </Badge>
+                                      )}
+                                      {assignment.imageEditProvider && (
+                                        <Badge variant="outline" className="text-xs gap-1">
+                                          <ImageIcon className="w-3 h-3" />
+                                          Image Edit
                                         </Badge>
                                       )}
                                     </div>

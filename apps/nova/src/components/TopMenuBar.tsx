@@ -15,10 +15,12 @@ import {
   Rss,
   Tv,
   Shield,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
-import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
+import { SupportRequestDialog } from "./dialogs/SupportRequestDialog";
+import { SharedTopMenuBar, BrandingConfig, MenuDropdown, UserMenuConfig } from "./shared/SharedTopMenuBar";
 import { supabase } from "../utils/supabase/client";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
@@ -43,6 +45,7 @@ export function TopMenuBar({
     return false;
   });
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [apps, setApps] = useState<Array<{
     id: string;
     name: string;
@@ -130,7 +133,7 @@ export function TopMenuBar({
 
   // Tools Menu Configuration - filter based on permissions
   const toolsMenuItems = [
-    { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents'), dashboardId: 'agents', pageKey: 'agents' },
+    { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents'), dashboardId: null, pageKey: 'agents' },
     { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds'), dashboardId: null, pageKey: 'feeds' },
     { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media'), dashboardId: 'media_library', pageKey: 'media' },
     { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels'), dashboardId: null, pageKey: 'channels', adminOnly: true },
@@ -161,60 +164,63 @@ export function TopMenuBar({
     ],
   };
 
-  // Build settings menu items based on permissions
-  const settingsMenuItems = [
-    {
-      id: 'account-settings',
-      label: 'Account Settings',
-      icon: UserIcon,
-      onClick: () => setShowAccountSettings(true)
-    },
-  ];
-
-  // Only show admin items if user is admin or superuser
-  if (isAdmin || isSuperuser) {
-    settingsMenuItems.push(
-      {
-        id: 'users-groups',
-        label: 'Users and Groups',
-        icon: Users,
-        onClick: () => onNavigate('users-groups')
-      },
-      {
-        id: 'ai-connections',
-        label: 'AI Connections',
-        icon: Zap,
-        onClick: () => onNavigate('ai-connections')
-      }
-    );
-  }
-
-  // Settings Menu Configuration
-  const settingsMenu: MenuDropdown = {
+  // Settings Menu Configuration - Admin only items
+  const settingsMenu: MenuDropdown | undefined = (isAdmin || isSuperuser) ? {
     id: 'settings',
     label: 'Settings',
     icon: Settings,
     sections: [
-      // Show user info if authenticated
-      ...(authUser ? [{
-        label: isSuperuser ? 'Superuser' : (isAdmin ? 'Administrator' : 'User'),
+      {
         items: [
           {
-            id: 'user-email',
-            label: authUser.email,
-            icon: isSuperuser ? Shield : UserIcon,
-            disabled: true
+            id: 'users-groups',
+            label: 'Users and Groups',
+            icon: Users,
+            onClick: () => onNavigate('users-groups')
           },
+          {
+            id: 'ai-connections',
+            label: 'AI Connections',
+            icon: Zap,
+            onClick: () => onNavigate('ai-connections')
+          }
         ],
-      }] : []),
+      },
+    ],
+  } : undefined;
+
+  // User Menu Configuration - Get initials from email
+  const getUserInitials = (email?: string, name?: string): string => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const userMenu: UserMenuConfig | undefined = authUser ? {
+    name: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
+    email: authUser.email,
+    role: isSuperuser ? 'Superuser' : (isAdmin ? 'Administrator' : undefined),
+    initials: getUserInitials(authUser.email, authUser.user_metadata?.full_name || authUser.user_metadata?.name),
+    sections: [
       {
         label: 'Preferences',
         items: [
-          { id: 'dark-mode-toggle', label: 'Dark Mode' }, // Special ID for dark mode
+          { id: 'dark-mode-toggle', label: 'Dark Mode' },
         ],
       },
       {
-        items: settingsMenuItems,
+        items: [
+          {
+            id: 'account-settings',
+            label: 'Account Settings',
+            icon: UserIcon,
+            onClick: () => setShowAccountSettings(true)
+          },
+        ],
       },
       {
         items: [
@@ -228,7 +234,7 @@ export function TopMenuBar({
         ],
       },
     ],
-  };
+  } : undefined;
 
   // Help Menu Configuration
   const helpMenu: MenuDropdown = {
@@ -239,8 +245,21 @@ export function TopMenuBar({
       {
         label: 'Support',
         items: [
-          { id: 'docs', label: 'Documentation', icon: FileText, disabled: true },
-          { id: 'support', label: 'Contact Support', icon: MessageSquare, disabled: true },
+          {
+            id: 'docs',
+            label: 'Documentation',
+            icon: FileText,
+            onClick: () => window.open(
+              import.meta.env.DEV ? 'http://localhost:3000/docs/apps/nova' : '/docs/apps/nova',
+              '_blank'
+            )
+          },
+          {
+            id: 'support',
+            label: 'Contact Support',
+            icon: MessageSquare,
+            onClick: () => setShowSupportDialog(true)
+          },
         ],
       },
       {
@@ -253,22 +272,31 @@ export function TopMenuBar({
   };
 
   return (
-    <SharedTopMenuBar
-      branding={branding}
-      menus={{
-        apps: appsMenu,
-        tools: toolsMenu,
-        settings: settingsMenu,
-        help: helpMenu,
-      }}
-      darkMode={darkMode}
-      onDarkModeToggle={toggleDarkMode}
-      accountSettingsDialog={
-        <AccountSettingsDialog
-          open={showAccountSettings}
-          onOpenChange={setShowAccountSettings}
-        />
-      }
-    />
+    <>
+      <SharedTopMenuBar
+        branding={branding}
+        menus={{
+          apps: appsMenu,
+          tools: toolsMenu,
+          settings: settingsMenu,
+          help: helpMenu,
+        }}
+        userMenu={userMenu}
+        darkMode={darkMode}
+        onDarkModeToggle={toggleDarkMode}
+        accountSettingsDialog={
+          <AccountSettingsDialog
+            open={showAccountSettings}
+            onOpenChange={setShowAccountSettings}
+          />
+        }
+      />
+
+      {/* Support Request Dialog */}
+      <SupportRequestDialog
+        open={showSupportDialog}
+        onOpenChange={setShowSupportDialog}
+      />
+    </>
   );
 }

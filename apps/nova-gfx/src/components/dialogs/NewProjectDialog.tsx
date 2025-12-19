@@ -19,7 +19,7 @@ import {
 import { createProject } from '@/services/projectService';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useAuthStore } from '@/stores/authStore';
-import { Loader2, Monitor, Smartphone, Film } from 'lucide-react';
+import { Loader2, Monitor, Smartphone, Film, MonitorPlay, Zap } from 'lucide-react';
 
 // Resolution presets
 const RESOLUTION_PRESETS = [
@@ -57,6 +57,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   const [height, setHeight] = useState(1080);
   const [frameRate, setFrameRate] = useState('30');
   const [backgroundColor, setBackgroundColor] = useState('transparent');
+  const [interactiveEnabled, setInteractiveEnabled] = useState(false);
 
   // Handle preset change
   const handlePresetChange = (presetId: string) => {
@@ -88,6 +89,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         canvas_height: height,
         frame_rate: parseInt(frameRate),
         background_color: backgroundColor,
+        interactive_enabled: interactiveEnabled,
         organization_id: user.organizationId,
         created_by: user.id,
       }, accessToken || undefined);
@@ -118,6 +120,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
     setHeight(1080);
     setFrameRate('30');
     setBackgroundColor('transparent');
+    setInteractiveEnabled(false);
   };
 
   const handleCancel = () => {
@@ -275,6 +278,47 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
             </div>
           </div>
 
+          {/* Project Type */}
+          <div className="space-y-2">
+            <Label>Project Type</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setInteractiveEnabled(false)}
+                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  !interactiveEnabled
+                    ? 'border-violet-500 bg-violet-500/10'
+                    : 'border-border hover:border-muted-foreground/50'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <MonitorPlay className="w-4 h-4" />
+                  <span className="text-sm font-medium">Broadcast</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Animations for live production
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInteractiveEnabled(true)}
+                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  interactiveEnabled
+                    ? 'border-amber-500 bg-amber-500/10'
+                    : 'border-border hover:border-muted-foreground/50'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-medium">Interactive</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Buttons, forms, and scripts
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* Preview */}
           <div className="rounded-lg border bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground mb-2">Preview</div>
@@ -300,7 +344,11 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
                 <div className="font-medium">{width} × {height}</div>
                 <div className="text-muted-foreground">{frameRate} fps</div>
                 <div className="text-muted-foreground capitalize">
-                  {backgroundColor === 'transparent' ? 'Transparent' : 'Solid'} background
+                  {backgroundColor === 'transparent' ? 'Transparent' : 'Solid'} Background
+                </div>
+                <div className={`text-xs flex items-center gap-1 ${interactiveEnabled ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                  {interactiveEnabled ? <Zap className="w-3 h-3" /> : <MonitorPlay className="w-3 h-3" />}
+                  {interactiveEnabled ? 'Interactive' : 'Broadcast'}
                 </div>
               </div>
             </div>

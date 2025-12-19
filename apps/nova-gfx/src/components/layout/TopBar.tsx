@@ -38,6 +38,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
     project,
     saveProject,
     currentTemplateId,
+    isScriptPlayMode,
   } = useDesignerStore();
   const [copiedOBS, setCopiedOBS] = useState(false);
   const [copiedPublish, setCopiedPublish] = useState(false);
@@ -171,6 +172,14 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Script Play Mode Banner - centered in header */}
+      {isScriptPlayMode && (
+        <div className="absolute left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2 shadow-lg">
+          <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          PLAY MODE
+        </div>
+      )}
 
       {/* Right side - Menus */}
       <div className="flex items-center gap-0.5">

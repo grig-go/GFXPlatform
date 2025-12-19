@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   Youtube,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 
 interface ProjectSettingsDialogProps {
@@ -69,6 +70,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
   const [copiedSlug, setCopiedSlug] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [interactiveEnabled, setInteractiveEnabled] = useState(false);
 
   // Load current settings when dialog opens
   useEffect(() => {
@@ -81,6 +83,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
       setFrameRate(project.frame_rate || 60);
       setBackgroundColor(project.background_color || 'transparent');
       setMapboxApiKey(project.settings?.mapboxApiKey || '');
+      setInteractiveEnabled(project.interactive_enabled || false);
       setHasChanges(false);
     }
   }, [open, project]);
@@ -88,9 +91,9 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
   // Track changes
   useEffect(() => {
     if (!project) return;
-    
+
     const projectMapboxKey = project.settings?.mapboxApiKey || '';
-    
+
     const changed =
       name !== project.name ||
       description !== (project.description || '') ||
@@ -99,10 +102,11 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
       canvasHeight !== project.canvas_height ||
       frameRate !== project.frame_rate ||
       backgroundColor !== project.background_color ||
-      mapboxApiKey !== projectMapboxKey;
+      mapboxApiKey !== projectMapboxKey ||
+      interactiveEnabled !== (project.interactive_enabled || false);
 
     setHasChanges(changed);
-  }, [name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, project]);
+  }, [name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, interactiveEnabled, project]);
 
   // Copy slug to clipboard
   const copySlug = useCallback(async () => {
@@ -147,6 +151,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
         canvas_height: canvasHeight,
         frame_rate: frameRate,
         background_color: backgroundColor,
+        interactive_enabled: interactiveEnabled,
         settings: {
           ...project.settings,
           mapboxApiKey: mapboxApiKey || undefined,
@@ -160,7 +165,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
     } finally {
       setIsSaving(false);
     }
-  }, [project, name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, updateProjectSettings, onOpenChange]);
+  }, [project, name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, interactiveEnabled, updateProjectSettings, onOpenChange]);
 
   // Reset to defaults
   const resetToDefaults = useCallback(() => {
@@ -266,6 +271,58 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
                 <p className="text-xs text-muted-foreground">
                   Publish URL: <code className="bg-muted px-1 rounded">{window.location.origin}/play/{slug}</code>
                 </p>
+              </div>
+
+              <div className="border-t pt-4 mt-4" />
+
+              {/* Project Type - Interactive Mode */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <Label>Project Type</Label>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setInteractiveEnabled(false)}
+                    className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                      !interactiveEnabled
+                        ? 'border-violet-500 bg-violet-500/10'
+                        : 'border-border hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <MonitorPlay className="w-5 h-5" />
+                      <span className="font-medium">Broadcast</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-left">
+                      Traditional graphics with animations. Ideal for live production, lower thirds, and overlays.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInteractiveEnabled(true)}
+                    className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                      interactiveEnabled
+                        ? 'border-amber-500 bg-amber-500/10'
+                        : 'border-border hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap className="w-5 h-5 text-amber-500" />
+                      <span className="font-medium">Interactive App</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-left">
+                      Build interactive experiences with buttons, forms, scripts, and user interactions.
+                    </p>
+                  </button>
+                </div>
+                {interactiveEnabled && (
+                  <p className="text-xs text-amber-500/80 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" />
+                    Interactive mode enables Scripts panel and interactive element assets.
+                  </p>
+                )}
               </div>
             </TabsContent>
 

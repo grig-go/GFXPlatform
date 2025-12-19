@@ -11,14 +11,23 @@ import { Label } from "./ui/label";
 import { Race, getFieldValue } from "../types/election";
 import { currentElectionYear } from '../utils/constants';
 import { supabase } from "../utils/supabase/client";
-import { 
-  Search, 
+import { SyntheticGroup } from "../utils/useSyntheticRaceWorkflow";
+import {
+  Search,
   Filter,
   Database,
   Sparkles,
   LoaderIcon,
-  Bug
+  Bug,
+  ChevronDown
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 interface ElectionFiltersProps {
   searchTerm: string;
@@ -36,7 +45,9 @@ interface ElectionFiltersProps {
   races: Race[];
   resultCount: number;
   lastUpdated: string;
-  onShowSyntheticRaces: (syntheticRaces: any[]) => void; // Callback to pass synthetic races to parent
+  syntheticGroups: SyntheticGroup[]; // Available synthetic groups
+  selectedSyntheticGroupId: string | null; // Currently selected group ID
+  onShowSyntheticRaces: (syntheticRaces: any[], groupId: string | null) => void; // Callback to pass synthetic races and group to parent
   showingSyntheticRaces: boolean; // Whether synthetic races are currently being displayed
   onHideSyntheticRaces: () => void; // Callback to hide synthetic races
   onDebugPayload: () => void; // Callback to show debug data
@@ -66,6 +77,8 @@ export function ElectionFilters({
   races,
   resultCount,
   lastUpdated,
+  syntheticGroups,
+  selectedSyntheticGroupId,
   onShowSyntheticRaces,
   showingSyntheticRaces,
   onHideSyntheticRaces,
@@ -131,27 +144,42 @@ export function ElectionFilters({
     setSelectedRace("");
   };
 
-  // Fetch synthetic races from database
-  const handleFetchSyntheticRaces = async () => {
+  // Fetch synthetic races from database - optionally filtered by group
+  const handleFetchSyntheticRaces = async (groupId: string | null = null) => {
     try {
       setIsGenerating(true);
-      
-      // First, get the list of all synthetic race IDs
-      const { data: raceList, error: listError } = await supabase.rpc('e_list_synthetic_races');
-      
-      console.log("Synthetic race list:", raceList);
-      
+
+      // Fetch synthetic race list, optionally filtered by group
+      let raceList;
+      let listError;
+
+      if (groupId) {
+        // Fetch races for specific group
+        const result = await supabase.rpc('e_list_synthetic_races_by_group', {
+          p_group_id: groupId
+        });
+        raceList = result.data;
+        listError = result.error;
+      } else {
+        // Fetch all synthetic races
+        const result = await supabase.rpc('e_list_synthetic_races');
+        raceList = result.data;
+        listError = result.error;
+      }
+
+      console.log("Synthetic race list:", raceList, "groupId:", groupId);
+
       if (listError) {
         console.error("Error fetching synthetic race list:", listError);
         return;
       }
-      
+
       if (!raceList || !Array.isArray(raceList) || raceList.length === 0) {
         console.log("No synthetic races found");
-        onShowSyntheticRaces([]);
+        onShowSyntheticRaces([], groupId);
         return;
       }
-      
+
       // Fetch full details for each synthetic race
       const fullRaces = await Promise.all(
         raceList.map(async (race: any) => {
@@ -159,12 +187,12 @@ export function ElectionFilters({
           const { data, error } = await supabase.rpc("e_get_synthetic_race_full", {
             p_synthetic_race_id: raceId,
           });
-          
+
           if (error) {
             console.error(`Error fetching full details for race ${raceId}:`, error);
             return null;
           }
-          
+
           console.log("FULL SYNTHETIC RACE (raw RPC response):", data);
           // RPC returns an array, extract the first element which is the race object
           const raceData = Array.isArray(data) && data.length > 0 ? data[0] : data;
@@ -172,14 +200,14 @@ export function ElectionFilters({
           return raceData;
         })
       );
-      
+
       // Filter out any null results from errors
       const validRaces = fullRaces.filter(race => race !== null);
-      
+
       console.log("All full synthetic races:", validRaces);
-      
-      // Pass synthetic races to parent component for display
-      onShowSyntheticRaces(validRaces);
+
+      // Pass synthetic races and group ID to parent component for display
+      onShowSyntheticRaces(validRaces, groupId);
     } catch (err) {
       console.error("Error fetching synthetic races:", err);
     } finally {
@@ -230,25 +258,57 @@ export function ElectionFilters({
 
         {/* Election Year Data Sets */}
         <div className="flex flex-wrap gap-2 mb-6">
-          <Button
-            variant={showingSyntheticRaces ? "default" : "outline"}
-            size="sm"
-            onClick={handleFetchSyntheticRaces}
-            className="gap-2"
-            disabled={isGenerating}
-          >
-            {isGenerating ? (
-              <>
-                <LoaderIcon className="w-4 h-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
+          {/* Synthetic Data Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={showingSyntheticRaces ? "default" : "outline"}
+                size="sm"
+                className="gap-2"
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <>
+                    <LoaderIcon className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    {showingSyntheticRaces && selectedSyntheticGroupId
+                      ? syntheticGroups.find(g => g.id === selectedSyntheticGroupId)?.name || 'Synthetic Data'
+                      : 'Synthetic Data'}
+                    <ChevronDown className="w-3 h-3 ml-1" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={() => handleFetchSyntheticRaces(null)}
+                className="gap-2"
+              >
                 <Database className="w-4 h-4" />
-                Synthetic Data
-              </>
-            )}
-          </Button>
+                All Synthetic Races
+              </DropdownMenuItem>
+              {syntheticGroups.length > 0 && <DropdownMenuSeparator />}
+              {syntheticGroups.map((group) => (
+                <DropdownMenuItem
+                  key={group.id}
+                  onClick={() => handleFetchSyntheticRaces(group.id)}
+                  className="gap-2"
+                >
+                  <Database className="w-4 h-4" />
+                  <span className="flex-1">{group.name}</span>
+                  {group.race_count !== undefined && (
+                    <span className="text-xs text-muted-foreground">
+                      ({group.race_count})
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {years.map((year) => (
             <Button
               key={year.key}
