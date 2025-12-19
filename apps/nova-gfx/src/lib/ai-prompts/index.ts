@@ -19,6 +19,7 @@ import { SPORTS_TOOLS_PROMPT, getSportsLogoUrl } from './tools/sports-logos';
 import { STYLING_REFERENCE } from './styling-reference';
 import { ANIMATION_REFERENCE } from './animation-reference';
 import { BROADCAST_DESIGN_GUIDELINES } from './broadcast-guidelines';
+import { INTERACTIVE_REFERENCE } from './interactive-reference';
 import type { AIContext } from '@emergent-platform/types';
 
 /**
@@ -154,6 +155,16 @@ export function buildDynamicSystemPrompt(
     });
   }
 
+  // Add interactive scripting reference when project is interactive or user mentions interactivity
+  if (intent.needsInteractive || context.isInteractive) {
+    modules.push({
+      id: 'interactive',
+      name: 'Interactive Scripting Reference',
+      content: INTERACTIVE_REFERENCE,
+      priority: 15, // After broadcast guidelines, before styling
+    });
+  }
+
   // Add data-driven design instructions when data context is provided
   if (context.dataContext) {
     modules.push({
@@ -283,6 +294,20 @@ export function buildContextMessage(context: AIContext): string {
     parts.push(`Sample Data (first record):\n\`\`\`json\n${JSON.stringify(sampleData, null, 2)}\n\`\`\``);
 
     parts.push(`⚠️ IMPORTANT: Create elements for ALL data fields shown above with "binding" configuration. Do NOT skip any fields - use every piece of available data!`);
+  }
+
+  // Include interactive mode context
+  if (context.isInteractive) {
+    parts.push(`\n## 🎮 INTERACTIVE MODE ACTIVE
+This project is in Interactive Mode. You can create clickable buttons, navigation, and data-switching interactions.
+
+**Key capabilities:**
+- Use \`"interactive": true\` on elements that should respond to clicks
+- Address elements with \`@ElementName.property\` syntax
+- Switch template data with \`@template.TemplateName.data = "Value"\`
+- Create visual scripts with Event → Action node connections
+
+When user asks for buttons, navigation, or interactive features, include the visual script configuration.`);
   }
 
   return parts.join('\n\n');

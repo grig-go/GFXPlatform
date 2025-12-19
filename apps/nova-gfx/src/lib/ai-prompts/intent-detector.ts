@@ -27,6 +27,7 @@ export interface UserIntent {
   needsStyling: boolean;
   needsAnimation: boolean;
   needsData: boolean; // Charts, tables, tickers
+  needsInteractive: boolean; // Interactive scripting, buttons, navigation
 
   // Element types mentioned or implied
   mentionedElementTypes: string[];
@@ -63,6 +64,15 @@ const NEWS_KEYWORDS = [
 const FINANCE_KEYWORDS = [
   'stock', 'market', 'finance', 'trading', 'price', 'ticker', 'nasdaq',
   'dow', 's&p', 'crypto', 'bitcoin', 'earnings', 'revenue',
+];
+
+const INTERACTIVE_KEYWORDS = [
+  'interactive', 'button', 'click', 'clickable', 'hover', 'navigation',
+  'navigate', 'switch', 'toggle', 'select', 'selector', 'tab', 'tabs',
+  'menu', 'dropdown', 'carousel', 'slider', 'expandable', 'collapsible',
+  'accordion', 'modal', 'popup', 'dialog', 'touch', 'gesture', 'drag', 'drop',
+  'script', 'scripting', 'event', 'action', 'trigger', 'state', 'dynamic',
+  'address', '@', 'binding', 'data-driven',
 ];
 
 const CREATE_KEYWORDS = [
@@ -167,6 +177,8 @@ export function detectIntent(message: string, context: AIContext): UserIntent {
   const needsAnimation = isCreating ||
     ['animate', 'animation', 'motion', 'transition', 'fade', 'slide', 'entrance', 'exit'].some(kw => lowerMessage.includes(kw));
   const needsData = ['data', 'chart', 'table', 'stats', 'statistics', 'numbers'].some(kw => lowerMessage.includes(kw));
+  const needsInteractive = context.isInteractive ||
+    INTERACTIVE_KEYWORDS.some(kw => lowerMessage.includes(kw));
 
   // Detect element types
   const mentionedElementTypes: string[] = [];
@@ -242,6 +254,7 @@ export function detectIntent(message: string, context: AIContext): UserIntent {
     needsStyling,
     needsAnimation,
     needsData,
+    needsInteractive,
     mentionedElementTypes,
     suggestedElementTypes,
     graphicType,

@@ -31,6 +31,8 @@ import {
 import { useDesignerStore } from '@/stores/designerStore';
 import { AddDataModal } from '@/components/dialogs/AddDataModal';
 import { extractFieldsFromData, getNestedValue } from '@/data/sampleDataSources';
+import { AddressContextMenu } from '@/components/common/AddressContextMenu';
+import { buildDataAddress, sanitizeName } from '@/lib/address';
 
 export function DataBindingTab() {
   const [showAddDataModal, setShowAddDataModal] = useState(false);
@@ -90,6 +92,13 @@ export function DataBindingTab() {
         bindableTypes.includes(e.element_type)
     );
   }, [elements, currentTemplateId]);
+
+  // Get current template name for address building
+  const currentTemplateName = useMemo(() => {
+    if (!currentTemplateId) return '';
+    const template = templates.find(t => t.id === currentTemplateId);
+    return template?.name || '';
+  }, [currentTemplateId, templates]);
 
   // Get default record index from current template config
   const defaultRecordIndex = useMemo(() => {
@@ -271,28 +280,34 @@ export function DataBindingTab() {
             <ChevronLeft className="w-4 h-4" />
           </Button>
 
-          <Select
-            value={String(currentRecordIndex)}
-            onValueChange={(val) => setCurrentRecordIndex(parseInt(val, 10))}
+          <AddressContextMenu
+            address={`@template.${sanitizeName(currentTemplateName)}.data`}
+            label="Template Data"
+            className="flex-1"
           >
-            <SelectTrigger className="h-7 flex-1 text-xs">
-              <SelectValue>
-                {recordDisplayValue}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {dataPayload.map((record, idx) => {
-                const displayVal = dataDisplayField
-                  ? getNestedValue(record, dataDisplayField)
-                  : null;
-                return (
-                  <SelectItem key={idx} value={String(idx)}>
-                    {displayVal ? String(displayVal) : `Record ${idx + 1}`}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+            <Select
+              value={String(currentRecordIndex)}
+              onValueChange={(val) => setCurrentRecordIndex(parseInt(val, 10))}
+            >
+              <SelectTrigger className="h-7 w-full text-xs">
+                <SelectValue>
+                  {recordDisplayValue}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {dataPayload.map((record, idx) => {
+                  const displayVal = dataDisplayField
+                    ? getNestedValue(record, dataDisplayField)
+                    : null;
+                  return (
+                    <SelectItem key={idx} value={String(idx)}>
+                      {displayVal ? String(displayVal) : `Record ${idx + 1}`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </AddressContextMenu>
 
           <Button
             variant="outline"
@@ -349,22 +364,25 @@ export function DataBindingTab() {
                 const formatterOptions = (binding?.formatter_options || {}) as { prefix?: string; suffix?: string; hideOnZero?: boolean; hideOnNull?: boolean };
                 const boundElement = binding ? elements.find(e => e.id === binding.element_id) : null;
                 const isTextBinding = boundElement?.element_type === 'text';
+                const fieldAddress = buildDataAddress(field.path);
 
                 return (
-                  <div
+                  <AddressContextMenu
                     key={field.path}
-                    className="p-1.5 rounded bg-muted/30 text-xs space-y-1"
+                    address={fieldAddress}
+                    label="Data Field"
                   >
-                    <div className="flex items-center gap-2">
-                      {/* Field name and value */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-mono text-[10px] truncate" title={field.path}>
-                          {field.path}
+                    <div className="p-1.5 rounded bg-muted/30 text-xs space-y-1 cursor-context-menu">
+                      <div className="flex items-center gap-2">
+                        {/* Field name and value */}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-mono text-[10px] truncate" title={field.path}>
+                            {field.path}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground truncate" title={String(value)}>
+                            {formatFieldValue(value)}
+                          </div>
                         </div>
-                        <div className="text-[9px] text-muted-foreground truncate" title={String(value)}>
-                          {formatFieldValue(value)}
-                        </div>
-                      </div>
 
                       {/* Element dropdown */}
                       <Select
@@ -438,8 +456,9 @@ export function DataBindingTab() {
                           </Label>
                         </div>
                       </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </AddressContextMenu>
                 );
               })}
             </div>

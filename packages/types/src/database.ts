@@ -1076,6 +1076,43 @@ export interface DynamicElements {
   animations?: Partial<Animation>[];
 }
 
+// Visual Script Node for AI-generated scripts
+export interface AIVisualScriptNode {
+  id: string;
+  type: 'event' | 'action' | 'condition' | 'data';
+  data: {
+    // Event node properties
+    eventType?: 'onClick' | 'onHover' | 'onHoverEnd' | 'onLoad' | 'onDataChange';
+    elementId?: string; // The element this event is bound to
+    elementName?: string; // Element name (resolved to ID later)
+    // Action node properties
+    actionType?: 'setState' | 'playIn' | 'playOut' | 'showElement' | 'hideElement' | 'toggleElement' | 'navigate' | 'log' | 'delay';
+    target?: string; // Address like @template.Name.data
+    value?: unknown; // Value to set
+    templateName?: string;
+    layerName?: string;
+    elementName_action?: string; // For show/hide element
+    // Condition node properties
+    condition?: string;
+    // General
+    label?: string;
+  };
+  position?: { x: number; y: number };
+}
+
+export interface AIVisualScriptEdge {
+  id?: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+export interface AIVisualScript {
+  nodes: AIVisualScriptNode[];
+  edges: AIVisualScriptEdge[];
+}
+
 export interface AIChanges {
   type: 'create' | 'update' | 'replace' | 'delete' | 'mixed';
   layerType?: LayerType;
@@ -1087,6 +1124,8 @@ export interface AIChanges {
   elementsToDelete?: string[];
   validationHints?: ValidationHint[];
   dynamic_elements?: DynamicElements;
+  /** Visual script configuration for interactive elements */
+  visualScript?: AIVisualScript;
   /** Warning message if response was truncated and repaired */
   _truncationWarning?: string;
 }

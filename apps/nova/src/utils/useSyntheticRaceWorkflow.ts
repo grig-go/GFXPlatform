@@ -29,6 +29,28 @@ const getStateCode = (stateNameOrCode: string): string => {
   return STATE_NAME_TO_CODE[stateNameOrCode] || stateNameOrCode;
 };
 
+// Helper to determine race type from office string
+const getRaceTypeFromOffice = (office: string): string => {
+  const officeLower = office.toLowerCase();
+  if (officeLower.includes('president')) return 'presidential';
+  if (officeLower.includes('senate') || officeLower.includes('senator')) return 'senate';
+  if (officeLower.includes('house') || officeLower.includes('representative')) return 'house';
+  if (officeLower.includes('governor')) return 'governor';
+  return 'other';
+};
+
+// Helper to extract year from election_id or race data
+const getElectionYear = (electionId: string): number => {
+  // Try to extract year from election_id like "ap_p_2024" or "2024_general"
+  // Use a simpler pattern that matches 20XX anywhere in the string
+  const yearMatch = electionId.match(/(20\d{2})/);
+  if (yearMatch) {
+    return parseInt(yearMatch[1], 10);
+  }
+  // Default to current year if not found
+  return new Date().getFullYear();
+};
+
 export interface SyntheticGroup {
   id: string;
   name: string;
@@ -47,6 +69,7 @@ export interface ScenarioInput {
   customInstructions: string;
   aiProvider: string;
   syntheticGroupId?: string; // Optional group ID to save to
+  includeCountyData?: boolean; // Whether to include county-level data for AI (default: true)
 }
 
 export interface SyntheticPreview {
@@ -226,95 +249,140 @@ export function useSyntheticRaceWorkflow() {
     });
 
     // Fetch counties for this state to generate county-level results
+    // Default to including county data (can be disabled via scenario.includeCountyData)
+    const shouldIncludeCountyData = scenario.includeCountyData !== false;
+
     let countyData: Array<{ id: string; name: string }> = [];
     let countyBaselineResults: Array<{
       division_id: string;
       division_name: string;
+      fips_code: string;
       precincts_reporting: number;
       precincts_total: number;
       total_votes: number;
       results: Array<{
         candidate_id: string;
         candidate_name: string;
+        party: string;
         votes: number;
       }>;
     }> = [];
-    
-    try {
-      const stateCode = getStateCode(race.state);
-      console.log(`🔍 Fetching county-level results for race: ${race.race_id} (state: ${race.state} / ${stateCode})`);
 
-      // Query e_race_results directly for county-level data
-      // TODO: Fix county data fetching - temporarily commented out
-      const countyResults = [];
-      const resultsError = null;
-      
-      /* const { data: countyResults, error: resultsError } = await supabase
-        .from('e_race_results')
-        .select(`
-          id,
-          division_id,
-          reporting_level,
-          precincts_reporting,
-          precincts_total,
-          total_votes,
-          e_geographic_divisions!inner(name),
-          e_candidate_results!e_candidate_results_race_result_id_fkey(
-            candidate_id,
-            votes,
-            e_candidates(full_name)
-          )
-        `)
-        .eq('race_id', race.race_id)
-        .eq('reporting_level', 'county'); */
-      
-      if (!resultsError && countyResults && countyResults.length > 0) {
-        console.log(`✅ Fetched ${countyResults.length} county-level results`);
-        
-        // Group results by division_id
-        const resultsByDivision = new Map<string, typeof countyBaselineResults[0]>();
-        
-        for (const result of countyResults) {
-          const divisionId = result.division_id;
-          const divisionName = (result.e_geographic_divisions as any)?.name || 'Unknown County';
-          
-          if (!resultsByDivision.has(divisionId)) {
-            resultsByDivision.set(divisionId, {
-              division_id: divisionId,
-              division_name: divisionName,
-              precincts_reporting: result.precincts_reporting || 0,
-              precincts_total: result.precincts_total || 0,
-              total_votes: result.total_votes || 0,
-              results: []
-            });
+    if (shouldIncludeCountyData) {
+      try {
+        const stateCode = getStateCode(race.state);
+        const raceType = getRaceTypeFromOffice(raceOffice);
+        const electionYear = getElectionYear(race.election_id);
+
+        console.log(`🔍 Fetching county-level results using RPC:`);
+        console.log(`   - race_type: ${raceType}`);
+        console.log(`   - year: ${electionYear}`);
+        console.log(`   - state: ${stateCode}`);
+        console.log(`   - race.id: ${race.id}`);
+        console.log(`   - race.race_id: ${race.race_id}`);
+        console.log(`   - race.election_id: ${race.election_id}`);
+
+        // Use the RPC function to fetch county data
+        const BATCH_SIZE = 5000;
+        let allCountyData: any[] = [];
+        let offset = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase.rpc('fetch_county_data_extended', {
+            p_race_type: raceType,
+            p_year: electionYear,
+            p_state: stateCode,
+            p_offset: offset,
+            p_limit: BATCH_SIZE
+          });
+
+          if (error) {
+            console.warn('⚠️ RPC fetch_county_data_extended error:', error);
+            break;
           }
-          
-          const divisionData = resultsByDivision.get(divisionId)!;
-          
-          // Process candidate results
-          const candidateResults = result.e_candidate_results as any;
-          if (Array.isArray(candidateResults)) {
-            for (const candResult of candidateResults) {
-              const candidateName = candResult.e_candidates?.full_name || 'Unknown';
-              const raceCandidateId = candResult.candidate_id;
-              
-              divisionData.results.push({
-                candidate_id: raceCandidateId,
-                candidate_name: candidateName,
-                votes: candResult.votes || 0
+
+          if (!data || data.length === 0) {
+            break;
+          }
+
+          allCountyData = allCountyData.concat(data);
+          console.log(`📊 Fetched ${allCountyData.length} county records so far...`);
+
+          hasMore = data.length === BATCH_SIZE;
+          offset += BATCH_SIZE;
+        }
+
+        console.log(`✅ Total county records fetched: ${allCountyData.length}`);
+
+        if (allCountyData.length > 0) {
+          // Group results by division_id (UUID) - the actual database ID for counties
+          const countyMap = new Map<string, {
+            division_id: string; // UUID from database
+            fips_code: string;
+            county_name: string;
+            state_code: string;
+            total_votes: number;
+            percent_reporting: number;
+            candidates: Array<{
+              candidate_id: string;
+              candidate_name: string;
+              party: string;
+              votes: number;
+            }>;
+          }>();
+
+          for (const row of allCountyData) {
+            // Use division_id (UUID) as the key if available, fallback to fips_code
+            const divisionId = row.division_id || row.fips_code;
+            if (!divisionId) continue;
+
+            if (!countyMap.has(divisionId)) {
+              countyMap.set(divisionId, {
+                division_id: row.division_id || row.fips_code, // Prefer UUID
+                fips_code: row.fips_code || '',
+                county_name: row.county_name || row.division_name || 'Unknown County',
+                state_code: row.state_code,
+                total_votes: 0,
+                percent_reporting: row.percent_reporting || 100,
+                candidates: []
               });
             }
+
+            const county = countyMap.get(divisionId)!;
+            const votes = row.votes || 0;
+            county.total_votes += votes;
+            county.candidates.push({
+              candidate_id: row.candidate_id,
+              candidate_name: row.full_name || 'Unknown',
+              party: row.party_abbreviation || 'IND',
+              votes: votes
+            });
           }
+
+          // Convert map to array format expected by AI prompt
+          for (const [divisionId, county] of countyMap) {
+            countyData.push({ id: county.division_id, name: county.county_name });
+            countyBaselineResults.push({
+              division_id: county.division_id, // Using actual UUID from RPC
+              division_name: county.county_name,
+              fips_code: county.fips_code,
+              precincts_reporting: Math.round(county.percent_reporting),
+              precincts_total: 100, // Default to 100 as baseline
+              total_votes: county.total_votes,
+              results: county.candidates
+            });
+          }
+
+          console.log(`✅ Processed baseline results for ${countyBaselineResults.length} counties`);
+        } else {
+          console.warn('⚠️ No county data returned from RPC');
         }
-        
-        countyBaselineResults = Array.from(resultsByDivision.values());
-        countyData = countyBaselineResults.map(c => ({ id: c.division_id, name: c.division_name }));
-        console.log(`✅ Processed baseline results for ${countyBaselineResults.length} counties`);
-      } else {
-        console.log('⚠️ No county-level baseline results found for this race');
+      } catch (error) {
+        console.warn('⚠️ Could not fetch county results:', error);
       }
-    } catch (error) {
-      console.warn('⚠️ Could not fetch county results:', error);
+    } else {
+      console.log('ℹ️ County data excluded by user preference');
     }
 
     const countyListText = countyData.length > 0 

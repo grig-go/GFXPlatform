@@ -6,6 +6,8 @@ import {
   ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Layers, ScrollText, Tag, X, Plus, Check, Edit2,
   FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock, Scissors, Play,
 } from 'lucide-react';
+import { AddressContextMenu, AddressableProperty } from '@/components/common/AddressContextMenu';
+import { buildElementAddress } from '@/lib/address';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
 import { TOPIC_BADGE_STYLES, type TickerTopic } from '@emergent-platform/types';
@@ -51,6 +53,9 @@ const PropertySearchContext = createContext<string>('');
 // Context to track if we're inside a matching parent section (skip individual filtering)
 const ParentMatchContext = createContext<boolean>(false);
 
+// Context for current element name - allows PropertySection to build addresses
+const ElementNameContext = createContext<string>('');
+
 // Hook to access property search filter
 function usePropertySearch() {
   return useContext(PropertySearchContext);
@@ -59,6 +64,11 @@ function usePropertySearch() {
 // Hook to check if parent section matches search
 function useParentMatch() {
   return useContext(ParentMatchContext);
+}
+
+// Hook to get current element name for address building
+function useElementName() {
+  return useContext(ElementNameContext);
 }
 
 // Property keywords for each section (used for search-based auto-expand)
@@ -790,6 +800,7 @@ export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }
       </div>
 
       {/* Collapsible Sections */}
+      <ElementNameContext.Provider value={selectedElement.name}>
       <PropertySearchContext.Provider value={searchFilter}>
         <ScrollArea className="flex-1">
           <div className="space-y-0.5">
@@ -855,6 +866,7 @@ export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }
           </div>
         </ScrollArea>
       </PropertySearchContext.Provider>
+      </ElementNameContext.Provider>
     </div>
   );
 }
@@ -916,6 +928,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               title="Thickness"
               propertyKey="lineThickness"
               elementId={element.id}
+              elementName={element.name}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
               currentValue={lineContent.strokeWidth || 2}
@@ -948,6 +961,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               title="Color"
               propertyKey="lineColor"
               elementId={element.id}
+              elementName={element.name}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
               currentValue={lineContent.stroke || '#FFFFFF'}
@@ -1230,6 +1244,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               title="Icon Size"
               propertyKey="iconSize"
               elementId={element.id}
+              elementName={element.name}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
               currentValue={iconContent.size || 24}
@@ -1262,6 +1277,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
               title="Icon Color"
               propertyKey="iconColor"
               elementId={element.id}
+              elementName={element.name}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
               currentValue={iconContent.color || '#FFFFFF'}
@@ -1290,6 +1306,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
             title="Font Size"
             propertyKey="fontSize"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={parseInt(getStyle('fontSize', '32')) || 32}
@@ -1362,6 +1379,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
             title="Text Color"
             propertyKey="color"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={getStyle('color', '#ffffff')}
@@ -1711,6 +1729,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
             title="Font Size"
             propertyKey="fontSize"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={parseInt(getStyle('fontSize', '32')) || 32}
@@ -1782,6 +1801,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
             title="Text Color"
             propertyKey="color"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={getStyle('color', '#ffffff')}
@@ -1990,6 +2010,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
                       title="Progress"
                       propertyKey="charAnimation_progress"
                       elementId={element.id}
+                      elementName={element.name}
                       selectedKeyframe={selectedKeyframe}
                       currentAnimation={currentAnimation}
                       currentValue={textContent.charAnimation.progress}
@@ -2039,6 +2060,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
         title="Opacity"
         propertyKey="opacity"
         elementId={element.id}
+        elementName={element.name}
         selectedKeyframe={selectedKeyframe}
         currentAnimation={currentAnimation}
         currentValue={element.opacity}
@@ -2070,6 +2092,7 @@ function StyleEditor({ element, selectedKeyframe, currentAnimation }: EditorProp
           title="Background"
           propertyKey="backgroundColor"
           elementId={element.id}
+          elementName={element.name}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
           currentValue={getStyle('backgroundColor', 'transparent')}
@@ -2260,6 +2283,7 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
           title=""
           propertyKey="tickerFontSize"
           elementId={element.id}
+          elementName={element.name}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
           currentValue={parseInt(getStyle('fontSize', '24')) || 24}
@@ -2288,6 +2312,7 @@ function TickerStyleEditor({ element, selectedKeyframe, currentAnimation }: Edit
           title=""
           propertyKey="tickerColor"
           elementId={element.id}
+          elementName={element.name}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
           currentValue={getStyle('color', '#ffffff')}
@@ -2819,24 +2844,30 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
 
       <PropertySection title="Fill">
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={shapeContent.glass?.enabled || false}
-              onChange={(e) => updateContent({
-                glass: {
-                  enabled: e.target.checked,
-                  blur: shapeContent.glass?.blur ?? 16,
-                  opacity: shapeContent.glass?.opacity ?? 0.6,
-                  borderWidth: shapeContent.glass?.borderWidth ?? 1,
-                  borderColor: shapeContent.glass?.borderColor ?? 'rgba(255, 255, 255, 0.1)',
-                  saturation: shapeContent.glass?.saturation ?? 180,
-                },
-              })}
-              className="rounded"
-            />
-            <span>Frosted Glass</span>
-          </label>
+          <AddressableProperty
+            propertyPath="content.glass.enabled"
+            label="Frosted Glass"
+            elementName={element.name}
+          >
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={shapeContent.glass?.enabled || false}
+                onChange={(e) => updateContent({
+                  glass: {
+                    enabled: e.target.checked,
+                    blur: shapeContent.glass?.blur ?? 16,
+                    opacity: shapeContent.glass?.opacity ?? 0.6,
+                    borderWidth: shapeContent.glass?.borderWidth ?? 1,
+                    borderColor: shapeContent.glass?.borderColor ?? 'rgba(255, 255, 255, 0.1)',
+                    saturation: shapeContent.glass?.saturation ?? 180,
+                  },
+                })}
+                className="rounded"
+              />
+              <span>Frosted Glass</span>
+            </label>
+          </AddressableProperty>
 
           {shapeContent.glass?.enabled && (
             <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
@@ -2964,27 +2995,33 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
           )}
 
           {/* Texture Fill - inside Fill section */}
-          <TextureFillSection shapeContent={shapeContent} updateContent={updateContent} />
+          <TextureFillSection shapeContent={shapeContent} updateContent={updateContent} elementName={element.name} />
 
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={hasGradient}
-              onChange={(e) => updateContent({
-                gradient: {
-                  enabled: e.target.checked,
-                  type: shapeContent.gradient?.type || 'linear',
-                  direction: shapeContent.gradient?.direction || 0,
-                  colors: shapeContent.gradient?.colors || [
-                    { color: '#3B82F6', stop: 0 },
-                    { color: '#8B5CF6', stop: 100 },
-                  ],
-                },
-              })}
-              className="rounded"
-            />
-            <span>Use Gradient</span>
-          </label>
+          <AddressableProperty
+            propertyPath="content.gradient.enabled"
+            label="Use Gradient"
+            elementName={element.name}
+          >
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hasGradient}
+                onChange={(e) => updateContent({
+                  gradient: {
+                    enabled: e.target.checked,
+                    type: shapeContent.gradient?.type || 'linear',
+                    direction: shapeContent.gradient?.direction || 0,
+                    colors: shapeContent.gradient?.colors || [
+                      { color: '#3B82F6', stop: 0 },
+                      { color: '#8B5CF6', stop: 100 },
+                    ],
+                  },
+                })}
+                className="rounded"
+              />
+              <span>Use Gradient</span>
+            </label>
+          </AddressableProperty>
 
           {hasGradient ? (
             <div className="space-y-3 pt-2">
@@ -3275,36 +3312,44 @@ function ShapeStyleEditor({ element, updateContent }: { element: Element; update
 // Texture Fill Section for Shapes
 function TextureFillSection({
   shapeContent,
-  updateContent
+  updateContent,
+  elementName
 }: {
   shapeContent: Extract<Element['content'], { type: 'shape' }>;
   updateContent: (updates: Record<string, unknown>) => void;
+  elementName: string;
 }) {
   const [showTexturePicker, setShowTexturePicker] = useState(false);
   const hasTexture = shapeContent.texture?.enabled ?? false;
 
   return (
     <>
-      <label className="flex items-center gap-2 text-xs cursor-pointer">
-        <input
-          type="checkbox"
-          checked={hasTexture}
-          onChange={(e) => updateContent({
-            texture: {
-              enabled: e.target.checked,
-              url: shapeContent.texture?.url || '',
-              fit: shapeContent.texture?.fit || 'cover',
-              position: shapeContent.texture?.position || { x: 0, y: 0 },
-              scale: shapeContent.texture?.scale ?? 1,
-              rotation: shapeContent.texture?.rotation || 0,
-              opacity: shapeContent.texture?.opacity ?? 1,
-              blendMode: shapeContent.texture?.blendMode || 'normal',
-            },
-          })}
-          className="rounded"
-        />
-        <span>Use Texture</span>
-      </label>
+      <AddressableProperty
+        propertyPath="content.texture.enabled"
+        label="Use Texture"
+        elementName={elementName}
+      >
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hasTexture}
+            onChange={(e) => updateContent({
+              texture: {
+                enabled: e.target.checked,
+                url: shapeContent.texture?.url || '',
+                fit: shapeContent.texture?.fit || 'cover',
+                position: shapeContent.texture?.position || { x: 0, y: 0 },
+                scale: shapeContent.texture?.scale ?? 1,
+                rotation: shapeContent.texture?.rotation || 0,
+                opacity: shapeContent.texture?.opacity ?? 1,
+                blendMode: shapeContent.texture?.blendMode || 'normal',
+              },
+            })}
+            className="rounded"
+          />
+          <span>Use Texture</span>
+        </label>
+      </AddressableProperty>
 
         {hasTexture && (
           <div className="space-y-3 pt-2 pl-4 border-l-2 border-violet-500/30">
@@ -4609,6 +4654,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="X"
             propertyKey="position_x"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.position_x}
@@ -4631,6 +4677,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="Y"
             propertyKey="position_y"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.position_y}
@@ -4659,6 +4706,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="W"
             propertyKey="width"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.width}
@@ -4683,6 +4731,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="H"
             propertyKey="height"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.height}
@@ -4838,6 +4887,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
           title="Rotation"
           propertyKey="rotation"
           elementId={element.id}
+          elementName={element.name}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
           currentValue={element.rotation}
@@ -4872,6 +4922,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="Scale X"
             propertyKey="scale_x"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.scale_x}
@@ -4896,6 +4947,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
             title="Scale Y"
             propertyKey="scale_y"
             elementId={element.id}
+            elementName={element.name}
             selectedKeyframe={selectedKeyframe}
             currentAnimation={currentAnimation}
             currentValue={element.scale_y}
@@ -4957,6 +5009,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                 title="X"
                 propertyKey="screenMask_x"
                 elementId={element.id}
+                elementName={element.name}
                 selectedKeyframe={selectedKeyframe}
                 currentAnimation={currentAnimation}
                 currentValue={element.screenMask.x}
@@ -4986,6 +5039,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                 title="Y"
                 propertyKey="screenMask_y"
                 elementId={element.id}
+                elementName={element.name}
                 selectedKeyframe={selectedKeyframe}
                 currentAnimation={currentAnimation}
                 currentValue={element.screenMask.y}
@@ -5015,6 +5069,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                 title="Width"
                 propertyKey="screenMask_width"
                 elementId={element.id}
+                elementName={element.name}
                 selectedKeyframe={selectedKeyframe}
                 currentAnimation={currentAnimation}
                 currentValue={element.screenMask.width}
@@ -5045,6 +5100,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                 title="Height"
                 propertyKey="screenMask_height"
                 elementId={element.id}
+                elementName={element.name}
                 selectedKeyframe={selectedKeyframe}
                 currentAnimation={currentAnimation}
                 currentValue={element.screenMask.height}
@@ -5081,6 +5137,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                   title="Feather Top"
                   propertyKey="screenMask_feather_top"
                   elementId={element.id}
+                  elementName={element.name}
                   selectedKeyframe={selectedKeyframe}
                   currentAnimation={currentAnimation}
                   currentValue={element.screenMask.feather?.top ?? 0}
@@ -5125,6 +5182,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                   title="Feather Right"
                   propertyKey="screenMask_feather_right"
                   elementId={element.id}
+                  elementName={element.name}
                   selectedKeyframe={selectedKeyframe}
                   currentAnimation={currentAnimation}
                   currentValue={element.screenMask.feather?.right ?? 0}
@@ -5169,6 +5227,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                   title="Feather Bottom"
                   propertyKey="screenMask_feather_bottom"
                   elementId={element.id}
+                  elementName={element.name}
                   selectedKeyframe={selectedKeyframe}
                   currentAnimation={currentAnimation}
                   currentValue={element.screenMask.feather?.bottom ?? 0}
@@ -5211,6 +5270,7 @@ function LayoutEditor({ element, selectedKeyframe, currentAnimation }: EditorPro
                 </KeyframableProperty>
                 <KeyframableProperty
                   title="Feather Left"
+                  elementName={element.name}
                   propertyKey="screenMask_feather_left"
                   elementId={element.id}
                   selectedKeyframe={selectedKeyframe}
@@ -7167,6 +7227,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
               title="Chart Progress"
               propertyKey="chartProgress"
               elementId={element.id}
+              elementName={element.name}
               selectedKeyframe={selectedKeyframe}
               currentAnimation={currentAnimation}
               currentValue={chartContent.options?.chartProgress ?? 1}
@@ -7198,6 +7259,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
                 title="Gauge Value"
                 propertyKey="gaugeValue"
                 elementId={element.id}
+                elementName={element.name}
                 selectedKeyframe={selectedKeyframe}
                 currentAnimation={currentAnimation}
                 currentValue={chartContent.options?.gaugeValue ?? chartContent.data?.datasets?.[0]?.data?.[0] ?? 0}
@@ -7227,6 +7289,7 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
                       title={chartContent.data?.labels?.[index] || `Value ${index + 1}`}
                       propertyKey={`chartData_${index}`}
                       elementId={element.id}
+                      elementName={element.name}
                       selectedKeyframe={selectedKeyframe}
                       currentAnimation={currentAnimation}
                       currentValue={typeof value === 'number' ? value : 0}
@@ -8475,10 +8538,14 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
 }
 
 // Property section without keyframe button
-function PropertySection({ title, children }: { title: string; children: React.ReactNode }) {
+function PropertySection({ title, children, propertyPath }: { title: string; children: React.ReactNode; propertyPath?: string }) {
   const searchFilter = usePropertySearch();
   const parentMatches = useParentMatch();
+  const elementName = useElementName();
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  // Build address from element name and property path (or title as fallback)
+  const address = elementName ? buildElementAddress(elementName, propertyPath || title.toLowerCase().replace(/\s+/g, '_')) : '';
 
   // Check if this section title matches the search
   const normalizedSearch = searchFilter?.toLowerCase().trim() || '';
@@ -8501,27 +8568,31 @@ function PropertySection({ title, children }: { title: string; children: React.R
     const shouldShowAll = titleMatches || parentMatches;
 
     return (
-      <div ref={sectionRef}>
-        <label className={cn(
-          "text-[10px] font-medium uppercase tracking-wide mb-1 block",
-          titleMatches ? "text-emerald-400 bg-emerald-500/20 px-1 rounded" : "text-muted-foreground"
-        )}>
-          {title}
-        </label>
-        <ParentMatchContext.Provider value={shouldShowAll}>
-          {children}
-        </ParentMatchContext.Provider>
-      </div>
+      <AddressContextMenu address={address} label={title} disabled={!address}>
+        <div ref={sectionRef}>
+          <label className={cn(
+            "text-[10px] font-medium uppercase tracking-wide mb-1 block",
+            titleMatches ? "text-emerald-400 bg-emerald-500/20 px-1 rounded" : "text-muted-foreground"
+          )}>
+            {title}
+          </label>
+          <ParentMatchContext.Provider value={shouldShowAll}>
+            {children}
+          </ParentMatchContext.Provider>
+        </div>
+      </AddressContextMenu>
     );
   }
 
   return (
-    <div>
-      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">
-        {title}
-      </label>
-      {children}
-    </div>
+    <AddressContextMenu address={address} label={title} disabled={!address}>
+      <div>
+        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">
+          {title}
+        </label>
+        {children}
+      </div>
+    </AddressContextMenu>
   );
 }
 
@@ -8594,6 +8665,7 @@ export function KeyframableProperty({
   title,
   propertyKey,
   elementId,
+  elementName,
   selectedKeyframe,
   currentAnimation,
   currentValue,
@@ -8604,6 +8676,7 @@ export function KeyframableProperty({
   title: string;
   propertyKey: string;
   elementId: string;
+  elementName?: string;
   selectedKeyframe: Keyframe | null;
   currentAnimation: Animation | null;
   currentValue: string | number | null;
@@ -8611,6 +8684,8 @@ export function KeyframableProperty({
   children: (displayValue: string | number | null, onChange: (value: string | number | null) => void) => React.ReactNode;
   compact?: boolean;
 }) {
+  // Build address for this property
+  const address = elementName ? buildElementAddress(elementName, propertyKey) : null;
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
   const searchFilter = usePropertySearch();
   const parentMatches = useParentMatch();
@@ -8842,7 +8917,7 @@ export function KeyframableProperty({
 
   // Compact mode: just the input with a small keyframe button
   if (compact) {
-    return (
+    const compactContent = (
       <div className="flex items-center gap-1 group">
         <div className="flex-1">
           {children(displayValue, handleChange)}
@@ -8876,9 +8951,15 @@ export function KeyframableProperty({
         </TooltipProvider>
       </div>
     );
+
+    return address ? (
+      <AddressContextMenu address={address} label={`${title} Property`}>
+        {compactContent}
+      </AddressContextMenu>
+    ) : compactContent;
   }
 
-  return (
+  const nonCompactContent = (
     <div className="group">
       <div className="flex items-center justify-between mb-1">
         <label className={cn(
@@ -8924,6 +9005,12 @@ export function KeyframableProperty({
       {children(displayValue, handleChange)}
     </div>
   );
+
+  return address ? (
+    <AddressContextMenu address={address} label={`${title} Property`}>
+      {nonCompactContent}
+    </AddressContextMenu>
+  ) : nonCompactContent;
 }
 
 function ColorInput({ value, onChange }: { value: string; onChange: (color: string) => void }) {

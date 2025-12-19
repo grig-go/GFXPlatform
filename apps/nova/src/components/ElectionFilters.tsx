@@ -10,7 +10,7 @@ import { Slider } from "./ui/slider";
 import { Label } from "./ui/label";
 import { Race, getFieldValue } from "../types/election";
 import { currentElectionYear } from '../utils/constants';
-import { supabase } from "../utils/supabase/client";
+import { supabase, withAutoRecovery } from "../utils/supabase/client";
 import { SyntheticGroup } from "../utils/useSyntheticRaceWorkflow";
 import {
   Search,
@@ -148,68 +148,82 @@ export function ElectionFilters({
   const handleFetchSyntheticRaces = async (groupId: string | null = null) => {
     try {
       setIsGenerating(true);
+      console.log("📦 Fetching synthetic races for groupId:", groupId);
 
-      // Fetch synthetic race list, optionally filtered by group
+      // Fetch synthetic race list, optionally filtered by group (with auto-recovery)
       let raceList;
       let listError;
 
       if (groupId) {
         // Fetch races for specific group
-        const result = await supabase.rpc('e_list_synthetic_races_by_group', {
-          p_group_id: groupId
-        });
+        const result = await withAutoRecovery(
+          (client) => client.rpc('e_list_synthetic_races_by_group', { p_group_id: groupId }),
+          10000,
+          'listSyntheticRacesByGroup'
+        );
         raceList = result.data;
         listError = result.error;
       } else {
         // Fetch all synthetic races
-        const result = await supabase.rpc('e_list_synthetic_races');
+        const result = await withAutoRecovery(
+          (client) => client.rpc('e_list_synthetic_races'),
+          10000,
+          'listSyntheticRaces'
+        );
         raceList = result.data;
         listError = result.error;
       }
 
-      console.log("Synthetic race list:", raceList, "groupId:", groupId);
+      console.log("📦 Synthetic race list:", raceList, "groupId:", groupId);
 
       if (listError) {
-        console.error("Error fetching synthetic race list:", listError);
+        console.error("❌ Error fetching synthetic race list:", listError);
         return;
       }
 
       if (!raceList || !Array.isArray(raceList) || raceList.length === 0) {
-        console.log("No synthetic races found");
+        console.log("📦 No synthetic races found for group");
         onShowSyntheticRaces([], groupId);
         return;
       }
 
-      // Fetch full details for each synthetic race
+      // Fetch full details for each synthetic race (with auto-recovery)
       const fullRaces = await Promise.all(
         raceList.map(async (race: any) => {
           const raceId = race.synthetic_race_id || race.id;
-          const { data, error } = await supabase.rpc("e_get_synthetic_race_full", {
-            p_synthetic_race_id: raceId,
-          });
+          try {
+            const { data, error } = await withAutoRecovery(
+              (client) => client.rpc("e_get_synthetic_race_full", { p_synthetic_race_id: raceId }),
+              10000,
+              `getSyntheticRaceFull:${raceId}`
+            );
 
-          if (error) {
-            console.error(`Error fetching full details for race ${raceId}:`, error);
+            if (error) {
+              console.error(`❌ Error fetching full details for race ${raceId}:`, error);
+              return null;
+            }
+
+            console.log("✅ FULL SYNTHETIC RACE (raw RPC response):", data);
+            // RPC returns an array, extract the first element which is the race object
+            const raceData = Array.isArray(data) && data.length > 0 ? data[0] : data;
+            console.log("✅ EXTRACTED RACE DATA:", raceData);
+            return raceData;
+          } catch (err) {
+            console.error(`❌ Exception fetching race ${raceId}:`, err);
             return null;
           }
-
-          console.log("FULL SYNTHETIC RACE (raw RPC response):", data);
-          // RPC returns an array, extract the first element which is the race object
-          const raceData = Array.isArray(data) && data.length > 0 ? data[0] : data;
-          console.log("EXTRACTED RACE DATA:", raceData);
-          return raceData;
         })
       );
 
       // Filter out any null results from errors
       const validRaces = fullRaces.filter(race => race !== null);
 
-      console.log("All full synthetic races:", validRaces);
+      console.log("✅ All full synthetic races:", validRaces);
 
       // Pass synthetic races and group ID to parent component for display
       onShowSyntheticRaces(validRaces, groupId);
     } catch (err) {
-      console.error("Error fetching synthetic races:", err);
+      console.error("❌ Error fetching synthetic races:", err);
     } finally {
       setIsGenerating(false);
     }

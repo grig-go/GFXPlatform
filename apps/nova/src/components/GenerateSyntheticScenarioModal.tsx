@@ -1,6 +1,6 @@
 import { useSyntheticRaceWorkflow, ScenarioInput, AIProvider, SyntheticPreview, SyntheticGroup } from "../utils/useSyntheticRaceWorkflow";
 import { Race, Candidate, getFieldValue, Party } from "../types/election";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -11,6 +11,7 @@ import { Slider } from "./ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Alert, AlertDescription } from "./ui/alert";
+import { Switch } from "./ui/switch";
 import {
   Loader2,
   ArrowLeft,
@@ -59,6 +60,28 @@ const getStateCode = (stateNameOrCode: string): string => {
   }
   // Otherwise, look it up in the mapping
   return STATE_NAME_TO_CODE[stateNameOrCode] || stateNameOrCode;
+};
+
+// Helper to determine race type from office string
+const getRaceTypeFromOffice = (office: string): string => {
+  const officeLower = office.toLowerCase();
+  if (officeLower.includes('president')) return 'presidential';
+  if (officeLower.includes('senate') || officeLower.includes('senator')) return 'senate';
+  if (officeLower.includes('house') || officeLower.includes('representative')) return 'house';
+  if (officeLower.includes('governor')) return 'governor';
+  return 'other';
+};
+
+// Helper to extract year from election_id or race data
+const getElectionYear = (electionId: string): number => {
+  // Try to extract year from election_id like "ap_p_2024" or "2024_general"
+  // Use a simpler pattern that matches 20XX anywhere in the string
+  const yearMatch = electionId.match(/(20\d{2})/);
+  if (yearMatch) {
+    return parseInt(yearMatch[1], 10);
+  }
+  // Default to current year if not found
+  return new Date().getFullYear();
 };
 
 // Party color mapping (fallback when parties data not available)
@@ -189,6 +212,7 @@ export function GenerateSyntheticScenarioModal({
   const [countyStrategy, setCountyStrategy] = useState<string>('uniform');
   const [customInstructions, setCustomInstructions] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [includeCountyData, setIncludeCountyData] = useState<boolean>(true); // Default ON
 
   // Candidate management state
   const [modifiedCandidates, setModifiedCandidates] = useState<Candidate[]>([]);
@@ -199,6 +223,9 @@ export function GenerateSyntheticScenarioModal({
   const [manualCandidateName, setManualCandidateName] = useState('');
   const [manualCandidateParty, setManualCandidateParty] = useState<'DEM' | 'REP' | 'IND' | 'GRN' | 'LIB' | 'OTH'>('IND');
   const [showSearchDebug, setShowSearchDebug] = useState(false);
+
+  // Ref for scrolling to debug panel
+  const debugPanelRef = useRef<HTMLDivElement>(null);
 
   // Synthetic group selection state
   // Use '__NEW__' as a special marker to indicate creating a new group
@@ -272,6 +299,7 @@ export function GenerateSyntheticScenarioModal({
       countyStrategy,
       customInstructions,
       aiProvider: selectedProvider,
+      includeCountyData,
     };
 
     const result = await onSubmitWorkflow(scenario, modifiedCandidates);
@@ -579,99 +607,132 @@ export function GenerateSyntheticScenarioModal({
         headshot: getFieldValue(c.headshot || ''),
       }));
 
-      // Fetch county baseline data (same logic as in useSyntheticRaceWorkflow)
+      // Fetch county baseline data using the RPC function
       let countyBaselineResults: Array<{
         division_id: string;
         division_name: string;
+        fips_code: string;
         precincts_reporting: number;
         precincts_total: number;
         total_votes: number;
         results: Array<{
           candidate_id: string;
           candidate_name: string;
+          party: string;
           votes: number;
         }>;
       }> = [];
 
-      console.log(`🔍 Fetching county-level results for race: ${race.race_id}`);
+      const stateCode = getStateCode(race.state);
+      const raceType = getRaceTypeFromOffice(raceOffice);
+      const electionYear = getElectionYear(race.election_id);
 
-      // TODO: Fix county data fetching - temporarily commented out
-      const countyResults = [];
-      const resultsError = null;
-      
-      /* const { data: countyResults, error: resultsError } = await supabase
-        .from('e_race_results')
-        .select(`
-          id,
-          division_id,
-          reporting_level,
-          precincts_reporting,
-          precincts_total,
-          total_votes,
-          e_geographic_divisions!inner(name),
-          e_candidate_results!e_candidate_results_race_result_id_fkey(
-            candidate_id,
-            votes,
-            e_candidates(full_name)
-          )
-        `)
-        .eq('race_id', race.race_id)
-        .eq('reporting_level', 'county'); */
+      console.log(`🔍 Fetching county-level results using RPC:`);
+      console.log(`   - race_type: ${raceType}`);
+      console.log(`   - year: ${electionYear}`);
+      console.log(`   - state: ${stateCode}`);
+      console.log(`   - race.id: ${race.id}`);
+      console.log(`   - race.race_id: ${race.race_id}`);
+      console.log(`   - race.election_id: ${race.election_id}`);
 
-      console.log('📊 County results query:', { 
-        resultsError,
-        count: countyResults?.length || 0,
-        race_id: race.race_id,
-        sample: countyResults?.[0]
-      });
+      try {
+        // Use the RPC function to fetch county data
+        const BATCH_SIZE = 5000;
+        let allCountyData: any[] = [];
+        let offset = 0;
+        let hasMore = true;
 
-      if (resultsError) {
-        console.error('❌ Error fetching county results:', resultsError);
-      }
+        while (hasMore) {
+          const { data, error } = await supabase.rpc('fetch_county_data_extended', {
+            p_race_type: raceType,
+            p_year: electionYear,
+            p_state: stateCode,
+            p_offset: offset,
+            p_limit: BATCH_SIZE
+          });
 
-      if (!resultsError && countyResults && countyResults.length > 0) {
-        console.log(`✅ Fetched ${countyResults.length} county-level results`);
+          if (error) {
+            console.warn('⚠️ RPC fetch_county_data_extended error:', error);
+            break;
+          }
 
-        // Group results by division_id
-        const resultsByDivision = new Map<string, typeof countyBaselineResults[0]>();
+          if (!data || data.length === 0) {
+            break;
+          }
 
-        for (const result of countyResults) {
-          const divisionId = result.division_id;
-          const divisionName = (result.e_geographic_divisions as any)?.name || 'Unknown County';
+          allCountyData = allCountyData.concat(data);
+          console.log(`📊 Fetched ${allCountyData.length} county records so far...`);
 
-          if (!resultsByDivision.has(divisionId)) {
-            resultsByDivision.set(divisionId, {
-              division_id: divisionId,
-              division_name: divisionName,
-              precincts_reporting: result.precincts_reporting || 0,
-              precincts_total: result.precincts_total || 0,
-              total_votes: result.total_votes || 0,
-              results: []
+          hasMore = data.length === BATCH_SIZE;
+          offset += BATCH_SIZE;
+        }
+
+        console.log(`✅ Total county records fetched: ${allCountyData.length}`);
+
+        if (allCountyData.length > 0) {
+          // Group results by division_id (UUID) - the actual database ID for counties
+          const countyMap = new Map<string, {
+            division_id: string; // UUID from database
+            fips_code: string;
+            county_name: string;
+            state_code: string;
+            total_votes: number;
+            percent_reporting: number;
+            candidates: Array<{
+              candidate_id: string;
+              candidate_name: string;
+              party: string;
+              votes: number;
+            }>;
+          }>();
+
+          for (const row of allCountyData) {
+            // Use division_id (UUID) as the key if available, fallback to fips_code
+            const divisionId = row.division_id || row.fips_code;
+            if (!divisionId) continue;
+
+            if (!countyMap.has(divisionId)) {
+              countyMap.set(divisionId, {
+                division_id: row.division_id || row.fips_code, // Prefer UUID
+                fips_code: row.fips_code || '',
+                county_name: row.county_name || row.division_name || 'Unknown County',
+                state_code: row.state_code,
+                total_votes: 0,
+                percent_reporting: row.percent_reporting || 100,
+                candidates: []
+              });
+            }
+
+            const county = countyMap.get(divisionId)!;
+            const votes = row.votes || 0;
+            county.total_votes += votes;
+            county.candidates.push({
+              candidate_id: row.candidate_id,
+              candidate_name: row.full_name || 'Unknown',
+              party: row.party_abbreviation || 'IND',
+              votes: votes
             });
           }
 
-          const divisionData = resultsByDivision.get(divisionId)!;
-
-          // Process candidate results
-          const candidateResults = result.e_candidate_results as any;
-          if (Array.isArray(candidateResults)) {
-            for (const candResult of candidateResults) {
-              const candidateName = candResult.e_candidates?.full_name || 'Unknown';
-              const raceCandidateId = candResult.candidate_id;
-
-              divisionData.results.push({
-                candidate_id: raceCandidateId,
-                candidate_name: candidateName,
-                votes: candResult.votes || 0
-              });
-            }
+          // Convert map to array format
+          for (const [divisionId, county] of countyMap) {
+            countyBaselineResults.push({
+              division_id: county.division_id, // Using actual UUID from RPC
+              division_name: county.county_name,
+              fips_code: county.fips_code,
+              precincts_reporting: Math.round(county.percent_reporting),
+              precincts_total: 100, // Default to 100 as baseline
+              total_votes: county.total_votes,
+              results: county.candidates
+            });
           }
-        }
 
-        countyBaselineResults = Array.from(resultsByDivision.values());
-        console.log(`✅ Processed baseline results for ${countyBaselineResults.length} counties`);
-      } else {
-        console.log('⚠️ No county-level baseline results found for this race');
+          console.log(`✅ Processed baseline results for ${countyBaselineResults.length} counties`);
+        } else {
+          console.warn('⚠️ No county data returned from RPC');
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not fetch county results:', error);
       }
 
       return {
@@ -679,7 +740,7 @@ export function GenerateSyntheticScenarioModal({
           title: raceTitle,
           office: raceOffice,
           state: race.state,
-          state_code: getStateCode(race.state),
+          state_code: stateCode,
           district: race.district,
           totalVotes: raceTotalVotes,
         },
@@ -986,22 +1047,41 @@ export function GenerateSyntheticScenarioModal({
               </div>
             </div>
 
-            {/* County Strategy */}
-            <div className="space-y-2">
-              <Label htmlFor="county-strategy">County Strategy</Label>
-              <Select value={countyStrategy} onValueChange={setCountyStrategy}>
-                <SelectTrigger id="county-strategy">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="uniform">Uniform (Apply shifts evenly)</SelectItem>
-                  <SelectItem value="urban-focus">Urban Focus</SelectItem>
-                  <SelectItem value="rural-focus">Rural Focus</SelectItem>
-                  <SelectItem value="suburban-focus">Suburban Focus</SelectItem>
-                  <SelectItem value="competitive-counties">Competitive Counties Only</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Include County Data Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+              <div className="space-y-0.5">
+                <Label htmlFor="include-county-data" className="text-sm font-medium cursor-pointer">
+                  Include County-Level Data
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Send county baseline results to AI for more accurate synthetic data
+                </p>
+              </div>
+              <Switch
+                id="include-county-data"
+                checked={includeCountyData}
+                onCheckedChange={setIncludeCountyData}
+              />
             </div>
+
+            {/* County Strategy - Only shown when county data is included */}
+            {includeCountyData && (
+              <div className="space-y-2">
+                <Label htmlFor="county-strategy">County Strategy</Label>
+                <Select value={countyStrategy} onValueChange={setCountyStrategy}>
+                  <SelectTrigger id="county-strategy">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="uniform">Uniform (Apply shifts evenly)</SelectItem>
+                    <SelectItem value="urban-focus">Urban Focus</SelectItem>
+                    <SelectItem value="rural-focus">Rural Focus</SelectItem>
+                    <SelectItem value="suburban-focus">Suburban Focus</SelectItem>
+                    <SelectItem value="competitive-counties">Competitive Counties Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Custom Instructions */}
             <div className="space-y-2">
@@ -1213,9 +1293,16 @@ export function GenerateSyntheticScenarioModal({
                 onClick={async () => {
                   const payload = await buildRPCPayload();
                   console.log('📦 RPC Payload:', payload);
-                  setShowDebugPayload(!showDebugPayload);
+                  const newShowState = !showDebugPayload;
+                  setShowDebugPayload(newShowState);
                   setDebugRPCPayload(payload);
                   setDebugAIResponse(await buildAIPromptPayload());
+                  // Scroll to debug panel after showing
+                  if (newShowState) {
+                    setTimeout(() => {
+                      debugPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }
                 }}
                 className="w-full gap-2"
               >
@@ -1226,7 +1313,7 @@ export function GenerateSyntheticScenarioModal({
 
             {/* Debug Payload Display */}
             {showDebugPayload && (
-              <div className="space-y-4">
+              <div ref={debugPanelRef} className="space-y-4">
                 {/* AI Response from AI */}
                 <div className="space-y-3 p-4 bg-purple-950 rounded-lg border border-purple-800">
                   <h4 className="font-medium text-sm text-purple-200">

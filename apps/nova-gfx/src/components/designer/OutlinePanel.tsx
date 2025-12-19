@@ -50,6 +50,8 @@ import { useDesignerStore } from '@/stores/designerStore';
 import { PropertiesPanel } from './PropertiesPanel';
 import { DataBindingTab } from './DataBindingTab';
 import { AddDataModal } from '@/components/dialogs/AddDataModal';
+import { AddressContextMenu } from '@/components/common/AddressContextMenu';
+import { buildLayerAddress, buildTemplateAddress, buildElementAddress } from '@/lib/address';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { Template, Element, Layer } from '@emergent-platform/types';
@@ -905,14 +907,18 @@ function LayersTree() {
         return (
           <div key={layer.id}>
             {/* Layer Header */}
-            <div
-              className={cn(
-                'flex items-center gap-1 px-1.5 py-1 rounded-md group hover:bg-muted/50 cursor-pointer',
-                isExpanded && 'bg-muted/30',
-                onAir && 'border-l-2 border-emerald-500'
-              )}
-              onClick={() => toggleNode(layer.id)}
+            <AddressContextMenu
+              address={buildLayerAddress(layer.name)}
+              label="Layer Address"
             >
+              <div
+                className={cn(
+                  'flex items-center gap-1 px-1.5 py-1 rounded-md group hover:bg-muted/50 cursor-pointer',
+                  isExpanded && 'bg-muted/30',
+                  onAir && 'border-l-2 border-emerald-500'
+                )}
+                onClick={() => toggleNode(layer.id)}
+              >
               <Button
                 variant="ghost"
                 size="icon"
@@ -1093,7 +1099,8 @@ function LayersTree() {
                   )}
                 </div>
               </TooltipProvider>
-            </div>
+              </div>
+            </AddressContextMenu>
 
             {/* Templates in Layer */}
             {isExpanded && (
@@ -1104,25 +1111,30 @@ function LayersTree() {
                   </div>
                 ) : (
                   layerTemplates.map((template) => (
-                    <TemplateItem
+                    <AddressContextMenu
                       key={template.id}
-                      template={template}
-                      isSelected={currentTemplateId === template.id}
-                      hasSelectedElement={selectedElementTemplateId === template.id}
-                      isOnAir={onAir?.templateId === template.id}
-                      playbackState={onAir?.templateId === template.id ? onAir.state : 'idle'}
-                      onClick={() => selectTemplate(template.id)}
-                      onPlayIn={() => playIn(template.id, layer.id)}
-                      onPlayOut={() => playOut(layer.id)}
-                      onDuplicate={() => duplicateTemplate(template.id)}
-                      onDelete={() => handleDeleteTemplate(template.id, template.name)}
-                      onToggleVisibility={() => toggleTemplateVisibility(template.id)}
-                      onToggleLock={() => toggleTemplateLock(template.id)}
-                      onAddData={() => {
-                        selectTemplate(template.id);
-                        window.dispatchEvent(new CustomEvent('open-add-data-modal'));
-                      }}
-                    />
+                      address={buildTemplateAddress(template.name)}
+                      label="Template Address"
+                    >
+                      <TemplateItem
+                        template={template}
+                        isSelected={currentTemplateId === template.id}
+                        hasSelectedElement={selectedElementTemplateId === template.id}
+                        isOnAir={onAir?.templateId === template.id}
+                        playbackState={onAir?.templateId === template.id ? onAir.state : 'idle'}
+                        onClick={() => selectTemplate(template.id)}
+                        onPlayIn={() => playIn(template.id, layer.id)}
+                        onPlayOut={() => playOut(layer.id)}
+                        onDuplicate={() => duplicateTemplate(template.id)}
+                        onDelete={() => handleDeleteTemplate(template.id, template.name)}
+                        onToggleVisibility={() => toggleTemplateVisibility(template.id)}
+                        onToggleLock={() => toggleTemplateLock(template.id)}
+                        onAddData={() => {
+                          selectTemplate(template.id);
+                          window.dispatchEvent(new CustomEvent('open-add-data-modal'));
+                        }}
+                      />
+                    </AddressContextMenu>
                   ))
                 )}
               </div>
@@ -1970,6 +1982,29 @@ function ElementItem({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {/* Address section */}
+          <div className="px-2 py-1.5 border-b border-zinc-700 mb-1">
+            <div className="text-[9px] text-zinc-500 uppercase tracking-wide mb-0.5">
+              Element Address
+            </div>
+            <code className="text-[10px] font-mono text-emerald-400 break-all">
+              {buildElementAddress(element.name)}
+            </code>
+          </div>
+          <ContextMenuItem
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(buildElementAddress(element.name));
+                console.log('[Address] Copied:', buildElementAddress(element.name));
+              } catch (err) {
+                console.error('Failed to copy address:', err);
+              }
+            }}
+          >
+            <Copy className="mr-2 h-4 w-4 text-emerald-400" />
+            Copy Address
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           {isGroup && (
             <>
               <ContextMenuItem onClick={() => onUngroup(element.id)}>

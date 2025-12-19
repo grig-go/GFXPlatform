@@ -1817,6 +1817,7 @@ export function ChatPanel() {
       availablePresets: [],
       availableLibraries: ['anime.js', 'GSAP'],
       dataContext, // Include data context for data-driven design
+      isInteractive: project?.interactive_enabled ?? false, // Include interactive mode flag
     };
   };
 

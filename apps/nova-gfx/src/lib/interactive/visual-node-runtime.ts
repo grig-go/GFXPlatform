@@ -7,6 +7,7 @@
  */
 
 import type { Node, Edge } from '@xyflow/react';
+import { parseAddress, resolveAddress, setAddressValue, sanitizeName } from '../address';
 
 // Types for node data
 interface EventNodeData {
@@ -57,10 +58,10 @@ export interface NodeRuntimeContext {
   state: Record<string, unknown>;
   setState: (key: string, value: unknown) => void;
 
-  // Element operations
-  showElement: (elementId: string) => void;
-  hideElement: (elementId: string) => void;
-  toggleElement: (elementId: string) => void;
+  // Element operations (accept either ID or @address)
+  showElement: (elementIdOrAddress: string) => void;
+  hideElement: (elementIdOrAddress: string) => void;
+  toggleElement: (elementIdOrAddress: string) => void;
 
   // Animation/Timeline operations
   playTemplate: (templateId: string, layerId: string, phase?: string) => void;
@@ -73,6 +74,9 @@ export interface NodeRuntimeContext {
   // Utilities
   log: (message: string) => void;
   delay: (ms: number) => Promise<void>;
+
+  // Address resolution
+  resolveElementId: (nameOrAddress: string) => string | undefined;
 
   // Event data
   event?: {
@@ -96,6 +100,32 @@ function buildAdjacencyMap(edges: Edge[]): Map<string, string[]> {
 }
 
 /**
+ * Resolve a value that might be an address reference
+ * Supports @elementName.property syntax
+ */
+function resolveValue(value: string, context: NodeRuntimeContext): unknown {
+  // Check if it's an address reference
+  if (value.startsWith('@')) {
+    const resolved = resolveAddress(value);
+    if (resolved !== undefined) {
+      console.log(`[NodeRuntime] Resolved address "${value}" to:`, resolved);
+      return resolved;
+    }
+    console.warn(`[NodeRuntime] Failed to resolve address: ${value}`);
+    return undefined;
+  }
+
+  // Handle state references like "state.value"
+  if (value.startsWith('state.')) {
+    const path = value.slice(6); // Remove "state."
+    return context.state[path];
+  }
+
+  // Return as-is if not a reference
+  return value;
+}
+
+/**
  * Evaluate a condition based on operator
  */
 function evaluateCondition(
@@ -104,28 +134,18 @@ function evaluateCondition(
   compareValue: string,
   context: NodeRuntimeContext
 ): boolean {
-  // Get the actual value from state or path
-  let actualValue: unknown;
+  // Get the actual value - supports @address syntax
+  const actualValue = resolveValue(condition, context);
 
-  // Handle state references like "state.value"
-  if (condition.startsWith('state.')) {
-    const path = condition.slice(6); // Remove "state."
-    actualValue = context.state[path];
-  } else {
-    // Try to evaluate as a simple expression
-    try {
-      // For safety, only allow simple property access
-      actualValue = condition;
-    } catch {
-      actualValue = condition;
-    }
+  // Resolve compare value too (might also be an address)
+  let typedCompareValue: unknown = resolveValue(compareValue, context);
+
+  // Convert string compare values to appropriate types
+  if (typeof typedCompareValue === 'string') {
+    if (typedCompareValue === 'true') typedCompareValue = true;
+    else if (typedCompareValue === 'false') typedCompareValue = false;
+    else if (!isNaN(Number(typedCompareValue))) typedCompareValue = Number(typedCompareValue);
   }
-
-  // Convert compareValue to appropriate type
-  let typedCompareValue: unknown = compareValue;
-  if (compareValue === 'true') typedCompareValue = true;
-  else if (compareValue === 'false') typedCompareValue = false;
-  else if (!isNaN(Number(compareValue))) typedCompareValue = Number(compareValue);
 
   switch (operator) {
     case 'equals':
@@ -203,16 +223,50 @@ async function executeNode(
       const actionData = data as unknown as ActionNodeData;
 
       switch (actionData.actionType) {
-        case 'setState':
-          context.setState(actionData.target || 'value', actionData.value ?? null);
-          context.log(`Set state "${actionData.target}" = ${actionData.value}`);
-          break;
+        case 'setState': {
+          const target = actionData.target || 'value';
+          const valueToSet = actionData.value ?? null;
 
-        case 'toggleState':
-          const currentValue = context.state[actionData.target || 'value'];
-          context.setState(actionData.target || 'value', !currentValue);
-          context.log(`Toggled state "${actionData.target}"`);
+          console.log('[NodeRuntime] setState debug:', {
+            target,
+            valueToSet,
+            startsWithAt: target.startsWith('@'),
+            targetCharCode0: target.charCodeAt(0)
+          });
+
+          // Support @address syntax for setting element properties
+          if (target.startsWith('@')) {
+            const success = setAddressValue(target, valueToSet);
+            if (success) {
+              context.log(`Set address "${target}" = ${valueToSet}`);
+            } else {
+              context.log(`Failed to set address "${target}"`);
+            }
+          } else {
+            context.setState(target, valueToSet);
+            context.log(`Set state "${target}" = ${valueToSet}`);
+          }
           break;
+        }
+
+        case 'toggleState': {
+          const target = actionData.target || 'value';
+          // Support @address syntax for toggling element properties
+          if (target.startsWith('@')) {
+            const currentValue = resolveAddress(target);
+            const success = setAddressValue(target, !currentValue);
+            if (success) {
+              context.log(`Toggled address "${target}" to ${!currentValue}`);
+            } else {
+              context.log(`Failed to toggle address "${target}"`);
+            }
+          } else {
+            const currentValue = context.state[target];
+            context.setState(target, !currentValue);
+            context.log(`Toggled state "${target}"`);
+          }
+          break;
+        }
 
         case 'navigate':
           context.navigate(actionData.target || 'screen');
@@ -300,16 +354,34 @@ async function executeNode(
       const dataNodeData = data as unknown as DataNodeData;
 
       switch (dataNodeData.operation) {
-        case 'get':
-          context.log(`Get data from "${dataNodeData.path}"`);
-          break;
-        case 'set':
-          if (dataNodeData.path.startsWith('state.')) {
-            const key = dataNodeData.path.slice(6);
-            context.setState(key, dataNodeData.value);
-            context.log(`Set data "${dataNodeData.path}" = ${dataNodeData.value}`);
+        case 'get': {
+          // Support @address syntax for getting values
+          const path = dataNodeData.path;
+          if (path.startsWith('@')) {
+            const resolved = resolveAddress(path);
+            context.log(`Get address "${path}" = ${JSON.stringify(resolved)}`);
+          } else {
+            context.log(`Get data from "${path}"`);
           }
           break;
+        }
+        case 'set': {
+          const path = dataNodeData.path;
+          // Support @address syntax for setting values
+          if (path.startsWith('@')) {
+            const success = setAddressValue(path, dataNodeData.value);
+            if (success) {
+              context.log(`Set address "${path}" = ${dataNodeData.value}`);
+            } else {
+              context.log(`Failed to set address "${path}"`);
+            }
+          } else if (path.startsWith('state.')) {
+            const key = path.slice(6);
+            context.setState(key, dataNodeData.value);
+            context.log(`Set state "${path}" = ${dataNodeData.value}`);
+          }
+          break;
+        }
         default:
           context.log(`Data operation "${dataNodeData.operation}"`);
       }
@@ -355,7 +427,7 @@ async function executeNode(
  */
 export async function executeNodeGraph(
   eventType: string,
-  _elementId: string | undefined,
+  elementId: string | undefined,
   nodes: Node[],
   edges: Edge[],
   context: NodeRuntimeContext
@@ -365,19 +437,30 @@ export async function executeNodeGraph(
   // Build adjacency map
   const adjacencyMap = buildAdjacencyMap(edges);
 
-  // Find event nodes that match this event type
+  // Find event nodes that match this event type AND element (if specified)
   const eventNodes = nodes.filter(n => {
     if (n.type !== 'event') return false;
     const data = n.data as unknown as EventNodeData;
-    return data.eventType === eventType;
+
+    // Must match event type
+    if (data.eventType !== eventType) return false;
+
+    // If the event node has a specific element, it must match
+    // If event node has no element or "__any__", it matches all elements
+    if (data.elementId && data.elementId !== '__any__' && elementId) {
+      return data.elementId === elementId;
+    }
+
+    // Event nodes without specific element match all
+    return true;
   });
 
   if (eventNodes.length === 0) {
-    context.log(`No event handlers found for "${eventType}"`);
+    context.log(`No event handlers found for "${eventType}" on element "${elementId || 'any'}"`);
     return;
   }
 
-  context.log(`Executing ${eventNodes.length} handler(s) for "${eventType}"`);
+  context.log(`Executing ${eventNodes.length} handler(s) for "${eventType}" on element "${elementId || 'any'}"`);
 
   // Execute from each matching event node
   for (const eventNode of eventNodes) {
@@ -402,10 +485,10 @@ export async function executeNodeGraph(
 export function createNodeRuntimeContext(
   designerStore: {
     updateElement: (id: string, updates: Record<string, unknown>) => void;
-    elements: Array<{ id: string; visible: boolean }>;
+    elements: Array<{ id: string; name: string; visible: boolean }>;
     playIn: (templateId: string, layerId: string) => void;
     playOut: (layerId: string) => void;
-    templates: Array<{ id: string; layer_id: string }>;
+    templates: Array<{ id: string; name?: string; layer_id: string }>;
   },
   interactiveStore: {
     runtime: { state: Record<string, unknown> };
@@ -413,6 +496,52 @@ export function createNodeRuntimeContext(
     navigate: (screenId: string) => void;
   }
 ): NodeRuntimeContext {
+  /**
+   * Resolve an element ID from an address (@name) or name string
+   * Returns the element ID if found, or undefined
+   */
+  const resolveElementId = (nameOrAddress: string): string | undefined => {
+    // If it's an address, parse it
+    if (nameOrAddress.startsWith('@')) {
+      const parsed = parseAddress(nameOrAddress);
+      if (!parsed || parsed.type !== 'element') {
+        console.warn(`[NodeRuntime] Invalid element address: ${nameOrAddress}`);
+        return undefined;
+      }
+      // Look up element by sanitized name
+      const normalizedName = parsed.name.toLowerCase().replace(/_/g, ' ');
+      const element = designerStore.elements.find(
+        e => e.name.toLowerCase() === normalizedName ||
+             sanitizeName(e.name).toLowerCase() === parsed.name.toLowerCase()
+      );
+      if (element) {
+        console.log(`[NodeRuntime] Resolved address "${nameOrAddress}" to element ID: ${element.id}`);
+        return element.id;
+      }
+      console.warn(`[NodeRuntime] Element not found for address: ${nameOrAddress}`);
+      return undefined;
+    }
+
+    // Check if it's already a valid element ID
+    const elementById = designerStore.elements.find(e => e.id === nameOrAddress);
+    if (elementById) {
+      return nameOrAddress;
+    }
+
+    // Try to find by name (fallback)
+    const elementByName = designerStore.elements.find(
+      e => e.name.toLowerCase() === nameOrAddress.toLowerCase() ||
+           sanitizeName(e.name).toLowerCase() === nameOrAddress.toLowerCase()
+    );
+    if (elementByName) {
+      console.log(`[NodeRuntime] Resolved name "${nameOrAddress}" to element ID: ${elementByName.id}`);
+      return elementByName.id;
+    }
+
+    console.warn(`[NodeRuntime] Could not resolve element: ${nameOrAddress}`);
+    return undefined;
+  };
+
   return {
     state: interactiveStore.runtime.state,
 
@@ -420,18 +549,29 @@ export function createNodeRuntimeContext(
       interactiveStore.setState(key, value);
     },
 
-    showElement: (elementId: string) => {
-      designerStore.updateElement(elementId, { visible: true });
+    resolveElementId,
+
+    showElement: (elementIdOrAddress: string) => {
+      const elementId = resolveElementId(elementIdOrAddress);
+      if (elementId) {
+        designerStore.updateElement(elementId, { visible: true });
+      }
     },
 
-    hideElement: (elementId: string) => {
-      designerStore.updateElement(elementId, { visible: false });
+    hideElement: (elementIdOrAddress: string) => {
+      const elementId = resolveElementId(elementIdOrAddress);
+      if (elementId) {
+        designerStore.updateElement(elementId, { visible: false });
+      }
     },
 
-    toggleElement: (elementId: string) => {
-      const element = designerStore.elements.find(e => e.id === elementId);
-      if (element) {
-        designerStore.updateElement(elementId, { visible: !element.visible });
+    toggleElement: (elementIdOrAddress: string) => {
+      const elementId = resolveElementId(elementIdOrAddress);
+      if (elementId) {
+        const element = designerStore.elements.find(e => e.id === elementId);
+        if (element) {
+          designerStore.updateElement(elementId, { visible: !element.visible });
+        }
       }
     },
 

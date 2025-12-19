@@ -35,6 +35,8 @@ export interface AIContext {
     schema: Record<string, string>; // field name -> type (string, number, boolean)
     sampleData: Record<string, unknown>; // first record from the data source
   };
+  // Interactive project context
+  isInteractive?: boolean; // Whether the project is in interactive mode
 }
 
 // AI Request
