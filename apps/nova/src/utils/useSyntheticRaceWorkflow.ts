@@ -29,6 +29,14 @@ const getStateCode = (stateNameOrCode: string): string => {
   return STATE_NAME_TO_CODE[stateNameOrCode] || stateNameOrCode;
 };
 
+export interface SyntheticGroup {
+  id: string;
+  name: string;
+  description?: string;
+  race_count?: number;
+  created_at?: string;
+}
+
 export interface ScenarioInput {
   name: string;
   turnoutShift: number;
@@ -38,6 +46,7 @@ export interface ScenarioInput {
   countyStrategy: string;
   customInstructions: string;
   aiProvider: string;
+  syntheticGroupId?: string; // Optional group ID to save to
 }
 
 export interface SyntheticPreview {
@@ -73,6 +82,86 @@ export function useSyntheticRaceWorkflow() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<AIProvider[]>([]);
+  const [syntheticGroups, setSyntheticGroups] = useState<SyntheticGroup[]>([]);
+
+  // Fetch synthetic groups from database
+  const fetchSyntheticGroups = async (): Promise<SyntheticGroup[]> => {
+    try {
+      const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+
+      if (error) {
+        console.error('Error fetching synthetic groups:', error);
+        return [];
+      }
+
+      const groups = (data || []) as SyntheticGroup[];
+      setSyntheticGroups(groups);
+      return groups;
+    } catch (err) {
+      console.error('Error fetching synthetic groups:', err);
+      return [];
+    }
+  };
+
+  // Create a new synthetic group
+  const createSyntheticGroup = async (
+    name: string,
+    description?: string
+  ): Promise<string | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase.rpc('e_create_synthetic_group', {
+        p_name: name,
+        p_description: description || null,
+        p_user_id: user?.id || null
+      });
+
+      if (error) {
+        console.error('Error creating synthetic group:', error);
+        setError(error.message);
+        return null;
+      }
+
+      // Refresh groups list
+      await fetchSyntheticGroups();
+
+      return data as string;
+    } catch (err) {
+      console.error('Error creating synthetic group:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create group');
+      return null;
+    }
+  };
+
+  // Delete a synthetic group
+  const deleteSyntheticGroup = async (
+    groupId: string,
+    cascadeDeleteRaces: boolean = false
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error } = await supabase.rpc('e_delete_synthetic_group', {
+        p_group_id: groupId,
+        p_cascade_delete_races: cascadeDeleteRaces
+      });
+
+      if (error) {
+        console.error('Error deleting synthetic group:', error);
+        return { success: false, error: error.message };
+      }
+
+      const result = data as { success: boolean; error?: string };
+
+      if (result.success) {
+        await fetchSyntheticGroups();
+      }
+
+      return result;
+    } catch (err) {
+      console.error('Error deleting synthetic group:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to delete group' };
+    }
+  };
 
   // Fetch AI providers assigned to elections dashboard
   const fetchProviders = async () => {
@@ -698,6 +787,7 @@ CRITICAL RULES:
         p_state: rpcPayload.p_state,
         p_district: rpcPayload.p_district,
         p_summary: rpcPayload.p_summary,
+        p_synthetic_group_id: preview.scenario.syntheticGroupId || null, // Pass group ID if specified
       });
 
       if (error) {
@@ -728,7 +818,7 @@ CRITICAL RULES:
     deleteSyntheticRace: async (syntheticRaceId: string): Promise<{ success: boolean; error?: string }> => {
       try {
         console.log('🗑️ Deleting synthetic race:', syntheticRaceId);
-        
+
         const { error } = await supabase.rpc('e_delete_synthetic_race', {
           p_synthetic_race_id: syntheticRaceId
         });
@@ -746,5 +836,10 @@ CRITICAL RULES:
         return { success: false, error: errorMessage };
       }
     },
+    // Synthetic groups functions
+    syntheticGroups,
+    fetchSyntheticGroups,
+    createSyntheticGroup,
+    deleteSyntheticGroup,
   };
 }

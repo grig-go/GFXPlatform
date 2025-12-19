@@ -110,9 +110,14 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
     }
   }, [node]);
 
-  // Update handler
-  const handleUpdate = useCallback((key: string, value: unknown) => {
-    const newData = { ...localData, [key]: value };
+  // Update handler - supports single key or multiple keys via object
+  const handleUpdate = useCallback((keyOrUpdates: string | Record<string, unknown>, value?: unknown) => {
+    let newData: Record<string, unknown>;
+    if (typeof keyOrUpdates === 'string') {
+      newData = { ...localData, [keyOrUpdates]: value };
+    } else {
+      newData = { ...localData, ...keyOrUpdates };
+    }
     setLocalData(newData);
     if (node) {
       onUpdate(node.id, newData);
@@ -187,8 +192,10 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                 value={localData.elementId as string || ''}
                 onValueChange={(v) => {
                   const el = elements.find(e => e.id === v);
-                  handleUpdate('elementId', v);
-                  handleUpdate('elementName', el?.name || 'Unknown');
+                  handleUpdate({
+                    elementId: v,
+                    elementName: el?.name || 'Unknown',
+                  });
                 }}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
@@ -296,7 +303,13 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                   <Label className="text-[10px] text-zinc-400">Template</Label>
                   <Select
                     value={localData.templateId as string || ''}
-                    onValueChange={(v) => handleUpdate('templateId', v)}
+                    onValueChange={(v) => {
+                      const template = templates.find(t => t.id === v);
+                      handleUpdate({
+                        templateId: v,
+                        templateName: template?.name || 'Unknown',
+                      });
+                    }}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue placeholder="Select..." />
@@ -314,7 +327,13 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
                   <Label className="text-[10px] text-zinc-400">Layer</Label>
                   <Select
                     value={localData.layerId as string || ''}
-                    onValueChange={(v) => handleUpdate('layerId', v)}
+                    onValueChange={(v) => {
+                      const layer = layers.find(l => l.id === v);
+                      handleUpdate({
+                        layerId: v,
+                        layerName: layer?.name || 'Unknown',
+                      });
+                    }}
                   >
                     <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                       <SelectValue placeholder="Select..." />
@@ -561,7 +580,13 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Label className="text-[10px] text-zinc-400">Template</Label>
               <Select
                 value={localData.templateId as string || ''}
-                onValueChange={(v) => handleUpdate('templateId', v)}
+                onValueChange={(v) => {
+                  const template = templates.find(t => t.id === v);
+                  handleUpdate({
+                    templateId: v,
+                    templateName: template?.name || 'Unknown',
+                  });
+                }}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue placeholder="Select..." />
@@ -580,7 +605,13 @@ export function NodeEditorPanel({ node, onUpdate, onClose }: NodeEditorPanelProp
               <Label className="text-[10px] text-zinc-400">Layer</Label>
               <Select
                 value={localData.layerId as string || ''}
-                onValueChange={(v) => handleUpdate('layerId', v)}
+                onValueChange={(v) => {
+                  const layer = layers.find(l => l.id === v);
+                  handleUpdate({
+                    layerId: v,
+                    layerName: layer?.name || 'Unknown',
+                  });
+                }}
               >
                 <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700 text-zinc-200">
                   <SelectValue placeholder="Select..." />

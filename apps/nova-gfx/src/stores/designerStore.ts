@@ -309,6 +309,7 @@ interface DesignerState {
     templateId: string;
     state: 'idle' | 'in' | 'loop' | 'out';
     pendingSwitch?: string; // Template ID to switch to after OUT completes
+    timestamp?: number; // Timestamp for detecting repeated plays of the same state
   }>;
 
   // Script play mode (for testing interactive scripts in canvas)
@@ -3755,10 +3756,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         playIn: (templateId, layerId) => {
           console.log('[OnAir] Play IN:', templateId, 'in layer:', layerId);
           set((state) => {
-            state.onAirTemplates[layerId] = { 
-              templateId, 
+            state.onAirTemplates[layerId] = {
+              templateId,
               state: 'in',
               pendingSwitch: undefined,
+              timestamp: Date.now(),
             };
           });
         },

@@ -28,6 +28,7 @@ import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import { InteractiveElement } from '@/components/canvas/InteractiveElement';
 import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
+import { useDesignerStore } from '@/stores/designerStore';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
 import type { Node, Edge } from '@xyflow/react';
 
@@ -154,6 +155,9 @@ export function NovaPlayer() {
     isInteractiveMode,
     dispatchEvent,
   } = useInteractiveStore();
+
+  // Designer store - needed to sync templates for visual node runtime
+  const { setTemplates: setDesignerTemplates, setElements: setDesignerElements, setLayers: setDesignerLayers } = useDesignerStore();
 
   // Project data (from Supabase)
   const [project, setProject] = useState<Project | null>(null);
@@ -299,6 +303,76 @@ export function NovaPlayer() {
     console.log('[Nova Player] isInteractiveMode state changed:', isInteractiveMode);
   }, [isInteractiveMode]);
 
+  // Subscribe to designer store's onAirTemplates changes (for visual node runtime playback)
+  // When visual node scripts call designerStore.playIn(), we need to sync to local layerTemplates
+  useEffect(() => {
+    if (!isInteractiveMode) return;
+
+    // Subscribe to onAirTemplates changes in designer store
+    const unsubscribe = useDesignerStore.subscribe(
+      (state) => state.onAirTemplates,
+      (onAirTemplates, prevOnAirTemplates) => {
+        console.log('[Nova Player] onAirTemplates changed:', onAirTemplates);
+
+        // Find new or changed entries
+        for (const [layerId, onAirState] of Object.entries(onAirTemplates)) {
+          const prevState = prevOnAirTemplates?.[layerId];
+
+          // If this is a new entry or state changed
+          if (!prevState || prevState.state !== onAirState.state || prevState.templateId !== onAirState.templateId) {
+            console.log('[Nova Player] Processing onAirTemplates change for layer:', layerId, onAirState);
+
+            if (onAirState.state === 'in') {
+              // Play IN animation via local layerTemplates state
+              setLayerTemplates(prev => {
+                const next = new Map(prev);
+                const instanceId = `${onAirState.templateId}-${Date.now()}`;
+                const existing = next.get(layerId) || [];
+
+                // Create new template state
+                const newState: LayerTemplateState = {
+                  templateId: onAirState.templateId,
+                  instanceId,
+                  phase: 'in',
+                  playheadPosition: 0,
+                  lastTime: performance.now(),
+                };
+
+                // If there's already a template, mark it as outgoing
+                if (existing.length > 0 && existing[0].phase !== 'out') {
+                  const outgoing = existing.map(s => ({ ...s, phase: 'out' as const, playheadPosition: 0, lastTime: performance.now(), isOutgoing: true }));
+                  next.set(layerId, [...outgoing, newState]);
+                } else {
+                  next.set(layerId, [newState]);
+                }
+
+                console.log('[Nova Player] Set layerTemplates for interactive playIn:', next);
+                return next;
+              });
+            } else if (onAirState.state === 'out') {
+              // Play OUT animation
+              setLayerTemplates(prev => {
+                const next = new Map(prev);
+                const existing = next.get(layerId);
+
+                if (existing && existing.length > 0) {
+                  const updated = existing.map(s => ({ ...s, phase: 'out' as const, playheadPosition: 0, lastTime: performance.now(), isOutgoing: true }));
+                  next.set(layerId, updated);
+                  console.log('[Nova Player] Set layerTemplates for interactive playOut:', next);
+                }
+
+                return next;
+              });
+            }
+          }
+        }
+      },
+      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+    );
+
+    return unsubscribe;
+  }, [isInteractiveMode]);
+
   // Handle element clicks in interactive mode - dispatches to visual node runtime
   const handleElementClick = useCallback((elementId: string, elementName?: string) => {
     if (!isInteractiveMode) return;
@@ -386,6 +460,11 @@ export function NovaPlayer() {
       setLayers(layersData);
       setTemplates(templatesData);
 
+      // Sync to designer store for visual node runtime to access
+      setDesignerLayers(layersData);
+      setDesignerTemplates(templatesData);
+      console.log('[Nova Player] Synced templates to designer store:', templatesData.length);
+
       // Fetch elements for all templates via direct REST
       // We need to use a different approach since directRestSelect doesn't support IN queries
       // Fetch elements for each template in parallel
@@ -446,6 +525,10 @@ export function NovaPlayer() {
       setAnimations(allAnimations);
       setKeyframes(allKeyframes);
 
+      // Sync elements to designer store for visual node runtime
+      setDesignerElements(allElements);
+      console.log('[Nova Player] Synced elements to designer store:', allElements.length);
+
       // Mark as loaded
       loadedProjectIdRef.current = projectId;
 
@@ -457,7 +540,7 @@ export function NovaPlayer() {
       console.error(`[Nova Player] Failed to load project after ${totalTime}ms:`, err);
     }
     return { success: false, templates: [], layers: [] };
-  }, []);
+  }, [setDesignerLayers, setDesignerTemplates, setDesignerElements]);
 
 
   // Helper to resolve layerIndex to layerId (Pulsar GFX uses numeric indices)
@@ -496,43 +579,49 @@ export function NovaPlayer() {
             console.log(`[Nova Player] Using embedded command data for real-time playback (${embeddedElements.length} elements)`);
 
             // Also add/update the template in templates state (needed for alwaysOnTemplateIds check)
+            // AND sync to designer store for visual node runtime
+            const newTemplate: Template = {
+              id: templateId,
+              name: cmd.template!.name || 'Template',
+              layer_id: cmd.template!.layerId || '',
+              project_id: cmd.template!.projectId || '',
+              folder_id: null,
+              description: null,
+              tags: [],
+              thumbnail_url: null,
+              html_template: '',
+              css_styles: '',
+              width: null,
+              height: null,
+              in_duration: 1500,
+              loop_duration: null,
+              loop_iterations: 1,
+              out_duration: 1500,
+              libraries: [],
+              custom_script: null,
+              enabled: true,
+              locked: false,
+              archived: false,
+              version: 1,
+              sort_order: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              created_by: null,
+              data_source_id: null,
+              data_source_config: null,
+            };
+
             setTemplates(prev => {
               const exists = prev.some(t => t.id === templateId);
               if (!exists) {
-                // Add a minimal template entry with all required fields
-                const newTemplate: Template = {
-                  id: templateId,
-                  name: cmd.template!.name || 'Template',
-                  layer_id: cmd.template!.layerId || '',
-                  project_id: cmd.template!.projectId || '',
-                  folder_id: null,
-                  description: null,
-                  tags: [],
-                  thumbnail_url: null,
-                  html_template: '',
-                  css_styles: '',
-                  width: null,
-                  height: null,
-                  in_duration: 1500,
-                  loop_duration: null,
-                  loop_iterations: 1,
-                  out_duration: 1500,
-                  libraries: [],
-                  custom_script: null,
-                  enabled: true,
-                  locked: false,
-                  archived: false,
-                  version: 1,
-                  sort_order: 0,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                  created_by: null,
-                  data_source_id: null,
-                  data_source_config: null,
-                };
                 console.log(`[Nova Player] Adding template to state:`, newTemplate.id);
-                return [...prev, newTemplate];
+                const updated = [...prev, newTemplate];
+                // Sync to designer store for visual node runtime
+                setDesignerTemplates(updated);
+                return updated;
               }
+              // Also sync existing templates
+              setDesignerTemplates(prev);
               return prev;
             });
 
@@ -545,7 +634,10 @@ export function NovaPlayer() {
                 ...el,
                 template_id: templateId,
               }));
-              return [...otherElements, ...newElements];
+              const updated = [...otherElements, ...newElements];
+              // Sync to designer store for visual node runtime
+              setDesignerElements(updated);
+              return updated;
             });
 
             // Merge embedded animations if present
@@ -1156,6 +1248,62 @@ export function NovaPlayer() {
     return [];
   }, [elements, templates, localStorageData]);
 
+  // Merge templates from DB and localStorage
+  const mergedTemplates = useMemo((): Template[] => {
+    if (templates.length > 0) {
+      // Check if localStorage has templates not in DB
+      if (localStorageData?.templates) {
+        const dbTemplateIds = new Set(templates.map(t => t.id));
+        const localOnlyTemplates = localStorageData.templates.filter(t => !dbTemplateIds.has(t.id));
+        if (localOnlyTemplates.length > 0) {
+          console.log(`[Nova Player] Merging ${templates.length} DB templates + ${localOnlyTemplates.length} localStorage templates`);
+          return [...templates, ...localOnlyTemplates];
+        }
+      }
+      return templates;
+    }
+    if (localStorageData?.templates && localStorageData.templates.length > 0) {
+      console.log(`[Nova Player] Using ${localStorageData.templates.length} templates from localStorage`);
+      return localStorageData.templates;
+    }
+    return [];
+  }, [templates, localStorageData]);
+
+  // Resolve template ID - finds the correct template ID that has elements
+  // This handles cases where Animation node stored a stale template ID
+  const resolveTemplateId = useCallback((requestedId: string): string => {
+    // Check if elements exist with this template ID
+    const hasElements = mergedElements.some(e => e.template_id === requestedId);
+    if (hasElements) {
+      return requestedId;
+    }
+
+    // Try to find the template to get its name
+    const template = mergedTemplates.find(t => t.id === requestedId);
+    if (template && template.name) {
+      // Find a template with the same name that has elements
+      const templateIdsInElements = [...new Set(mergedElements.map(e => e.template_id))];
+      for (const existingId of templateIdsInElements) {
+        const existingTemplate = mergedTemplates.find(t => t.id === existingId);
+        if (existingTemplate && existingTemplate.name === template.name) {
+          console.log(`[Nova Player] Resolved template ID by name: "${template.name}" - ${requestedId} -> ${existingId}`);
+          return existingId;
+        }
+      }
+    }
+
+    // If only one template has elements, use that as fallback
+    const templateIdsInElements = [...new Set(mergedElements.map(e => e.template_id))];
+    if (templateIdsInElements.length === 1) {
+      console.log(`[Nova Player] Using only available template ID: ${templateIdsInElements[0]} (requested: ${requestedId})`);
+      return templateIdsInElements[0];
+    }
+
+    // Return original if no resolution found
+    console.warn(`[Nova Player] Could not resolve template ID: ${requestedId}, elements exist for: ${templateIdsInElements.join(', ')}`);
+    return requestedId;
+  }, [mergedElements, mergedTemplates]);
+
   // Merge DB animations with localStorage data (same approach as Preview.tsx)
   const mergedAnimations = useMemo((): Animation[] => {
     if (animations.length > 0) {
@@ -1376,6 +1524,7 @@ export function NovaPlayer() {
         instances.push(state);
       }
     }
+    console.log('[Nova Player] activeInstances computed:', instances.length, 'instances:', instances.map(i => ({ templateId: i.templateId, phase: i.phase })));
     return instances;
   }, [layerTemplates]);
 
@@ -1728,13 +1877,27 @@ export function NovaPlayer() {
         {/* This renders BOTH outgoing (animating OUT) and incoming (animating IN) instances */}
         {/* Each instance gets its own payload overrides applied - critical for same template back-to-back */}
         {activeInstances.map((instance) => {
+          // Resolve template ID - handles cases where Animation node stored a stale ID
+          const resolvedTemplateId = resolveTemplateId(instance.templateId);
+
           // Get elements for this template and apply instance-specific overrides
           const templateElements = mergedElements.filter(
-            e => e.template_id === instance.templateId &&
+            e => e.template_id === resolvedTemplateId &&
                  !alwaysOnTemplateIds.has(e.template_id) &&
                  e.visible !== false &&
                  !e.parent_element_id
           );
+
+          // Debug: log what elements we found for this instance
+          if (templateElements.length === 0) {
+            const availableTemplateIds = [...new Set(mergedElements.map(e => e.template_id))];
+            console.warn('[Nova Player] ⚠️ No elements found for template:', instance.templateId, '(resolved:', resolvedTemplateId, ')');
+            console.warn('[Nova Player] Available template IDs with elements:', availableTemplateIds);
+            console.warn('[Nova Player] Check that your Animation node is configured to play a template that has elements.');
+          } else {
+            console.log('[Nova Player] Rendering instance:', resolvedTemplateId, 'with', templateElements.length, 'elements');
+          }
+
           // Apply this instance's payload overrides (each instance has its own payload data)
           const instanceElements = applyInstanceOverrides(templateElements, instance.instanceId);
           // Also apply overrides to allElements for child element lookups

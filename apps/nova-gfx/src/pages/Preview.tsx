@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useDesignerStore } from '@/stores/designerStore';
 import { getAnimatedProperties } from '@/lib/animation';
@@ -16,7 +16,7 @@ import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import { InteractiveElement } from '@/components/canvas/InteractiveElement';
-import { useInteractiveStore, createNodeRuntimeContext, executeNodeGraph } from '@/lib/interactive';
+import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
 import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
 import type { Node, Edge } from '@xyflow/react';
 
@@ -114,6 +114,9 @@ export function Preview() {
     phaseDurations: state.phaseDurations,
   }));
 
+  // Get setters for syncing localStorage data to designer store (for visual node runtime)
+  const { setTemplates: setDesignerTemplates, setElements: setDesignerElements, setLayers: setDesignerLayers } = useDesignerStore();
+
   // Load from localStorage if store is empty (new window case)
   const [localData, setLocalData] = useState<PreviewData | null>(null);
 
@@ -139,12 +142,26 @@ export function Preview() {
           const parsed = JSON.parse(savedData);
           setLocalData(parsed);
           console.log('Preview loaded from localStorage:', parsed);
+
+          // Sync to designer store for visual node runtime access
+          if (parsed.templates?.length > 0) {
+            setDesignerTemplates(parsed.templates);
+            console.log('[Preview] Synced templates to designer store:', parsed.templates.length);
+          }
+          if (parsed.elements?.length > 0) {
+            setDesignerElements(parsed.elements);
+            console.log('[Preview] Synced elements to designer store:', parsed.elements.length);
+          }
+          if (parsed.layers?.length > 0) {
+            setDesignerLayers(parsed.layers);
+            console.log('[Preview] Synced layers to designer store:', parsed.layers.length);
+          }
         } catch (e) {
           console.error('Failed to parse preview data:', e);
         }
       }
     }
-  }, [storeData.templates.length]);
+  }, [storeData.templates.length, setDesignerTemplates, setDesignerElements, setDesignerLayers]);
 
   // Use store data if available, otherwise use localStorage data
   const layers = storeData.layers.length > 0 ? storeData.layers : (localData?.layers || []);
@@ -161,12 +178,48 @@ export function Preview() {
     || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined)
     || defaultPhaseDurations;
 
+  // Resolve template ID - finds the correct template ID that has elements
+  // This handles cases where Animation node stored a stale template ID
+  const resolveTemplateId = useCallback((requestedId: string): string => {
+    // Check if elements exist with this template ID
+    const hasElements = elements.some(e => e.template_id === requestedId);
+    if (hasElements) {
+      return requestedId;
+    }
+
+    // Try to find the template to get its name
+    const template = templates.find(t => t.id === requestedId);
+    if (template && template.name) {
+      // Find a template with the same name that has elements
+      const templateIdsInElements = [...new Set(elements.map(e => e.template_id))];
+      for (const existingId of templateIdsInElements) {
+        const existingTemplate = templates.find(t => t.id === existingId);
+        if (existingTemplate && existingTemplate.name === template.name) {
+          console.log(`[Preview] Resolved template ID by name: "${template.name}" - ${requestedId} -> ${existingId}`);
+          return existingId;
+        }
+      }
+    }
+
+    // If only one template has elements, use that as fallback
+    const templateIdsInElements = [...new Set(elements.map(e => e.template_id))];
+    if (templateIdsInElements.length === 1) {
+      console.log(`[Preview] Using only available template ID: ${templateIdsInElements[0]} (requested: ${requestedId})`);
+      return templateIdsInElements[0];
+    }
+
+    // Return original if no resolution found
+    console.warn(`[Preview] Could not resolve template ID: ${requestedId}, elements exist for: ${templateIdsInElements.join(', ')}`);
+    return requestedId;
+  }, [elements, templates]);
+
   // Interactive mode support
   const {
     enableInteractiveMode,
     disableInteractiveMode,
     setVisualNodes,
     isInteractiveMode,
+    dispatchEvent,
   } = useInteractiveStore();
 
   // Check if project is interactive
@@ -217,6 +270,73 @@ export function Preview() {
   useEffect(() => {
     console.log('[Preview] isInteractiveMode state changed:', isInteractiveMode);
   }, [isInteractiveMode]);
+
+  // Subscribe to designer store's onAirTemplates changes (for visual node runtime playback)
+  // When visual node scripts call designerStore.playIn(), we trigger the animation
+  useEffect(() => {
+    if (!isInteractiveMode) return;
+
+    // Subscribe to onAirTemplates changes in designer store
+    const unsubscribe = useDesignerStore.subscribe(
+      (state) => state.onAirTemplates,
+      (onAirTemplates, prevOnAirTemplates) => {
+        console.log('[Preview] onAirTemplates changed:', onAirTemplates);
+
+        // Find new or changed entries
+        for (const [layerId, onAirState] of Object.entries(onAirTemplates)) {
+          const prevState = prevOnAirTemplates?.[layerId];
+
+          // If this is a new entry or state changed
+          if (!prevState || prevState.state !== onAirState.state || prevState.templateId !== onAirState.templateId) {
+            console.log('[Preview] Processing onAirTemplates change for layer:', layerId, onAirState);
+
+            if (onAirState.state === 'in') {
+              // Resolve template ID in case it was stored with a stale ID
+              const resolvedId = resolveTemplateId(onAirState.templateId);
+              // Select the template and start IN animation
+              setSelectedTemplateId(resolvedId);
+              setCurrentPhase('in');
+              setPlayheadPosition(0);
+              lastTimeRef.current = 0;
+              setIsPlaying(true);
+              console.log('[Preview] Started IN animation for template:', onAirState.templateId, '(resolved:', resolvedId, ')');
+            } else if (onAirState.state === 'out') {
+              // Start OUT animation
+              setCurrentPhase('out');
+              setPlayheadPosition(0);
+              lastTimeRef.current = 0;
+              setIsPlaying(true);
+              console.log('[Preview] Started OUT animation for layer:', layerId);
+            }
+          }
+        }
+      },
+      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+    );
+
+    return unsubscribe;
+  }, [isInteractiveMode, resolveTemplateId]);
+
+  // Handle element clicks in interactive mode - dispatches to visual node runtime
+  const handleElementClick = useCallback((elementId: string, elementName?: string) => {
+    if (!isInteractiveMode) {
+      console.log('[Preview] Click ignored - not in interactive mode');
+      return;
+    }
+
+    console.log('[Preview] handleElementClick - dispatching click event:', {
+      elementId,
+      elementName,
+      isInteractiveMode
+    });
+
+    // Create and dispatch a click event
+    const event = createInteractionEvent('click', elementId, undefined);
+    console.log('[Preview] Created interaction event:', event);
+
+    // The dispatchEvent will route this to the visual node runtime
+    dispatchEvent(event, []);
+  }, [isInteractiveMode, dispatchEvent]);
 
   // Keep templatesRef updated with the actual templates array (for event handler access)
   useEffect(() => {
@@ -1025,6 +1145,7 @@ export function Preview() {
               isPlaying={isPlaying}
               phaseDuration={phaseDurations[currentPhase]}
               isInteractiveMode={isInteractiveMode}
+              onElementClick={handleElementClick}
             />
           ))}
         </div>
@@ -1070,6 +1191,7 @@ export function Preview() {
               isPlaying={isPlaying}
               phaseDuration={phaseDurations[currentPhase]}
               isInteractiveMode={isInteractiveMode}
+              onElementClick={handleElementClick}
             />
           ))}
         </div>
@@ -1322,6 +1444,7 @@ interface PreviewElementProps {
   isPlaying: boolean;
   phaseDuration: number;
   isInteractiveMode?: boolean;
+  onElementClick?: (elementId: string, elementName?: string) => void;
 }
 
 function PreviewElement({
@@ -1334,6 +1457,7 @@ function PreviewElement({
   isPlaying,
   phaseDuration,
   isInteractiveMode = false,
+  onElementClick,
 }: PreviewElementProps) {
   // Calculate animated properties - pass phaseDuration for correct keyframe interpolation
   const animatedProps = useMemo(() => {
@@ -2012,8 +2136,30 @@ function PreviewElement({
     }
   };
 
+  // Handle click on this element
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (!isInteractiveMode || !onElementClick) return;
+
+    // Stop propagation so parent elements don't also trigger
+    e.stopPropagation();
+
+    console.log('[Preview] Element clicked:', {
+      elementId: element.id,
+      elementName: element.name,
+      contentType: element.content?.type
+    });
+
+    onElementClick(element.id, element.name);
+  }, [isInteractiveMode, onElementClick, element.id, element.name, element.content?.type]);
+
   return (
-    <div style={style}>
+    <div
+      style={{
+        ...style,
+        cursor: isInteractiveMode ? 'pointer' : undefined,
+      }}
+      onClick={handleClick}
+    >
       {renderContent()}
       {children.map((child) => (
         <PreviewElement
@@ -2027,6 +2173,7 @@ function PreviewElement({
           isPlaying={isPlaying}
           phaseDuration={phaseDuration}
           isInteractiveMode={isInteractiveMode}
+          onElementClick={onElementClick}
         />
       ))}
     </div>

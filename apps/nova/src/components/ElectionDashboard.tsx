@@ -24,6 +24,7 @@ import {
 import { getFilteredElectionData, clearElectionDataCache } from "../data/electionData";
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { supabase } from '../utils/supabase/client';
+import { SyntheticGroup } from '../utils/useSyntheticRaceWorkflow';
 import { currentElectionYear } from '../utils/constants';
 import { motion } from "framer-motion";
 
@@ -58,6 +59,8 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add trigger to force refresh
   const [syntheticRaces, setSyntheticRaces] = useState<any[]>([]); // State for synthetic races
   const [showingSyntheticRaces, setShowingSyntheticRaces] = useState(false); // Toggle for showing synthetic vs real races
+  const [selectedSyntheticGroupId, setSelectedSyntheticGroupId] = useState<string | null>(null); // Currently selected synthetic group
+  const [syntheticGroups, setSyntheticGroups] = useState<SyntheticGroup[]>([]); // Available synthetic groups
   const [showDebugDialog, setShowDebugDialog] = useState(false); // State for debug dialog
   const [debugRPCData, setDebugRPCData] = useState<any>(null); // Raw RPC response for debugging
   const [isLoadingDebugData, setIsLoadingDebugData] = useState(false); // Loading state for debug fetch
@@ -1076,8 +1079,67 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
     </div>
   );
 
-  const handleShowSyntheticRaces = (races: any[]) => {
-    console.log('🔍 Displaying synthetic races:', races);
+  // Fetch synthetic groups on mount
+  useEffect(() => {
+    const fetchSyntheticGroups = async () => {
+      try {
+        const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+        if (error) {
+          console.error('Error fetching synthetic groups:', error);
+          return;
+        }
+        console.log('📦 Fetched synthetic groups:', data);
+        setSyntheticGroups(data || []);
+      } catch (err) {
+        console.error('Error fetching synthetic groups:', err);
+      }
+    };
+
+    fetchSyntheticGroups();
+  }, []);
+
+  // Function to refresh synthetic groups (after creating a new group)
+  const refreshSyntheticGroups = async () => {
+    try {
+      const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+      if (error) {
+        console.error('Error refreshing synthetic groups:', error);
+        return;
+      }
+      console.log('📦 Refreshed synthetic groups:', data);
+      setSyntheticGroups(data || []);
+    } catch (err) {
+      console.error('Error refreshing synthetic groups:', err);
+    }
+  };
+
+  // Function to create a new synthetic group
+  const handleCreateSyntheticGroup = async (name: string, description?: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.rpc('e_create_synthetic_group', {
+        p_name: name,
+        p_description: description || null
+      });
+
+      if (error) {
+        console.error('Error creating synthetic group:', error);
+        return null;
+      }
+
+      console.log('✅ Created synthetic group:', data);
+      // Refresh groups after creation
+      await refreshSyntheticGroups();
+      // RPC returns UUID directly, not an object
+      return data || null;
+    } catch (err) {
+      console.error('Error creating synthetic group:', err);
+      return null;
+    }
+  };
+
+  const handleShowSyntheticRaces = (races: any[], groupId: string | null) => {
+    console.log('🔍 Displaying synthetic races:', races, 'groupId:', groupId);
+    setSelectedSyntheticGroupId(groupId);
     
     // Transform raw synthetic race data to match Race interface
     const transformedRaces = races.map(rawRace => {
@@ -1186,6 +1248,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
 
   const handleHideSyntheticRaces = () => {
     setShowingSyntheticRaces(false);
+    setSelectedSyntheticGroupId(null);
   };
 
   // Debug handler to show raw RPC data
@@ -1228,6 +1291,8 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       races={displayRaces}
       resultCount={filteredRaces.length}
       lastUpdated={lastUpdated}
+      syntheticGroups={syntheticGroups}
+      selectedSyntheticGroupId={selectedSyntheticGroupId}
       onShowSyntheticRaces={handleShowSyntheticRaces}
       showingSyntheticRaces={showingSyntheticRaces}
       onHideSyntheticRaces={handleHideSyntheticRaces}
@@ -1759,6 +1824,9 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                         onUpdateRace={handleUpdateRace}
                         onDeleteRace={handleDeleteRace}
                         parties={displayParties}
+                        syntheticGroups={syntheticGroups}
+                        onCreateGroup={handleCreateSyntheticGroup}
+                        onGroupsChange={refreshSyntheticGroups}
                       />
                     </motion.div>
                   );
@@ -1789,6 +1857,9 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                     onUpdateRace={handleUpdateRace}
                     onDeleteRace={handleDeleteRace}
                     parties={displayParties}
+                    syntheticGroups={syntheticGroups}
+                    onCreateGroup={handleCreateSyntheticGroup}
+                    onGroupsChange={refreshSyntheticGroups}
                   />
                 </motion.div>
               ))

@@ -1,4 +1,4 @@
-import { useSyntheticRaceWorkflow, ScenarioInput, AIProvider, SyntheticPreview } from "../utils/useSyntheticRaceWorkflow";
+import { useSyntheticRaceWorkflow, ScenarioInput, AIProvider, SyntheticPreview, SyntheticGroup } from "../utils/useSyntheticRaceWorkflow";
 import { Race, Candidate, getFieldValue, Party } from "../types/election";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
@@ -11,16 +11,16 @@ import { Slider } from "./ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Alert, AlertDescription } from "./ui/alert";
-import { 
-  Loader2, 
-  ArrowLeft, 
-  ArrowRight, 
-  Sparkles, 
-  CheckCircle2, 
-  XCircle, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertCircle, 
+import {
+  Loader2,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
   Bug,
   Plus,
   X,
@@ -28,7 +28,9 @@ import {
   UserPlus,
   Eye,
   Users,
-  CheckCircle
+  CheckCircle,
+  FolderPlus,
+  Database
 } from "lucide-react";
 import { supabase } from "../utils/supabase/client";
 import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
@@ -143,13 +145,15 @@ interface GenerateSyntheticScenarioModalProps {
   race: Race;
   candidates: Candidate[];
   providers: AIProvider[];
+  syntheticGroups: SyntheticGroup[]; // Available synthetic groups
+  onCreateGroup: (name: string, description?: string) => Promise<string | null>; // Callback to create new group
   onSubmitWorkflow: (scenario: ScenarioInput, modifiedCandidates: Candidate[]) => Promise<SyntheticPreview | null>;
   onConfirmSave: (synthetic: SyntheticPreview) => Promise<{ success: boolean; syntheticRaceId?: string; error?: string }>;
   isLoading: boolean;
   parties?: Party[]; // Add parties prop for dynamic party colors
 }
 
-type Step = 'input' | 'preview';
+type Step = 'input' | 'preview' | 'save';
 
 export function GenerateSyntheticScenarioModal({
   isOpen,
@@ -157,6 +161,8 @@ export function GenerateSyntheticScenarioModal({
   race,
   candidates,
   providers,
+  syntheticGroups,
+  onCreateGroup,
   onSubmitWorkflow,
   onConfirmSave,
   isLoading,
@@ -194,6 +200,14 @@ export function GenerateSyntheticScenarioModal({
   const [manualCandidateParty, setManualCandidateParty] = useState<'DEM' | 'REP' | 'IND' | 'GRN' | 'LIB' | 'OTH'>('IND');
   const [showSearchDebug, setShowSearchDebug] = useState(false);
 
+  // Synthetic group selection state
+  // Use '__NEW__' as a special marker to indicate creating a new group
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+
+
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
@@ -216,11 +230,20 @@ export function GenerateSyntheticScenarioModal({
       setShowSuccessDialog(false);
       setSuccessRaceId('');
       setErrorMessage('');
+      // Reset group selection state
+      setSelectedGroupId('');
+      setNewGroupName('');
+      setNewGroupDescription('');
     } else {
       // Initialize with current candidates when modal opens
       setModifiedCandidates([...candidates]);
+      // Auto-select default group if available
+      if (syntheticGroups.length > 0 && !selectedGroupId) {
+        const defaultGroup = syntheticGroups.find(g => g.name === 'Default');
+        setSelectedGroupId(defaultGroup?.id || syntheticGroups[0].id);
+      }
     }
-  }, [isOpen, candidates]);
+  }, [isOpen, candidates, syntheticGroups]);
 
   // Auto-select first provider if available
   useEffect(() => {
@@ -262,19 +285,65 @@ export function GenerateSyntheticScenarioModal({
     }
   };
 
+  // Handler to proceed to save step (group selection)
+  const handleProceedToSave = () => {
+    if (!preview) return;
+    setStep('save');
+  };
+
   const handleSave = async () => {
     if (!preview) return;
+
+    // Determine which group to save to
+    let groupIdToSave = selectedGroupId;
+
+    // If user typed a new group name, create the group first
+    if (newGroupName.trim()) {
+      setIsCreatingGroup(true);
+      try {
+        const newGroupId = await onCreateGroup(newGroupName.trim(), newGroupDescription.trim() || undefined);
+        if (!newGroupId) {
+          alert('Failed to create group. Please try again.');
+          setIsCreatingGroup(false);
+          return;
+        }
+        groupIdToSave = newGroupId;
+        console.log('✅ Created new group:', newGroupId);
+      } catch (err) {
+        console.error('Error creating group:', err);
+        alert('Failed to create group. Please try again.');
+        setIsCreatingGroup(false);
+        return;
+      }
+      setIsCreatingGroup(false);
+    }
+
+    // Validate we have a group to save to
+    if (!groupIdToSave || groupIdToSave === '__NEW__') {
+      alert('Please select a synthetic group or enter a new group name');
+      return;
+    }
 
     console.log('💾 SAVING WITH PREVIEW:', preview);
     console.log('💾 Preview aiResponse:', preview.aiResponse);
     console.log('💾 Preview aiResponse candidates:', preview.aiResponse?.candidates);
     console.log('💾 Preview synthesizedResults:', preview.synthesizedResults);
+    console.log('💾 Saving to group:', groupIdToSave);
 
-    const result = await onConfirmSave(preview);
+    // Update the preview scenario with the selected group ID
+    const updatedPreview: SyntheticPreview = {
+      ...preview,
+      scenario: {
+        ...preview.scenario,
+        syntheticGroupId: groupIdToSave,
+      }
+    };
+
+    const result = await onConfirmSave(updatedPreview);
     if (result.success) {
       // Close modal and optionally navigate
       onClose();
-      
+
       // Note: Navigation should be handled by parent component
       // For now, just show success message
       setSuccessRaceId(result.syntheticRaceId || '');
@@ -286,8 +355,12 @@ export function GenerateSyntheticScenarioModal({
   };
 
   const handleBack = () => {
-    setStep('input');
-    setPreview(null);
+    if (step === 'save') {
+      setStep('preview');
+    } else {
+      setStep('input');
+      setPreview(null);
+    }
   };
 
   const raceTitle = getFieldValue(race.title);
@@ -635,13 +708,14 @@ export function GenerateSyntheticScenarioModal({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {step === 'input' ? 'Generate Synthetic Race Scenario' : 'Preview Synthetic Scenario'}
+            {step === 'input' && 'Generate Synthetic Race Scenario'}
+            {step === 'preview' && 'Preview Synthetic Scenario'}
+            {step === 'save' && 'Save to Synthetic Group'}
           </DialogTitle>
           <DialogDescription>
-            {step === 'input' 
-              ? `Create a synthetic scenario for: ${raceTitle}`
-              : 'Review the AI-generated scenario before saving'
-            }
+            {step === 'input' && `Create a synthetic scenario for: ${raceTitle}`}
+            {step === 'preview' && 'Review the AI-generated scenario before saving'}
+            {step === 'save' && 'Choose which synthetic group to save this scenario to'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1200,6 +1274,136 @@ export function GenerateSyntheticScenarioModal({
           </div>
         )}
 
+        {/* Save Step - Group Selection */}
+        {step === 'save' && preview && (
+          <div className="space-y-6 py-4">
+            {/* Summary of what we're saving */}
+            <div className="p-4 bg-muted rounded-lg space-y-2">
+              <h3 className="font-medium flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Saving: {preview.scenario.name}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {raceTitle} - {preview.synthesizedResults.candidates.length} candidates
+              </p>
+            </div>
+
+            {/* Group Selection */}
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Select or Create Synthetic Group</Label>
+
+              {/* Create New Group - Always visible at top */}
+              <div className={`p-4 rounded-lg border-2 transition-colors ${
+                newGroupName.trim()
+                  ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500'
+                  : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <FolderPlus className={`w-4 h-4 ${newGroupName.trim() ? 'text-blue-600' : 'text-slate-500'}`} />
+                  <span className={`font-medium text-sm ${newGroupName.trim() ? 'text-blue-900' : 'text-slate-700'}`}>
+                    Create New Group
+                  </span>
+                  {newGroupName.trim() && (
+                    <Badge variant="default" className="ml-auto text-xs bg-blue-600">
+                      Will be created on save
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Input
+                      id="new-group-name"
+                      placeholder="Type a new group name..."
+                      value={newGroupName}
+                      onChange={(e) => {
+                        setNewGroupName(e.target.value);
+                        // Clear existing selection when typing new group
+                        if (e.target.value.trim()) {
+                          setSelectedGroupId('');
+                        }
+                      }}
+                      className="bg-white"
+                    />
+                  </div>
+                  {newGroupName.trim() && (
+                    <div className="space-y-1">
+                      <Input
+                        id="new-group-desc"
+                        placeholder="Description (optional)"
+                        value={newGroupDescription}
+                        onChange={(e) => setNewGroupDescription(e.target.value)}
+                        className="bg-white text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              {syntheticGroups.length > 0 && (
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">or select existing</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Groups List */}
+              <div className="space-y-2">
+                {syntheticGroups.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Database className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No synthetic groups found.</p>
+                    <p className="text-sm">Create a new group to save your scenario.</p>
+                  </div>
+                ) : (
+                  syntheticGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        setSelectedGroupId(group.id);
+                        // Clear new group form when selecting existing
+                        setNewGroupName('');
+                        setNewGroupDescription('');
+                      }}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        selectedGroupId === group.id && !newGroupName.trim()
+                          ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500'
+                          : 'bg-white hover:bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            <Database className="w-4 h-4" />
+                            {group.name}
+                          </div>
+                          {group.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{group.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {group.race_count !== undefined && (
+                            <Badge variant="secondary" className="text-xs">
+                              {group.race_count} race{group.race_count !== 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          {selectedGroupId === group.id && !newGroupName.trim() && (
+                            <CheckCircle className="w-5 h-5 text-blue-600" />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           {step === 'input' && (
             <>
@@ -1218,21 +1422,45 @@ export function GenerateSyntheticScenarioModal({
               </Button>
             </>
           )}
-          
+
           {step === 'preview' && (
             <>
               <Button variant="outline" onClick={handleBack} disabled={isLoading}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
               </Button>
-              <Button onClick={handleSave} disabled={isLoading}>
-                {isLoading ? (
+              <Button onClick={handleProceedToSave} disabled={isLoading}>
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Choose Group & Save
+              </Button>
+            </>
+          )}
+
+          {step === 'save' && (
+            <>
+              <Button variant="outline" onClick={handleBack} disabled={isLoading || isCreatingGroup}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={isLoading || isCreatingGroup || (!selectedGroupId && !newGroupName.trim())}
+              >
+                {isLoading || isCreatingGroup ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    {isCreatingGroup ? 'Creating Group...' : 'Saving...'}
+                  </>
+                ) : newGroupName.trim() ? (
+                  <>
+                    <FolderPlus className="w-4 h-4 mr-2" />
+                    Create "{newGroupName.trim()}" & Save
                   </>
                 ) : (
-                  'Save Synthetic Race'
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Save to Group
+                  </>
                 )}
               </Button>
             </>

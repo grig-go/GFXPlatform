@@ -12,7 +12,7 @@ import { updateRacesFieldOverride, updateRaceFieldOverride, updateCandidateField
 import { EditImageDialog } from "./EditImageDialog";
 import { motion } from "framer-motion";
 import { GenerateSyntheticScenarioModal } from "./GenerateSyntheticScenarioModal";
-import { useSyntheticRaceWorkflow } from "../utils/useSyntheticRaceWorkflow";
+import { useSyntheticRaceWorkflow, SyntheticGroup } from "../utils/useSyntheticRaceWorkflow";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,9 @@ interface RaceCardProps {
   onUpdateRace: (race: Race) => void;
   onDeleteRace?: (raceId: string) => void; // Add delete callback
   parties?: Party[];
+  syntheticGroups?: SyntheticGroup[];
+  onCreateGroup?: (name: string, description?: string) => Promise<string | null>;
+  onGroupsChange?: () => void; // Callback to refresh groups after creation
 }
 
 const statusConfig = {
@@ -99,7 +102,7 @@ const getPartyColor = (partyCode: string, parties?: Party[]): string => {
   return fallbackPartyColors[partyCode] || '#808080';
 };
 
-export function RaceCard({ race, onUpdateRace, onDeleteRace, parties }: RaceCardProps) {
+export function RaceCard({ race, onUpdateRace, onDeleteRace, parties, syntheticGroups, onCreateGroup, onGroupsChange }: RaceCardProps) {
   const [editingImageCandidate, setEditingImageCandidate] = useState<string | null>(null);
   const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [showSyntheticModal, setShowSyntheticModal] = useState(false);
@@ -800,6 +803,17 @@ export function RaceCard({ race, onUpdateRace, onDeleteRace, parties }: RaceCard
         onConfirmSave={(preview) => confirmSave(preview, race, race.candidates)}
         isLoading={isSyntheticLoading}
         parties={parties}
+        syntheticGroups={syntheticGroups || []}
+        onCreateGroup={async (name, description) => {
+          if (onCreateGroup) {
+            const groupId = await onCreateGroup(name, description);
+            if (groupId && onGroupsChange) {
+              onGroupsChange();
+            }
+            return groupId;
+          }
+          return null;
+        }}
       />
 
       {/* Race Summary Dialog */}

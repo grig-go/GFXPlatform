@@ -81,7 +81,7 @@ export function SecurityChartDialog({ open, onOpenChange, symbol, name, type }: 
       console.log(`🔍 Fetching chart data for ${symbol} with resolution ${res}...`);
 
       const response = await fetch(
-        getEdgeFunctionUrl('finance_dashboard/chart/${symbol}?resolution=${res}'),
+        getEdgeFunctionUrl(`finance_dashboard/chart/${symbol}?resolution=${res}`),
         {
           headers: {
             Authorization: `Bearer ${getSupabaseAnonKey()}`,

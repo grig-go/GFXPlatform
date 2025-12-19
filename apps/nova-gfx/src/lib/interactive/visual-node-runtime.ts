@@ -436,8 +436,23 @@ export function createNodeRuntimeContext(
     },
 
     playTemplate: (templateId: string, layerId: string, phase?: string) => {
+      console.log('[NodeRuntime] playTemplate called:', { templateId, layerId, phase });
+      console.log('[NodeRuntime] Available templates:', designerStore.templates.map(t => ({ id: t.id, name: t.name })));
+
       const template = designerStore.templates.find(t => t.id === templateId);
       if (!template) {
+        // Try to find by name as fallback
+        const templateByName = designerStore.templates.find(t => t.name === templateId);
+        if (templateByName) {
+          console.log('[NodeRuntime] Found template by name:', templateByName.id);
+          const actualLayerId = layerId || templateByName.layer_id;
+          if (phase === 'out') {
+            designerStore.playOut(actualLayerId);
+          } else {
+            designerStore.playIn(templateByName.id, actualLayerId);
+          }
+          return;
+        }
         console.warn(`[NodeRuntime] Template not found: ${templateId}`);
         return;
       }
