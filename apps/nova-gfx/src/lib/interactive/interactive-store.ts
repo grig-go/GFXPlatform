@@ -24,6 +24,7 @@ import {
 } from './action-executor';
 import { evaluateExpression, evaluateCondition, getNestedValue, setNestedValue, setDesignerStoreRef } from './script-engine';
 import { executeNodeGraph, createNodeRuntimeContext } from './visual-node-runtime';
+import { setAddressValue } from '../address';
 import type { Node, Edge } from '@xyflow/react';
 
 // ============================================================================
@@ -573,6 +574,7 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
 
       // Execute code script if present (primary method - used by AI)
       const { codeScript } = get();
+      console.log(`[Interactive] Code script check: length=${codeScript?.length || 0}, hasContent=${!!(codeScript && codeScript.trim())}`);
       if (codeScript && codeScript.trim()) {
         console.log(`[Interactive] Executing code script for event "${event.type}" on element "${event.elementId || 'any'}"`);
 
@@ -609,7 +611,6 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
             setState: (address: string, value: unknown) => {
               console.log(`[Interactive] actions.setState("${address}", "${value}")`);
               // Use the address system to set the value
-              const { setAddressValue } = require('../address');
               if (address.startsWith('@')) {
                 const success = setAddressValue(address, value);
                 if (!success) {

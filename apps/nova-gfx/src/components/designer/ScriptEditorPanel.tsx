@@ -832,8 +832,9 @@ export function ScriptEditorPanel({ className }: ScriptEditorPanelProps) {
     setScriptPlayMode(newPlayMode);
     // Also enable/disable interactive mode for interactive elements to work
     if (newPlayMode) {
-      console.log('[ScriptEditor] Enabling interactive mode...');
+      console.log('[ScriptEditor] Enabling interactive mode... (function type:', typeof enableInteractiveMode, ')');
       enableInteractiveMode();
+      console.log('[ScriptEditor] enableInteractiveMode() was called');
       // Set the code script in the interactive store for execution (primary method)
       setCodeScript(script);
       console.log('[ScriptEditor] Play mode enabled - code script set:', script.length, 'chars');

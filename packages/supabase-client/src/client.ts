@@ -348,11 +348,44 @@ export async function isSupabaseHealthy(timeoutMs = 5000): Promise<boolean> {
 /**
  * Recreate the Supabase client to get a fresh connection
  * Call this when operations are timing out
+ *
+ * IMPORTANT: Properly disposes the old client to prevent multiple GoTrueClient instances
  */
 export async function reconnectSupabase(): Promise<boolean> {
   console.log('[Supabase] Attempting to reconnect...');
 
+  const oldClient = _supabase;
+
   try {
+    // CRITICAL: Properly dispose the old client BEFORE creating a new one
+    // This prevents "Multiple GoTrueClient instances detected" warning
+    // which can cause session conflicts and connection instability
+    if (oldClient) {
+      try {
+        // 1. Stop the auto-refresh timer to prevent background token refresh conflicts
+        await oldClient.auth.stopAutoRefresh();
+        console.log('[Supabase] Stopped auto-refresh on old client');
+
+        // 2. Remove all realtime channels
+        await oldClient.removeAllChannels();
+        console.log('[Supabase] Removed all channels from old client');
+      } catch (e) {
+        // Don't block on cleanup errors - the old client might already be in a bad state
+        console.warn('[Supabase] Error during old client cleanup:', e);
+      }
+    }
+
+    // Get the session BEFORE disposing (we already stopped auto-refresh above)
+    let sessionToRestore = null;
+    if (oldClient) {
+      try {
+        const { data: { session } } = await oldClient.auth.getSession();
+        sessionToRestore = session;
+      } catch (e) {
+        console.warn('[Supabase] Could not get session from old client:', e);
+      }
+    }
+
     // Create a new client
     const newClient = createSupabaseClient();
     if (!newClient) {
@@ -361,12 +394,9 @@ export async function reconnectSupabase(): Promise<boolean> {
     }
 
     // Restore the auth session if we had one
-    if (_supabase) {
-      const { data: { session } } = await _supabase.auth.getSession();
-      if (session) {
-        console.log('[Supabase] Restoring session...');
-        await newClient.auth.setSession(session);
-      }
+    if (sessionToRestore) {
+      console.log('[Supabase] Restoring session...');
+      await newClient.auth.setSession(sessionToRestore);
     }
 
     // Replace the client reference

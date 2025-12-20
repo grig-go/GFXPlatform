@@ -216,13 +216,32 @@ export const useAuthStore = create<AuthState>()(
           if (!authListenerSetup) {
             authListenerSetup = true;
             supabase.auth.onAuthStateChange(async (event, session) => {
+              console.log('[authStore] Auth state change:', event);
+
               if (event === 'SIGNED_OUT') {
                 set({ user: null, organization: null, accessToken: null });
-              } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-                // Store/refresh the access token
+              } else if (event === 'TOKEN_REFRESHED' && session) {
+                // TOKEN_REFRESHED: Only update access token, don't refetch user data
+                // User data hasn't changed, just the access token was refreshed
+                console.log('[authStore] Token refreshed, updating access token only');
                 set({ accessToken: session.access_token });
-                // Refresh user data without re-initializing
-                await fetchAndSetUserData(session.user.id, set);
+              } else if (event === 'SIGNED_IN' && session?.user) {
+                // SIGNED_IN can be triggered by:
+                // 1. Actual new login (need to fetch user data)
+                // 2. _recoverAndRefresh on page focus (same user, skip refetch)
+                const currentUser = get().user;
+
+                if (currentUser && currentUser.id === session.user.id) {
+                  // Same user - just update access token, don't refetch
+                  // This prevents unnecessary DB calls from _recoverAndRefresh
+                  console.log('[authStore] SIGNED_IN for same user, updating access token only');
+                  set({ accessToken: session.access_token });
+                } else {
+                  // Different user or no previous user - full refresh needed
+                  console.log('[authStore] SIGNED_IN with different/new user, fetching user data');
+                  set({ accessToken: session.access_token });
+                  await fetchAndSetUserData(session.user.id, set);
+                }
               }
             });
           }
