@@ -1,8 +1,9 @@
 const { createClient } = require('@supabase/supabase-js');
 
+// Pulsar VS uses bgkjcngrslxyqjitksim (Emergent Nova Dev)
 const supabase = createClient(
-  'https://ihdoylhzekyluiiigxxc.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZG95bGh6ZWt5bHVpaWlneHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MDg5OTIsImV4cCI6MjA4MDA4NDk5Mn0.BTBy31mZUYuxTP-FTU6BU2lu95K0YTxN5eaDRX3hn8o'
+  'https://bgkjcngrslxyqjitksim.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJna2pjbmdyc2x4eXFqaXRrc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMDk2MDgsImV4cCI6MjA3NzU4NTYwOH0.7BWAMP7l3PoPr9NnTUz2WT5qo2sqt8ggA2AAHrqfrR0'
 );
 
 async function check() {
@@ -27,7 +28,25 @@ async function check() {
         console.log('Has sections:', !!parsed.sections);
         console.log('Has actors:', !!parsed.actors);
         console.log('Sections count:', parsed.sections?.length);
-        console.log('Section names:', parsed.sections?.map(s => s.name).slice(0, 10));
+        console.log('Actors count:', parsed.actors?.length);
+        console.log('Materials count:', parsed.materials?.length);
+        console.log('\nAll section names:', parsed.sections?.map(s => s.name));
+
+        // Group actors by section
+        const actorsBySection = {};
+        (parsed.actors || []).forEach(actor => {
+          const section = actor.section || 'General';
+          if (!actorsBySection[section]) actorsBySection[section] = [];
+          actorsBySection[section].push(actor.name);
+        });
+        console.log('\nActors by section:');
+        Object.entries(actorsBySection).forEach(([section, actors]) => {
+          console.log(`  ${section}: ${actors.length} actors`);
+        });
+
+        // Sections without actors
+        const sectionsWithoutActors = parsed.sections?.filter(s => !actorsBySection[s.name]).map(s => s.name);
+        console.log('\nSections WITHOUT actors:', sectionsWithoutActors);
       } else {
         console.log('set_manager_json is NULL');
       }

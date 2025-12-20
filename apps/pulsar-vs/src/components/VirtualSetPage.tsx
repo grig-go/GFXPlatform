@@ -754,17 +754,55 @@ export default function VirtualSetPage({
     // Get all materials (materials can go to any section)
     const allMaterials = schema.materials || [];
 
-    // Group actors by section
+    // Build section name lookup map for case-insensitive and fuzzy matching
+    // This maps lowercase section names to their canonical form from the schema
+    const sectionNames = (schema.sections || []).map((s: any) => s.name as string);
+    const sectionNameMap: Record<string, string> = {};
+    sectionNames.forEach((name: string) => {
+      sectionNameMap[name.toLowerCase()] = name;
+    });
+
+    // Helper to find matching section name (case-insensitive, handles variations like "Left" -> "WallLeft")
+    const findMatchingSection = (actorSection: string): string => {
+      if (!actorSection) return "General";
+
+      // Exact match (case-insensitive)
+      const lowerSection = actorSection.toLowerCase();
+      if (sectionNameMap[lowerSection]) {
+        return sectionNameMap[lowerSection];
+      }
+
+      // Try common variations: "Left" -> "WallLeft", "Right" -> "WallRight", etc.
+      const wallVariant = `wall${lowerSection}`;
+      if (sectionNameMap[wallVariant]) {
+        return sectionNameMap[wallVariant];
+      }
+
+      // Try removing "Wall" prefix if it exists
+      if (lowerSection.startsWith('wall')) {
+        const withoutWall = lowerSection.slice(4);
+        if (sectionNameMap[withoutWall]) {
+          return sectionNameMap[withoutWall];
+        }
+      }
+
+      // No match found, return original (will create orphan section)
+      return actorSection;
+    };
+
+    // Group actors by section (using normalized section names)
     const actorsBySection: Record<string, any[]> = {};
     (schema.actors || []).forEach((actor: any) => {
-      const section = actor.section || "General";
-      if (!actorsBySection[section]) actorsBySection[section] = [];
-      actorsBySection[section].push(actor);
+      const rawSection = actor.section || "General";
+      const normalizedSection = findMatchingSection(rawSection);
+      if (!actorsBySection[normalizedSection]) actorsBySection[normalizedSection] = [];
+      actorsBySection[normalizedSection].push(actor);
     });
 
     // Debug: log first actor to see its properties
     if (schema.actors && schema.actors.length > 0) {
       console.log('📋 First actor properties:', Object.keys(schema.actors[0]), schema.actors[0]);
+      console.log('📋 Actor sections mapping:', Object.keys(actorsBySection));
     }
 
     // Build available options from sections
@@ -793,8 +831,11 @@ export default function VirtualSetPage({
             return;
           }
 
-          // Check if actor has specific allowedMaterials
-          if (actor.allowedMaterials && actor.allowedMaterials.length > 0) {
+          // Check if actor has specific allowedMaterials (must be array with items)
+          // Note: allowedMaterials can be an array, a string like "No restriction", or undefined
+          const hasAllowedMaterials = Array.isArray(actor.allowedMaterials) && actor.allowedMaterials.length > 0;
+
+          if (hasAllowedMaterials) {
             // Use only allowed materials for this actor
             actor.allowedMaterials.forEach((matId: string) => {
               const material = allMaterials.find((m: any) => m.materialid === matId);
@@ -818,10 +859,49 @@ export default function VirtualSetPage({
 
       // Filter out any empty strings and add "__none__" for clear option
       const filteredOptions = actorMaterialOptions.filter(opt => opt && opt !== "");
-      options[sectionName] = filteredOptions.length > 0 ? [...filteredOptions, "__none__"] : [];
 
+      // If section has actors with materials, use those options
+      // Otherwise, provide just material options (no actor prefix) for sections without actors
       if (filteredOptions.length > 0) {
+        options[sectionName] = [...filteredOptions, "__none__"];
         console.log(`📋 Section "${sectionName}": ${sectionActors.length} actors × ${allMaterials.length} materials => ${filteredOptions.length} options`);
+      } else {
+        // Section has no actors - provide material-only options so it still appears in UI
+        const materialOnlyOptions = allMaterials.map((m: any) => m.materialid).filter((id: string) => id);
+        if (materialOnlyOptions.length > 0) {
+          options[sectionName] = [...materialOnlyOptions, "__none__"];
+          console.log(`📋 Section "${sectionName}": No actors, ${materialOnlyOptions.length} material-only options`);
+        } else {
+          options[sectionName] = ["__none__"];
+          console.log(`📋 Section "${sectionName}": No actors, no materials - placeholder only`);
+        }
+      }
+    });
+
+    // Also add any orphan sections (actors that reference sections not in the schema)
+    // This ensures all actor sections appear even if schema.sections is incomplete
+    Object.keys(actorsBySection).forEach((actorSectionName) => {
+      if (!options[actorSectionName] && actorsBySection[actorSectionName].length > 0) {
+        const orphanActors = actorsBySection[actorSectionName];
+        const actorMaterialOptions: string[] = [];
+
+        orphanActors.forEach((actor: any) => {
+          const actorId = actor.BlueprintClassName || actor.blueprintClassName || actor.actorName || actor.name || actor.id;
+          if (!actorId) return;
+
+          // No specific materials restricted - use ALL materials
+          allMaterials.forEach((material: any) => {
+            const optionValue = `${actorId}:${material.materialid}`;
+            if (!actorMaterialOptions.includes(optionValue)) {
+              actorMaterialOptions.push(optionValue);
+            }
+          });
+        });
+
+        if (actorMaterialOptions.length > 0) {
+          options[actorSectionName] = [...actorMaterialOptions, "__none__"];
+          console.log(`📋 Orphan section "${actorSectionName}": ${orphanActors.length} actors => ${actorMaterialOptions.length} options`);
+        }
       }
     });
 
@@ -836,8 +916,8 @@ export default function VirtualSetPage({
 
     setAvailableOptions(options as VirtualSetAvailableOptions);
     const sectionsWithOptions = Object.keys(options).filter(k => options[k].length > 0);
-    console.log(`✅ New schema processed: ${sectionsWithOptions.length} sections with options`, options);
-    addDebugLog(`New schema processed: ${sectionsWithOptions.length} sections with options`);
+    console.log(`✅ New schema processed: ${sectionsWithOptions.length} sections with options from ${sectionNames.length} schema sections`, options);
+    addDebugLog(`New schema processed: ${sectionsWithOptions.length} sections with options from ${sectionNames.length} schema sections`);
   };
 
   // NEW: Extract Airport available options
