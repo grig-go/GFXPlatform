@@ -265,6 +265,10 @@ export function buildContextMessage(context: AIContext): string {
           if (content.text) details.push(`"${String(content.text).slice(0, 20)}"`);
           if (content.shape) details.push(content.shape);
         }
+        // Show if element is interactive (clickable)
+        if ((e as any).interactive) {
+          details.push('🎮 interactive');
+        }
         return `• ${e.name} (${e.element_type}) [${details.join(', ')}]`;
       }).join('\n');
 
@@ -298,16 +302,32 @@ export function buildContextMessage(context: AIContext): string {
 
   // Include interactive mode context
   if (context.isInteractive) {
+    // List interactive elements for scripts
+    const interactiveElements = context.currentTemplate?.elements
+      .filter(e => (e as any).interactive)
+      .map(e => `• "${e.name}" (${e.element_type})`)
+      .join('\n') || 'None yet';
+
     parts.push(`\n## 🎮 INTERACTIVE MODE ACTIVE
 This project is in Interactive Mode. You can create clickable buttons, navigation, and data-switching interactions.
 
 **Key capabilities:**
 - Use \`"interactive": true\` on elements that should respond to clicks
 - Address elements with \`@ElementName.property\` syntax
-- Switch template data with \`@template.TemplateName.data = "Value"\`
-- Create visual scripts with Event → Action node connections
+- Switch template data with \`actions.setState('@template.{{CURRENT_TEMPLATE}}.data', 'Value')\`
+- Create JavaScript handler functions in the \`script\` field
 
-When user asks for buttons, navigation, or interactive features, include the visual script configuration.`);
+**⚠️ CRITICAL: Use \`{{CURRENT_TEMPLATE}}\` placeholder in template addresses!**
+It will be resolved to the actual template name at runtime. Do NOT hard-code template names.
+
+**⚠️ REQUIRED: Include \`script\` field with handler functions when creating interactive buttons!**
+Handler function pattern: \`on{ElementName}On{EventType}\` (spaces become underscores)
+Example: "Btn Alabama" → \`function onBtn_AlabamaOnClick(event) { actions.setState(...) }\`
+
+**Interactive Elements on Canvas:**
+${interactiveElements}
+
+When creating scripts for buttons, use their EXACT names (with spaces → underscores) in handler function names.`);
   }
 
   return parts.join('\n\n');

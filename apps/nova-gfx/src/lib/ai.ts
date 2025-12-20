@@ -2327,6 +2327,9 @@ function normalizeElement(el: any, index: number): any {
   // AI generates binding objects on elements to specify which data field they should display
   const binding = el.binding || undefined;
 
+  // Preserve interactive flag for elements that should respond to clicks in interactive mode
+  const interactive = el.interactive === true;
+
   return {
     id: el.id || undefined,
     name: el.name || `Element ${index + 1}`,
@@ -2345,6 +2348,8 @@ function normalizeElement(el: any, index: number): any {
     styles,
     // Include binding if AI provided one (for data-driven design)
     ...(binding && { binding }),
+    // Include interactive flag if AI marked element as clickable
+    ...(interactive && { interactive }),
   };
 }
 
@@ -2966,6 +2971,10 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           validationHints: hints.length > 0 ? hints : undefined,
           // Preserve dynamic_elements for template expansion
           ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
+          // Preserve visualScript for interactive elements (legacy, basic users)
+          ...(parsed.visualScript && { visualScript: parsed.visualScript }),
+          // Preserve script for interactive elements (code script, primary method)
+          ...(parsed.script && { script: parsed.script }),
         };
       }
     }
@@ -3199,6 +3208,10 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
           elementsToDelete: parsed.elementsToDelete || [],
           // Preserve dynamic_elements for template expansion
           ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
+          // Preserve visualScript for interactive elements (legacy, basic users)
+          ...(parsed.visualScript && { visualScript: parsed.visualScript }),
+          // Preserve script for interactive elements (code script, primary method)
+          ...(parsed.script && { script: parsed.script }),
           // Add truncation warning if response was repaired
           ...(wasRepaired && { _truncationWarning: 'Response was truncated and repaired. Some elements or animations may be incomplete.' }),
         };
@@ -3322,7 +3335,7 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
         }
       }
 
-      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${finalAnimations.length}, layerType=${layerType}`);
+      console.log(`✅ Parsed successfully: type=${parsed.action}, elements=${flatElements.length}, animations=${finalAnimations.length}, layerType=${layerType}${parsed.visualScript ? ', has visualScript' : ''}${parsed.script ? ', has script' : ''}`);
       return {
         type: parsed.action as 'create' | 'update' | 'delete',
         layerType: layerType,
@@ -3331,6 +3344,10 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
         elementsToDelete: parsed.elementsToDelete || [],
         // Preserve dynamic_elements for template expansion in ChatPanel
         ...(parsed.dynamic_elements && { dynamic_elements: parsed.dynamic_elements }),
+        // Preserve visualScript for interactive elements (legacy, basic users)
+        ...(parsed.visualScript && { visualScript: parsed.visualScript }),
+        // Preserve script for interactive elements (code script, primary method)
+        ...(parsed.script && { script: parsed.script }),
         // Add truncation warning if response was repaired
         ...(wasRepaired && { _truncationWarning: 'Response was truncated and repaired. Some elements or animations may be incomplete.' }),
       };
@@ -3351,6 +3368,8 @@ export function parseChangesFromResponse(response: string): AIResponse['changes'
             elements: Array.isArray(fallback.elements) ? fallback.elements.slice(0, 10) : [],
             animations: Array.isArray(fallback.animations) ? fallback.animations : [],
             elementsToDelete: [],
+            // Preserve script if present
+            ...(fallback.script && { script: fallback.script }),
           };
         }
       }
@@ -3650,6 +3669,10 @@ function convertBlueprintToChanges(blueprint: any): AIResponse['changes'] | null
       elements,
       animations: finalAnimations,
       elementsToDelete: [],
+      // Preserve visualScript for interactive elements (from blueprint, legacy)
+      ...(blueprint.visualScript && { visualScript: blueprint.visualScript }),
+      // Preserve script for interactive elements (code script, primary method)
+      ...(blueprint.script && { script: blueprint.script }),
     };
   } catch (error) {
     console.error('❌ Error converting blueprint:', error);

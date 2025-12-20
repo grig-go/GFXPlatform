@@ -5,7 +5,20 @@
  */
 
 // Supabase client
-export { supabase, getSupabaseClient, withTimeout, withAutoRecovery, resetSupabaseClient, createFreshSupabaseClient, sessionReady } from './client';
+export {
+  supabase,
+  getSupabaseClient,
+  withTimeout,
+  withAutoRecovery,
+  resetSupabaseClient,
+  createFreshSupabaseClient,
+  sessionReady,
+  // Connection health monitoring
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
+  markQuerySuccess,
+} from './client';
 
 // Configuration helpers (with environment variable support)
 export {

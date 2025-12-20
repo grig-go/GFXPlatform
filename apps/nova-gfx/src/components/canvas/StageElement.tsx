@@ -255,6 +255,13 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   // Get interactive store for dispatching events in play mode
   const { dispatchEvent, isInteractiveMode } = useInteractiveStore();
 
+  // Debug: Log when play mode changes (only for interactive elements)
+  useEffect(() => {
+    if (element.interactive) {
+      console.log('[StageElement] Interactive element render:', element.name, { isScriptPlayMode, isInteractiveMode });
+    }
+  }, [element.name, element.interactive, isScriptPlayMode, isInteractiveMode]);
+
   const { isDragging, handleMouseDown: handleDragStart } = useDrag();
   const { isResizing, handleResizeStart } = useResize();
   const { isRotating, handleRotateStart } = useRotate();
@@ -369,6 +376,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   // Handle click for selection
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      console.log('[StageElement] handleClick (selection) on element:', element.id, element.name, { isScriptPlayMode });
+
       // In script play mode, don't handle selection - let interactive elements work
       if (isScriptPlayMode) return;
 
@@ -418,16 +427,18 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
   const handleScriptPlayClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log('[StageElement] Script play click on element:', element.id, element.name, { isInteractiveMode });
+      console.log('[StageElement] Script play click on element:', element.id, element.name, { isInteractiveMode, isScriptPlayMode });
 
       if (isInteractiveMode) {
         // Dispatch click event to the interactive system
         const event = createInteractionEvent('click', element.id, undefined);
         console.log('[StageElement] Dispatching click event:', event);
         dispatchEvent(event, []);
+      } else {
+        console.warn('[StageElement] Click not dispatched - isInteractiveMode is false');
       }
     },
-    [element.id, element.name, isInteractiveMode, dispatchEvent]
+    [element.id, element.name, isInteractiveMode, isScriptPlayMode, dispatchEvent]
   );
 
   // Build transform style with animated properties

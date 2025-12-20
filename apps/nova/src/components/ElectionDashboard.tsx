@@ -26,6 +26,7 @@ import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateField
 import { supabase, withAutoRecovery } from '../utils/supabase/client';
 import { SyntheticGroup } from '../utils/useSyntheticRaceWorkflow';
 import { currentElectionYear } from '../utils/constants';
+import { getEdgeFunctionUrl, getSupabaseAnonKey } from '../utils/supabase/config';
 import { motion } from "framer-motion";
 
 interface ElectionDashboardProps {
@@ -1079,71 +1080,70 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
     </div>
   );
 
+  // Fetch synthetic groups using edge function (bypasses stuck client issue)
+  const fetchSyntheticGroupsViaEdge = async () => {
+    try {
+      console.log('📦 Fetching synthetic groups via edge function...');
+      const response = await fetch(
+        getEdgeFunctionUrl('nova-election/synthetic-groups'),
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error fetching synthetic groups:', errorData);
+        return;
+      }
+      const result = await response.json();
+      console.log('📦 Fetched synthetic groups via edge:', result.groups?.length || 0);
+      setSyntheticGroups(result.groups || []);
+    } catch (err) {
+      console.error('Error fetching synthetic groups:', err);
+    }
+  };
+
   // Fetch synthetic groups on mount
   useEffect(() => {
-    const fetchSyntheticGroups = async () => {
-      try {
-        console.log('📦 Starting fetch of synthetic groups...');
-        const { data, error } = await withAutoRecovery(
-          (client) => client.rpc('e_list_synthetic_groups'),
-          10000,
-          'fetchSyntheticGroups'
-        );
-        if (error) {
-          console.error('Error fetching synthetic groups:', error);
-          return;
-        }
-        console.log('📦 Fetched synthetic groups:', data);
-        setSyntheticGroups(data || []);
-      } catch (err) {
-        console.error('Error fetching synthetic groups:', err);
-      }
-    };
-
-    fetchSyntheticGroups();
+    fetchSyntheticGroupsViaEdge();
   }, []);
 
   // Function to refresh synthetic groups (after creating a new group)
   const refreshSyntheticGroups = async () => {
-    try {
-      const { data, error } = await withAutoRecovery(
-        (client) => client.rpc('e_list_synthetic_groups'),
-        10000,
-        'refreshSyntheticGroups'
-      );
-      if (error) {
-        console.error('Error refreshing synthetic groups:', error);
-        return;
-      }
-      console.log('📦 Refreshed synthetic groups:', data);
-      setSyntheticGroups(data || []);
-    } catch (err) {
-      console.error('Error refreshing synthetic groups:', err);
-    }
+    await fetchSyntheticGroupsViaEdge();
   };
 
-  // Function to create a new synthetic group
+  // Function to create a new synthetic group (via edge function)
   const handleCreateSyntheticGroup = async (name: string, description?: string): Promise<string | null> => {
     try {
-      const { data, error } = await withAutoRecovery(
-        (client) => client.rpc('e_create_synthetic_group', {
-          p_name: name,
-          p_description: description || null
-        }),
-        10000,
-        'createSyntheticGroup'
+      console.log('📦 Creating synthetic group via edge function:', name);
+      const response = await fetch(
+        getEdgeFunctionUrl('nova-election/synthetic-groups'),
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name, description }),
+        }
       );
 
-      if (error) {
-        console.error('Error creating synthetic group:', error);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error creating synthetic group:', errorData);
         return null;
       }
 
-      console.log('✅ Created synthetic group:', data);
+      const result = await response.json();
+      console.log('✅ Created synthetic group:', result.groupId);
       // Refresh groups after creation
       await refreshSyntheticGroups();
-      // RPC returns UUID directly, not an object
-      return data || null;
+      return result.groupId || null;
     } catch (err) {
       console.error('Error creating synthetic group:', err);
       return null;
@@ -1160,8 +1160,33 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       
       // Backend returns nested structure: { race: {...}, candidates: [...], counties: [...] }
       const raceData = rawRace.race || rawRace;
-      const candidatesData = Array.isArray(rawRace.candidates) ? rawRace.candidates : [];
-      
+
+      // First try rawRace.candidates (from e_synthetic_race_candidates table)
+      // If empty, fallback to raceData.ai_response.candidates (newer races store candidates there)
+      let candidatesData = Array.isArray(rawRace.candidates) && rawRace.candidates.length > 0
+        ? rawRace.candidates
+        : [];
+
+      // Fallback to ai_response.candidates if candidatesData is empty
+      const aiResponseCandidates = raceData.ai_response?.candidates;
+      if (candidatesData.length === 0 && Array.isArray(aiResponseCandidates) && aiResponseCandidates.length > 0) {
+        console.log('📌 Using ai_response.candidates fallback for race:', raceData.name);
+        // Transform ai_response.candidates to match the expected format
+        candidatesData = aiResponseCandidates.map((c: any, idx: number) => ({
+          candidate_id: c.candidate_id || `synthetic-candidate-${idx}`,
+          ballot_order: c.ballot_order || idx + 1,
+          withdrew: c.withdrew || false,
+          write_in: c.write_in || false,
+          metadata: {
+            candidate_name: c.candidate_name,
+            party: c.party,
+            headshot: c.headshot,
+            ...c.metadata, // Include votes, vote_percentage, winner from nested metadata
+          },
+          candidate: null, // No linked candidate profile
+        }));
+      }
+
       console.log('📌 Extracted race fields:', {
         name: raceData.name,
         office: raceData.office,
@@ -1170,7 +1195,8 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
         candidates_count: candidatesData.length,
         id: raceData.id,
         synthetic_race_id_source: raceData.id,
-        all_keys: Object.keys(raceData)
+        all_keys: Object.keys(raceData),
+        usedAiResponseFallback: candidatesData.length > 0 && rawRace.candidates?.length === 0
       });
 
       // Calculate total votes from candidates (metadata.metadata.votes - double nested!)

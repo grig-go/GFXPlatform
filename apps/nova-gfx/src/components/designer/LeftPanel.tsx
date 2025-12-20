@@ -7,59 +7,92 @@
  */
 
 import { useState } from 'react';
-import { Code2, Sparkles } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, cn } from '@emergent-platform/ui';
+import { Code2, Sparkles, BookOpen, Database } from 'lucide-react';
+import { cn } from '@emergent-platform/ui';
 import { ChatPanel } from './ChatPanel';
 import { ScriptEditorPanel } from './ScriptEditorPanel';
 import { useDesignerStore } from '@/stores/designerStore';
+import { AI_MODELS, getAIModel } from '@/lib/ai';
 
 type TabValue = 'chat' | 'script';
 
 export function LeftPanel() {
   const [activeTab, setActiveTab] = useState<TabValue>('chat');
-  const { project } = useDesignerStore();
+  const { project, isDocsMode, isDataMode, selectedDataSource } = useDesignerStore();
   const isInteractive = project?.interactive_enabled ?? false;
+
+  // Get AI model info for display
+  const aiModel = AI_MODELS[getAIModel()];
+  const isGemini = aiModel?.provider === 'gemini';
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Tab header */}
-      <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-          <TabsList className="h-8 w-full justify-start bg-transparent p-0 gap-1">
-            <TabsTrigger
-              value="chat"
-              className={cn(
-                'h-7 px-3 text-xs gap-1.5 rounded-md data-[state=active]:bg-muted',
-                'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground'
-              )}
-            >
-              <Sparkles className="w-3 h-3" />
-              AI Chat
-            </TabsTrigger>
-            <TabsTrigger
-              value="script"
-              className={cn(
-                'h-7 px-3 text-xs gap-1.5 rounded-md data-[state=active]:bg-muted',
-                'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground',
-                !isInteractive && 'opacity-50'
-              )}
-              disabled={!isInteractive}
-              title={!isInteractive ? 'Enable Interactive Mode in Project Settings' : undefined}
-            >
-              <Code2 className="w-3 h-3" />
-              Scripts
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Combined header with AI Assistant info and Scripts tab */}
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
+        {/* AI Assistant / Chat tab - clickable */}
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={cn(
+            'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors',
+            activeTab === 'chat'
+              ? 'bg-muted'
+              : 'hover:bg-muted/50 opacity-70 hover:opacity-100'
+          )}
+        >
+          <div className={cn(
+            "h-5 w-5 rounded-lg flex items-center justify-center flex-shrink-0",
+            isDocsMode
+              ? "bg-gradient-to-br from-blue-500 to-blue-600"
+              : isDataMode
+                ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
+                : isGemini
+                  ? "bg-gradient-to-br from-blue-500 to-cyan-400"
+                  : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
+          )}>
+            {isDocsMode ? (
+              <BookOpen className="w-3 h-3 text-white" />
+            ) : isDataMode ? (
+              <Database className="w-3 h-3 text-white" />
+            ) : (
+              <Sparkles className="w-3 h-3 text-white" />
+            )}
+          </div>
+          <div className="text-left">
+            <h2 className="font-semibold text-xs leading-tight">
+              {isDocsMode ? 'Docs Helper' : isDataMode ? 'Data Design' : 'AI Assistant'}
+            </h2>
+            <p className="text-[9px] text-muted-foreground leading-tight truncate max-w-[100px]">
+              {isDocsMode ? 'Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (aiModel?.name || 'AI')}
+            </p>
+          </div>
+        </button>
+
+        {/* Script Editor tab */}
+        <button
+          onClick={() => isInteractive && setActiveTab('script')}
+          disabled={!isInteractive}
+          title={!isInteractive ? 'Enable Interactive Mode in Project Settings' : 'Visual Script Editor'}
+          className={cn(
+            'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors',
+            activeTab === 'script'
+              ? 'bg-muted'
+              : 'hover:bg-muted/50 opacity-70 hover:opacity-100',
+            !isInteractive && 'opacity-40 cursor-not-allowed hover:opacity-40 hover:bg-transparent'
+          )}
+        >
+          <Code2 className="w-4 h-4" />
+          <span className="text-xs font-medium">Script Editor</span>
+        </button>
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'chat' ? (
-          <ChatPanel />
-        ) : (
+      {/* Tab content - both panels always mounted, visibility controlled via CSS */}
+      <div className="flex-1 overflow-hidden relative">
+        <div className={cn('absolute inset-0', activeTab !== 'chat' && 'hidden')}>
+          <ChatPanel hideHeader />
+        </div>
+        <div className={cn('absolute inset-0', activeTab !== 'script' && 'hidden')}>
           <ScriptEditorPanel />
-        )}
+        </div>
       </div>
     </div>
   );

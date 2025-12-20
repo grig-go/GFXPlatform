@@ -12,8 +12,27 @@ const sidebars: SidebarsConfig = {
       label: 'Applications',
       collapsed: false,
       items: [
+        'apps/nova',
         'apps/nova-gfx',
         'apps/pulsar-gfx',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Nova Features',
+      collapsed: true,
+      items: [
+        'nova/elections',
+        'nova/finance',
+        'nova/sports',
+        'nova/weather',
+        'nova/news',
+        'nova/agents',
+        'nova/media',
+        'nova/graphics',
+        'nova/data-sources',
+        'nova/permissions',
+        'nova/overrides',
       ],
     },
     {

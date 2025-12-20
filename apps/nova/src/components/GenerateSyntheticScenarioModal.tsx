@@ -173,6 +173,7 @@ interface GenerateSyntheticScenarioModalProps {
   onSubmitWorkflow: (scenario: ScenarioInput, modifiedCandidates: Candidate[]) => Promise<SyntheticPreview | null>;
   onConfirmSave: (synthetic: SyntheticPreview) => Promise<{ success: boolean; syntheticRaceId?: string; error?: string }>;
   isLoading: boolean;
+  progressStatus?: string | null; // Progress status message for AI generation
   parties?: Party[]; // Add parties prop for dynamic party colors
 }
 
@@ -189,6 +190,7 @@ export function GenerateSyntheticScenarioModal({
   onSubmitWorkflow,
   onConfirmSave,
   isLoading,
+  progressStatus,
   parties
 }: GenerateSyntheticScenarioModalProps) {
   const [step, setStep] = useState<Step>('input');
@@ -1491,9 +1493,15 @@ export function GenerateSyntheticScenarioModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
           {step === 'input' && (
             <>
+              {isLoading && progressStatus && (
+                <div className="flex-1 text-sm text-muted-foreground flex items-center gap-2 mr-auto">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {progressStatus}
+                </div>
+              )}
               <Button variant="outline" onClick={onClose} disabled={isLoading}>
                 Cancel
               </Button>

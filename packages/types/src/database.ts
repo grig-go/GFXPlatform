@@ -304,6 +304,8 @@ export interface Element {
   };
   // Interactive app event handlers and input configuration
   interactions?: ElementInteractions;
+  // Whether this element responds to clicks in interactive mode
+  interactive?: boolean;
 }
 
 // Table types
@@ -1124,8 +1126,10 @@ export interface AIChanges {
   elementsToDelete?: string[];
   validationHints?: ValidationHint[];
   dynamic_elements?: DynamicElements;
-  /** Visual script configuration for interactive elements */
+  /** Visual script configuration for interactive elements (for basic users) */
   visualScript?: AIVisualScript;
+  /** JavaScript code script with handler functions (AI-generated, primary method) */
+  script?: string;
   /** Warning message if response was truncated and repaired */
   _truncationWarning?: string;
 }

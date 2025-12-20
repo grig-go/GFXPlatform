@@ -111,12 +111,13 @@ export function RaceCard({ race, onUpdateRace, onDeleteRace, parties, syntheticG
   const [isDeleting, setIsDeleting] = useState(false);
   
   // Synthetic race workflow
-  const { 
-    isLoading: isSyntheticLoading, 
-    providers, 
+  const {
+    isLoading: isSyntheticLoading,
+    providers,
     fetchProviders,
-    runPreview, 
-    confirmSave 
+    runPreview,
+    confirmSave,
+    progressStatus: syntheticProgressStatus
   } = useSyntheticRaceWorkflow();
 
   // Fetch providers when component mounts
@@ -802,6 +803,7 @@ export function RaceCard({ race, onUpdateRace, onDeleteRace, parties, syntheticG
         onSubmitWorkflow={(scenario, modifiedCandidates) => runPreview(scenario, race, modifiedCandidates)}
         onConfirmSave={(preview) => confirmSave(preview, race, race.candidates)}
         isLoading={isSyntheticLoading}
+        progressStatus={syntheticProgressStatus}
         parties={parties}
         syntheticGroups={syntheticGroups || []}
         onCreateGroup={async (name, description) => {

@@ -446,6 +446,73 @@ serve(async (req)=>{
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const url = new URL(req.url);
+    const pathname = url.pathname;
+
+    // Route: GET /nova-election/synthetic-groups - List synthetic groups
+    if (pathname.endsWith('/synthetic-groups') && req.method === 'GET') {
+      console.log('📦 Fetching synthetic groups...');
+      const { data, error } = await supabase.rpc('e_list_synthetic_groups');
+      if (error) {
+        console.error('Error fetching synthetic groups:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      console.log(`✅ Fetched ${data?.length || 0} synthetic groups`);
+      return new Response(JSON.stringify({ ok: true, groups: data || [] }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Route: POST /nova-election/synthetic-groups - Create synthetic group
+    if (pathname.endsWith('/synthetic-groups') && req.method === 'POST') {
+      const body = await req.json();
+      const { name, description } = body;
+      console.log('📦 Creating synthetic group:', name);
+      const { data, error } = await supabase.rpc('e_create_synthetic_group', {
+        p_name: name,
+        p_description: description || null
+      });
+      if (error) {
+        console.error('Error creating synthetic group:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      console.log('✅ Created synthetic group:', data);
+      return new Response(JSON.stringify({ ok: true, groupId: data }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Route: DELETE /nova-election/synthetic-groups/:id - Delete synthetic group
+    if (pathname.includes('/synthetic-groups/') && req.method === 'DELETE') {
+      const groupId = pathname.split('/synthetic-groups/')[1];
+      const cascadeDelete = url.searchParams.get('cascade') === 'true';
+      console.log('🗑️ Deleting synthetic group:', groupId, 'cascade:', cascadeDelete);
+      const { data, error } = await supabase.rpc('e_delete_synthetic_group', {
+        p_group_id: groupId,
+        p_cascade_delete_races: cascadeDelete
+      });
+      if (error) {
+        console.error('Error deleting synthetic group:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      console.log('✅ Deleted synthetic group:', data);
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Default route: Election data
     const yearParam = url.searchParams.get('year');
     const raceTypeParam = url.searchParams.get('raceType');
     const levelParam = url.searchParams.get('level');

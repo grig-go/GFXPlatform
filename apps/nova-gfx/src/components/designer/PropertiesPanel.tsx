@@ -7,7 +7,7 @@ import {
   FolderOpen, Timer, Eraser, Trash2, ChevronDown, Clock, Scissors, Play,
 } from 'lucide-react';
 import { AddressContextMenu, AddressableProperty } from '@/components/common/AddressContextMenu';
-import { buildElementAddress } from '@/lib/address';
+import { buildElementAddress, buildKeyframeAddress } from '@/lib/address';
 import { TickerEditor } from '@/components/panels/TickerEditor';
 import { TopicBadgePreview } from '@/components/canvas/TopicBadgeElement';
 import { TOPIC_BADGE_STYLES, type TickerTopic } from '@emergent-platform/types';
@@ -422,56 +422,60 @@ function KeyframeInspector({
   const currentEasing = keyframe.easing || 'linear';
   const currentEasingLabel = EASING_OPTIONS.find(e => e.value === currentEasing)?.label || currentEasing;
   const propertyKeys = Object.keys(keyframe.properties);
+  const keyframeName = keyframe.name || `${elementName}_${animation.phase}_key_${keyframe.position}`;
+  const keyframeAddress = buildKeyframeAddress(elementName, animation.phase, keyframeName);
 
   return (
     <div className="space-y-3">
-      {/* Header with phase badge and actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
-          <input
-            type="text"
-            defaultValue={keyframe.name || `${elementName}_key_${keyframe.position}`}
-            className="text-xs font-medium bg-transparent border-none outline-none hover:bg-muted/50 focus:bg-muted px-1 py-0.5 rounded -ml-1 max-w-[120px]"
-            onBlur={(e) => {
-              const newName = e.target.value.trim();
-              if (newName && newName !== keyframe.name) {
-                onUpdate(keyframe.id, { name: newName });
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.currentTarget.blur();
-              }
-              e.stopPropagation();
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
-            {animation.phase.toUpperCase()}
-          </span>
+      {/* Header with phase badge and actions - right-click for address */}
+      <AddressContextMenu address={keyframeAddress} label="Keyframe Address">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
+            <input
+              type="text"
+              defaultValue={keyframeName}
+              className="text-xs font-medium bg-transparent border-none outline-none hover:bg-muted/50 focus:bg-muted px-1 py-0.5 rounded -ml-1 max-w-[120px]"
+              onBlur={(e) => {
+                const newName = e.target.value.trim();
+                if (newName && newName !== keyframe.name) {
+                  onUpdate(keyframe.id, { name: newName });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur();
+                }
+                e.stopPropagation();
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
+              {animation.phase.toUpperCase()}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+              onClick={() => onDelete(keyframe.id)}
+              title="Delete keyframe"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              onClick={onDeselect}
+              title="Deselect keyframe"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-            onClick={() => onDelete(keyframe.id)}
-            title="Delete keyframe"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-            onClick={onDeselect}
-            title="Deselect keyframe"
-          >
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
+      </AddressContextMenu>
 
       {/* Time/Position Section */}
       <div className="space-y-1.5">

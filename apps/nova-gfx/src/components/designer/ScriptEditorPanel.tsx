@@ -29,11 +29,6 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
   cn,
 } from '@emergent-platform/ui';
 import {
@@ -206,9 +201,17 @@ function nodesToScript(nodes: Node[], edges: Edge[]): string {
         case 'action': {
           const actionType = nodeData.actionType as string || 'log';
 
+          // Helper to properly format values (quote strings, pass through numbers/booleans)
+          const formatValue = (val: unknown): string => {
+            if (val === null || val === undefined) return 'null';
+            if (typeof val === 'string') return JSON.stringify(val);
+            if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+            return JSON.stringify(val);
+          };
+
           switch (actionType) {
             case 'setState':
-              lines.push(`${indent}actions.setState('${nodeData.target || 'value'}', ${nodeData.value || 'null'});`);
+              lines.push(`${indent}actions.setState('${nodeData.target || 'value'}', ${formatValue(nodeData.value)});`);
               break;
             case 'toggleState':
               lines.push(`${indent}actions.setState('${nodeData.target || 'value'}', !state.${nodeData.target || 'value'});`);
@@ -460,155 +463,158 @@ function VisualEditor({
     );
   }, [setNodes]);
 
-  // Handle context menu
-  const onContextMenu = useCallback((event: React.MouseEvent) => {
+  // State for custom context menu
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuScreenPos, setContextMenuScreenPos] = useState({ x: 0, y: 0 });
+
+  // Handle context menu - capture position for node placement
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     const position = screenToFlowPosition({
       x: event.clientX,
       y: event.clientY,
     });
     setContextMenuPosition(position);
+    setContextMenuScreenPos({ x: event.clientX, y: event.clientY });
+    setShowContextMenu(true);
+    console.log('[ScriptEditor] Context menu at flow position:', position);
   }, [screenToFlowPosition]);
+
+  // Close context menu when clicking elsewhere
+  useEffect(() => {
+    const handleClick = () => setShowContextMenu(false);
+    if (showContextMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [showContextMenu]);
+
+  // Add node and close menu
+  const addNodeAndClose = useCallback((type: NodeType) => {
+    if (contextMenuPosition) {
+      addNodeAtPosition(type, contextMenuPosition);
+    }
+    setShowContextMenu(false);
+  }, [contextMenuPosition, addNodeAtPosition]);
+
+  // Paste node and close menu
+  const pasteNodeAndClose = useCallback(() => {
+    if (contextMenuPosition) {
+      pasteNode(contextMenuPosition);
+    }
+    setShowContextMenu(false);
+  }, [contextMenuPosition, pasteNode]);
 
   return (
     <div className="h-full relative">
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="h-full" onContextMenu={onContextMenu}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={onNodeClick}
-              onNodeDoubleClick={onNodeDoubleClick}
-              onPaneClick={onPaneClick}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.5, maxZoom: 1 }}
-              defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-              minZoom={0.25}
-              maxZoom={2}
-              className="bg-background"
-              deleteKeyCode={['Backspace', 'Delete']}
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background variant={BackgroundVariant.Dots} gap={16} size={1} className="bg-muted/30" />
-              <Controls className="bg-zinc-900 border border-zinc-700 rounded-md [&>button]:bg-zinc-800 [&>button]:border-zinc-700 [&>button:hover]:bg-zinc-700 [&>button>svg]:fill-zinc-300" />
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onPaneClick}
+        onPaneContextMenu={onPaneContextMenu}
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.5, maxZoom: 1 }}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        minZoom={0.25}
+        maxZoom={2}
+        className="bg-background"
+        deleteKeyCode={['Backspace', 'Delete']}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} className="bg-muted/30" />
+        <Controls className="bg-zinc-900 border border-zinc-700 rounded-md [&>button]:bg-zinc-800 [&>button]:border-zinc-700 [&>button:hover]:bg-zinc-700 [&>button>svg]:fill-zinc-300" />
 
-              {/* Node palette */}
-              <Panel position="top-left" className="bg-zinc-900 border border-zinc-700 rounded-md p-2 m-2 shadow-lg">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-zinc-400 font-medium mb-1">ADD NODE</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 justify-start text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                    onClick={() => addNode('event')}
-                  >
-                    <MousePointer className="w-3 h-3 mr-2 text-blue-400" />
-                    Event
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 justify-start text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                    onClick={() => addNode('condition')}
-                  >
-                    <Filter className="w-3 h-3 mr-2 text-yellow-400" />
-                    Condition
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 justify-start text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                    onClick={() => addNode('action')}
-                  >
-                    <Zap className="w-3 h-3 mr-2 text-green-400" />
-                    Action
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 justify-start text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                    onClick={() => addNode('animation')}
-                  >
-                    <Clapperboard className="w-3 h-3 mr-2 text-purple-400" />
-                    Animation
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 justify-start text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                    onClick={() => addNode('data')}
-                  >
-                    <Database className="w-3 h-3 mr-2 text-cyan-400" />
-                    Data
-                  </Button>
-                </div>
-              </Panel>
+        {/* Selected node actions */}
+        {selectedNodeId && (
+          <Panel position="top-right" className="bg-zinc-900 border border-zinc-700 rounded-md p-2 m-2 shadow-lg">
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                onClick={copySelectedNode}
+                title="Copy (Ctrl+C)"
+              >
+                <Copy className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-red-400 hover:bg-zinc-800 hover:text-red-300"
+                onClick={deleteSelectedNode}
+                title="Delete"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Delete
+              </Button>
+            </div>
+          </Panel>
+        )}
 
-              {/* Selected node actions */}
-              {selectedNodeId && (
-                <Panel position="top-right" className="bg-zinc-900 border border-zinc-700 rounded-md p-2 m-2 shadow-lg">
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-zinc-200 hover:bg-zinc-800 hover:text-white"
-                      onClick={copySelectedNode}
-                      title="Copy (Ctrl+C)"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-red-400 hover:bg-zinc-800 hover:text-red-300"
-                      onClick={deleteSelectedNode}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3 h-3 mr-1" />
-                      Delete
-                    </Button>
-                  </div>
-                </Panel>
-              )}
-            </ReactFlow>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
-          <ContextMenuItem onClick={() => contextMenuPosition && addNodeAtPosition('event', contextMenuPosition)}>
+      </ReactFlow>
+
+      {/* Custom Context Menu */}
+      {showContextMenu && (
+        <div
+          className="fixed z-50 min-w-[180px] bg-zinc-900 border border-zinc-700 rounded-md shadow-lg py-1"
+          style={{ left: contextMenuScreenPos.x, top: contextMenuScreenPos.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full flex items-center px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={() => addNodeAndClose('event')}
+          >
             <MousePointer className="w-4 h-4 mr-2 text-blue-500" />
             Add Event
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => contextMenuPosition && addNodeAtPosition('condition', contextMenuPosition)}>
+          </button>
+          <button
+            className="w-full flex items-center px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={() => addNodeAndClose('condition')}
+          >
             <Filter className="w-4 h-4 mr-2 text-yellow-500" />
             Add Condition
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => contextMenuPosition && addNodeAtPosition('action', contextMenuPosition)}>
+          </button>
+          <button
+            className="w-full flex items-center px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={() => addNodeAndClose('action')}
+          >
             <Zap className="w-4 h-4 mr-2 text-green-500" />
             Add Action
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => contextMenuPosition && addNodeAtPosition('animation', contextMenuPosition)}>
+          </button>
+          <button
+            className="w-full flex items-center px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={() => addNodeAndClose('animation')}
+          >
             <Clapperboard className="w-4 h-4 mr-2 text-purple-500" />
             Add Animation
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => contextMenuPosition && addNodeAtPosition('data', contextMenuPosition)}>
+          </button>
+          <button
+            className="w-full flex items-center px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={() => addNodeAndClose('data')}
+          >
             <Database className="w-4 h-4 mr-2 text-cyan-500" />
             Add Data
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onClick={() => contextMenuPosition && pasteNode(contextMenuPosition)}
+          </button>
+          <div className="border-t border-zinc-700 my-1" />
+          <button
+            className={cn(
+              "w-full flex items-center px-3 py-2 text-sm",
+              copiedNode ? "text-zinc-200 hover:bg-zinc-800" : "text-zinc-500 cursor-not-allowed"
+            )}
+            onClick={pasteNodeAndClose}
             disabled={!copiedNode}
           >
             <Clipboard className="w-4 h-4 mr-2" />
             Paste Node
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+          </button>
+        </div>
+      )}
 
       {/* Node Editor Panel */}
       {selectedNode && (
@@ -638,24 +644,94 @@ export function ScriptEditorPanel({ className }: ScriptEditorPanelProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving'>('saved');
 
   const { project, updateProjectSettings, isScriptPlayMode, setScriptPlayMode } = useDesignerStore();
-  const { enableInteractiveMode, disableInteractiveMode, setVisualNodes } = useInteractiveStore();
+  const { enableInteractiveMode, disableInteractiveMode, setCodeScript, setVisualNodes } = useInteractiveStore();
   const isInteractive = project?.interactive_enabled ?? false;
 
   // React Flow state for visual mode - start with empty canvas
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Load saved config from project on mount
+  // Track the last known config hash to detect external changes
+  const lastConfigHashRef = useRef<string>('');
+
+  // Load saved config from project on mount AND when AI adds new nodes
   useEffect(() => {
-    if (project?.interactive_config && !isLoaded) {
-      const config = project.interactive_config as InteractiveConfig;
+    if (!project?.interactive_config) return;
+
+    const config = project.interactive_config as InteractiveConfig;
+
+    // Create a hash of the config to detect changes
+    const configHash = JSON.stringify({
+      nodeCount: config.visualNodes?.length || 0,
+      edgeCount: config.visualEdges?.length || 0,
+      nodeIds: config.visualNodes?.map(n => n.id).sort().join(',') || '',
+    });
+
+    // Initial load
+    if (!isLoaded) {
       if (config.mode) setMode(config.mode);
-      if (config.script) setScript(config.script);
+      // Load script from project interactive_config
+      if (config.script) {
+        setScript(config.script);
+        console.log('[ScriptEditor] Loaded script from project config:', config.script.length, 'chars');
+      }
       if (config.visualNodes) setNodes(config.visualNodes);
       if (config.visualEdges) setEdges(config.visualEdges);
+      lastConfigHashRef.current = configHash;
       setIsLoaded(true);
+      console.log('[ScriptEditor] Initial load:', config.visualNodes?.length || 0, 'nodes,', config.visualEdges?.length || 0, 'edges');
+      return;
     }
-  }, [project?.interactive_config, isLoaded, setNodes, setEdges]);
+
+    // Check if project config was updated externally (e.g., by AI)
+    // This happens when AI generates visual script nodes
+    if (configHash !== lastConfigHashRef.current) {
+      console.log('[ScriptEditor] Detected external config change, merging nodes...');
+      console.log('[ScriptEditor] Previous hash:', lastConfigHashRef.current);
+      console.log('[ScriptEditor] New hash:', configHash);
+
+      // Merge new nodes with existing (avoid duplicates)
+      if (config.visualNodes && config.visualNodes.length > 0) {
+        const existingNodeIds = new Set(nodes.map(n => n.id));
+        const newNodes = config.visualNodes.filter(n => !existingNodeIds.has(n.id));
+
+        if (newNodes.length > 0) {
+          console.log('[ScriptEditor] Adding', newNodes.length, 'new nodes from AI');
+          setNodes(prev => [...prev, ...newNodes]);
+        }
+      }
+
+      // Merge new edges with existing
+      if (config.visualEdges && config.visualEdges.length > 0) {
+        const existingEdgeIds = new Set(edges.map(e => e.id));
+        const newEdges = config.visualEdges.filter(e => !existingEdgeIds.has(e.id));
+
+        if (newEdges.length > 0) {
+          console.log('[ScriptEditor] Adding', newEdges.length, 'new edges from AI');
+          setEdges(prev => [...prev, ...newEdges]);
+        }
+      }
+
+      lastConfigHashRef.current = configHash;
+    }
+  }, [project?.interactive_config, isLoaded, setNodes, setEdges, nodes, edges]);
+
+  // Track last known script to detect AI additions
+  const lastScriptRef = useRef<string>('');
+
+  // Detect when project's interactive_config.script changes (e.g., AI generated a script)
+  useEffect(() => {
+    if (!project?.interactive_config) return;
+    const config = project.interactive_config as InteractiveConfig;
+    if (!config.script) return;
+
+    // Check if script changed (AI added it)
+    if (config.script !== lastScriptRef.current) {
+      console.log('[ScriptEditor] Project config script changed, updating editor');
+      setScript(config.script);
+      lastScriptRef.current = config.script;
+    }
+  }, [project?.interactive_config]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -752,19 +828,26 @@ export function ScriptEditorPanel({ className }: ScriptEditorPanelProps) {
   // Toggle script running state (play mode)
   const toggleScript = useCallback(() => {
     const newPlayMode = !isScriptPlayMode;
+    console.log('[ScriptEditor] toggleScript called - current:', isScriptPlayMode, '-> new:', newPlayMode);
     setScriptPlayMode(newPlayMode);
     // Also enable/disable interactive mode for interactive elements to work
     if (newPlayMode) {
+      console.log('[ScriptEditor] Enabling interactive mode...');
       enableInteractiveMode();
-      // Set the visual nodes in the interactive store for execution
+      // Set the code script in the interactive store for execution (primary method)
+      setCodeScript(script);
+      console.log('[ScriptEditor] Play mode enabled - code script set:', script.length, 'chars');
+      // Also set visual nodes for fallback (basic users using visual editor)
       setVisualNodes(nodes, edges);
-      console.log('[Script] Play mode enabled - visual nodes set:', nodes.length, 'nodes,', edges.length, 'edges');
+      console.log('[ScriptEditor] Visual nodes set:', nodes.length, 'nodes,', edges.length, 'edges');
     } else {
+      console.log('[ScriptEditor] Disabling interactive mode...');
       disableInteractiveMode();
-      // Clear visual nodes when stopping
+      // Clear script and visual nodes when stopping
+      setCodeScript('');
       setVisualNodes([], []);
     }
-  }, [isScriptPlayMode, setScriptPlayMode, enableInteractiveMode, disableInteractiveMode, setVisualNodes, nodes, edges]);
+  }, [isScriptPlayMode, setScriptPlayMode, enableInteractiveMode, disableInteractiveMode, setCodeScript, setVisualNodes, script, nodes, edges]);
 
   if (!isInteractive) {
     return (
@@ -783,26 +866,23 @@ export function ScriptEditorPanel({ className }: ScriptEditorPanelProps) {
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Code2 className="w-4 h-4 text-purple-500" />
-          <span className="text-sm font-medium">Script Editor</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Mode toggle */}
-          <Tabs value={mode} onValueChange={(v) => handleModeChange(v as 'visual' | 'code')} className="h-7">
-            <TabsList className="h-7 p-0.5">
-              <TabsTrigger value="code" className="h-6 px-2 text-xs">
-                <Code2 className="w-3 h-3 mr-1" />
-                Code
-              </TabsTrigger>
-              <TabsTrigger value="visual" className="h-6 px-2 text-xs">
-                <GitBranch className="w-3 h-3 mr-1" />
-                Visual
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
+        {/* Mode toggle */}
+        <Tabs value={mode} onValueChange={(v) => handleModeChange(v as 'visual' | 'code')} className="h-7">
+          <TabsList className="h-7 p-0.5">
+            <TabsTrigger value="code" className="h-6 px-2 text-xs">
+              <Code2 className="w-3 h-3 mr-1" />
+              Code
+            </TabsTrigger>
+            <TabsTrigger value="visual" className="h-6 px-2 text-xs">
+              <GitBranch className="w-3 h-3 mr-1" />
+              Visual
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-1">
           {/* Convert to Code button (only in visual mode with nodes) */}
           {mode === 'visual' && nodes.length > 0 && (
             <Button
@@ -817,57 +897,41 @@ export function ScriptEditorPanel({ className }: ScriptEditorPanelProps) {
             </Button>
           )}
           {/* Script Controls */}
-          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-border">
-            <Button
-              variant={isScriptPlayMode ? 'default' : 'ghost'}
-              size="sm"
-              className={cn(
-                'h-7 px-2',
-                isScriptPlayMode && 'bg-green-600 hover:bg-green-700 text-white'
-              )}
-              onClick={toggleScript}
-              title={isScriptPlayMode ? 'Stop Script' : 'Start Script'}
-            >
-              {isScriptPlayMode ? (
-                <>
-                  <Square className="w-3 h-3 mr-1" />
-                  <span className="text-xs">Stop</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3 h-3 mr-1" />
-                  <span className="text-xs">Start</span>
-                </>
-              )}
-            </Button>
-            {isScriptPlayMode && (
-              <div className="flex items-center gap-1 text-xs text-green-500">
-                <Circle className="w-2 h-2 fill-green-500 animate-pulse" />
-                <span>Running</span>
-              </div>
+          <Button
+            variant={isScriptPlayMode ? 'default' : 'ghost'}
+            size="sm"
+            className={cn(
+              'h-7 px-2',
+              isScriptPlayMode && 'bg-green-600 hover:bg-green-700 text-white'
             )}
-          </div>
+            onClick={toggleScript}
+            title={isScriptPlayMode ? 'Stop Script' : 'Start Script'}
+          >
+            {isScriptPlayMode ? (
+              <>
+                <Square className="w-3 h-3 mr-1" />
+                <span className="text-xs">Stop</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3 h-3 mr-1" />
+                <span className="text-xs">Start</span>
+              </>
+            )}
+          </Button>
+          {isScriptPlayMode && (
+            <Circle className="w-2 h-2 fill-green-500 animate-pulse" />
+          )}
           {/* Save status indicator */}
-          <div className="flex items-center gap-1 ml-2">
-            {saveStatus === 'pending' && (
-              <div className="flex items-center gap-1 text-xs text-amber-500">
-                <Circle className="w-2 h-2 fill-amber-500" />
-                <span>Unsaved</span>
-              </div>
-            )}
-            {saveStatus === 'saving' && (
-              <div className="flex items-center gap-1 text-xs text-blue-500">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Saving...</span>
-              </div>
-            )}
-            {saveStatus === 'saved' && (
-              <div className="flex items-center gap-1 text-xs text-green-500">
-                <Check className="w-3 h-3" />
-                <span>Saved</span>
-              </div>
-            )}
-          </div>
+          {saveStatus === 'pending' && (
+            <Circle className="w-2 h-2 fill-amber-500" title="Unsaved" />
+          )}
+          {saveStatus === 'saving' && (
+            <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+          )}
+          {saveStatus === 'saved' && (
+            <Check className="w-3 h-3 text-green-500" />
+          )}
           {/* Manual save button */}
           <Button variant="ghost" size="sm" className="h-7 px-2" onClick={saveScript} title="Save Script">
             <Save className="w-3 h-3" />

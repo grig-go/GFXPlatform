@@ -6,7 +6,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { supabase, sessionReady } from '../utils/supabase';
+import { supabase, sessionReady, startConnectionMonitor, stopConnectionMonitor, withAutoRecovery } from '../utils/supabase';
 import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '../lib/cookieStorage';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import type {
@@ -54,11 +54,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       console.log('[Auth] checkSystemLocked: querying u_users for superuser...');
       const startTime = Date.now();
-      const { data, error } = await supabase
-        .from('u_users')
-        .select('id')
-        .eq('is_superuser', true)
-        .limit(1);
+
+      // Use withAutoRecovery to handle stuck connections
+      const { data, error } = await withAutoRecovery(
+        (client) => client
+          .from('u_users')
+          .select('id')
+          .eq('is_superuser', true)
+          .limit(1),
+        10000,
+        'checkSystemLocked'
+      );
       console.log('[Auth] checkSystemLocked: query took', Date.now() - startTime, 'ms');
 
       if (error) {
@@ -78,15 +84,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const fetchUserData = useCallback(async (authUserId: string): Promise<AppUserWithPermissions | null> => {
     console.log('[Auth] fetchUserData starting for:', authUserId);
     try {
-      // Fetch user from u_users
+      // Fetch user from u_users with auto-recovery
       console.log('[Auth] Fetching user from u_users...');
       console.log('[Auth] Query: u_users where auth_user_id =', authUserId);
       const startTime = Date.now();
-      const { data: userData, error: userError } = await supabase
-        .from('u_users')
-        .select('*')
-        .eq('auth_user_id', authUserId)
-        .single();
+      const { data: userData, error: userError } = await withAutoRecovery(
+        (client) => client
+          .from('u_users')
+          .select('*')
+          .eq('auth_user_id', authUserId)
+          .single(),
+        10000,
+        'fetchUserData'
+      );
       console.log('[Auth] u_users query completed in', Date.now() - startTime, 'ms');
 
       if (userError || !userData) {
@@ -315,6 +325,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     initialize();
 
+    // Start connection health monitor to detect and recover from stuck connections
+    startConnectionMonitor();
+
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -339,8 +352,54 @@ export function AuthProvider({ children }: AuthProviderProps) {
             isPending: false,
           }));
           setChannelAccess([]);
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // TOKEN_REFRESHED: Only update session tokens, don't re-fetch user data
+          // User data hasn't changed, just the access token was refreshed
+          console.log('[Auth] Token refreshed, updating session tokens only');
+          setState(prev => ({
+            ...prev,
+            session: {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+              expires_at: session.expires_at || 0,
+            },
+          }));
+        } else if (event === 'SIGNED_IN' && session && initializedRef.current) {
+          // SIGNED_IN after initialization: Check if this is a session recovery or new login
+          // _recoverAndRefresh emits SIGNED_IN when recovering session on page focus
+          // Only refetch user data if the user ID changed (actual new login)
+          let shouldRefetch = false;
+
+          setState(prev => {
+            const currentUserId = prev.user?.auth_user_id;
+            const newUserId = session.user.id;
+
+            if (currentUserId && currentUserId === newUserId) {
+              // Same user - just update session tokens, don't refetch user data
+              // This prevents unnecessary DB calls from _recoverAndRefresh
+              console.log('[Auth] SIGNED_IN for same user, updating session tokens only');
+              return {
+                ...prev,
+                session: {
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                  expires_at: session.expires_at || 0,
+                },
+              };
+            }
+            // Different user or no previous user - need full refresh
+            shouldRefetch = true;
+            return prev;
+          });
+
+          // Full refresh only if user changed or no previous user
+          if (shouldRefetch) {
+            console.log('[Auth] SIGNED_IN with different/new user, fetching user data');
+            await handleSessionChange(session);
+          }
         } else if (session && initializedRef.current) {
-          console.log('[Auth] Processing auth state change for session');
+          // Other events (USER_UPDATED, etc.): Full user data refresh
+          console.log('[Auth] Processing auth state change for session, event:', event);
           await handleSessionChange(session);
         }
       }
@@ -349,6 +408,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      stopConnectionMonitor();
     };
   }, [checkSystemLocked, handleSessionChange]);
 

@@ -34,14 +34,16 @@ export async function withAutoRecovery<T>(
     // First attempt with current client
     const client = getSupabaseClient();
     const result = await withTimeout(operationFn(client), timeoutMs, operationName);
+    // Mark successful query for health monitoring
+    markQuerySuccess();
     return result;
   } catch (error: any) {
     // Check if this was a timeout error
     if (error.message?.includes('timed out')) {
       console.warn(`[Supabase] ${operationName} timed out after ${Date.now() - startTime}ms, resetting client and retrying...`);
 
-      // Reset the stuck client
-      resetSupabaseClient();
+      // Reset the stuck client (properly disposes old client)
+      await resetSupabaseClient();
 
       // Retry with fresh client
       const freshClient = getSupabaseClient();
@@ -50,6 +52,8 @@ export async function withAutoRecovery<T>(
       try {
         const result = await withTimeout(operationFn(freshClient), timeoutMs, `${operationName} (retry)`);
         console.log(`[Supabase] ${operationName} succeeded on retry in ${Date.now() - retryStart}ms`);
+        // Mark successful query for health monitoring
+        markQuerySuccess();
         return result;
       } catch (retryError: any) {
         console.error(`[Supabase] ${operationName} failed on retry:`, retryError.message);
@@ -77,6 +81,14 @@ export async function withAutoRecovery<T>(
  */
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 let clientVersion = 0; // Track client version for debugging
+let lastSuccessfulQuery = Date.now(); // Track last successful operation
+let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+let connectionHealthy = true;
+
+// Connection health configuration
+const HEALTH_CHECK_INTERVAL = 30000; // Check every 30 seconds
+const CONNECTION_STALE_THRESHOLD = 60000; // Consider stale after 60 seconds of no activity
+const HEALTH_CHECK_TIMEOUT = 5000; // 5 second timeout for health checks
 
 // Migrate existing localStorage sessions on module load
 const supabaseUrl = getSupabaseUrl();
@@ -86,14 +98,152 @@ migrateLocalStorageToCookie([
 ]);
 
 /**
+ * Mark a successful query - called to track connection health
+ */
+export function markQuerySuccess(): void {
+  lastSuccessfulQuery = Date.now();
+  if (!connectionHealthy) {
+    console.log('[Supabase] Connection restored');
+    connectionHealthy = true;
+  }
+}
+
+/**
+ * Check if the connection is currently healthy
+ */
+export function isConnectionHealthy(): boolean {
+  return connectionHealthy;
+}
+
+/**
  * Reset the Supabase client singleton
  * Use this when the client gets into a stuck state (e.g., auth lock hung)
  * This forces creation of a fresh client on next getSupabaseClient() call
+ *
+ * IMPORTANT: Properly disposes the old client to prevent multiple GoTrueClient instances
  */
-export function resetSupabaseClient(): void {
+export async function resetSupabaseClient(): Promise<void> {
+  const oldClient = supabaseClient;
+
   console.log('[Supabase] Resetting client (version was:', clientVersion, ')');
+
+  // CRITICAL: Properly dispose the old client before creating a new one
+  // This prevents "Multiple GoTrueClient instances detected" warning
+  if (oldClient) {
+    try {
+      // 1. Stop the auto-refresh timer to prevent background token refresh conflicts
+      await oldClient.auth.stopAutoRefresh();
+      console.log('[Supabase] Stopped auto-refresh on old client');
+
+      // 2. Remove all realtime channels
+      await oldClient.removeAllChannels();
+      console.log('[Supabase] Removed all channels from old client');
+    } catch (e) {
+      // Don't block on cleanup errors
+      console.warn('[Supabase] Error during client cleanup:', e);
+    }
+  }
+
   supabaseClient = null;
   clientVersion++;
+  connectionHealthy = false; // Mark as unhealthy until next successful query
+}
+
+/**
+ * Perform a lightweight health check to detect stuck connections
+ * Uses a simple query with strict timeout
+ */
+async function performHealthCheck(): Promise<boolean> {
+  const client = supabaseClient;
+  if (!client) return true; // No client to check
+
+  // Skip if we had a recent successful query
+  const timeSinceLastSuccess = Date.now() - lastSuccessfulQuery;
+  if (timeSinceLastSuccess < CONNECTION_STALE_THRESHOLD) {
+    return true;
+  }
+
+  console.log(`[Supabase] Health check - ${timeSinceLastSuccess}ms since last success`);
+
+  try {
+    // Use raw fetch to bypass potentially stuck client
+    const url = getSupabaseUrl();
+    const key = getSupabaseAnonKey();
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+    const response = await fetch(`${url}/rest/v1/?limit=0`, {
+      method: 'HEAD',
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      markQuerySuccess();
+      return true;
+    }
+
+    console.warn('[Supabase] Health check failed with status:', response.status);
+    return false;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn('[Supabase] Health check timed out - connection may be stuck');
+    } else {
+      console.warn('[Supabase] Health check error:', error.message);
+    }
+    return false;
+  }
+}
+
+/**
+ * Start the connection health monitor
+ * Periodically checks connection health and auto-recovers if stuck
+ */
+export function startConnectionMonitor(): void {
+  if (healthCheckInterval) {
+    return; // Already running
+  }
+
+  console.log('[Supabase] Starting connection health monitor');
+
+  healthCheckInterval = setInterval(async () => {
+    const healthy = await performHealthCheck();
+
+    if (!healthy && connectionHealthy) {
+      console.warn('[Supabase] Connection appears stuck, attempting recovery...');
+      connectionHealthy = false;
+
+      // Reset the client to force a fresh connection (properly disposes old client)
+      await resetSupabaseClient();
+
+      // Trigger a new health check after reset
+      setTimeout(async () => {
+        const recoveredHealthy = await performHealthCheck();
+        if (recoveredHealthy) {
+          console.log('[Supabase] Connection recovered after reset');
+        } else {
+          console.error('[Supabase] Connection still unhealthy after reset');
+        }
+      }, 1000);
+    }
+  }, HEALTH_CHECK_INTERVAL);
+}
+
+/**
+ * Stop the connection health monitor
+ */
+export function stopConnectionMonitor(): void {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+    console.log('[Supabase] Stopped connection health monitor');
+  }
 }
 
 /**
@@ -197,7 +347,7 @@ const ensureSessionInitialized = async (): Promise<void> => {
           console.warn('[Supabase] setSession timed out or failed:', e);
           // Clear the potentially corrupted cookie
           cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-          resetSupabaseClient();
+          await resetSupabaseClient();
         }
       } else {
         console.warn('[Supabase] Cookie exists but missing tokens:', {
@@ -259,9 +409,9 @@ if (typeof window !== 'undefined') {
   };
 
   // Reset the client and create a fresh one
-  (window as any).resetSupabase = () => {
+  (window as any).resetSupabase = async () => {
     console.log('[Supabase] Manual reset triggered');
-    resetSupabaseClient();
+    await resetSupabaseClient();
     // Get new client to trigger recreation
     const newClient = getSupabaseClient();
     console.log('[Supabase] New client created. Run window.testSupabase() to verify.');

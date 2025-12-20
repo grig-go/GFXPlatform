@@ -84,6 +84,41 @@ export function buildActionAddress(actionName: string, params?: string[]): strin
 }
 
 /**
+ * Build an address string for a keyframe
+ * @param elementName - The element's display name
+ * @param phase - Animation phase ('in' or 'out')
+ * @param keyframeName - The keyframe's name
+ * @param property - Optional property path
+ */
+export function buildKeyframeAddress(
+  elementName: string,
+  phase: string,
+  keyframeName: string,
+  property?: string
+): string {
+  const safeElementName = sanitizeName(elementName);
+  const safeKeyframeName = sanitizeName(keyframeName);
+  const base = `@${safeElementName}.animation.${phase}.${safeKeyframeName}`;
+  return property ? `${base}.${property}` : base;
+}
+
+/**
+ * Build an address string for an animation
+ * @param elementName - The element's display name
+ * @param phase - Animation phase ('in' or 'out')
+ * @param property - Optional property path
+ */
+export function buildAnimationAddress(
+  elementName: string,
+  phase: string,
+  property?: string
+): string {
+  const safeElementName = sanitizeName(elementName);
+  const base = `@${safeElementName}.animation.${phase}`;
+  return property ? `${base}.${property}` : base;
+}
+
+/**
  * Sanitize a name for use in addresses
  * Replaces spaces with underscores, removes special characters
  */

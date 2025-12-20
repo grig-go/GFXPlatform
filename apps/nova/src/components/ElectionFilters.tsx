@@ -154,25 +154,15 @@ export function ElectionFilters({
       let raceList;
       let listError;
 
-      if (groupId) {
-        // Fetch races for specific group
-        const result = await withAutoRecovery(
-          (client) => client.rpc('e_list_synthetic_races_by_group', { p_group_id: groupId }),
-          10000,
-          'listSyntheticRacesByGroup'
-        );
-        raceList = result.data;
-        listError = result.error;
-      } else {
-        // Fetch all synthetic races
-        const result = await withAutoRecovery(
-          (client) => client.rpc('e_list_synthetic_races'),
-          10000,
-          'listSyntheticRaces'
-        );
-        raceList = result.data;
-        listError = result.error;
-      }
+      // Use e_list_synthetic_races_by_group for both cases - it handles null to return all races
+      // This avoids the function overloading issue with e_list_synthetic_races
+      const result = await withAutoRecovery(
+        (client) => client.rpc('e_list_synthetic_races_by_group', { p_group_id: groupId }),
+        10000,
+        'listSyntheticRacesByGroup'
+      );
+      raceList = result.data;
+      listError = result.error;
 
       console.log("📦 Synthetic race list:", raceList, "groupId:", groupId);
 

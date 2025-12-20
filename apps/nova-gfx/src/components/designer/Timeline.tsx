@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronFirst, ChevronLast,
   Plus, ZoomIn, ZoomOut, Repeat, Maximize2, Trash2, Diamond,
-  GripHorizontal, Move, MonitorPlay, X, Layers, Clock, ChevronDown, Copy, Spline,
+  GripHorizontal, Move, MonitorPlay, X, Layers, Clock, ChevronDown, Copy, Spline, Check, Link,
 } from 'lucide-react';
 import { CurveGraphEditor } from './CurveGraphEditor';
 import {
@@ -41,6 +41,7 @@ import {
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { FRAME_RATE, FRAME_DURATION, createDefaultAnimation, formatTime, type AnimationType } from '@/lib/animation';
+import { buildKeyframeAddress, buildAnimationAddress } from '@/lib/address';
 import type { AnimationPhase, Keyframe as StoreKeyframe } from '@emergent-platform/types';
 
 // Row and header heights - must match for alignment between element list and timeline
@@ -145,6 +146,7 @@ export function Timeline() {
   const [contextMenuElementId, setContextMenuElementId] = useState<string | null>(null);
   const [contextMenuSelectedKeyframes, setContextMenuSelectedKeyframes] = useState<string[]>([]);
   const [contextMenuShowEasing, setContextMenuShowEasing] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   // Curves panel resizing state
   const [curvesPanelHeight, setCurvesPanelHeight] = useState(180);
@@ -2425,6 +2427,9 @@ export function Timeline() {
         const selectedKfAnim = selectedKf
           ? animations.find(a => a.id === selectedKf.animation_id)
           : null;
+        const selectedKfElement = selectedKfAnim
+          ? elements.find(e => e.id === selectedKfAnim.element_id)
+          : null;
         const selectedKfTimeMs = selectedKf && selectedKfAnim
           ? selectedKfAnim.delay + selectedKf.position  // Absolute timeline position = delay + relative position
           : 0;
@@ -2433,6 +2438,12 @@ export function Timeline() {
           : 0;
         const currentEasing = selectedKf?.easing || 'linear';
         const currentEasingLabel = easingOptions.find(e => e.value === currentEasing)?.label || currentEasing;
+
+        // Build keyframe address for "Copy Address" feature
+        const keyframeName = selectedKf?.name || `key_${selectedKf?.position || 0}`;
+        const keyframeAddress = selectedKf && selectedKfElement && selectedKfAnim
+          ? buildKeyframeAddress(selectedKfElement.name, selectedKfAnim.phase, keyframeName)
+          : null;
 
         return (
           <>
@@ -2631,6 +2642,39 @@ export function Timeline() {
                     <Copy className="w-4 h-4 text-violet-400" />
                     <span>Duplicate Keyframe</span>
                   </span>
+                </button>
+              )}
+
+              {/* Copy Address - only for single selection with valid address */}
+              {keyframeAddress && (
+                <button
+                  className="w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-emerald-500/10 transition-colors"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(keyframeAddress);
+                      setCopiedAddress(true);
+                      console.log('[Address] Copied keyframe address:', keyframeAddress);
+                      setTimeout(() => setCopiedAddress(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy address:', err);
+                    }
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    {copiedAddress ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Link className="w-4 h-4 text-emerald-400" />
+                    )}
+                    <span className={copiedAddress ? 'text-emerald-400' : ''}>
+                      {copiedAddress ? 'Address Copied!' : 'Copy Address'}
+                    </span>
+                  </span>
+                  {!copiedAddress && (
+                    <code className="text-[9px] font-mono text-emerald-400/60 truncate max-w-[100px]">
+                      {keyframeAddress}
+                    </code>
+                  )}
                 </button>
               )}
 

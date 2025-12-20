@@ -873,6 +873,14 @@ app.post("/ai_provider/chat", async (c) => {
       case 'openai':
         {
           console.log('🤖 Calling OpenAI API...');
+          // Use higher token limit for elections dashboard (synthetic scenarios need ~100K tokens)
+          const isElections = dashboard === 'elections';
+          const maxTokens = isElections ? 100000 : (provider.max_tokens || 4096);
+          const timeout = isElections ? 300000 : 30000; // 5 minutes for elections
+          const useStreaming = isElections; // Use streaming for elections to get full response
+
+          console.log(`📊 Using max_tokens=${maxTokens}, timeout=${timeout}ms, streaming=${useStreaming} for dashboard=${dashboard}`);
+
           const apiResponse = await fetch(`${provider.endpoint}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -881,8 +889,9 @@ app.post("/ai_provider/chat", async (c) => {
             },
             body: JSON.stringify({
               model: provider.model,
-              max_tokens: provider.max_tokens || 4096,
+              max_tokens: maxTokens,
               temperature: provider.temperature || 0.7,
+              stream: useStreaming,
               messages: [
                 {
                   role: 'user',
@@ -890,7 +899,7 @@ app.post("/ai_provider/chat", async (c) => {
                 }
               ]
             }),
-            signal: AbortSignal.timeout(30000)
+            signal: AbortSignal.timeout(timeout)
           });
 
           if (!apiResponse.ok) {
@@ -898,17 +907,94 @@ app.post("/ai_provider/chat", async (c) => {
             throw new Error(`OpenAI API error: ${apiResponse.status} - ${errorText}`);
           }
 
-          const data = await apiResponse.json();
-          response = data.choices[0].message.content;
+          if (useStreaming) {
+            // Handle streaming response using Deno-compatible approach
+            console.log('📡 Processing streaming response with getReader()...');
+            let fullContent = '';
+            let chunkCount = 0;
+
+            const reader = apiResponse.body?.getReader();
+            if (!reader) {
+              throw new Error('No response body for streaming');
+            }
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
+
+              // Process complete lines from buffer
+              const lines = buffer.split('\n');
+              // Keep the last incomplete line in buffer
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6).trim();
+                  if (data === '[DONE]') continue;
+                  if (!data) continue;
+
+                  try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices?.[0]?.delta?.content || '';
+                    if (content) {
+                      fullContent += content;
+                      chunkCount++;
+                    }
+                  } catch (e) {
+                    // Skip malformed JSON chunks
+                  }
+                }
+              }
+            }
+
+            // Process any remaining data in buffer
+            if (buffer.startsWith('data: ')) {
+              const data = buffer.slice(6).trim();
+              if (data && data !== '[DONE]') {
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content || '';
+                  if (content) {
+                    fullContent += content;
+                    chunkCount++;
+                  }
+                } catch (e) {
+                  // Skip malformed
+                }
+              }
+            }
+
+            console.log(`✅ Streaming complete: ${chunkCount} chunks, ${fullContent.length} chars`);
+            response = fullContent;
+          } else {
+            const data = await apiResponse.json();
+            response = data.choices[0].message.content;
+          }
           break;
         }
 
       case 'gemini':
         {
           console.log('🤖 Calling Gemini API...');
-          const apiResponse = await fetch(
-            `${provider.endpoint}/models/${provider.model}:generateContent?key=${provider.api_key}`,
-            {
+          // Use higher token limit for elections dashboard
+          const isElections = dashboard === 'elections';
+          const maxTokens = isElections ? 100000 : (provider.max_tokens || 4096);
+          const timeout = isElections ? 300000 : 30000; // 5 minutes for elections
+          const useStreaming = isElections;
+
+          console.log(`📊 Gemini: max_tokens=${maxTokens}, timeout=${timeout}ms, streaming=${useStreaming}`);
+
+          if (useStreaming) {
+            // Use Gemini streaming endpoint for large responses
+            const apiUrl = `${provider.endpoint}/models/${provider.model}:streamGenerateContent?key=${provider.api_key}&alt=sse`;
+
+            const apiResponse = await fetch(apiUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
@@ -925,20 +1011,97 @@ app.post("/ai_provider/chat", async (c) => {
                 ],
                 generationConfig: {
                   temperature: provider.temperature || 0.7,
-                  maxOutputTokens: provider.max_tokens || 4096
+                  maxOutputTokens: maxTokens
                 }
               }),
-              signal: AbortSignal.timeout(30000)
+              signal: AbortSignal.timeout(timeout)
+            });
+
+            if (!apiResponse.ok) {
+              const errorText = await apiResponse.text();
+              throw new Error(`Gemini streaming API error: ${apiResponse.status} - ${errorText}`);
             }
-          );
 
-          if (!apiResponse.ok) {
-            const errorText = await apiResponse.text();
-            throw new Error(`Gemini API error: ${apiResponse.status} - ${errorText}`);
+            console.log('📡 Processing Gemini streaming response...');
+            let fullContent = '';
+            let chunkCount = 0;
+
+            const reader = apiResponse.body?.getReader();
+            if (!reader) {
+              throw new Error('No response body for Gemini streaming');
+            }
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
+
+              // Process complete lines from buffer
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6).trim();
+                  if (!data) continue;
+
+                  try {
+                    const parsed = JSON.parse(data);
+                    const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    if (text) {
+                      fullContent += text;
+                      chunkCount++;
+                    }
+                  } catch (e) {
+                    // Skip malformed chunks
+                  }
+                }
+              }
+            }
+
+            console.log(`✅ Gemini streaming complete: ${chunkCount} chunks, ${fullContent.length} chars`);
+            response = fullContent;
+          } else {
+            // Non-streaming for smaller requests
+            const apiResponse = await fetch(
+              `${provider.endpoint}/models/${provider.model}:generateContent?key=${provider.api_key}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      parts: [
+                        {
+                          text: context ? `${context}\n\n${message}` : message
+                        }
+                      ]
+                    }
+                  ],
+                  generationConfig: {
+                    temperature: provider.temperature || 0.7,
+                    maxOutputTokens: maxTokens
+                  }
+                }),
+                signal: AbortSignal.timeout(timeout)
+              }
+            );
+
+            if (!apiResponse.ok) {
+              const errorText = await apiResponse.text();
+              throw new Error(`Gemini API error: ${apiResponse.status} - ${errorText}`);
+            }
+
+            const data = await apiResponse.json();
+            response = data.candidates[0].content.parts[0].text;
           }
-
-          const data = await apiResponse.json();
-          response = data.candidates[0].content.parts[0].text;
           break;
         }
 

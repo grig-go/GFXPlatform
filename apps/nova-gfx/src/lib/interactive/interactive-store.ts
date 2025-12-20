@@ -97,7 +97,10 @@ interface InteractiveStoreState {
   config: InteractiveAppConfig | null;
   isInteractiveMode: boolean;
 
-  // Visual node graph for script execution
+  // Code script for script execution (primary method)
+  codeScript: string;
+
+  // Visual node graph for script execution (optional, for basic users)
   visualNodes: Node[];
   visualEdges: Edge[];
 
@@ -114,7 +117,8 @@ interface InteractiveStoreState {
   enableInteractiveMode: () => void;
   disableInteractiveMode: () => void;
 
-  // Visual node management
+  // Script management
+  setCodeScript: (script: string) => void;
   setVisualNodes: (nodes: Node[], edges: Edge[]) => void;
 
   // State management
@@ -173,6 +177,7 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
     // Initial state
     config: null,
     isInteractiveMode: false,
+    codeScript: '',
     visualNodes: [],
     visualEdges: [],
     runtime: createInitialRuntime(),
@@ -228,7 +233,13 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
       set({ isInteractiveMode: false });
     },
 
-    // Set visual nodes for script execution
+    // Set code script for execution
+    setCodeScript: (script: string) => {
+      set({ codeScript: script });
+      console.log(`[Interactive] Code script set: ${script.length} chars`);
+    },
+
+    // Set visual nodes for script execution (optional, for basic users)
     setVisualNodes: (nodes: Node[], edges: Edge[]) => {
       set({ visualNodes: nodes, visualEdges: edges });
       console.log(`[Interactive] Visual nodes set: ${nodes.length} nodes, ${edges.length} edges`);
@@ -560,7 +571,118 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
         }
       }
 
-      // Execute visual node graph if nodes are present
+      // Execute code script if present (primary method - used by AI)
+      const { codeScript } = get();
+      if (codeScript && codeScript.trim()) {
+        console.log(`[Interactive] Executing code script for event "${event.type}" on element "${event.elementId || 'any'}"`);
+
+        // Find the element name for the clicked element
+        let elementName: string | null = null;
+        if (event.elementId) {
+          const clickedElement = designerStore.elements.find(e => e.id === event.elementId);
+          if (clickedElement) {
+            elementName = clickedElement.name;
+          }
+        }
+
+        // Build the handler function name based on element name and event type
+        // Pattern: on{ElementName}On{EventType} e.g., onBtn_AlabamaOnClick
+        if (elementName) {
+          const sanitizedName = elementName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+          const eventTypeCap = event.type.charAt(0).toUpperCase() + event.type.slice(1);
+          const handlerName = `on${sanitizedName}On${eventTypeCap}`;
+
+          console.log(`[Interactive] Looking for handler: ${handlerName}`);
+
+          // Get current template name for {{CURRENT_TEMPLATE}} placeholder resolution
+          const currentTemplate = designerStore.currentTemplateId
+            ? designerStore.templates.find(t => t.id === designerStore.currentTemplateId)
+            : null;
+          const currentTemplateName = currentTemplate?.name || '';
+          const sanitizedTemplateName = currentTemplateName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+
+          // Replace {{CURRENT_TEMPLATE}} placeholder in script
+          const resolvedScript = codeScript.replace(/\{\{CURRENT_TEMPLATE\}\}/g, sanitizedTemplateName);
+
+          // Create actions object with methods that call into the interactive system
+          const actionsObj = {
+            setState: (address: string, value: unknown) => {
+              console.log(`[Interactive] actions.setState("${address}", "${value}")`);
+              // Use the address system to set the value
+              const { setAddressValue } = require('../address');
+              if (address.startsWith('@')) {
+                const success = setAddressValue(address, value);
+                if (!success) {
+                  console.warn(`[Interactive] Failed to set address: ${address}`);
+                }
+              } else {
+                get().setState(address, value);
+              }
+            },
+            navigate: (templateName: string) => {
+              console.log(`[Interactive] actions.navigate("${templateName}")`);
+              get().navigate(templateName);
+            },
+            showElement: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.updateElement(el.id, { visible: true });
+              }
+            },
+            hideElement: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.updateElement(el.id, { visible: false });
+              }
+            },
+            toggleElement: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.updateElement(el.id, { visible: !el.visible });
+              }
+            },
+            playIn: (templateName: string, layerName: string) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                designerStore.playIn(template.id, template.layer_id);
+              }
+            },
+            playOut: (layerName: string) => {
+              // Find layer by name and play out
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                designerStore.playOut(layer.id);
+              }
+            },
+            log: (message: string) => {
+              console.log(`[Script] ${message}`);
+            },
+          };
+
+          try {
+            // Execute the script with the handler call
+            const scriptWithCall = `
+              ${resolvedScript}
+              if (typeof ${handlerName} === 'function') {
+                ${handlerName}(event);
+              }
+            `;
+
+            // Create and execute the function
+            const fn = new Function('state', 'data', 'event', 'actions', scriptWithCall);
+            fn(
+              runtime.state,
+              dataContext,
+              { type: event.type, elementId: event.elementId, elementName, data: event.data },
+              actionsObj
+            );
+          } catch (error) {
+            console.error('[Interactive] Error executing code script:', error);
+          }
+        }
+      }
+
+      // Execute visual node graph if nodes are present (fallback for basic users)
       if (visualNodes.length > 0) {
         console.log(`[Interactive] Executing visual node graph for event "${event.type}"`);
 

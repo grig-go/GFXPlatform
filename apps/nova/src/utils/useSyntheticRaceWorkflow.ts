@@ -106,6 +106,7 @@ export function useSyntheticRaceWorkflow() {
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [syntheticGroups, setSyntheticGroups] = useState<SyntheticGroup[]>([]);
+  const [progressStatus, setProgressStatus] = useState<string | null>(null);
 
   // Fetch synthetic groups from database
   const fetchSyntheticGroups = async (): Promise<SyntheticGroup[]> => {
@@ -385,13 +386,20 @@ export function useSyntheticRaceWorkflow() {
       console.log('ℹ️ County data excluded by user preference');
     }
 
-    const countyListText = countyData.length > 0 
-      ? `\n\nCOUNTIES IN ${race.state} (Generate results for ALL these counties):\n${countyData.map((c, idx) => `${idx + 1}. ${c.name} - DIVISION_ID: ${c.id}`).join('\n')}`
+    // Create compact county data to reduce prompt size
+    // Format: division_id|county_name|total_votes|candidate1_votes,candidate2_votes,...
+    const compactCountyBaseline = countyBaselineResults.map(county => {
+      const candidateVotes = county.results.map(r => `${r.candidate_id}:${r.votes}`).join(',');
+      return `${county.division_id}|${county.division_name}|${county.total_votes}|${candidateVotes}`;
+    });
+
+    const countyListText = countyData.length > 0
+      ? `\n\nCOUNTIES (${countyData.length} total) - Format: DIVISION_ID|NAME|TOTAL_VOTES|CANDIDATE_VOTES\n${compactCountyBaseline.join('\n')}`
       : '';
 
     const countyBaselineText = countyBaselineResults.length > 0
-      ? `\n\nCOUNTY-LEVEL BASELINE RESULTS (Modify these based on scenario parameters):\n${JSON.stringify(countyBaselineResults, null, 2)}\n\n⚠️ IMPORTANT: Use these baseline results as your starting point. Apply the scenario parameters (turnout shifts, party shifts, county strategy) to these numbers to generate realistic synthetic county results.`
-      : countyData.length > 0 
+      ? `\n\n🚨 MANDATORY: You MUST output county_results for ALL ${countyBaselineResults.length} counties listed above. Do NOT skip any counties. Do NOT truncate. The response MUST contain exactly ${countyBaselineResults.length} county entries.`
+      : countyData.length > 0
         ? `\n\n⚠️ No baseline county data available - generate realistic county results from scratch based on state totals.`
         : '';
 
@@ -421,51 +429,10 @@ SCENARIO PARAMETERS:
 TASK:
 Generate a synthetic election scenario based on these parameters with FULL COUNTY-LEVEL RESULTS.
 
-⭐ YOU MUST OUTPUT A JSON OBJECT MATCHING EXACTLY THE SCHEMA BELOW:
+⭐ YOU MUST OUTPUT COMPACT JSON (no extra whitespace, no newlines within arrays).
 
-{
-  "race": {
-    "title": "PASTE THE EXACT RACE TITLE FROM BASE RACE INFORMATION",
-    "office": "PASTE THE EXACT OFFICE FROM BASE RACE INFORMATION",
-    "state": "PASTE THE EXACT STATE FROM BASE RACE INFORMATION",
-    "state_code": "TWO-LETTER STATE CODE (e.g., GA, TX, CA)",
-    "totalVotes": 1234567
-  },
-  "candidates": [
-    {
-      "candidate_id": "PASTE THE EXACT CANDIDATE_ID FROM ABOVE",
-      "candidate_name": "PASTE THE EXACT CANDIDATE NAME",
-      "party": "PASTE THE EXACT PARTY CODE (DEM/REP/IND/etc)",
-      "ballot_order": 1,
-      "withdrew": false,
-      "write_in": false,
-      "metadata": {
-        "votes": 805374,
-        "vote_percentage": 65.82,
-        "winner": true
-      }
-    }
-  ],
-  "county_results": [
-    {
-      "division_id": "PASTE THE EXACT DIVISION_ID FROM COUNTY BASELINE",
-      "precincts_reporting": 30,
-      "precincts_total": 30,
-      "total_votes": 54000,
-      "results": [
-        {
-          "candidate_id": "PASTE THE EXACT CANDIDATE_ID",
-          "votes": 32000
-        },
-        {
-          "candidate_id": "PASTE THE EXACT CANDIDATE_ID",
-          "votes": 19000
-        }
-      ]
-    }
-  ],
-  "summary": "Brief narrative summary here"
-}
+SCHEMA - Use this exact structure but OUTPUT ON MINIMAL LINES:
+{"race":{"title":"...","office":"...","state":"...","state_code":"XX","totalVotes":N},"candidates":[{"candidate_id":"...","candidate_name":"...","party":"...","ballot_order":N,"withdrew":false,"write_in":false,"metadata":{"votes":N,"vote_percentage":N,"winner":BOOL}}],"county_results":[{"division_id":"UUID","precincts_reporting":N,"precincts_total":N,"total_votes":N,"results":[{"candidate_id":"...","votes":N}]}],"summary":"..."}
 
 CRITICAL RULES:
 1. Include the "race" object with title, office, state, state_code, and totalVotes
@@ -478,13 +445,16 @@ CRITICAL RULES:
 8. Ensure all percentages add up to 100%
 9. Mark the candidate with the most votes as winner: true in metadata
 10. Set ballot_order as 1, 2, 3, etc.
-11. ${countyData.length > 0 ? `Generate county_results for ALL ${countyData.length} counties listed above` : 'county_results can be an empty array if no counties available'}
+11. ${countyData.length > 0 ? `🚨 MANDATORY: Generate county_results for ALL ${countyData.length} counties. Your response MUST have exactly ${countyData.length} entries in county_results array. Do NOT stop early.` : 'county_results can be an empty array if no counties available'}
 12. For each county, include results for ALL candidates with votes and rank
 13. County total_votes should equal the sum of all candidate votes in that county
 14. Rank candidates in each county (1 = most votes, 2 = second, etc.)
 15. Use exact DIVISION_ID from the county list above
 16. For state_code, use the two-letter abbreviation (e.g., GA for Georgia, TX for Texas, CA for California)
-17. Output ONLY valid JSON - no markdown, no code blocks, no extra text`;
+17. Output ONLY valid JSON - no markdown, no code blocks, no extra text
+18. ⚠️ CRITICAL: Output COMPACT JSON - NO pretty-printing, NO newlines between array items, NO indentation.
+
+🚨 FINAL CHECK: Your county_results array MUST contain exactly ${countyData.length} entries. Count: ${countyData.length}. Do not stop until you have output all ${countyData.length} counties.`;
   };
 
   // Generate preview using AI
@@ -495,13 +465,18 @@ CRITICAL RULES:
   ): Promise<SyntheticPreview | null> => {
     setIsLoading(true);
     setError(null);
+    setProgressStatus('Building prompt with county data...');
 
     try {
       const prompt = await buildAIPrompt(race, candidates, scenario);
-      
+
       console.log('📊 Generating synthetic scenario with AI...');
       console.log('🗳️ Race:', race.title);
       console.log('👥 Candidates:', candidates.length);
+
+      // Count counties in prompt
+      const countyCount = (prompt.match(/COUNTIES \((\d+) total\)/)?.[1]) || '0';
+      setProgressStatus(`Sending request to AI (${countyCount} counties)... This may take 1-3 minutes.`);
 
       // Call AI provider chat endpoint to generate scenario
       const response = await fetch(
@@ -520,12 +495,15 @@ CRITICAL RULES:
         }
       );
 
+      setProgressStatus('Receiving AI response...');
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || errorData.detail || 'Failed to generate preview');
       }
 
       const aiResponse = await response.json();
+      setProgressStatus('Parsing AI response...');
       
       // Parse AI response
       let parsedContent;
@@ -650,12 +628,17 @@ CRITICAL RULES:
         originalCandidates: candidates, // Store the original candidates list used in the preview
       };
 
+      const countyResultsCount = parsedContent.county_results?.length || 0;
+      setProgressStatus(`Complete! Generated ${countyResultsCount} county results.`);
+
       setIsLoading(false);
+      setProgressStatus(null);
       return preview;
     } catch (err) {
       console.error('Error generating preview:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate preview');
       setIsLoading(false);
+      setProgressStatus(null);
       return null;
     }
   };
@@ -909,5 +892,7 @@ CRITICAL RULES:
     fetchSyntheticGroups,
     createSyntheticGroup,
     deleteSyntheticGroup,
+    // Progress status for UI
+    progressStatus,
   };
 }

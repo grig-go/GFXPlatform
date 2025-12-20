@@ -78,12 +78,34 @@ export interface NodeRuntimeContext {
   // Address resolution
   resolveElementId: (nameOrAddress: string) => string | undefined;
 
+  // Current template name for {{CURRENT_TEMPLATE}} placeholder resolution
+  currentTemplateName?: string;
+
   // Event data
   event?: {
     type: string;
     elementId?: string;
     data?: Record<string, unknown>;
   };
+}
+
+/**
+ * Replace {{CURRENT_TEMPLATE}} placeholder with actual template name
+ */
+function resolveTemplatePlaceholder(value: string, context: NodeRuntimeContext): string {
+  if (!value || typeof value !== 'string') return value;
+
+  if (value.includes('{{CURRENT_TEMPLATE}}')) {
+    if (context.currentTemplateName) {
+      const sanitizedName = sanitizeName(context.currentTemplateName);
+      const resolved = value.replace(/\{\{CURRENT_TEMPLATE\}\}/g, sanitizedName);
+      console.log(`[NodeRuntime] Resolved template placeholder: "${value}" -> "${resolved}"`);
+      return resolved;
+    } else {
+      console.warn('[NodeRuntime] {{CURRENT_TEMPLATE}} used but no currentTemplateName in context');
+    }
+  }
+  return value;
 }
 
 /**
@@ -224,14 +246,23 @@ async function executeNode(
 
       switch (actionData.actionType) {
         case 'setState': {
-          const target = actionData.target || 'value';
+          // Resolve {{CURRENT_TEMPLATE}} placeholder in target
+          const rawTarget = actionData.target || 'value';
+          console.log('[NodeRuntime] setState - before resolve:', {
+            rawTarget,
+            currentTemplateName: context.currentTemplateName,
+            hasPlaceholder: rawTarget.includes('{{CURRENT_TEMPLATE}}')
+          });
+          const target = resolveTemplatePlaceholder(rawTarget, context);
           const valueToSet = actionData.value ?? null;
 
           console.log('[NodeRuntime] setState debug:', {
+            rawTarget,
             target,
             valueToSet,
             startsWithAt: target.startsWith('@'),
-            targetCharCode0: target.charCodeAt(0)
+            targetCharCode0: target.charCodeAt(0),
+            wasResolved: rawTarget !== target
           });
 
           // Support @address syntax for setting element properties
@@ -250,7 +281,9 @@ async function executeNode(
         }
 
         case 'toggleState': {
-          const target = actionData.target || 'value';
+          // Resolve {{CURRENT_TEMPLATE}} placeholder in target
+          const rawTarget = actionData.target || 'value';
+          const target = resolveTemplatePlaceholder(rawTarget, context);
           // Support @address syntax for toggling element properties
           if (target.startsWith('@')) {
             const currentValue = resolveAddress(target);
@@ -445,10 +478,29 @@ export async function executeNodeGraph(
     // Must match event type
     if (data.eventType !== eventType) return false;
 
-    // If the event node has a specific element, it must match
+    // If the event node has a specific element (by ID or name), it must match
     // If event node has no element or "__any__", it matches all elements
-    if (data.elementId && data.elementId !== '__any__' && elementId) {
-      return data.elementId === elementId;
+    const nodeElementId = data.elementId;
+    const nodeElementName = data.elementName;
+
+    // Check if we have element constraints
+    if (nodeElementId && nodeElementId !== '__any__' && elementId) {
+      return nodeElementId === elementId;
+    }
+
+    // Also support matching by element name
+    if (nodeElementName && nodeElementName !== '__any__' && elementId) {
+      console.log(`[NodeRuntime] Event node has elementName: "${nodeElementName}", checking against clicked elementId: "${elementId}"`);
+      // Resolve the name to ID and check
+      const resolvedId = context.resolveElementId(nodeElementName);
+      if (resolvedId) {
+        const matches = resolvedId === elementId;
+        console.log(`[NodeRuntime] Event node "${nodeElementName}" resolved to ID: "${resolvedId}", comparing to: "${elementId}" -> ${matches ? 'MATCH' : 'NO MATCH'}`);
+        return matches;
+      }
+      console.log(`[NodeRuntime] Could not resolve elementName "${nodeElementName}" to an ID`);
+      // If we can't resolve, try direct comparison (might be an ID already)
+      return nodeElementName === elementId;
     }
 
     // Event nodes without specific element match all
@@ -489,6 +541,7 @@ export function createNodeRuntimeContext(
     playIn: (templateId: string, layerId: string) => void;
     playOut: (layerId: string) => void;
     templates: Array<{ id: string; name?: string; layer_id: string }>;
+    currentTemplateId?: string | null;
   },
   interactiveStore: {
     runtime: { state: Record<string, unknown> };
@@ -496,6 +549,11 @@ export function createNodeRuntimeContext(
     navigate: (screenId: string) => void;
   }
 ): NodeRuntimeContext {
+  // Get current template name for {{CURRENT_TEMPLATE}} placeholder resolution
+  const currentTemplate = designerStore.currentTemplateId
+    ? designerStore.templates.find(t => t.id === designerStore.currentTemplateId)
+    : null;
+  const currentTemplateName = currentTemplate?.name || undefined;
   /**
    * Resolve an element ID from an address (@name) or name string
    * Returns the element ID if found, or undefined
@@ -529,21 +587,32 @@ export function createNodeRuntimeContext(
     }
 
     // Try to find by name (fallback)
+    const searchNameLower = nameOrAddress.toLowerCase();
+    console.log(`[NodeRuntime] Searching for element by name: "${nameOrAddress}" (lowercase: "${searchNameLower}")`);
+    console.log(`[NodeRuntime] Available elements:`, designerStore.elements.map(e => ({
+      id: e.id.slice(0, 8),
+      name: e.name,
+      nameLower: e.name.toLowerCase(),
+      sanitized: sanitizeName(e.name),
+      sanitizedLower: sanitizeName(e.name).toLowerCase()
+    })));
+
     const elementByName = designerStore.elements.find(
-      e => e.name.toLowerCase() === nameOrAddress.toLowerCase() ||
-           sanitizeName(e.name).toLowerCase() === nameOrAddress.toLowerCase()
+      e => e.name.toLowerCase() === searchNameLower ||
+           sanitizeName(e.name).toLowerCase() === searchNameLower
     );
     if (elementByName) {
-      console.log(`[NodeRuntime] Resolved name "${nameOrAddress}" to element ID: ${elementByName.id}`);
+      console.log(`[NodeRuntime] Resolved name "${nameOrAddress}" to element ID: ${elementByName.id} (name: "${elementByName.name}")`);
       return elementByName.id;
     }
 
-    console.warn(`[NodeRuntime] Could not resolve element: ${nameOrAddress}`);
+    console.warn(`[NodeRuntime] Could not resolve element: "${nameOrAddress}" - no match found`);
     return undefined;
   };
 
   return {
     state: interactiveStore.runtime.state,
+    currentTemplateName,
 
     setState: (key: string, value: unknown) => {
       interactiveStore.setState(key, value);

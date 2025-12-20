@@ -8,8 +8,9 @@ import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_P
 import { resolveGeneratePlaceholders, hasGeneratePlaceholders, replaceGenerateWithPlaceholder } from '@/lib/ai-prompts/tools/ai-image-generator';
 import { useAuthStore } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
+import { useInteractiveStore } from '@/lib/interactive/interactive-store';
 import { useConfirm } from '@/hooks/useConfirm';
-import type { AIContext, AIChanges, ChatAttachment } from '@emergent-platform/types';
+import type { AIContext, AIChanges, ChatAttachment, AIVisualScriptNode, AIVisualScriptEdge } from '@emergent-platform/types';
 import { sampleDataSources, type DataSourceConfig, extractFieldsFromData } from '@/data/sampleDataSources';
 
 interface Attachment {
@@ -432,7 +433,11 @@ function MessageContent({
   );
 }
 
-export function ChatPanel() {
+interface ChatPanelProps {
+  hideHeader?: boolean;
+}
+
+export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   const confirm = useConfirm();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1684,6 +1689,239 @@ export function ChatPanel() {
         console.log(`✅ Auto-created ${newlyCreatedElementIds.length * 2} animations (in + out for each element)`);
       }
 
+      // PROCESS VISUAL SCRIPT if provided (for interactive elements)
+      if (expandedChanges.visualScript?.nodes?.length > 0) {
+        console.log('🎮 Processing visual script from AI:', expandedChanges.visualScript);
+
+        const scriptStore = useDesignerStore.getState();
+        const currentProject = scriptStore.project;
+
+        if (currentProject?.interactive_enabled) {
+          try {
+            // Build a map of element names to IDs from the NEWLY CREATED elements
+            // This is critical because we need to reference elements that were just created
+            const elementNameToId: Record<string, string> = {};
+
+            // Get freshest store state to ensure we have the newly created elements
+            const freshStore = useDesignerStore.getState();
+
+            // Build map from newly created element IDs
+            newlyCreatedElementIds.forEach(elId => {
+              const el = freshStore.elements.find(e => e.id === elId);
+              if (el) {
+                // Map by exact name
+                elementNameToId[el.name] = elId;
+                // Also map by lowercase
+                elementNameToId[el.name.toLowerCase()] = elId;
+                // Also map by normalized name (uppercase with underscores)
+                const normalizedName = el.name.toUpperCase().replace(/\s+/g, '_');
+                elementNameToId[normalizedName] = elId;
+              }
+            });
+
+            console.log('🔗 Element name to ID mapping:', elementNameToId);
+            console.log('🔗 Newly created element IDs:', newlyCreatedElementIds);
+            console.log('🔗 All elements in store:', freshStore.elements.map(e => ({ id: e.id, name: e.name })));
+
+            // Convert AI nodes to React Flow format
+            const reactFlowNodes: Array<{
+              id: string;
+              type: string;
+              position: { x: number; y: number };
+              data: Record<string, unknown>;
+            }> = [];
+
+            let nodeX = 100;
+            let nodeY = 100;
+
+            expandedChanges.visualScript.nodes.forEach((aiNode: AIVisualScriptNode, index: number) => {
+              // Resolve elementId or elementName to actual element ID
+              let elementId = aiNode.data?.elementId || '';
+              const elementName = aiNode.data?.elementName || '';
+
+              // If elementName is provided, find the element by name using our pre-built map
+              if (elementName && typeof elementName === 'string') {
+                // Try exact match first
+                let resolvedId = elementNameToId[elementName] ||
+                                 elementNameToId[elementName.toLowerCase()] ||
+                                 elementNameToId[elementName.toUpperCase().replace(/\s+/g, '_')];
+
+                // If not found in map, try searching all elements in the store
+                if (!resolvedId) {
+                  const matchingElement = freshStore.elements.find(e =>
+                    e.name.toLowerCase() === elementName.toLowerCase() ||
+                    e.name.toLowerCase().replace(/\s+/g, '_') === elementName.toLowerCase().replace(/\s+/g, '_')
+                  );
+                  if (matchingElement) {
+                    resolvedId = matchingElement.id;
+                  }
+                }
+
+                if (resolvedId) {
+                  elementId = resolvedId;
+                  console.log(`✅ Resolved elementName "${elementName}" to element ID: ${elementId}`);
+                } else {
+                  console.warn(`⚠️ Could not find element with name "${elementName}". Available names:`, Object.keys(elementNameToId));
+                }
+              }
+              // Also handle {{PLACEHOLDER}} format for backward compatibility
+              else if (typeof elementId === 'string' && elementId.startsWith('{{') && elementId.endsWith('}}')) {
+                // Extract the placeholder name (e.g., "ARIZONA_BUTTON_ID" from "{{ARIZONA_BUTTON_ID}}")
+                const placeholder = elementId.slice(2, -2);
+                // Try to match by normalized element name
+                const normalizedPlaceholder = placeholder.replace(/_ID$/, '').replace(/_/g, ' ');
+                const matchingElement = freshStore.elements.find(e =>
+                  e.name.toUpperCase() === normalizedPlaceholder ||
+                  e.name.toUpperCase().replace(/\s+/g, '_') === placeholder.replace(/_ID$/, '')
+                );
+                if (matchingElement) {
+                  elementId = matchingElement.id;
+                  console.log(`✅ Resolved placeholder ${placeholder} to element "${matchingElement.name}" (${elementId})`);
+                } else {
+                  console.warn(`⚠️ Could not resolve placeholder ${placeholder}`);
+                }
+              }
+
+              // Position nodes in a grid layout
+              const isEventNode = aiNode.type === 'event';
+              const nodePosition = aiNode.position || {
+                x: isEventNode ? nodeX : nodeX + 300,
+                y: nodeY + (Math.floor(index / 2) * 150)
+              };
+
+              reactFlowNodes.push({
+                id: aiNode.id,
+                type: aiNode.type,
+                position: nodePosition,
+                data: {
+                  ...aiNode.data,
+                  elementId: elementId || aiNode.data?.elementId,
+                }
+              });
+
+              if (isEventNode) {
+                nodeY += 150;
+              }
+            });
+
+            // Convert AI edges to React Flow format
+            const reactFlowEdges = expandedChanges.visualScript.edges.map((aiEdge: AIVisualScriptEdge, index: number) => ({
+              id: aiEdge.id || `edge-${index}`,
+              source: aiEdge.source,
+              target: aiEdge.target,
+              sourceHandle: aiEdge.sourceHandle || 'output',
+              targetHandle: aiEdge.targetHandle || 'input',
+            }));
+
+            console.log('📊 Converted nodes:', reactFlowNodes);
+            console.log('🔗 Converted edges:', reactFlowEdges);
+
+            // Get existing interactive config
+            const existingConfig = (currentProject.interactive_config || {}) as {
+              mode?: string;
+              script?: string;
+              visualNodes?: typeof reactFlowNodes;
+              visualEdges?: typeof reactFlowEdges;
+            };
+
+            // Merge with existing nodes/edges (or replace)
+            const updatedConfig = {
+              ...existingConfig,
+              mode: existingConfig.mode || 'visual',
+              visualNodes: [...(existingConfig.visualNodes || []), ...reactFlowNodes],
+              visualEdges: [...(existingConfig.visualEdges || []), ...reactFlowEdges],
+            };
+
+            // Update project settings using fresh store reference
+            console.log('[VisualScript] Calling updateProjectSettings with config:', {
+              nodeCount: reactFlowNodes.length,
+              edgeCount: reactFlowEdges.length,
+              totalNodesInConfig: updatedConfig.visualNodes?.length,
+              totalEdgesInConfig: updatedConfig.visualEdges?.length,
+            });
+
+            try {
+              await freshStore.updateProjectSettings({
+                interactive_config: updatedConfig as any,
+              });
+              console.log(`✅ Saved ${reactFlowNodes.length} visual script nodes and ${reactFlowEdges.length} edges to project`);
+            } catch (saveError) {
+              console.error('❌ Failed to save interactive_config:', saveError);
+              throw saveError; // Re-throw to be caught by outer catch
+            }
+
+            // Notify user
+            freshStore.addChatMessage({
+              role: 'assistant',
+              content: `🎮 Created interactive script with ${reactFlowNodes.length} nodes. Open the Script Editor to view and edit the visual script.`,
+            });
+          } catch (scriptError) {
+            console.error('❌ Error processing visual script:', scriptError);
+          }
+        } else {
+          console.log('⚠️ Visual script provided but project is not in interactive mode');
+        }
+      }
+
+      // PROCESS CODE SCRIPT if provided (AI-generated JavaScript handlers)
+      console.log('📜 [Script Check] expandedChanges.script:', expandedChanges.script ? `${expandedChanges.script.length} chars` : 'undefined');
+      if (expandedChanges.script && typeof expandedChanges.script === 'string' && expandedChanges.script.trim()) {
+        console.log('📜 Processing code script from AI:', expandedChanges.script.substring(0, 200) + '...');
+
+        const scriptStore = useDesignerStore.getState();
+        const currentProject = scriptStore.project;
+
+        if (currentProject?.interactive_enabled) {
+          try {
+            // Set the code script in the interactive store
+            const interactiveStore = useInteractiveStore.getState();
+            interactiveStore.setCodeScript(expandedChanges.script);
+
+            // Save to project's interactive_config.script for persistence
+            const currentConfig = (currentProject.interactive_config || {}) as Record<string, unknown>;
+            await scriptStore.updateProjectSettings({
+              interactive_config: {
+                ...currentConfig,
+                script: expandedChanges.script,
+              },
+            });
+            console.log('✅ Saved code script to project interactive_config');
+
+            // Notify user
+            scriptStore.addChatMessage({
+              role: 'assistant',
+              content: `📜 Created interactive script with handler functions. Open the Script Editor and click Play to test the buttons.`,
+            });
+
+            console.log('✅ Code script set successfully');
+          } catch (scriptError) {
+            console.error('❌ Error processing code script:', scriptError);
+          }
+        } else {
+          console.log('⚠️ Code script provided but project is not in interactive mode. Enabling interactive mode...');
+          // Auto-enable interactive mode when AI provides a script
+          try {
+            await scriptStore.updateProjectSettings({
+              interactive_enabled: true,
+              interactive_config: {
+                ...((currentProject?.interactive_config || {}) as Record<string, unknown>),
+                script: expandedChanges.script,
+              },
+            });
+            const interactiveStore = useInteractiveStore.getState();
+            interactiveStore.setCodeScript(expandedChanges.script);
+
+            scriptStore.addChatMessage({
+              role: 'assistant',
+              content: `📜 Created interactive script and enabled Interactive Mode. Open the Script Editor and click Play to test the buttons.`,
+            });
+            console.log('✅ Auto-enabled interactive mode and set code script');
+          } catch (enableError) {
+            console.error('❌ Failed to auto-enable interactive mode:', enableError);
+          }
+        }
+      }
+
       // Log summary before marking as applied
       console.log(`📊 Element creation summary: ${newlyCreatedElementIds.length} created, ${failedElements.length} failed`);
 
@@ -2438,52 +2676,54 @@ Alternatively, configure your API key in Settings (⚙️).`,
   return (
     <TooltipProvider delayDuration={300}>
     <div ref={containerRef} className="h-full w-full min-w-0 flex flex-col bg-card border-r border-border overflow-hidden">
-      {/* Header */}
-      <div className="p-2 border-b border-border flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <div className={cn(
-            "h-5 w-5 rounded-lg flex items-center justify-center",
-            isDocsMode
-              ? "bg-gradient-to-br from-blue-500 to-blue-600"
-              : isDataMode
-                ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
-                : AI_MODELS[getAIModel()]?.provider === 'gemini'
-                  ? "bg-gradient-to-br from-blue-500 to-cyan-400"
-                  : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
-          )}>
-            {isDocsMode ? (
-              <BookOpen className="w-3 h-3 text-white" />
-            ) : isDataMode ? (
-              <Database className="w-3 h-3 text-white" />
-            ) : (
-              <Sparkles className="w-3 h-3 text-white" />
-            )}
+      {/* Header - hidden when used in LeftPanel combined header */}
+      {!hideHeader && (
+        <div className="p-2 border-b border-border flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-1.5">
+            <div className={cn(
+              "h-5 w-5 rounded-lg flex items-center justify-center",
+              isDocsMode
+                ? "bg-gradient-to-br from-blue-500 to-blue-600"
+                : isDataMode
+                  ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
+                  : AI_MODELS[getAIModel()]?.provider === 'gemini'
+                    ? "bg-gradient-to-br from-blue-500 to-cyan-400"
+                    : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
+            )}>
+              {isDocsMode ? (
+                <BookOpen className="w-3 h-3 text-white" />
+              ) : isDataMode ? (
+                <Database className="w-3 h-3 text-white" />
+              ) : (
+                <Sparkles className="w-3 h-3 text-white" />
+              )}
+            </div>
+            <div>
+              <h2 className="font-semibold text-xs leading-tight">
+                {isDocsMode ? 'Documentation Helper' : isDataMode ? 'Data-Driven Design' : 'AI Assistant'}
+              </h2>
+              <p className="text-[9px] text-muted-foreground leading-tight">
+                {isDocsMode ? 'Ask about Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="font-semibold text-xs leading-tight">
-              {isDocsMode ? 'Documentation Helper' : isDataMode ? 'Data-Driven Design' : 'AI Assistant'}
-            </h2>
-            <p className="text-[9px] text-muted-foreground leading-tight">
-              {isDocsMode ? 'Ask about Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
-            </p>
-          </div>
+          {chatMessages.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                  onClick={handleClearChat}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Clear chat history</TooltipContent>
+            </Tooltip>
+          )}
         </div>
-        {chatMessages.length > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                onClick={handleClearChat}
-              >
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Clear chat history</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
+      )}
 
       {/* Hidden file inputs */}
       <input
