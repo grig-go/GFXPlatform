@@ -251,6 +251,5 @@ Configure alerts for:
 
 ## Next Steps
 
-- [School Closings](/nova/school-closings) - Closure tracking
 - [AI Agents](/nova/agents) - Automated data collection
 - [Data Sources](/nova/data-sources) - Configure providers
