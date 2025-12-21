@@ -8,6 +8,8 @@ import { AIPromptSettingsDialog } from './AIPromptSettingsDialog';
 import { AIProvidersDialog } from './AIProvidersDialog';
 import { ProjectProvider } from './ProjectContext';
 import { ProjectManagementModal } from './ProjectManagementModal';
+import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 type PageView = 'virtual-set' | 'playlist';
 
@@ -19,7 +21,11 @@ export default function HomePage() {
   const [aiPromptSettingsOpen, setAIPromptSettingsOpen] = useState(false);
   const [aiProvidersOpen, setAIProvidersOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageView>('virtual-set');
+
+  // Keyboard shortcuts - actions will be passed to PlaylistPage
+  const { shortcuts, updateShortcut, resetShortcuts } = useKeyboardShortcuts({}, false);
 
   const [sharedScene, setSharedScene] = useState<any | null>(null);
   const [sharedBackdrop, setSharedBackdrop] = useState<string | null>(null);
@@ -56,6 +62,7 @@ export default function HomePage() {
           onOpenAIPromptSettings={() => setAIPromptSettingsOpen(true)}
           onOpenAIProviders={() => setAIProvidersOpen(true)}
           onOpenProjects={() => setProjectsOpen(true)}
+          onOpenKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
         />
@@ -63,7 +70,7 @@ export default function HomePage() {
         {/* Playlist Page - full width, no split view */}
         {currentPage === 'playlist' && (
           <div className="flex-1 overflow-hidden">
-            <PlaylistPage />
+            <PlaylistPage shortcuts={shortcuts} />
           </div>
         )}
 
@@ -128,6 +135,13 @@ export default function HomePage() {
         <ProjectManagementModal
           open={projectsOpen}
           onOpenChange={setProjectsOpen}
+        />
+        <KeyboardShortcutsDialog
+          open={keyboardShortcutsOpen}
+          onOpenChange={setKeyboardShortcutsOpen}
+          shortcuts={shortcuts}
+          onUpdateShortcut={updateShortcut}
+          onResetShortcuts={resetShortcuts}
         />
       </div>
     </ProjectProvider>

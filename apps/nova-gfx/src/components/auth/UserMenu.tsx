@@ -1,12 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Settings,
   LogOut,
-  Building2,
-  Shield,
+  User,
   Sun,
   Moon,
   Monitor,
+  Ticket,
 } from 'lucide-react';
 import {
   Button,
@@ -23,6 +23,8 @@ import {
 } from '@emergent-platform/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore, type Theme } from '@/stores/themeStore';
+import { SupportTicketsDialog } from '../dialogs/SupportTicketsDialog';
+import { AccountSettingsDialog } from '../dialogs/AccountSettingsDialog';
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -32,8 +34,13 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 
 export function UserMenu() {
   const navigate = useNavigate();
-  const { user, organization, signOut } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   const { theme, setTheme } = useThemeStore();
+  const [showSupportTickets, setShowSupportTickets] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+
+  // Check if user is from @emergent.new domain
+  const isEmergentUser = user?.email?.endsWith('@emergent.new') || false;
 
   const handleThemeChange = (newTheme: Theme) => {
     if (user?.id) {
@@ -56,8 +63,8 @@ export function UserMenu() {
     );
   }
 
-  const initials = user.name
-    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const initials = user.full_name
+    ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : user.email.slice(0, 2).toUpperCase();
 
   const handleSignOut = async () => {
@@ -66,6 +73,7 @@ export function UserMenu() {
   };
 
   return (
+  <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -81,29 +89,25 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium">{user.name || 'User'}</p>
+            <p className="text-sm font-medium">{user.full_name || 'User'}</p>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         </DropdownMenuLabel>
 
-        {organization && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-3 h-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{organization.name}</span>
-              </div>
-            </DropdownMenuLabel>
-          </>
-        )}
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={() => navigate('/settings')}>
-          <Settings className="w-4 h-4 mr-2" />
-          Settings
+        <DropdownMenuItem onClick={() => setShowAccountSettings(true)}>
+          <User className="w-4 h-4 mr-2" />
+          Account Settings
         </DropdownMenuItem>
+
+        {isEmergentUser && (
+          <DropdownMenuItem onClick={() => setShowSupportTickets(true)}>
+            <Ticket className="w-4 h-4 mr-2" />
+            Support Tickets
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
@@ -131,13 +135,6 @@ export function UserMenu() {
           </DropdownMenuPortal>
         </DropdownMenuSub>
 
-        {user.isAdmin && (
-          <DropdownMenuItem onClick={() => navigate('/settings/admin')}>
-            <Shield className="w-4 h-4 mr-2" />
-            Admin Panel
-          </DropdownMenuItem>
-        )}
-
         <DropdownMenuSeparator />
 
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
@@ -146,5 +143,20 @@ export function UserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    {/* Account Settings Dialog */}
+    <AccountSettingsDialog
+      open={showAccountSettings}
+      onOpenChange={setShowAccountSettings}
+    />
+
+    {/* Support Tickets Dialog (for @emergent.new users) */}
+    {isEmergentUser && (
+      <SupportTicketsDialog
+        open={showSupportTickets}
+        onOpenChange={setShowSupportTickets}
+      />
+    )}
+  </>
   );
 }

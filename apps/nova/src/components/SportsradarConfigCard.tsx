@@ -112,7 +112,7 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
     try {
       setIsTesting(providerId);
       const response = await fetch(
-        getEdgeFunctionUrl('sports_dashboard/sports-providers/${providerId}/test'),
+        getEdgeFunctionUrl(`sports_dashboard/sports-providers/${providerId}/test`),
         {
           method: "POST",
           headers: {

@@ -163,3 +163,4 @@ CREATE POLICY "Authenticated users can insert organizations" ON organizations
 
 
 
+

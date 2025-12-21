@@ -18,9 +18,10 @@ import { Alert, AlertDescription } from '../ui/alert';
 interface LoginPageProps {
   appName?: 'Nova' | 'Pulsar';
   onLoginSuccess?: () => void;
+  onNavigateToSignUp?: () => void;
 }
 
-export function LoginPage({ appName = 'Nova', onLoginSuccess }: LoginPageProps) {
+export function LoginPage({ appName = 'Nova', onLoginSuccess, onNavigateToSignUp }: LoginPageProps) {
   const { signIn, isLoading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [email, setEmail] = useState('');
@@ -185,7 +186,19 @@ export function LoginPage({ appName = 'Nova', onLoginSuccess }: LoginPageProps) 
         </Card>
 
         <p className="text-center text-sm text-muted-foreground mt-4">
-          Contact your administrator if you need access.
+          {onNavigateToSignUp ? (
+            <>
+              Don't have an account?{' '}
+              <button
+                onClick={onNavigateToSignUp}
+                className="text-primary hover:underline"
+              >
+                Sign up
+              </button>
+            </>
+          ) : (
+            'Contact your administrator if you need access.'
+          )}
         </p>
       </motion.div>
     </div>

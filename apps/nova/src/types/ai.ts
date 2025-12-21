@@ -20,10 +20,10 @@ export type AIProviderName =
   | 'pika'
   | 'custom';
 
-export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar-mcr' | 'pulsar-gfx' | 'pulsar-vs' | 'fusion' | 'feeds' | 'ai-connections' | 'media-library' | 'school-closings';
+export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar-mcr' | 'pulsar-gfx' | 'pulsar-vs' | 'fusion' | 'feeds' | 'ai-connections' | 'media-library' | 'school-closings' | 'nova-gfx';
 
 // Dashboards that support AI provider assignments
-export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar-mcr' | 'pulsar-gfx' | 'pulsar-vs' | 'fusion' | 'media-library' | 'school-closings';
+export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar-mcr' | 'pulsar-gfx' | 'pulsar-vs' | 'fusion' | 'media-library' | 'school-closings' | 'nova-gfx';
 
 export interface DashboardAssignment {
   dashboard: AssignableDashboardType;
@@ -209,6 +209,7 @@ export const DASHBOARD_LABELS: Record<DashboardType, string> = {
   news: 'News',
   agents: 'Agents',
   nova: 'Nova',
+  'nova-gfx': 'Nova GFX',
   'pulsar-mcr': 'Pulsar MCR',
   'pulsar-gfx': 'Pulsar GFX',
   'pulsar-vs': 'Pulsar VS',
@@ -227,6 +228,7 @@ export const ASSIGNABLE_DASHBOARD_LABELS: Record<AssignableDashboardType, string
   weather: 'Weather',
   news: 'News',
   agents: 'Agents',
+  'nova-gfx': 'Nova GFX',
   'pulsar-mcr': 'Pulsar MCR',
   'pulsar-gfx': 'Pulsar GFX',
   'pulsar-vs': 'Pulsar VS',

@@ -19,7 +19,7 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 export function ProfileSettings() {
   const { user, initialize } = useAuthStore();
   const { theme, setTheme, loadUserTheme } = useThemeStore();
-  const [name, setName] = useState(user?.name || '');
+  const [name, setName] = useState(user?.full_name || '');
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [themeSaved, setThemeSaved] = useState(false);
@@ -50,8 +50,8 @@ export function ProfileSettings() {
 
     try {
       const { error } = await supabase
-        .from('users')
-        .update({ name })
+        .from('u_users')
+        .update({ full_name: name })
         .eq('id', user.id);
 
       if (error) {
@@ -119,11 +119,11 @@ export function ProfileSettings() {
           <Label>Role</Label>
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 text-xs rounded-full capitalize ${
-              user?.isAdmin
+              user?.is_superuser
                 ? 'bg-amber-500/20 text-amber-400'
                 : 'bg-violet-500/20 text-violet-400'
             }`}>
-              {user?.role || 'member'}
+              {user?.is_superuser ? 'superuser' : 'member'}
             </span>
           </div>
         </div>

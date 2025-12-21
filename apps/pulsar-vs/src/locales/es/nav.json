@@ -9,7 +9,8 @@
   },
   "tools": {
     "channel": "Canal",
-    "projects": "Proyectos"
+    "projects": "Proyectos",
+    "keyboardShortcuts": "Atajos de Teclado"
   },
   "window": {
     "singleView": "Vista Única",

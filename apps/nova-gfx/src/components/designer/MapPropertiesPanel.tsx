@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Input, Button, Label, Separator, Collapsible, CollapsibleContent, CollapsibleTrigger } from '@emergent-platform/ui';
 import {
   MapPin, Search, Plus, Trash2, ChevronDown, ChevronRight,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@emergent-platform/ui';
 import { KeyframableProperty } from './PropertiesPanel';
+import { useMapboxStore } from '@/stores/mapboxStore';
 import type {
   Element,
   MapStyle,
@@ -238,6 +239,15 @@ export function MapContentEditor({ element, updateContent, selectedKeyframe, cur
   const [searchResults, setSearchResults] = useState<MapSavedLocation[]>([]);
   const [newMarkerName, setNewMarkerName] = useState('');
 
+  // Get Mapbox API key from store
+  const mapboxKey = useMapboxStore((state) => state.apiKey);
+  const fetchMapboxKey = useMapboxStore((state) => state.fetchApiKey);
+
+  // Fetch Mapbox key on mount
+  useEffect(() => {
+    fetchMapboxKey();
+  }, [fetchMapboxKey]);
+
   // Get map content with type safety
   const mapContent = element.content as {
     type: 'map';
@@ -271,8 +281,7 @@ export function MapContentEditor({ element, updateContent, selectedKeyframe, cur
 
     setIsSearching(true);
     try {
-      // Use Mapbox Geocoding API
-      const mapboxKey = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
+      // Use Mapbox Geocoding API with key from store
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxKey}&limit=5`
       );
@@ -294,7 +303,7 @@ export function MapContentEditor({ element, updateContent, selectedKeyframe, cur
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [mapboxKey]);
 
   // Jump to location
   const goToLocation = useCallback((location: MapSavedLocation) => {
@@ -376,7 +385,7 @@ export function MapContentEditor({ element, updateContent, selectedKeyframe, cur
     }
 
     try {
-      const mapboxKey = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
+      // Use Mapbox Geocoding API with key from store
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxKey}&limit=5`
       );
@@ -396,7 +405,7 @@ export function MapContentEditor({ element, updateContent, selectedKeyframe, cur
       console.error('Geocoding error:', error);
       setKeyframeSearchResults(prev => ({ ...prev, [keyframeId]: [] }));
     }
-  }, []);
+  }, [mapboxKey]);
 
   // Remove keyframe
   const removeKeyframe = useCallback((keyframeId: string) => {

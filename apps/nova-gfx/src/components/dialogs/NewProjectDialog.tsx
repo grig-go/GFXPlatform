@@ -18,7 +18,7 @@ import {
 } from '@emergent-platform/ui';
 import { createProject } from '@/services/projectService';
 import { useDesignerStore } from '@/stores/designerStore';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { Loader2, Monitor, Smartphone, Film, MonitorPlay, Zap } from 'lucide-react';
 
 // Resolution presets
@@ -73,9 +73,10 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   const handleCreate = async () => {
     if (!name.trim()) return;
 
-    // Ensure user has an organization
-    if (!user?.organizationId) {
-      console.error('Cannot create project: user has no organization');
+    // Get organization ID with fallback to dev org
+    const orgId = getOrganizationId(user);
+    if (!orgId) {
+      console.error('Cannot create project: no organization available');
       return;
     }
 
@@ -90,8 +91,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         frame_rate: parseInt(frameRate),
         background_color: backgroundColor,
         interactive_enabled: interactiveEnabled,
-        organization_id: user.organizationId,
-        created_by: user.id,
+        organization_id: orgId,
+        created_by: user?.id || '',
       }, accessToken || undefined);
 
       if (newProject) {

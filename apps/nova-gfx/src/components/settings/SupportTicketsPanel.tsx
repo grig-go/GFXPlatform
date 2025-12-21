@@ -242,14 +242,6 @@ export function SupportTicketsPanel() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Support Tickets</h2>
-        <p className="text-sm text-muted-foreground">
-          View and manage support tickets from all apps
-        </p>
-      </div>
-
-      <Separator />
 
       {/* Header with refresh */}
       <div className="flex items-center justify-between">

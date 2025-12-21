@@ -1,4 +1,4 @@
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, ensureFreshConnection } from '@emergent-platform/supabase-client';
 import type { AIContext, AIResponse, AIChanges } from '@emergent-platform/types';
 import {
   buildDynamicSystemPrompt,
@@ -7,7 +7,51 @@ import {
 import { resolveLogoPlaceholders } from './ai-prompts/tools/sports-logos';
 import { resolvePexelsPlaceholders, convertStockPhotoUrls } from './ai-prompts/tools/pexels-images';
 import { resolveGeneratePlaceholders, hasGeneratePlaceholders, getFallbackPlaceholderUrl, extractGeneratePlaceholders } from './ai-prompts/tools/ai-image-generator';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
+import {
+  getTextProviders,
+  revealProviderApiKey,
+} from '@/services/aiProviderService';
+
+// Track last activity time for connection health checks
+let lastActivityTime = Date.now();
+const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Update activity timestamp - call this when user interacts with chat
+ */
+export function markChatActivity(): void {
+  lastActivityTime = Date.now();
+}
+
+/**
+ * Check if browser has been idle and refresh connection if needed
+ */
+async function ensureFreshConnectionIfIdle(): Promise<void> {
+  const idleTime = Date.now() - lastActivityTime;
+  if (idleTime > IDLE_THRESHOLD_MS) {
+    console.log(`[AI] Browser was idle for ${Math.round(idleTime / 1000)}s, ensuring fresh connection...`);
+    try {
+      // Refresh the Supabase session to ensure token is valid
+      if (supabase) {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.warn('[AI] Session refresh warning:', error.message);
+        } else if (data?.session) {
+          // Update the auth store with refreshed token
+          useAuthStore.getState().accessToken && useAuthStore.setState({ accessToken: data.session.access_token });
+          console.log('[AI] Session refreshed successfully');
+        }
+      }
+      // Also ensure Supabase connection is healthy
+      await ensureFreshConnection(true);
+    } catch (err) {
+      console.warn('[AI] Connection refresh failed, continuing anyway:', err);
+    }
+  }
+  // Update activity time
+  lastActivityTime = Date.now();
+}
 
 /**
  * Callback for image generation progress updates
@@ -36,7 +80,7 @@ async function resolveImagePlaceholders(
   if (hasGenerate) {
     console.log('🖼️ Found GENERATE placeholders in text');
     const authState = useAuthStore.getState();
-    const organizationId = authState.user?.organizationId;
+    const organizationId = getOrganizationId(authState.user);
     const userId = authState.user?.id;
     const accessToken = authState.accessToken; // Get from store, not supabase.auth.getSession()
     console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8), hasToken: !!accessToken });
@@ -140,8 +184,9 @@ export const AI_MODELS = {
 
 export type AIModelId = keyof typeof AI_MODELS;
 
-// Default model is Gemini 2.5 Flash (fast and capable)
-export const DEFAULT_AI_MODEL: AIModelId = 'gemini-2.5-flash';
+// Default model ID - empty string means "use first backend provider"
+// The hardcoded AI_MODELS are kept for backwards compatibility but backend providers take priority
+export const DEFAULT_AI_MODEL = '';
 
 // ============================================================================
 // IMAGE GENERATION MODELS
@@ -181,97 +226,113 @@ export const AI_IMAGE_MODELS = {
 
 export type AIImageModelId = keyof typeof AI_IMAGE_MODELS;
 
-// Default image model
-export const DEFAULT_AI_IMAGE_MODEL: AIImageModelId = 'gemini-2.5-flash-image';
+// Default image model ID - empty string means "use first backend provider"
+export const DEFAULT_AI_IMAGE_MODEL = '';
 
-// Get/set image model preference from organization settings (fallback to localStorage)
-export function getAIImageModel(): AIImageModelId {
-  // First check organization settings
+// Get/set image model preference from organization settings
+// Now accepts dynamic model IDs from backend, not just hardcoded AI_IMAGE_MODELS
+export function getAIImageModel(): string {
+  // Check organization settings only
   const orgSettings = useAuthStore.getState().organization?.settings;
-  if (orgSettings?.ai_image_model && orgSettings.ai_image_model in AI_IMAGE_MODELS) {
-    return orgSettings.ai_image_model as AIImageModelId;
-  }
-  // Fallback to localStorage for backwards compatibility
-  const stored = localStorage.getItem('nova-ai-image-model');
-  if (stored && stored in AI_IMAGE_MODELS) {
-    return stored as AIImageModelId;
+  if (orgSettings?.ai_image_model) {
+    return orgSettings.ai_image_model;
   }
   return DEFAULT_AI_IMAGE_MODEL;
 }
 
-export async function setAIImageModel(modelId: AIImageModelId): Promise<void> {
+export async function setAIImageModel(modelId: string): Promise<void> {
   const result = await useAuthStore.getState().updateOrganizationSettings({ ai_image_model: modelId });
   if (!result.success) {
-    // Fallback to localStorage if org update fails
-    console.warn('Failed to save to organization settings, using localStorage:', result.error);
-    localStorage.setItem('nova-ai-image-model', modelId);
+    console.error('[AI] Failed to save ai_image_model to organization settings:', result.error);
   }
 }
 
-// Get/set model preference from organization settings (fallback to localStorage)
-export function getAIModel(): AIModelId {
-  // First check organization settings
+// Get/set model preference from organization settings
+// Now accepts dynamic model IDs from backend, not just hardcoded AI_MODELS
+export function getAIModel(): string {
+  // Check organization settings only
   const orgSettings = useAuthStore.getState().organization?.settings;
-  if (orgSettings?.ai_model && orgSettings.ai_model in AI_MODELS) {
-    return orgSettings.ai_model as AIModelId;
-  }
-  // Fallback to localStorage for backwards compatibility
-  const stored = localStorage.getItem('nova-ai-model');
-  if (stored && stored in AI_MODELS) {
-    return stored as AIModelId;
-  }
-  // Clear invalid stored model
-  if (stored) {
-    console.warn(`Invalid AI model "${stored}" found in localStorage, resetting to default`);
-    localStorage.removeItem('nova-ai-model');
-  }
-  return DEFAULT_AI_MODEL;
+  // Return saved model or empty string (backend will provide default)
+  return orgSettings?.ai_model || DEFAULT_AI_MODEL;
 }
 
-export async function setAIModel(modelId: AIModelId): Promise<void> {
+export async function setAIModel(modelId: string): Promise<void> {
+  console.log('[AI] setAIModel called with:', modelId);
   const result = await useAuthStore.getState().updateOrganizationSettings({ ai_model: modelId });
-  if (!result.success) {
-    // Fallback to localStorage if org update fails
-    console.warn('Failed to save to organization settings, using localStorage:', result.error);
-    localStorage.setItem('nova-ai-model', modelId);
+  if (result.success) {
+    console.log('[AI] Successfully saved ai_model to organization settings');
+  } else {
+    console.error('[AI] Failed to save ai_model to organization settings:', result.error);
   }
 }
 
-// Get API keys (organization settings -> localStorage -> VITE_ env vars)
-export function getGeminiApiKey(): string | null {
-  // First check organization settings
+/**
+ * Initialize AI models from backend providers on login.
+ * If no model is saved in org settings, saves the backend default.
+ * Call this after user auth/organization is loaded.
+ */
+export async function initializeAIModelsFromBackend(): Promise<void> {
   const orgSettings = useAuthStore.getState().organization?.settings;
-  if (orgSettings?.gemini_api_key) {
-    return orgSettings.gemini_api_key;
+
+  try {
+    // Only initialize if we have providers and no model is saved yet
+    const currentTextModel = orgSettings?.ai_model;
+    const currentImageModel = orgSettings?.ai_image_model;
+
+    const [textProviders, imageProviders] = await Promise.all([
+      getTextProviders(true), // Force refresh
+      import('@/services/aiProviderService').then(m => m.getImageProviders(true)),
+    ]);
+
+    // Initialize text model if not set
+    if (!currentTextModel && textProviders.length > 0) {
+      const defaultTextProvider = textProviders.find(p => p.apiKeyConfigured) || textProviders[0];
+      if (defaultTextProvider?.model) {
+        console.log('[AI] Initializing text model from backend:', defaultTextProvider.model);
+        await setAIModel(defaultTextProvider.model);
+      }
+    }
+
+    // Initialize image model if not set
+    if (!currentImageModel && imageProviders.length > 0) {
+      const defaultImageProvider = imageProviders.find(p => p.apiKeyConfigured) || imageProviders[0];
+      if (defaultImageProvider?.model) {
+        console.log('[AI] Initializing image model from backend:', defaultImageProvider.model);
+        await setAIImageModel(defaultImageProvider.model);
+      }
+    }
+
+    // Clear cache to use fresh config
+    clearResolvedProviderCache();
+    console.log('[AI] AI models initialized from backend');
+  } catch (err) {
+    console.warn('[AI] Failed to initialize AI models from backend:', err);
   }
-  // Fallback to localStorage, then env variable (local dev)
-  return localStorage.getItem('nova-gemini-api-key') || import.meta.env.VITE_GEMINI_API_KEY || null;
+}
+
+// Get API keys from organization settings only
+export function getGeminiApiKey(): string | null {
+  const orgSettings = useAuthStore.getState().organization?.settings;
+  return orgSettings?.gemini_api_key || null;
 }
 
 export function getClaudeApiKey(): string | null {
-  // First check organization settings
   const orgSettings = useAuthStore.getState().organization?.settings;
-  if (orgSettings?.claude_api_key) {
-    return orgSettings.claude_api_key;
-  }
-  // Fallback to localStorage, then env variable (local dev)
-  return localStorage.getItem('nova-claude-api-key') || import.meta.env.VITE_CLAUDE_API_KEY || null;
+  return orgSettings?.claude_api_key || null;
 }
 
 // Set API keys to organization settings
 export async function setGeminiApiKey(apiKey: string): Promise<void> {
   const result = await useAuthStore.getState().updateOrganizationSettings({ gemini_api_key: apiKey });
   if (!result.success) {
-    console.warn('Failed to save to organization settings, using localStorage:', result.error);
-    localStorage.setItem('nova-gemini-api-key', apiKey);
+    console.error('[AI] Failed to save gemini_api_key to organization settings:', result.error);
   }
 }
 
 export async function setClaudeApiKey(apiKey: string): Promise<void> {
   const result = await useAuthStore.getState().updateOrganizationSettings({ claude_api_key: apiKey });
   if (!result.success) {
-    console.warn('Failed to save to organization settings, using localStorage:', result.error);
-    localStorage.setItem('nova-claude-api-key', apiKey);
+    console.error('[AI] Failed to save claude_api_key to organization settings:', result.error);
   }
 }
 
@@ -295,26 +356,457 @@ function shouldUseBackendProxy(provider: AIProvider): boolean {
   return !getClaudeApiKey();
 }
 
-// Check if AI is available in current environment
+// Check if AI is available in current environment (sync version - uses cache)
 export function isAIAvailableInCurrentEnv(): { available: boolean; reason?: string } {
-  const isProduction = isProductionMode();
-  const hasGeminiKey = !!getGeminiApiKey();
-  const hasClaudeKey = !!getClaudeApiKey();
-
-  if (isProduction) {
-    // In production, backend proxy is available
+  // If we have a cached resolved provider, AI is available
+  if (resolvedProviderCache) {
     return { available: true };
   }
 
-  // In development, need a local API key
+  // Check for legacy local API keys as fallback
+  const hasGeminiKey = !!getGeminiApiKey();
+  const hasClaudeKey = !!getClaudeApiKey();
+
+  if (hasGeminiKey || hasClaudeKey) {
+    return { available: true };
+  }
+
+  // In production, backend proxy is available
+  if (isProductionMode()) {
+    return { available: true };
+  }
+
+  // No keys found - but backend might have providers, so don't block
+  // The actual check will happen async when making the request
+  return {
+    available: false,
+    reason: 'No AI provider configured. Please configure an AI provider in the Nova dashboard (AI Connections).',
+  };
+}
+
+// Check if AI is available (async version - checks backend)
+export async function checkAIAvailability(): Promise<{ available: boolean; reason?: string }> {
+  try {
+    const providers = await getTextProviders();
+    if (providers.length > 0 && providers.some(p => p.apiKeyConfigured)) {
+      return { available: true };
+    }
+  } catch (err) {
+    console.warn('[AI] Failed to check backend providers:', err);
+  }
+
+  // Fallback to local keys
+  const hasGeminiKey = !!getGeminiApiKey();
+  const hasClaudeKey = !!getClaudeApiKey();
+
   if (hasGeminiKey || hasClaudeKey) {
     return { available: true };
   }
 
   return {
     available: false,
-    reason: 'No API key configured. In development mode, please set VITE_GEMINI_API_KEY or VITE_CLAUDE_API_KEY in .env.local, or configure via Settings.',
+    reason: 'No AI provider configured. Please configure an AI provider in the Nova dashboard (AI Connections).',
   };
+}
+
+// ============================================================================
+// BACKEND PROVIDER RESOLUTION
+// Resolves model IDs to backend provider configuration and API keys
+// ============================================================================
+
+interface ResolvedModelConfig {
+  provider: AIProvider;
+  apiModel: string;
+  apiKey: string;
+  providerId: string;
+}
+
+// Cache for resolved provider configs
+let resolvedProviderCache: {
+  modelId: string;
+  config: ResolvedModelConfig;
+  timestamp: number;
+} | null = null;
+
+const RESOLVED_CACHE_TTL_MS = 60 * 1000; // 1 minute
+
+/**
+ * Resolve a model ID to its backend provider configuration and API key.
+ * This is the primary way to get model config for AI calls.
+ * Falls back to hardcoded AI_MODELS for backwards compatibility.
+ */
+async function resolveModelConfig(modelId: string): Promise<ResolvedModelConfig | null> {
+  // Check cache first
+  if (
+    resolvedProviderCache &&
+    resolvedProviderCache.modelId === modelId &&
+    Date.now() - resolvedProviderCache.timestamp < RESOLVED_CACHE_TTL_MS
+  ) {
+    console.log('[AI] Using cached provider config for:', modelId);
+    return resolvedProviderCache.config;
+  }
+
+  // Try to find provider from backend
+  try {
+    const providers = await getTextProviders();
+
+    // First try exact match
+    let matchingProvider = providers.find(p => p.model === modelId);
+
+    // If no exact match and we have backend providers, use the first available one
+    // This handles the case where user hasn't explicitly saved a model yet
+    if (!matchingProvider && providers.length > 0) {
+      matchingProvider = providers.find(p => p.apiKeyConfigured);
+      if (matchingProvider) {
+        console.log('[AI] No exact match for', modelId, ', using backend default:', matchingProvider.model);
+      }
+    }
+
+    if (matchingProvider && matchingProvider.apiKeyConfigured) {
+      // Get the actual API key from backend
+      const apiKey = await revealProviderApiKey(matchingProvider.id);
+
+      if (apiKey) {
+        // Use the provider's configured model, not the requested modelId
+        const actualModelId = matchingProvider.model;
+        const config: ResolvedModelConfig = {
+          provider: matchingProvider.providerName as AIProvider,
+          apiModel: actualModelId, // Use the provider's configured model
+          apiKey,
+          providerId: matchingProvider.id,
+        };
+
+        // Cache the result with the actual model being used
+        resolvedProviderCache = {
+          modelId: actualModelId,
+          config,
+          timestamp: Date.now(),
+        };
+
+        console.log('[AI] Resolved model from backend:', { requestedModel: modelId, actualModel: actualModelId, provider: config.provider });
+        return config;
+      }
+    }
+  } catch (err) {
+    console.warn('[AI] Failed to resolve model from backend:', err);
+  }
+
+  // Fallback to hardcoded AI_MODELS for backwards compatibility (only if no backend providers)
+  if (modelId in AI_MODELS) {
+    const hardcodedModel = AI_MODELS[modelId as keyof typeof AI_MODELS];
+    const apiKey = hardcodedModel.provider === 'gemini' ? getGeminiApiKey() : getClaudeApiKey();
+
+    if (apiKey) {
+      const config: ResolvedModelConfig = {
+        provider: hardcodedModel.provider,
+        apiModel: hardcodedModel.apiModel,
+        apiKey,
+        providerId: 'local',
+      };
+      console.log('[AI] Using hardcoded model config (no backend providers):', { modelId, provider: config.provider });
+      return config;
+    }
+  }
+
+  console.warn('[AI] Could not resolve model config for:', modelId);
+  return null;
+}
+
+/**
+ * Clear the resolved provider cache (call after settings changes)
+ */
+export function clearResolvedProviderCache(): void {
+  resolvedProviderCache = null;
+}
+
+/**
+ * Get display info for the current AI model.
+ * Returns name and provider from backend providers, or falls back to hardcoded AI_MODELS.
+ */
+export interface AIModelDisplayInfo {
+  name: string;
+  provider: AIProvider;
+  modelId: string;
+}
+
+export async function getCurrentModelDisplayInfo(): Promise<AIModelDisplayInfo> {
+  const requestedModelId = getAIModel();
+
+  // Try to find in backend providers first
+  try {
+    const providers = await getTextProviders();
+
+    // First try exact match
+    let matchingProvider = providers.find(p => p.model === requestedModelId);
+
+    // If no exact match but backend providers exist, use the first one with API key
+    if (!matchingProvider && providers.length > 0) {
+      matchingProvider = providers.find(p => p.apiKeyConfigured);
+    }
+
+    if (matchingProvider) {
+      const actualModelId = matchingProvider.model;
+      // Find the model in availableModels for display name
+      const modelInfo = matchingProvider.availableModels?.find(m => m.id === actualModelId);
+      return {
+        name: modelInfo?.name || actualModelId,
+        provider: matchingProvider.providerName as AIProvider,
+        modelId: actualModelId,
+      };
+    }
+  } catch (err) {
+    console.warn('[AI] Failed to get model display info from backend:', err);
+  }
+
+  // Fallback to hardcoded AI_MODELS (only if no backend providers)
+  if (requestedModelId in AI_MODELS) {
+    const hardcoded = AI_MODELS[requestedModelId as keyof typeof AI_MODELS];
+    return {
+      name: hardcoded.name,
+      provider: hardcoded.provider,
+      modelId: requestedModelId,
+    };
+  }
+
+  // Last resort - return the model ID as name
+  return {
+    name: requestedModelId,
+    provider: 'gemini', // Default assumption
+    modelId: requestedModelId,
+  };
+}
+
+/**
+ * Synchronous version that returns cached info or falls back to hardcoded.
+ * Use this for immediate UI display; it may not have the latest backend info.
+ */
+export function getCurrentModelDisplayInfoSync(): AIModelDisplayInfo {
+  const modelId = getAIModel();
+
+  // Check hardcoded models first (synchronous)
+  if (modelId in AI_MODELS) {
+    const hardcoded = AI_MODELS[modelId as keyof typeof AI_MODELS];
+    return {
+      name: hardcoded.name,
+      provider: hardcoded.provider,
+      modelId,
+    };
+  }
+
+  // If cached provider info exists, use it
+  if (resolvedProviderCache && resolvedProviderCache.modelId === modelId) {
+    return {
+      name: modelId, // We don't have the display name in cache, use ID
+      provider: resolvedProviderCache.config.provider,
+      modelId,
+    };
+  }
+
+  // Return model ID as name (backend model not in cache)
+  return {
+    name: modelId,
+    provider: 'gemini', // Default assumption for Gemini models
+    modelId,
+  };
+}
+
+// ============================================================================
+// IMAGE MODEL DISPLAY INFO & RESOLUTION
+// Parallel to text model functions, for AIImageGeneratorDialog
+// ============================================================================
+
+/**
+ * Display info for AI image models (used in AIImageGeneratorDialog)
+ */
+export interface AIImageModelDisplayInfo {
+  name: string;
+  description: string;
+  provider: AIProvider;
+  modelId: string;
+  apiModel: string;
+  apiEndpoint: 'generateContent' | 'generateImages';
+}
+
+// Cache for resolved image provider configs
+let resolvedImageProviderCache: {
+  modelId: string;
+  config: AIImageModelDisplayInfo & { apiKey: string; providerId: string };
+  timestamp: number;
+} | null = null;
+
+/**
+ * Get display info for the current AI image model.
+ * Returns name and provider from backend providers, or falls back to hardcoded AI_IMAGE_MODELS.
+ */
+export async function getCurrentImageModelDisplayInfo(): Promise<AIImageModelDisplayInfo> {
+  const requestedModelId = getAIImageModel();
+
+  // Try to find in backend providers first
+  try {
+    const { getImageProviders } = await import('@/services/aiProviderService');
+    const providers = await getImageProviders();
+
+    // First try exact match
+    let matchingProvider = providers.find(p => p.model === requestedModelId);
+
+    // If no exact match but backend providers exist, use the first one with API key
+    if (!matchingProvider && providers.length > 0) {
+      matchingProvider = providers.find(p => p.apiKeyConfigured);
+    }
+
+    if (matchingProvider) {
+      const actualModelId = matchingProvider.model;
+      // Find the model in availableModels for display name
+      const modelInfo = matchingProvider.availableModels?.find(m => m.id === actualModelId);
+      return {
+        name: modelInfo?.name || matchingProvider.name || actualModelId,
+        description: modelInfo?.description || matchingProvider.description || '',
+        provider: matchingProvider.providerName as AIProvider,
+        modelId: actualModelId,
+        apiModel: actualModelId,
+        apiEndpoint: 'generateContent', // Default for Gemini models
+      };
+    }
+  } catch (err) {
+    console.warn('[AI] Failed to get image model display info from backend:', err);
+  }
+
+  // Fallback to hardcoded AI_IMAGE_MODELS (only if no backend providers)
+  if (requestedModelId in AI_IMAGE_MODELS) {
+    const hardcoded = AI_IMAGE_MODELS[requestedModelId as keyof typeof AI_IMAGE_MODELS];
+    return {
+      name: hardcoded.name,
+      description: hardcoded.description,
+      provider: hardcoded.provider,
+      modelId: requestedModelId,
+      apiModel: hardcoded.apiModel,
+      apiEndpoint: hardcoded.apiEndpoint,
+    };
+  }
+
+  // Last resort - return the model ID as name (for dynamic backend models)
+  return {
+    name: requestedModelId || 'No Model Selected',
+    description: 'Configure a model in AI Settings',
+    provider: 'gemini',
+    modelId: requestedModelId,
+    apiModel: requestedModelId,
+    apiEndpoint: 'generateContent',
+  };
+}
+
+/**
+ * Resolve image model to backend provider with API key.
+ * This is the primary way to get image model config for generation calls.
+ */
+export async function resolveImageModelConfig(): Promise<{
+  apiKey: string;
+  apiModel: string;
+  apiEndpoint: 'generateContent' | 'generateImages';
+  provider: AIProvider;
+  providerId: string;
+} | null> {
+  const requestedModelId = getAIImageModel();
+
+  // Check cache first
+  if (
+    resolvedImageProviderCache &&
+    resolvedImageProviderCache.modelId === requestedModelId &&
+    Date.now() - resolvedImageProviderCache.timestamp < RESOLVED_CACHE_TTL_MS
+  ) {
+    console.log('[AI] Using cached image provider config for:', requestedModelId);
+    const cached = resolvedImageProviderCache.config;
+    return {
+      apiKey: cached.apiKey,
+      apiModel: cached.apiModel,
+      apiEndpoint: cached.apiEndpoint,
+      provider: cached.provider,
+      providerId: cached.providerId,
+    };
+  }
+
+  // Try to find provider from backend
+  try {
+    const { getImageProviders, revealProviderApiKey } = await import('@/services/aiProviderService');
+    const providers = await getImageProviders();
+
+    // First try exact match
+    let matchingProvider = providers.find(p => p.model === requestedModelId);
+
+    // If no exact match but backend providers exist, use the first one with API key
+    if (!matchingProvider && providers.length > 0) {
+      matchingProvider = providers.find(p => p.apiKeyConfigured);
+      if (matchingProvider) {
+        console.log('[AI] No exact image model match for', requestedModelId, ', using backend default:', matchingProvider.model);
+      }
+    }
+
+    if (matchingProvider && matchingProvider.apiKeyConfigured) {
+      // Get the actual API key from backend
+      const apiKey = await revealProviderApiKey(matchingProvider.id);
+
+      if (apiKey) {
+        const actualModelId = matchingProvider.model;
+        const modelInfo = matchingProvider.availableModels?.find(m => m.id === actualModelId);
+
+        const config = {
+          name: modelInfo?.name || matchingProvider.name || actualModelId,
+          description: modelInfo?.description || matchingProvider.description || '',
+          provider: matchingProvider.providerName as AIProvider,
+          modelId: actualModelId,
+          apiModel: actualModelId,
+          apiEndpoint: 'generateContent' as const,
+          apiKey,
+          providerId: matchingProvider.id,
+        };
+
+        // Cache the result
+        resolvedImageProviderCache = {
+          modelId: actualModelId,
+          config,
+          timestamp: Date.now(),
+        };
+
+        console.log('[AI] Resolved image model from backend:', { requestedModel: requestedModelId, actualModel: actualModelId, provider: config.provider });
+        return {
+          apiKey: config.apiKey,
+          apiModel: config.apiModel,
+          apiEndpoint: config.apiEndpoint,
+          provider: config.provider,
+          providerId: config.providerId,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[AI] Failed to resolve image model from backend:', err);
+  }
+
+  // Fallback to hardcoded AI_IMAGE_MODELS with legacy API key
+  if (requestedModelId in AI_IMAGE_MODELS) {
+    const hardcodedModel = AI_IMAGE_MODELS[requestedModelId as keyof typeof AI_IMAGE_MODELS];
+    const apiKey = getGeminiApiKey();
+
+    if (apiKey) {
+      console.log('[AI] Using hardcoded image model config (no backend providers):', { modelId: requestedModelId, provider: hardcodedModel.provider });
+      return {
+        apiKey,
+        apiModel: hardcodedModel.apiModel,
+        apiEndpoint: hardcodedModel.apiEndpoint,
+        provider: hardcodedModel.provider,
+        providerId: 'local',
+      };
+    }
+  }
+
+  console.warn('[AI] Could not resolve image model config for:', requestedModelId);
+  return null;
+}
+
+/**
+ * Clear the resolved image provider cache (call after settings changes)
+ */
+export function clearResolvedImageProviderCache(): void {
+  resolvedImageProviderCache = null;
 }
 
 // DEPRECATED: Legacy static system prompt - kept for reference
@@ -1591,10 +2083,13 @@ export type StreamCallback = (chunk: string, fullText: string) => void;
 export async function sendChatMessage(
   messages: ChatMessage[],
   context: AIContext,
-  modelId?: AIModelId,
+  modelId?: string,
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
+  // Ensure connection is fresh if browser was idle (prevents stale connection issues)
+  await ensureFreshConnectionIfIdle();
+
   // Get the user's latest message to detect intent
   const lastUserMessage = messages[messages.length - 1]?.content || '';
 
@@ -1603,8 +2098,28 @@ export async function sendChatMessage(
   const contextInfo = buildDynamicContextMessage(context);
 
   const selectedModel = modelId || getAIModel();
-  const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
-  const provider = modelConfig.provider;
+
+  // Resolve model config from backend or fallback to hardcoded
+  const resolvedConfig = await resolveModelConfig(selectedModel);
+
+  // If we couldn't resolve the config, try with default model
+  const fallbackConfig = resolvedConfig || await resolveModelConfig(DEFAULT_AI_MODEL);
+
+  if (!fallbackConfig) {
+    throw new Error('No AI model configured. Please configure an AI provider in Nova dashboard or set API keys locally.');
+  }
+
+  const provider = fallbackConfig.provider;
+  // Create a compatible model config object for the existing send functions
+  const modelConfig = {
+    id: selectedModel,
+    name: selectedModel,
+    description: '',
+    provider: fallbackConfig.provider,
+    apiModel: fallbackConfig.apiModel,
+    // Store the resolved API key for use in the send functions
+    _resolvedApiKey: fallbackConfig.apiKey,
+  };
 
   // Try Supabase Edge Function first (only in production, without images)
   // In development, Edge Function has CORS issues, so skip directly to direct API
@@ -1718,8 +2233,6 @@ function createTimeoutSignal(timeoutMs: number, existingSignal?: AbortSignal): {
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  console.log(`⏱️ [AI] Setting request timeout to ${timeoutMs / 1000} seconds`);
-
   // Set up timeout
   timeoutId = setTimeout(() => {
     console.warn(`⏱️ [AI] Request timed out after ${timeoutMs / 1000} seconds`);
@@ -1752,7 +2265,7 @@ function createTimeoutSignal(timeoutMs: number, existingSignal?: AbortSignal): {
 async function sendGeminiMessage(
   messages: ChatMessage[],
   context: AIContext,
-  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  modelConfig: { apiModel: string; _resolvedApiKey?: string; provider: AIProvider } & Record<string, any>,
   systemPrompt: string,
   contextInfo: string,
   images?: ImageAttachment[],
@@ -1762,12 +2275,13 @@ async function sendGeminiMessage(
   const MAX_RETRIES = 3;
   const BASE_DELAY = 2000; // 2 seconds
 
-  const geminiApiKey = getGeminiApiKey();
+  // Use resolved API key from backend, or fallback to legacy getGeminiApiKey
+  const geminiApiKey = modelConfig._resolvedApiKey || getGeminiApiKey();
   const useProxy = shouldUseBackendProxy('gemini');
 
   // In development without API key, throw a clear error
   if (!useProxy && !geminiApiKey) {
-    throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
+    throw new Error('Gemini API key not configured. Please configure an AI provider in Nova dashboard or set VITE_GEMINI_API_KEY in .env.local.');
   }
 
   // Build Gemini-format messages (convert assistant to model role)
@@ -1925,18 +2439,19 @@ async function sendGeminiMessage(
 async function sendClaudeMessage(
   messages: ChatMessage[],
   _context: AIContext, // Context is now passed via contextInfo parameter
-  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  modelConfig: { apiModel: string; _resolvedApiKey?: string; provider: AIProvider } & Record<string, any>,
   systemPrompt: string,
   contextInfo: string,
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
-  const claudeApiKey = getClaudeApiKey();
+  // Use resolved API key from backend, or fallback to legacy getClaudeApiKey
+  const claudeApiKey = modelConfig._resolvedApiKey || getClaudeApiKey();
   const useProxy = shouldUseBackendProxy('claude');
 
   // In development without API key, throw a clear error
   if (!useProxy && !claudeApiKey) {
-    throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
+    throw new Error('Claude API key not configured. Please configure an AI provider in Nova dashboard or set VITE_CLAUDE_API_KEY in .env.local.');
   }
 
   // Build Claude-format messages
@@ -2317,6 +2832,17 @@ function normalizeElement(el: any, index: number): any {
       data: Array.isArray(ds?.data) ? ds.data : [0],
       label: ds?.label || 'Data',
     }));
+
+    // Set reference dimensions for proportional scaling
+    // These capture the dimensions at which the chart options (seatRadius, rowHeight, etc.) were designed
+    // When the element is resized, the chart will scale proportionally based on these reference dimensions
+    if (!content.options) content.options = {};
+    if (!content.options.referenceWidth) {
+      content.options.referenceWidth = width;
+    }
+    if (!content.options.referenceHeight) {
+      content.options.referenceHeight = height;
+    }
   }
 
   // Normalize styles
@@ -3722,20 +4248,25 @@ export async function sendDocsChatMessage(
   signal?: AbortSignal
 ): Promise<string> {
   const modelId = getAIModel();
-  const modelConfig = AI_MODELS[modelId];
-  const provider = modelConfig.provider;
+
+  // Resolve model config from backend or fallback to hardcoded
+  const resolvedConfig = await resolveModelConfig(modelId);
+  const fallbackConfig = resolvedConfig || await resolveModelConfig(DEFAULT_AI_MODEL);
+
+  if (!fallbackConfig) {
+    throw new Error('No AI model configured. Please configure an AI provider in Nova dashboard or set API keys locally.');
+  }
+
+  const provider = fallbackConfig.provider;
+  const apiKey = fallbackConfig.apiKey;
+  const apiModel = fallbackConfig.apiModel;
 
   // Create timeout signal that also respects the user's abort signal
   const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(AI_REQUEST_TIMEOUT_MS, signal);
 
   try {
     if (provider === 'gemini') {
-      const geminiApiKey = getGeminiApiKey();
       const useProxy = shouldUseBackendProxy('gemini');
-
-      if (!useProxy && !geminiApiKey) {
-        throw new Error('Gemini API key not configured. Please set VITE_GEMINI_API_KEY in .env.local or configure via Settings.');
-      }
 
       // Build Gemini-format messages with docs system prompt
       const geminiContents: any[] = [
@@ -3754,7 +4285,7 @@ export async function sendDocsChatMessage(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             provider: 'gemini',
-            model: modelConfig.apiModel,
+            model: apiModel,
             messages: geminiContents,
             maxTokens: 16384,
             temperature: 0.7,
@@ -3763,7 +4294,7 @@ export async function sendDocsChatMessage(
         });
       } else {
         response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.apiModel}:generateContent?key=${geminiApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${apiModel}:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3787,12 +4318,7 @@ export async function sendDocsChatMessage(
 
     } else {
       // Claude
-      const claudeApiKey = getClaudeApiKey();
       const useProxy = shouldUseBackendProxy('claude');
-
-      if (!useProxy && !claudeApiKey) {
-        throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in .env.local or configure via Settings.');
-      }
 
       const apiMessages = messages.map((m) => ({
         role: m.role as 'user' | 'assistant',
@@ -3806,7 +4332,7 @@ export async function sendDocsChatMessage(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             provider: 'claude',
-            model: modelConfig.apiModel,
+            model: apiModel,
             systemPrompt,
             messages: apiMessages,
             maxTokens: 16384,
@@ -3824,11 +4350,11 @@ export async function sendDocsChatMessage(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': claudeApiKey!,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
           },
           body: JSON.stringify({
-            model: modelConfig.apiModel,
+            model: apiModel,
             max_tokens: 16384,
             system: systemPrompt,
             messages: apiMessages,
@@ -3873,11 +4399,14 @@ export async function sendChatMessageStreaming(
   messages: ChatMessage[],
   context: AIContext,
   onChunk: StreamCallback,
-  modelId?: AIModelId,
+  modelId?: string,
   images?: ImageAttachment[],
   signal?: AbortSignal,
   onImageProgress?: ImageProgressCallback
 ): Promise<AIResponse> {
+  // Ensure connection is fresh if browser was idle (prevents stale connection issues)
+  await ensureFreshConnectionIfIdle();
+
   // Debug: Log incoming parameters
   console.log('🔍 [sendChatMessageStreaming] Called with:');
   console.log('  - messages:', messages.length);
@@ -3898,8 +4427,24 @@ export async function sendChatMessageStreaming(
   const contextInfo = buildDynamicContextMessage(context);
 
   const selectedModel = modelId || getAIModel();
-  const modelConfig = AI_MODELS[selectedModel] || AI_MODELS[DEFAULT_AI_MODEL];
-  const provider = modelConfig.provider;
+
+  // Resolve model config from backend or fallback to hardcoded
+  const resolvedConfig = await resolveModelConfig(selectedModel);
+  const fallbackConfig = resolvedConfig || await resolveModelConfig(DEFAULT_AI_MODEL);
+
+  if (!fallbackConfig) {
+    throw new Error('No AI model configured. Please configure an AI provider in Nova dashboard or set API keys locally.');
+  }
+
+  const provider = fallbackConfig.provider;
+  const modelConfig = {
+    id: selectedModel,
+    name: selectedModel,
+    description: '',
+    provider: fallbackConfig.provider,
+    apiModel: fallbackConfig.apiModel,
+    _resolvedApiKey: fallbackConfig.apiKey,
+  };
 
   // Helper to make the streaming API call
   const makeStreamingCall = async (): Promise<AIResponse> => {
@@ -3957,14 +4502,15 @@ export async function sendChatMessageStreaming(
 async function sendGeminiMessageStreaming(
   messages: ChatMessage[],
   context: AIContext,
-  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  modelConfig: { apiModel: string; _resolvedApiKey?: string; provider: AIProvider } & Record<string, any>,
   systemPrompt: string,
   contextInfo: string,
   onChunk: StreamCallback,
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
-  const geminiApiKey = getGeminiApiKey();
+  // Use resolved API key from backend, or fallback to legacy getGeminiApiKey
+  const geminiApiKey = modelConfig._resolvedApiKey || getGeminiApiKey();
 
   if (!geminiApiKey) {
     // Fall back to non-streaming if no direct API key
@@ -4107,14 +4653,15 @@ async function sendGeminiMessageStreaming(
 async function sendClaudeMessageStreaming(
   messages: ChatMessage[],
   context: AIContext,
-  modelConfig: typeof AI_MODELS[keyof typeof AI_MODELS],
+  modelConfig: { apiModel: string; _resolvedApiKey?: string; provider: AIProvider } & Record<string, any>,
   systemPrompt: string,
   contextInfo: string,
   onChunk: StreamCallback,
   images?: ImageAttachment[],
   signal?: AbortSignal
 ): Promise<AIResponse> {
-  const claudeApiKey = getClaudeApiKey();
+  // Use resolved API key from backend, or fallback to legacy getClaudeApiKey
+  const claudeApiKey = modelConfig._resolvedApiKey || getClaudeApiKey();
 
   if (!claudeApiKey) {
     // Fall back to non-streaming if no direct API key

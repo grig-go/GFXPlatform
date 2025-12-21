@@ -15,6 +15,9 @@ import type {
   AppUser,
   Group,
   ChannelAccess,
+  Organization,
+  Invitation,
+  OrgRole,
 } from '../types/permissions';
 
 interface AuthContextValue extends AuthState {
@@ -23,6 +26,11 @@ interface AuthContextValue extends AuthState {
   refreshUser: () => Promise<void>;
   getChannelAccess: (channelId: string) => ChannelAccess | undefined;
   channelAccess: ChannelAccess[];
+  // Organization management
+  getOrganizationMembers: () => Promise<AppUser[]>;
+  sendInvitation: (email: string, role: OrgRole) => Promise<{ error: Error | null; invitation?: Invitation }>;
+  revokeInvitation: (invitationId: string) => Promise<{ error: Error | null }>;
+  getInvitations: () => Promise<Invitation[]>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -34,11 +42,13 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>({
     user: null,
+    organization: null,
     session: null,
     isLoading: true,
     isAuthenticated: false,
     isSuperuser: false,
     isAdmin: false,
+    isOrgAdmin: false,
     isPending: false,
     systemLocked: false,
   });
@@ -80,18 +90,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  // Fetch full user data with permissions
-  const fetchUserData = useCallback(async (authUserId: string): Promise<AppUserWithPermissions | null> => {
+  // Fetch full user data with permissions and organization
+  const fetchUserData = useCallback(async (authUserId: string): Promise<{ user: AppUserWithPermissions; organization: Organization } | null> => {
     console.log('[Auth] fetchUserData starting for:', authUserId);
     try {
-      // Fetch user from u_users with auto-recovery
+      // Fetch user from u_users with organization
       console.log('[Auth] Fetching user from u_users...');
       console.log('[Auth] Query: u_users where auth_user_id =', authUserId);
       const startTime = Date.now();
       const { data: userData, error: userError } = await withAutoRecovery(
         (client) => client
           .from('u_users')
-          .select('*')
+          .select(`
+            *,
+            u_organizations (*)
+          `)
           .eq('auth_user_id', authUserId)
           .single(),
         10000,
@@ -104,17 +117,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return null;
       }
       console.log('[Auth] User found:', userData.email);
+      console.log('[Auth] Raw userData:', JSON.stringify(userData, null, 2));
 
-      const appUser = userData as AppUser;
+      // Extract organization from joined data
+      const { u_organizations: orgData, ...userFields } = userData;
+      console.log('[Auth] Extracted orgData:', orgData);
+      const organization = orgData as Organization;
+      const appUser = userFields as AppUser;
 
       // If user is superuser, they have all permissions
       if (appUser.is_superuser) {
         console.log('[Auth] User is superuser, returning early');
         return {
-          ...appUser,
-          groups: [],
-          permissions: ['*'], // Wildcard for superuser
-          directPermissions: [],
+          user: {
+            ...appUser,
+            groups: [],
+            permissions: ['*'], // Wildcard for superuser
+            directPermissions: [],
+          },
+          organization,
         };
       }
 
@@ -198,10 +219,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       console.log('[Auth] fetchUserData complete, permissions:', allPermissions.length);
       return {
-        ...appUser,
-        groups,
-        permissions: allPermissions,
-        directPermissions,
+        user: {
+          ...appUser,
+          groups,
+          permissions: allPermissions,
+          directPermissions,
+        },
+        organization,
       };
     } catch (err) {
       console.error('[Auth] Error in fetchUserData:', err);
@@ -217,11 +241,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setState(prev => ({
         ...prev,
         user: null,
+        organization: null,
         session: null,
         isLoading: false,
         isAuthenticated: false,
         isSuperuser: false,
         isAdmin: false,
+        isOrgAdmin: false,
         isPending: false,
       }));
       setChannelAccess([]);
@@ -229,34 +255,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     console.log('[Auth] Fetching user data...');
-    const userData = await fetchUserData(session.user.id);
-    console.log('[Auth] User data result:', userData ? 'found' : 'not found');
+    const result = await fetchUserData(session.user.id);
+    console.log('[Auth] User data result:', result ? 'found' : 'not found');
 
-    if (!userData) {
+    if (!result) {
       // User exists in auth but not in u_users - edge case
       console.log('[Auth] No user data, clearing state');
       setState(prev => ({
         ...prev,
         user: null,
+        organization: null,
         session: null,
         isLoading: false,
         isAuthenticated: false,
         isSuperuser: false,
         isAdmin: false,
+        isOrgAdmin: false,
         isPending: false,
       }));
       return;
     }
+
+    const { user: userData, organization } = result;
 
     // Check if user is admin (has manage_users permission or is in Administrators group)
     const isAdmin = userData.is_superuser ||
       userData.permissions.includes('system.manage_users') ||
       userData.groups.some(g => g.name === 'Administrators');
 
-    console.log('[Auth] Setting authenticated state, isAdmin:', isAdmin, 'isSuperuser:', userData.is_superuser);
+    // Check if user is org admin (owner or admin in their organization)
+    const isOrgAdmin = userData.org_role === 'owner' || userData.org_role === 'admin';
+
+    console.log('[Auth] Setting authenticated state, isAdmin:', isAdmin, 'isSuperuser:', userData.is_superuser, 'isOrgAdmin:', isOrgAdmin);
     setState(prev => ({
       ...prev,
       user: userData,
+      organization,
       session: {
         access_token: session.access_token,
         refresh_token: session.refresh_token,
@@ -266,6 +300,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isAuthenticated: true,
       isSuperuser: userData.is_superuser,
       isAdmin,
+      isOrgAdmin,
       isPending: userData.status === 'pending',
     }));
     console.log('[Auth] State updated, isLoading set to false');
@@ -345,10 +380,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setState(prev => ({
             ...prev,
             user: null,
+            organization: null,
             session: null,
             isAuthenticated: false,
             isSuperuser: false,
             isAdmin: false,
+            isOrgAdmin: false,
             isPending: false,
           }));
           setChannelAccess([]);
@@ -437,10 +474,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({
       ...prev,
       user: null,
+      organization: null,
       session: null,
       isAuthenticated: false,
       isSuperuser: false,
       isAdmin: false,
+      isOrgAdmin: false,
       isPending: false,
     }));
     setChannelAccess([]);
@@ -476,6 +515,107 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return channelAccess.find(ca => ca.channel_id === channelId);
   }, [channelAccess]);
 
+  // Get members of the current organization
+  const getOrganizationMembers = useCallback(async (): Promise<AppUser[]> => {
+    if (!state.user?.organization_id) {
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('u_users')
+        .select('*')
+        .eq('organization_id', state.user.organization_id)
+        .order('full_name');
+
+      if (error) {
+        console.error('Error fetching organization members:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching organization members:', err);
+      return [];
+    }
+  }, [state.user?.organization_id]);
+
+  // Send an invitation to join the organization
+  const sendInvitation = useCallback(async (email: string, role: OrgRole): Promise<{ error: Error | null; invitation?: Invitation }> => {
+    if (!state.user?.organization_id || !state.user?.id) {
+      return { error: new Error('No organization or user ID available') };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('u_invitations')
+        .insert({
+          email,
+          organization_id: state.user.organization_id,
+          invited_by: state.user.id,
+          role,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error sending invitation:', error);
+        return { error: new Error(error.message) };
+      }
+
+      return { error: null, invitation: data };
+    } catch (err) {
+      console.error('Error sending invitation:', err);
+      return { error: err as Error };
+    }
+  }, [state.user?.organization_id, state.user?.id]);
+
+  // Revoke an invitation
+  const revokeInvitation = useCallback(async (invitationId: string): Promise<{ error: Error | null }> => {
+    try {
+      const { error } = await supabase
+        .from('u_invitations')
+        .delete()
+        .eq('id', invitationId);
+
+      if (error) {
+        console.error('Error revoking invitation:', error);
+        return { error: new Error(error.message) };
+      }
+
+      return { error: null };
+    } catch (err) {
+      console.error('Error revoking invitation:', err);
+      return { error: err as Error };
+    }
+  }, []);
+
+  // Get pending invitations for the organization
+  const getInvitations = useCallback(async (): Promise<Invitation[]> => {
+    if (!state.user?.organization_id) {
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('u_invitations')
+        .select('*')
+        .eq('organization_id', state.user.organization_id)
+        .is('accepted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching invitations:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching invitations:', err);
+      return [];
+    }
+  }, [state.user?.organization_id]);
+
   const value: AuthContextValue = {
     ...state,
     signIn,
@@ -483,6 +623,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refreshUser,
     getChannelAccess,
     channelAccess,
+    getOrganizationMembers,
+    sendInvitation,
+    revokeInvitation,
+    getInvitations,
   };
 
   return (

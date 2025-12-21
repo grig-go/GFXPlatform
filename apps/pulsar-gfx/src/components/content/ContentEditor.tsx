@@ -24,6 +24,7 @@ import { usePreviewStore } from '@/stores/previewStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { usePlaylistStore } from '@/stores/playlistStore';
 import { useChannelStore } from '@/stores/channelStore';
+import { useMapboxStore } from '@/stores/mapboxStore';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { getDataSourceById, getNestedValue } from '@/data/sampleDataSources';
@@ -267,6 +268,15 @@ export function ContentEditor() {
     }
   }, [currentRecord, templateBindings, currentRecordIndex, updatePreviewField]);
 
+  // Get Mapbox key from store and trigger fetch on mount
+  const mapboxKey = useMapboxStore((state) => state.apiKey);
+  const fetchMapboxKey = useMapboxStore((state) => state.fetchApiKey);
+
+  // Fetch Mapbox key from backend on mount
+  useEffect(() => {
+    fetchMapboxKey();
+  }, [fetchMapboxKey]);
+
   // Search for locations using Mapbox Geocoding API
   const searchLocation = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -276,7 +286,6 @@ export function ContentEditor() {
 
     setIsSearchingLocation(true);
     try {
-      const mapboxKey = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxKey}&limit=5`
       );
@@ -298,7 +307,7 @@ export function ContentEditor() {
     } finally {
       setIsSearchingLocation(false);
     }
-  }, []);
+  }, [mapboxKey]);
 
   // Handle location selection
   const handleLocationSelect = useCallback((location: { lng: number; lat: number; zoom?: number }) => {
@@ -325,7 +334,6 @@ export function ContentEditor() {
 
     setIsSearchingKeyframeLocation(true);
     try {
-      const mapboxKey = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxKey}&limit=5`
       );
@@ -347,7 +355,7 @@ export function ContentEditor() {
     } finally {
       setIsSearchingKeyframeLocation(false);
     }
-  }, []);
+  }, [mapboxKey]);
 
   // Handle keyframe location selection
   const handleKeyframeLocationSelect = useCallback((location: { name: string; lng: number; lat: number; zoom?: number }) => {

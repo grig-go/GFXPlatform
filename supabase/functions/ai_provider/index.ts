@@ -118,6 +118,61 @@ const sleep = (ms: number) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+/**
+ * Get user's organization ID from JWT token
+ * Returns null if token is invalid or user has no organization
+ */
+async function getUserOrganizationId(c: any): Promise<string | null> {
+  try {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return null;
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    // Create a client with the user's token to get their info
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      }
+    );
+
+    // Get the user's info
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.warn("[getUserOrganizationId] Auth error:", authError?.message);
+      return null;
+    }
+
+    // Get the user's organization from the u_users table (auth_user_id links to auth.uid())
+    const serviceSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: userData, error: userError } = await serviceSupabase
+      .from("u_users")
+      .select("organization_id")
+      .eq("auth_user_id", user.id)
+      .single();
+
+    if (userError || !userData) {
+      console.warn("[getUserOrganizationId] User lookup error:", userError?.message);
+      return null;
+    }
+
+    return userData.organization_id;
+  } catch (err) {
+    console.warn("[getUserOrganizationId] Error:", err);
+    return null;
+  }
+}
+
 // ============================================================================
 // AI PROVIDER INITIALIZATION
 // ============================================================================
@@ -477,30 +532,80 @@ app.post("/ai_provider/fetch-models", async (c) => {
 
       case 'gemini':
         {
-          console.log('📡 Using predefined Gemini models...');
-          models = [
-            {
-              id: 'gemini-2.0-flash-exp',
-              name: 'Gemini 2.0 Flash (Experimental)',
-              description: 'Latest experimental multimodal model',
-              contextWindow: 1048576,
-              capabilities: ['text', 'image', 'video']
-            },
-            {
-              id: 'gemini-1.5-pro',
-              name: 'Gemini 1.5 Pro',
-              description: 'Advanced reasoning and multimodal model',
-              contextWindow: 2097152,
-              capabilities: ['text', 'image', 'video']
-            },
-            {
-              id: 'gemini-1.5-flash',
-              name: 'Gemini 1.5 Flash',
-              description: 'Fast and efficient model',
-              contextWindow: 1048576,
-              capabilities: ['text', 'image', 'video']
+          console.log('📡 Fetching Gemini models from API...');
+          // Try to fetch from Google API first
+          const geminiEndpoint = endpoint || 'https://generativelanguage.googleapis.com/v1beta';
+          try {
+            const response = await fetch(`${geminiEndpoint}/models?key=${apiKey}`, {
+              signal: AbortSignal.timeout(10000)
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              // Filter to only include generative models (not embedding models)
+              const generativeModels = (data.models || []).filter((m: any) =>
+                m.name?.includes('gemini') &&
+                m.supportedGenerationMethods?.includes('generateContent')
+              );
+
+              models = generativeModels.map((m: any) => {
+                const modelId = m.name.replace('models/', '');
+                return {
+                  id: modelId,
+                  name: m.displayName || modelId,
+                  description: m.description || '',
+                  contextWindow: m.inputTokenLimit || 1000000,
+                  capabilities: ['text', 'image', 'video']
+                };
+              });
+
+              // Sort by name descending to show newest first
+              models.sort((a: any, b: any) => b.id.localeCompare(a.id));
+              console.log(`✅ Fetched ${models.length} Gemini models from API`);
+            } else {
+              throw new Error(`Gemini API error: ${response.status}`);
             }
-          ];
+          } catch (fetchError) {
+            console.warn('⚠️ Failed to fetch Gemini models from API, using predefined list:', fetchError);
+            // Fallback to predefined list if API fetch fails
+            models = [
+              {
+                id: 'gemini-2.5-pro-preview-06-05',
+                name: 'Gemini 2.5 Pro Preview',
+                description: 'Latest Gemini 2.5 Pro with enhanced capabilities',
+                contextWindow: 1048576,
+                capabilities: ['text', 'image', 'video']
+              },
+              {
+                id: 'gemini-2.0-flash',
+                name: 'Gemini 2.0 Flash',
+                description: 'Fast and efficient Gemini 2.0 model',
+                contextWindow: 1048576,
+                capabilities: ['text', 'image', 'video']
+              },
+              {
+                id: 'gemini-2.0-flash-exp',
+                name: 'Gemini 2.0 Flash (Experimental)',
+                description: 'Experimental multimodal model',
+                contextWindow: 1048576,
+                capabilities: ['text', 'image', 'video']
+              },
+              {
+                id: 'gemini-1.5-pro',
+                name: 'Gemini 1.5 Pro',
+                description: 'Advanced reasoning and multimodal model',
+                contextWindow: 2097152,
+                capabilities: ['text', 'image', 'video']
+              },
+              {
+                id: 'gemini-1.5-flash',
+                name: 'Gemini 1.5 Flash',
+                description: 'Fast and efficient model',
+                contextWindow: 1048576,
+                capabilities: ['text', 'image', 'video']
+              }
+            ];
+          }
           break;
         }
 
@@ -526,23 +631,38 @@ app.post("/ai_provider/fetch-models", async (c) => {
 // AI PROVIDER CRUD ROUTES
 // ============================================================================
 
-// Get providers by dashboard assignment (e.g., pulsar-vs-text, pulsar-vs-image-gen, pulsar-vs-image-edit)
+// Get providers by dashboard assignment (e.g., pulsar-vs, nova-gfx)
+// Optional query params: ?type=text|image|video|imageEdit to filter by provider type
+// Filters by user's organization (or returns global providers if org_id is null)
 app.get("/ai_provider/providers/by-dashboard/:dashboard", async (c) => {
   try {
     const dashboard = c.req.param("dashboard");
-    console.log("🔍 Fetching providers for dashboard:", dashboard);
+    const providerType = c.req.query("type"); // text, image, video, imageEdit
+
+    // Get user's organization ID for filtering
+    const organizationId = await getUserOrganizationId(c);
+    console.log("🔍 Fetching providers for dashboard:", dashboard, "type:", providerType || "all", "org:", organizationId || "global");
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Fetch all enabled providers and filter in memory
-    // (dashboard_assignments has mixed formats - string arrays and object arrays)
-    const { data, error } = await supabase
+    // Build query - filter by organization or global (null org_id)
+    let query = supabase
       .from("ai_providers")
       .select("*")
-      .eq("enabled", true)
-      .order("name");
+      .eq("enabled", true);
+
+    // Filter by organization: show org-specific providers OR global providers (org_id is null)
+    if (organizationId) {
+      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+    } else {
+      // If no org ID (anonymous), only show global providers
+      query = query.is("organization_id", null);
+    }
+
+    const { data, error } = await query.order("name");
 
     if (error) {
       console.error("Error fetching providers by dashboard:", error);
@@ -555,23 +675,43 @@ app.get("/ai_provider/providers/by-dashboard/:dashboard", async (c) => {
       if (!assignments || !Array.isArray(assignments)) return false;
 
       return assignments.some((assignment: any) => {
-        // Handle string format: ["pulsar-vs-text"]
+        // Handle string format: ["nova-gfx-text", "nova-gfx-image"]
         if (typeof assignment === 'string') {
-          return assignment === dashboard;
+          // If a type is specified, match dashboard-type pattern
+          if (providerType) {
+            return assignment === `${dashboard}-${providerType}`;
+          }
+          // Otherwise match any assignment starting with dashboard
+          return assignment === dashboard || assignment.startsWith(`${dashboard}-`);
         }
-        // Handle object format: [{"dashboard": "pulsar-vs", "textProvider": true}]
+        // Handle object format: [{"dashboard": "nova-gfx", "textProvider": true, "imageProvider": true}]
         if (typeof assignment === 'object' && assignment.dashboard) {
-          return assignment.dashboard === dashboard;
+          if (assignment.dashboard !== dashboard) return false;
+          // If a type is specified, check the corresponding provider flag
+          if (providerType) {
+            const typeMap: Record<string, string> = {
+              text: 'textProvider',
+              image: 'imageProvider',
+              video: 'videoProvider',
+              imageEdit: 'imageEditProvider'
+            };
+            const flagKey = typeMap[providerType];
+            return flagKey ? assignment[flagKey] === true : false;
+          }
+          // Otherwise return true if any provider type is enabled
+          return assignment.textProvider || assignment.imageProvider || assignment.videoProvider || assignment.imageEditProvider;
         }
         return false;
       });
     });
 
     const providers = filteredData.map(formatAIProvider);
-    console.log(`✅ Found ${providers.length} providers for dashboard: ${dashboard}`);
+    console.log(`✅ Found ${providers.length} providers for dashboard: ${dashboard}, type: ${providerType || "all"}, org: ${organizationId || "global"}`);
     return c.json({
       ok: true,
       dashboard,
+      type: providerType || null,
+      organizationId: organizationId || null,
       providers
     });
   } catch (error) {
@@ -617,6 +757,10 @@ app.post("/ai_provider/providers", async (c) => {
       providerName: body.providerName
     });
 
+    // Get user's organization ID to auto-assign
+    const organizationId = await getUserOrganizationId(c);
+    console.log("📝 Auto-assigning to organization:", organizationId || "none (global)");
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -626,7 +770,7 @@ app.post("/ai_provider/providers", async (c) => {
     const timestamp = Date.now();
     const providerId = `${body.providerName.toLowerCase()}-${timestamp}`;
 
-    const newProvider = {
+    const newProvider: any = {
       id: providerId,
       name: body.name,
       provider_name: body.providerName,
@@ -644,6 +788,11 @@ app.post("/ai_provider/providers", async (c) => {
       top_p: body.topP,
       dashboard_assignments: body.dashboardAssignments || []
     };
+
+    // Auto-assign organization if user is authenticated
+    if (organizationId) {
+      newProvider.organization_id = organizationId;
+    }
 
     const { data, error } = await supabase
       .from("ai_providers")

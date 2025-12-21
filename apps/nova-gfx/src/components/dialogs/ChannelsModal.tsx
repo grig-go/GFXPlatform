@@ -239,8 +239,8 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
                       <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor(channel.player_status)}`} />
 
                       {/* Channel info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{channel.name}</span>
                           <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                             {channel.channel_code}
@@ -249,13 +249,13 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
                             {CHANNEL_MODES.find(m => m.value === channel.channel_mode)?.label || channel.channel_mode}
                           </span>
                         </div>
-                        <div className="text-xs text-muted-foreground truncate mt-0.5">
+                        <div className="text-xs text-muted-foreground truncate mt-0.5 max-w-full">
                           {getPlayerUrl(channel.id)}
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="sm"

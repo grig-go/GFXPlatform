@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useDesignerStore } from '@/stores/designerStore';
 import { StageElement } from './StageElement';
 import { useOnAirAnimation } from '@/hooks/useOnAirAnimation';
+import { FpsCounter } from './FpsCounter';
 
 export function Stage() {
   const {
@@ -11,6 +12,7 @@ export function Stage() {
     layers,
     showGrid,
     showSafeArea,
+    showFps,
     isPlayingFullPreview,
     currentTemplateId,
   } = useDesignerStore();
@@ -154,6 +156,9 @@ export function Stage() {
           />
         );
       })}
+
+      {/* FPS Counter */}
+      {showFps && <FpsCounter />}
 
       {/* Selection handles would go here */}
     </div>

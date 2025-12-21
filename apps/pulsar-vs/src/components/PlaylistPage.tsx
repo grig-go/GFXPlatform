@@ -193,7 +193,13 @@ interface MediaAsset {
   media_type: string;
 }
 
-export default function PlaylistPage() {
+import { useKeyboardShortcuts, type KeyboardShortcut, type ShortcutActions } from '../hooks/useKeyboardShortcuts';
+
+interface PlaylistPageProps {
+  shortcuts?: KeyboardShortcut[];
+}
+
+export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistPageProps) {
   const { t } = useTranslation('playlist');
   const { activeProject } = useProject();
 
@@ -205,6 +211,9 @@ export default function PlaylistPage() {
 
   // Selected items state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // Focused item for Play In (single row selection)
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
 
   // Channels state
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -1702,6 +1711,84 @@ export default function PlaylistPage() {
     await playNextItem();
   }, [isPlaying, isPaused, playbackTimer, playNextItem]);
 
+  // Select next item in playlist
+  const handleSelectNext = useCallback(() => {
+    if (!selectedPlaylist?.items?.length) return;
+    const items = selectedPlaylist.items;
+    if (!focusedItemId) {
+      setFocusedItemId(items[0].id);
+      return;
+    }
+    const currentIndex = items.findIndex(item => item.id === focusedItemId);
+    if (currentIndex < items.length - 1) {
+      setFocusedItemId(items[currentIndex + 1].id);
+    }
+  }, [selectedPlaylist?.items, focusedItemId]);
+
+  // Select previous item in playlist
+  const handleSelectPrevious = useCallback(() => {
+    if (!selectedPlaylist?.items?.length) return;
+    const items = selectedPlaylist.items;
+    if (!focusedItemId) {
+      setFocusedItemId(items[items.length - 1].id);
+      return;
+    }
+    const currentIndex = items.findIndex(item => item.id === focusedItemId);
+    if (currentIndex > 0) {
+      setFocusedItemId(items[currentIndex - 1].id);
+    }
+  }, [selectedPlaylist?.items, focusedItemId]);
+
+  // Play the focused/selected item (Play In)
+  const handlePlayFocusedItem = useCallback(() => {
+    if (!focusedItemId || !selectedPlaylist) return;
+    const item = selectedPlaylist.items.find(i => i.id === focusedItemId);
+    if (item) {
+      handlePlayItem(item);
+    }
+  }, [focusedItemId, selectedPlaylist, handlePlayItem]);
+
+  // Clear focused selection
+  const handleClearSelection = useCallback(() => {
+    setFocusedItemId(null);
+    setSelectedItems(new Set());
+  }, []);
+
+  // Play current row and move to next
+  const handlePlayAndNext = useCallback(() => {
+    if (!focusedItemId || !selectedPlaylist?.items?.length) return;
+    const items = selectedPlaylist.items;
+    const currentIndex = items.findIndex(item => item.id === focusedItemId);
+
+    // Play the current item
+    const currentItem = items[currentIndex];
+    if (currentItem) {
+      handlePlayItem(currentItem);
+    }
+
+    // Move to next item (if available)
+    if (currentIndex < items.length - 1) {
+      setFocusedItemId(items[currentIndex + 1].id);
+    }
+  }, [focusedItemId, selectedPlaylist?.items, handlePlayItem]);
+
+  // Keyboard shortcuts actions
+  const shortcutActions: ShortcutActions = React.useMemo(() => ({
+    playIn: handlePlayFocusedItem,
+    playOut: () => {}, // TODO: Implement play out functionality
+    startPlaylist: handlePlayPlaylist,
+    stopPlaylist: handleStopPlaylist,
+    skipNext: handleSkipNext,
+    selectNext: handleSelectNext,
+    selectPrevious: handleSelectPrevious,
+    playSelected: handlePlayFocusedItem,
+    playAndNext: handlePlayAndNext,
+    clearSelection: handleClearSelection,
+  }), [handlePlayFocusedItem, handlePlayPlaylist, handleStopPlaylist, handleSkipNext, handleSelectNext, handleSelectPrevious, handlePlayAndNext, handleClearSelection]);
+
+  // Use keyboard shortcuts hook
+  useKeyboardShortcuts(shortcutActions, true);
+
   // Get the next item index for preview
   const getNextPlayIndex = useCallback(() => {
     const playableItems = getPlayableItems();
@@ -2157,6 +2244,7 @@ Please provide:
 
   const handleSelectPlaylist = (playlist: Playlist) => {
     setSelectedItems(new Set());
+    setFocusedItemId(null);
     loadPlaylistItems(playlist.id);
   };
 
@@ -2461,7 +2549,42 @@ Please provide:
             <div className="px-4 lg:px-6 py-2 border-b bg-muted/50 flex items-center justify-between gap-2">
               {/* Left: Play Controls */}
               <div className="flex items-center gap-1 lg:gap-2">
-                {/* Play/Pause Button */}
+                {/* Play In Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`h-7 px-2 lg:px-3 ${focusedItemId ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700' : 'opacity-50 cursor-not-allowed'}`}
+                  title={t('buttons.playIn')}
+                  disabled={!focusedItemId}
+                  onClick={() => {
+                    if (focusedItemId && selectedPlaylist) {
+                      const item = selectedPlaylist.items.find(i => i.id === focusedItemId);
+                      if (item) {
+                        handlePlayItem(item);
+                      }
+                    }
+                  }}
+                >
+                  <Play className="h-4 w-4 lg:mr-1" />
+                  <span className="hidden lg:inline">{t('buttons.playIn')}</span>
+                </Button>
+
+                {/* Play Out Button - disabled for now */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 lg:px-3 opacity-50 cursor-not-allowed"
+                  title={t('buttons.playOut')}
+                  disabled={true}
+                >
+                  <Square className="h-4 w-4 lg:mr-1" />
+                  <span className="hidden lg:inline">{t('buttons.playOut')}</span>
+                </Button>
+
+                {/* Separator */}
+                <div className="h-6 w-px bg-border mx-1" />
+
+                {/* Start/Pause Button */}
                 {isPlaying ? (
                   <Button
                     variant="default"
@@ -2725,7 +2848,15 @@ Please provide:
                           <Reorder.Item
                             value={item}
                             as="tr"
-                            className="hover:bg-muted/50 group border-b"
+                            className={`hover:bg-muted/50 group border-b cursor-pointer ${focusedItemId === item.id ? 'bg-blue-50 ring-1 ring-blue-300 ring-inset' : ''}`}
+                            onClick={(e) => {
+                              // Don't select if clicking on interactive elements
+                              const target = e.target as HTMLElement;
+                              if (target.closest('button') || target.closest('input') || target.closest('[role="checkbox"]') || target.closest('[data-no-row-select]')) {
+                                return;
+                              }
+                              setFocusedItemId(focusedItemId === item.id ? null : item.id);
+                            }}
                           >
                             <TableCell>
                               <Checkbox

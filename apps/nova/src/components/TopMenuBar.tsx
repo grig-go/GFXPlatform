@@ -9,17 +9,16 @@ import {
   MessageSquare,
   Users,
   Zap,
-  Cloud,
   ImageIcon,
   Bot,
   Rss,
   Tv,
-  Shield,
-  ExternalLink,
+  Ticket,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
 import { SupportRequestDialog } from "./dialogs/SupportRequestDialog";
+import { SupportTicketsDialog } from "./dialogs/SupportTicketsDialog";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown, UserMenuConfig } from "./shared/SharedTopMenuBar";
 import { supabase } from "../utils/supabase/client";
 import { useAuth } from "../contexts/AuthContext";
@@ -30,13 +29,32 @@ interface TopMenuBarProps {
   dashboardConfig?: any[];
 }
 
+// Extended user type to include preferences
+interface UserWithPreferences {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  preferences?: {
+    theme?: 'light' | 'dark' | 'system';
+    timezone?: string;
+    date_format?: string;
+    language?: string;
+    email_notifications?: boolean;
+    push_notifications?: boolean;
+  };
+}
+
 export function TopMenuBar({
   onNavigate,
   dashboardConfig = []
 }: TopMenuBarProps) {
-  // Auth hooks
-  const { user: authUser, signOut } = useAuth();
-  const { isAdmin, isSuperuser, canReadPage, canWritePage } = usePermissions();
+  // Auth hooks - user is the app user from u_users table
+  const { user, signOut } = useAuth();
+  const { isAdmin, isSuperuser, canReadPage } = usePermissions();
+
+  // Cast user to include preferences
+  const appUser = user as UserWithPreferences | null;
 
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof document !== 'undefined') {
@@ -46,6 +64,21 @@ export function TopMenuBar({
   });
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [showSupportTickets, setShowSupportTickets] = useState(false);
+
+  // Check if user is from @emergent.new domain
+  const isEmergentUser = appUser?.email?.endsWith('@emergent.new') || false;
+
+  // Check for openSettings URL param (used by other apps to deep-link to account settings)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('openSettings') === 'true') {
+      setShowAccountSettings(true);
+      // Clean up the URL param
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
   const [apps, setApps] = useState<Array<{
     id: string;
     name: string;
@@ -53,6 +86,23 @@ export function TopMenuBar({
     sort_order: number;
     app_key: string;
   }>>([]);
+
+  // Load theme from user preferences on mount
+  useEffect(() => {
+    if (appUser?.preferences?.theme) {
+      const userTheme = appUser.preferences.theme;
+      let shouldBeDark = false;
+
+      if (userTheme === 'system') {
+        shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      } else {
+        shouldBeDark = userTheme === 'dark';
+      }
+
+      setDarkMode(shouldBeDark);
+      document.documentElement.classList.toggle('dark', shouldBeDark);
+    }
+  }, [appUser]);
 
   // Handle sign out
   const handleSignOut = async () => {
@@ -63,39 +113,57 @@ export function TopMenuBar({
   useEffect(() => {
     const fetchApps = async () => {
       const { data, error } = await supabase.rpc("list_active_applications");
-      
+
       if (!error && data) {
         console.log("Applications fetched from backend:", data);
-        setApps(data); // dropdown items
+        setApps(data);
       } else if (error) {
         console.error("Failed to fetch applications:", error);
       }
     };
-    
+
     fetchApps();
   }, []);
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
+  const toggleDarkMode = async () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
     document.documentElement.classList.toggle('dark');
+
+    // Save the theme preference to user profile
+    if (appUser?.id) {
+      const currentPrefs = appUser.preferences || {};
+      const newTheme = newDarkMode ? 'dark' : 'light';
+
+      try {
+        await supabase.rpc('update_user_profile', {
+          p_user_id: appUser.id,
+          p_full_name: appUser.full_name || null,
+          p_preferences: {
+            ...currentPrefs,
+            theme: newTheme,
+          },
+          p_avatar_url: appUser.avatar_url || null,
+        });
+        console.log('[TopMenuBar] Theme preference saved:', newTheme);
+      } catch (err) {
+        console.error('[TopMenuBar] Failed to save theme preference:', err);
+      }
+    }
   };
 
   // Helper function to check if a dashboard is visible
   const isDashboardVisible = (dashboardId: string) => {
-    // If no config, show all dashboards (default behavior)
     if (!dashboardConfig || dashboardConfig.length === 0) {
       return true;
     }
-    
-    // Find the dashboard in the config
+
     const dashboard = dashboardConfig.find(d => d.dashboard_id === dashboardId);
-    
-    // If not found, hide by default
+
     if (!dashboard) {
       return false;
     }
-    
-    // Return visibility status
+
     return dashboard.visible;
   };
 
@@ -146,15 +214,12 @@ export function TopMenuBar({
     sections: [
       {
         items: toolsMenuItems.filter(item => {
-          // Check admin-only items
           if (item.adminOnly && !isAdmin && !isSuperuser) {
             return false;
           }
-          // Check page permissions
           if (item.pageKey && !canReadPage(item.pageKey)) {
             return false;
           }
-          // Check dashboard visibility
           if (item.dashboardId && !isDashboardVisible(item.dashboardId)) {
             return false;
           }
@@ -190,7 +255,7 @@ export function TopMenuBar({
   } : undefined;
 
   // User Menu Configuration - Get initials from email
-  const getUserInitials = (email?: string, name?: string): string => {
+  const getUserInitials = (email?: string, name?: string | null): string => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
     }
@@ -200,11 +265,11 @@ export function TopMenuBar({
     return 'U';
   };
 
-  const userMenu: UserMenuConfig | undefined = authUser ? {
-    name: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
-    email: authUser.email,
+  const userMenu: UserMenuConfig | undefined = appUser ? {
+    name: appUser.full_name || undefined,
+    email: appUser.email,
     role: isSuperuser ? 'Superuser' : (isAdmin ? 'Administrator' : undefined),
-    initials: getUserInitials(authUser.email, authUser.user_metadata?.full_name || authUser.user_metadata?.name),
+    initials: getUserInitials(appUser.email, appUser.full_name),
     sections: [
       {
         label: 'Preferences',
@@ -220,6 +285,12 @@ export function TopMenuBar({
             icon: UserIcon,
             onClick: () => setShowAccountSettings(true)
           },
+          ...(isEmergentUser ? [{
+            id: 'support-tickets',
+            label: 'Support Tickets',
+            icon: Ticket,
+            onClick: () => setShowSupportTickets(true)
+          }] : []),
         ],
       },
       {
@@ -297,6 +368,14 @@ export function TopMenuBar({
         open={showSupportDialog}
         onOpenChange={setShowSupportDialog}
       />
+
+      {/* Support Tickets Dialog (for @emergent.new users) */}
+      {isEmergentUser && (
+        <SupportTicketsDialog
+          open={showSupportTickets}
+          onOpenChange={setShowSupportTickets}
+        />
+      )}
     </>
   );
 }

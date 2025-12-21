@@ -24,6 +24,7 @@ import {
   ListMusic,
   Monitor,
   Bot,
+  Keyboard,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +41,7 @@ interface TopBarProps {
   onOpenAIPromptSettings?: () => void;
   onOpenAIProviders?: () => void;
   onOpenProjects?: () => void;
+  onOpenKeyboardShortcuts?: () => void;
   currentPage?: PageView;
   onPageChange?: (page: PageView) => void;
 }
@@ -51,6 +53,7 @@ export function TopBar({
   onOpenAIPromptSettings,
   onOpenAIProviders,
   onOpenProjects,
+  onOpenKeyboardShortcuts,
   currentPage = 'virtual-set',
   onPageChange,
 }: TopBarProps = {}) {
@@ -168,6 +171,12 @@ export function TopBar({
             label: t('tools.projects'),
             icon: FolderOpen,
             onClick: onOpenProjects,
+          },
+          {
+            id: 'keyboard-shortcuts',
+            label: t('tools.keyboardShortcuts'),
+            icon: Keyboard,
+            onClick: onOpenKeyboardShortcuts,
           },
         ],
       },

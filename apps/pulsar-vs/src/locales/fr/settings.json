@@ -1,4 +1,12 @@
 {
+  "shortcuts": {
+    "title": "Raccourcis Clavier",
+    "description": "Configurez les raccourcis clavier pour les contrôles de playlist. Cliquez sur un raccourci pour le modifier.",
+    "pressKey": "Appuyez sur une touche...",
+    "save": "Enregistrer",
+    "reset": "Réinitialiser",
+    "done": "Terminé"
+  },
   "advanced": {
     "title": "Paramètres avancés",
     "description": "Configurez les modèles IA et les clés API pour la génération.",

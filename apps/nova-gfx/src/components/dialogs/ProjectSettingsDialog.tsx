@@ -16,6 +16,7 @@ import {
   Textarea,
 } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
+import { getMapboxApiKey } from '@/services/dataProviderService';
 import {
   Settings,
   MonitorPlay,
@@ -32,15 +33,13 @@ import {
   Youtube,
   AlertTriangle,
   Zap,
+  Loader2,
 } from 'lucide-react';
 
 interface ProjectSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-
-// Default Mapbox dev key
-const DEFAULT_MAPBOX_KEY = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGjuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExnSoPnHlu_g';
 
 // Canvas presets
 const CANVAS_PRESETS = [
@@ -65,12 +64,33 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
   const [canvasHeight, setCanvasHeight] = useState(1080);
   const [frameRate, setFrameRate] = useState(60);
   const [backgroundColor, setBackgroundColor] = useState('transparent');
-  const [mapboxApiKey, setMapboxApiKey] = useState('');
-  const [showMapboxKey, setShowMapboxKey] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [interactiveEnabled, setInteractiveEnabled] = useState(false);
+
+  // Mapbox API key from backend (read-only, managed via Nova dashboard)
+  const [mapboxApiKey, setMapboxApiKey] = useState<string | null>(null);
+  const [mapboxLoading, setMapboxLoading] = useState(false);
+  const [showMapboxKey, setShowMapboxKey] = useState(false);
+
+  // Load Mapbox API key from backend when dialog opens
+  useEffect(() => {
+    if (open) {
+      setMapboxLoading(true);
+      getMapboxApiKey()
+        .then((key) => {
+          setMapboxApiKey(key);
+        })
+        .catch((err) => {
+          console.error('[ProjectSettings] Failed to fetch Mapbox key:', err);
+          setMapboxApiKey(null);
+        })
+        .finally(() => {
+          setMapboxLoading(false);
+        });
+    }
+  }, [open]);
 
   // Load current settings when dialog opens
   useEffect(() => {
@@ -82,17 +102,14 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
       setCanvasHeight(project.canvas_height || 1080);
       setFrameRate(project.frame_rate || 60);
       setBackgroundColor(project.background_color || 'transparent');
-      setMapboxApiKey(project.settings?.mapboxApiKey || '');
       setInteractiveEnabled(project.interactive_enabled || false);
       setHasChanges(false);
     }
   }, [open, project]);
 
-  // Track changes
+  // Track changes (mapboxApiKey is read-only from backend, not tracked here)
   useEffect(() => {
     if (!project) return;
-
-    const projectMapboxKey = project.settings?.mapboxApiKey || '';
 
     const changed =
       name !== project.name ||
@@ -102,11 +119,10 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
       canvasHeight !== project.canvas_height ||
       frameRate !== project.frame_rate ||
       backgroundColor !== project.background_color ||
-      mapboxApiKey !== projectMapboxKey ||
       interactiveEnabled !== (project.interactive_enabled || false);
 
     setHasChanges(changed);
-  }, [name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, interactiveEnabled, project]);
+  }, [name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, interactiveEnabled, project]);
 
   // Copy slug to clipboard
   const copySlug = useCallback(async () => {
@@ -136,7 +152,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
     setSlug(newSlug || `project-${Date.now()}`);
   }, [name]);
 
-  // Save settings
+  // Save settings (mapboxApiKey is managed via Nova dashboard, not saved here)
   const handleSave = useCallback(async () => {
     if (!project) return;
 
@@ -154,7 +170,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
         interactive_enabled: interactiveEnabled,
         settings: {
           ...project.settings,
-          mapboxApiKey: mapboxApiKey || undefined,
+          // Mapbox API key is fetched from backend, not stored per-project
         },
       });
 
@@ -165,18 +181,23 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
     } finally {
       setIsSaving(false);
     }
-  }, [project, name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, mapboxApiKey, interactiveEnabled, updateProjectSettings, onOpenChange]);
+  }, [project, name, description, slug, canvasWidth, canvasHeight, frameRate, backgroundColor, interactiveEnabled, updateProjectSettings, onOpenChange]);
 
-  // Reset to defaults
+  // Reset to defaults (mapboxApiKey is from backend, not reset here)
   const resetToDefaults = useCallback(() => {
     setCanvasWidth(1920);
     setCanvasHeight(1080);
     setFrameRate(60);
     setBackgroundColor('transparent');
-    setMapboxApiKey('');
   }, []);
 
-  if (!project) return null;
+  // Debug logging
+  console.log('[ProjectSettingsDialog] Rendering:', { open, hasProject: !!project, projectId: project?.id });
+
+  if (!project) {
+    console.warn('[ProjectSettingsDialog] No project in store, dialog will not render');
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -436,7 +457,7 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Project URL</span>
                     <code className="text-xs bg-background px-2 py-0.5 rounded font-mono">
-                      {import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || 'Not configured'}
+                      {import.meta.env.VITE_SUPABASE_URL || 'Not configured'}
                     </code>
                   </div>
                   <div className="flex items-center justify-between">
@@ -485,47 +506,68 @@ export function ProjectSettingsDialog({ open, onOpenChange }: ProjectSettingsDia
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-blue-500" />
-                  <Label htmlFor="mapbox-key">Mapbox API Key</Label>
+                  <Label>Mapbox Maps</Label>
+                  {mapboxLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 ml-auto animate-spin text-muted-foreground" />
+                  ) : mapboxApiKey ? (
+                    <span className="ml-auto flex items-center gap-1 text-xs text-emerald-500">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="ml-auto flex items-center gap-1 text-xs text-amber-500">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Not configured
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Required for map elements. Get a free key at{' '}
-                  <a
-                    href="https://mapbox.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline inline-flex items-center gap-1"
-                  >
-                    mapbox.com <ExternalLink className="w-3 h-3" />
-                  </a>
+                  Map visualization service for map elements. Managed via Nova dashboard.
                 </p>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      id="mapbox-key"
-                      type={showMapboxKey ? 'text' : 'password'}
-                      value={mapboxApiKey}
-                      onChange={(e) => setMapboxApiKey(e.target.value)}
-                      placeholder="pk.eyJ1Ijoi..."
-                      className="pr-10 font-mono text-xs"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full w-10"
-                      onClick={() => setShowMapboxKey(!showMapboxKey)}
-                    >
-                      {showMapboxKey ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </Button>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Provider</span>
+                    <code className="text-xs bg-background px-2 py-0.5 rounded font-mono">
+                      Mapbox
+                    </code>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">API Key</span>
+                    {mapboxLoading ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                    ) : mapboxApiKey ? (
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-background px-2 py-0.5 rounded font-mono">
+                          {showMapboxKey
+                            ? mapboxApiKey
+                            : `${mapboxApiKey.slice(0, 8)}${'•'.repeat(16)}${mapboxApiKey.slice(-4)}`
+                          }
+                        </code>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setShowMapboxKey(!showMapboxKey)}
+                        >
+                          {showMapboxKey ? (
+                            <EyeOff className="w-3 h-3" />
+                          ) : (
+                            <Eye className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">
+                        Not configured
+                      </span>
+                    )}
                   </div>
                 </div>
-                {!mapboxApiKey && (
-                  <p className="text-xs text-amber-500">
-                    Using development key. Add your own key for production use.
+                {!mapboxApiKey && !mapboxLoading && (
+                  <p className="text-xs text-amber-500 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Configure Mapbox API key in Nova dashboard under Data Providers.
                   </p>
                 )}
               </div>

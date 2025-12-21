@@ -489,7 +489,7 @@ export function ElectionAIInsights({
       console.log(`Attempting to delete election insight with ID: ${insightId}`);
       
       const response = await fetch(
-        getEdgeFunctionUrl('ai_insights/elections/${insightId}'),
+        getEdgeFunctionUrl(`ai_insights/elections/${insightId}`),
         {
           method: 'DELETE',
           headers: {

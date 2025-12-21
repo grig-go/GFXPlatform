@@ -4,9 +4,9 @@ import {
   AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen, Zap, Database
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
-import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, AI_MODELS, getAIModel, getGeminiApiKey, getClaudeApiKey, isAIAvailableInCurrentEnv, type ChatMessage as AIChatMessage } from '@/lib/ai';
+import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, getAIModel, checkAIAvailability, getCurrentModelDisplayInfo, type ChatMessage as AIChatMessage, type AIModelDisplayInfo } from '@/lib/ai';
 import { resolveGeneratePlaceholders, hasGeneratePlaceholders, replaceGenerateWithPlaceholder } from '@/lib/ai-prompts/tools/ai-image-generator';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
 import { useInteractiveStore } from '@/lib/interactive/interactive-store';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -130,9 +130,43 @@ function expandDynamicElements(changes: AIChanges): AIChanges {
   const expandedAnimations: any[] = [...(changes.animations || [])];
 
   // Simple helper to evaluate expressions - supports basic math only
+  // IMPORTANT: Some expressions contain runtime references (state, data, etc.) that
+  // should NOT be evaluated at design time - they need to be evaluated during playback
   const evalExpression = (expr: string, rowData: Record<string, any>, rowIndex: number): any => {
     try {
       let processed = expr;
+
+      // Check for runtime references that should NOT be evaluated at design time
+      // These expressions should be preserved as-is for runtime evaluation
+      const runtimeRefs = ['state.', 'data.', '@state.', '@data.', 'actions.'];
+      const hasRuntimeRef = runtimeRefs.some(ref => expr.includes(ref));
+
+      if (hasRuntimeRef) {
+        // This is a runtime expression - replace @index but preserve the rest
+        // Return as a runtime expression marker for later processing
+        processed = processed.replace(/\{\{@index\}\}/g, String(rowIndex));
+
+        // If it still contains runtime refs, extract the first fallback value
+        // from ternary expressions like: condition ? valueIfTrue : valueIfFalse
+        const ternaryMatch = processed.match(/\?\s*(\d+)\s*:\s*(\d+)/);
+        if (ternaryMatch) {
+          // Use the fallback value (valueIfFalse) for design time preview
+          console.log(`[evalExpression] Runtime expression detected, using fallback value: ${expr} → ${ternaryMatch[2]}`);
+          return parseInt(ternaryMatch[2], 10);
+        }
+
+        // For other runtime expressions, try to find a reasonable default
+        const numMatch = processed.match(/(\d+)/);
+        if (numMatch) {
+          console.log(`[evalExpression] Runtime expression, using first number as fallback: ${expr} → ${numMatch[1]}`);
+          return parseInt(numMatch[1], 10);
+        }
+
+        // Can't evaluate - leave as string (might cause issues but at least won't error)
+        console.warn(`[evalExpression] Cannot evaluate runtime expression at design time: ${expr}`);
+        return null;
+      }
+
       // Replace data variables
       Object.keys(rowData).forEach((key) => {
         const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
@@ -515,6 +549,12 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
     }
   }, [project?.id, loadChatMessages]);
 
+  // Current AI model display info (loaded from backend)
+  const [modelDisplayInfo, setModelDisplayInfo] = useState<AIModelDisplayInfo | null>(null);
+  useEffect(() => {
+    getCurrentModelDisplayInfo().then(setModelDisplayInfo).catch(console.warn);
+  }, []);
+
   // Handle drag to resize input area
   const handleResizeDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -732,7 +772,7 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
       // Resolve {{GENERATE:query}} placeholders in element content BEFORE applying
       if (expandedChanges.elements?.length) {
         const authState = useAuthStore.getState();
-        const organizationId = authState.user?.organizationId;
+        const organizationId = getOrganizationId(authState.user);
         const userId = authState.user?.id;
 
         if (organizationId && userId) {
@@ -2153,8 +2193,22 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
     }
   }, [elements.length]);
 
-  // Check if AI is available - uses centralized check from ai.ts
-  const aiAvailability = useMemo(() => isAIAvailableInCurrentEnv(), []);
+  // Check if AI is available - async check from backend providers
+  const [aiAvailability, setAiAvailability] = useState<{ available: boolean; reason?: string }>({ available: true }); // Optimistic default
+  const [isCheckingAI, setIsCheckingAI] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsCheckingAI(true);
+    checkAIAvailability().then((result) => {
+      if (mounted) {
+        setAiAvailability(result);
+        setIsCheckingAI(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
+
   const isAIAvailable = aiAvailability.available;
 
   const handleSend = async () => {
@@ -2190,12 +2244,12 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
 ${aiAvailability.reason || 'AI is not configured.'}
 
 **Setup Instructions:**
-1. Create a \`.env.local\` file in the project root
-2. Add: \`VITE_GEMINI_API_KEY=your-key\` or \`VITE_CLAUDE_API_KEY=your-key\`
-3. Get keys from: https://aistudio.google.com/ or https://console.anthropic.com/
-4. Restart the development server
+1. Open the Nova dashboard
+2. Go to AI Connections
+3. Configure an AI provider (Gemini, Claude, or OpenAI)
+4. Assign it to the Nova GFX dashboard
 
-Alternatively, configure your API key in Settings (⚙️).`,
+The AI provider will be automatically available once configured.`,
         error: true,
       });
       return;
@@ -2374,7 +2428,22 @@ Alternatively, configure your API key in Settings (⚙️).`,
           context,
           (_chunk, fullText) => {
             // Check if we've hit a JSON code block
-            const codeBlockStart = fullText.indexOf('```json');
+            let codeBlockStart = fullText.indexOf('```json');
+            let jsonPortion = '';
+            let hasRawJson = false;
+
+            // Also check for raw JSON responses without code block wrapper
+            // This can happen when connection is stale or prompt is truncated
+            if (codeBlockStart === -1) {
+              // Check if response starts with or contains raw JSON object
+              const rawJsonMatch = fullText.match(/\{"action"\s*:\s*"(create|update|delete)"/);
+              if (rawJsonMatch) {
+                hasRawJson = true;
+                codeBlockStart = rawJsonMatch.index || 0;
+                jsonPortion = fullText.substring(codeBlockStart);
+                console.warn('[ChatPanel] Detected raw JSON response without code block wrapper');
+              }
+            }
 
             if (codeBlockStart !== -1) {
               // We have JSON - extract the text before it and show progress
@@ -2385,8 +2454,10 @@ Alternatively, configure your API key in Settings (⚙️).`,
               }
 
               // Extract JSON portion to count elements being generated
-              const jsonStart = codeBlockStart + 7; // After ```json
-              const jsonPortion = fullText.substring(jsonStart);
+              if (!hasRawJson) {
+                const jsonStart = codeBlockStart + 7; // After ```json
+                jsonPortion = fullText.substring(jsonStart);
+              }
 
               // Count element objects in the JSON so far
               const elementMatches = jsonPortion.match(/"element_type"\s*:/g);
@@ -2440,7 +2511,25 @@ Alternatively, configure your API key in Settings (⚙️).`,
         );
 
         // Show the response to user immediately
-        useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, response.message);
+        // If response contains raw JSON changes, show intro text + success instead of raw JSON
+        let displayMessage = response.message;
+        if (response.changes && response.changes.elements && response.changes.elements.length > 0) {
+          // Check if response is mostly JSON (should not be shown to user)
+          const hasRawJson = response.message.match(/^\s*\{[\s\S]*"action"\s*:/);
+          const hasCodeBlock = response.message.includes('```json');
+          if (hasRawJson || hasCodeBlock) {
+            // Extract any text before the JSON and append success message
+            const jsonStart = hasCodeBlock
+              ? response.message.indexOf('```json')
+              : (response.message.match(/\{[\s\S]*?"action"/)?.index || 0);
+            const introText = response.message.substring(0, jsonStart).trim();
+            const elementCount = response.changes.elements.length;
+            displayMessage = introText
+              ? `${introText}\n\n✅ Created ${elementCount} element${elementCount !== 1 ? 's' : ''}.`
+              : `✅ Created ${elementCount} element${elementCount !== 1 ? 's' : ''}.`;
+          }
+        }
+        useDesignerStore.getState().updateChatMessageContent(streamingMessage.id, displayMessage);
         setCreationProgress({ phase: 'idle', message: '' });
         setActiveMessageId(null);
 
@@ -2686,7 +2775,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
                 ? "bg-gradient-to-br from-blue-500 to-blue-600"
                 : isDataMode
                   ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
-                  : AI_MODELS[getAIModel()]?.provider === 'gemini'
+                  : (modelDisplayInfo?.provider || 'gemini') === 'gemini'
                     ? "bg-gradient-to-br from-blue-500 to-cyan-400"
                     : "bg-gradient-to-br from-violet-500 to-fuchsia-400"
             )}>
@@ -2703,7 +2792,7 @@ Alternatively, configure your API key in Settings (⚙️).`,
                 {isDocsMode ? 'Documentation Helper' : isDataMode ? 'Data-Driven Design' : 'AI Assistant'}
               </h2>
               <p className="text-[9px] text-muted-foreground leading-tight">
-                {isDocsMode ? 'Ask about Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (AI_MODELS[getAIModel()]?.name || 'Unknown Model')}
+                {isDocsMode ? 'Ask about Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (modelDisplayInfo?.name || 'Loading...')}
               </p>
             </div>
           </div>

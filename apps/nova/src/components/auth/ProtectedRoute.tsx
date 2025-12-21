@@ -5,11 +5,12 @@
  * Handles loading states, authentication checks, and permission verification.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { LoginPage } from './LoginPage';
+import { SignUpPage } from './SignUpPage';
 import { SystemLocked } from './SystemLocked';
 import type { PermissionKey } from '../../types/permissions';
 
@@ -44,6 +45,17 @@ export function ProtectedRoute({
     isSuperuser,
   } = usePermissions();
 
+  // Track auth view (login or signup)
+  const [authView, setAuthView] = useState<'login' | 'signup'>(() => {
+    // Check URL for signup route or invite token
+    const urlParams = new URLSearchParams(window.location.search);
+    const path = window.location.pathname;
+    if (path === '/signup' || urlParams.has('invite')) {
+      return 'signup';
+    }
+    return 'login';
+  });
+
   // Show loading spinner while checking auth
   if (isLoading) {
     return (
@@ -61,9 +73,23 @@ export function ProtectedRoute({
     return <SystemLocked appName={appName} />;
   }
 
-  // Show login if not authenticated
+  // Show login or signup if not authenticated
   if (!isAuthenticated) {
-    return <LoginPage appName={appName} />;
+    if (authView === 'signup') {
+      return (
+        <SignUpPage
+          appName={appName}
+          onNavigateToLogin={() => setAuthView('login')}
+          onSignUpSuccess={() => setAuthView('login')}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        appName={appName}
+        onNavigateToSignUp={() => setAuthView('signup')}
+      />
+    );
   }
 
   // Check page-level permission

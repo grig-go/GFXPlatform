@@ -301,7 +301,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_insights/news/${insightId}'),
+        getEdgeFunctionUrl(`ai_insights/news/${insightId}`),
         {
           method: 'DELETE',
           headers: {

@@ -84,6 +84,40 @@ Every text element that shows data from the schema MUST have a "binding" propert
 3. Static elements (backgrounds, decorative shapes) do NOT need bindings
 4. Elements displaying data MUST have the binding object - this is NOT optional!
 5. **USE ALL DATA FIELDS** - Don't leave out precipitation, humidity, wind, or any other available fields!
+
+### 🌤️ Weather Icons - CRITICAL!
+**For weather data, use ICON elements with library="weather", NOT {{GENERATE:...}} placeholders!**
+
+Weather icon codes (like "01d", "sunny", etc.) should be mapped to animated weather icons:
+\`\`\`json
+{
+  "element_type": "icon",
+  "name": "Weather Icon Day 1",
+  "content": {
+    "type": "icon",
+    "library": "weather",
+    "iconName": "animated-clear-day",
+    "size": 64,
+    "color": "#FFD700"
+  }
+}
+\`\`\`
+
+**Icon name mapping (use the appropriate one based on condition):**
+- Clear/Sunny → "animated-clear-day" or "animated-clear-night"
+- Partly Cloudy → "animated-partly-cloudy-day" or "animated-partly-cloudy-night"
+- Cloudy/Overcast → "animated-cloudy"
+- Rain/Showers → "animated-rain"
+- Snow → "animated-snow"
+- Fog/Mist → "animated-fog"
+- Wind → "animated-wind"
+
+**❌ NEVER DO THIS for weather icons:**
+\`\`\`json
+{"src": "{{GENERATE:{{weather.items[0].icon}}}}"}  // WRONG - data binding alone!
+\`\`\`
+
+**✅ ALWAYS use icon elements for weather conditions!**
 `;
 
 export interface PromptModule {

@@ -1,27 +1,27 @@
 import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY, migrateLocalStorageToCookie } from './cookieStorage';
 
-// Get Supabase credentials from environment variables
-// Note: These are accessed via import.meta.env in Vite apps
-let supabaseUrl: string | undefined;
-let supabaseAnonKey: string | undefined;
+// Re-export cookie storage for apps that need it
+export { cookieStorage, SHARED_AUTH_STORAGE_KEY, migrateLocalStorageToCookie };
+
+// Read Supabase credentials from environment variables
+let supabaseUrl = '';
+let supabaseAnonKey = '';
+
+if (typeof import.meta !== 'undefined' && import.meta.env) {
+  supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+}
+
+// Dev user credentials from env (these are fine to read from env)
 let devUserEmail: string | undefined;
 let devUserPassword: string | undefined;
 
-// Try to access environment variables (will be set by consuming app)
 if (typeof import.meta !== 'undefined' && import.meta.env) {
-  supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   devUserEmail = import.meta.env.VITE_DEV_USER_EMAIL;
   devUserPassword = import.meta.env.VITE_DEV_USER_PASSWORD;
 }
 
-// Validate environment variables
-if (!supabaseUrl) {
-  console.error('Missing VITE_SUPABASE_URL environment variable');
-}
-if (!supabaseAnonKey) {
-  console.error('Missing VITE_SUPABASE_ANON_KEY environment variable');
-}
 
 // Custom fetch that disables caching
 const customFetch = (url: RequestInfo | URL, options: RequestInit = {}) => {
@@ -272,10 +272,20 @@ let consecutiveFailures = 0;
 function createSupabaseClient(): SupabaseClient | null {
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
+  // Migrate any existing localStorage sessions to cookie storage
+  const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+  migrateLocalStorageToCookie([
+    `sb-${projectRef}-auth-token`, // Default Supabase key pattern
+  ]);
+
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: false, // Prevents issues with URL detection conflicts
+      flowType: 'pkce',
+      storage: cookieStorage,
+      storageKey: SHARED_AUTH_STORAGE_KEY,
     },
     global: {
       fetch: customFetch,
@@ -602,11 +612,11 @@ async function ensureDevUserInDatabase(user: User): Promise<void> {
   if (!supabase) return;
 
   try {
-    // Check if user exists in users table
+    // Check if user exists in u_users table
     const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
+      .from('u_users')
       .select('id, organization_id')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .single();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
@@ -620,7 +630,7 @@ async function ensureDevUserInDatabase(user: User): Promise<void> {
       let orgId = '00000000-0000-0000-0000-000000000001'; // Default dev org
 
       const { data: org } = await supabase
-        .from('organizations')
+        .from('u_organizations')
         .select('id')
         .eq('id', orgId)
         .single();
@@ -628,7 +638,7 @@ async function ensureDevUserInDatabase(user: User): Promise<void> {
       if (!org) {
         // Create dev organization
         const { error: orgError } = await supabase
-          .from('organizations')
+          .from('u_organizations')
           .insert({
             id: orgId,
             name: 'Nova Development',
@@ -643,13 +653,13 @@ async function ensureDevUserInDatabase(user: User): Promise<void> {
 
       // Create user record
       const { error: userError } = await supabase
-        .from('users')
+        .from('u_users')
         .insert({
-          id: user.id,
+          auth_user_id: user.id,
           email: user.email,
           name: user.user_metadata?.name || 'Development User',
           organization_id: orgId,
-          role: 'admin',
+          org_role: 'admin',
         });
 
       if (userError && !userError.message.includes('duplicate')) {

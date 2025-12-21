@@ -294,7 +294,7 @@ export function SportsDebugPanel() {
       leagueId,
       leagueName: debugData.tournaments?.find((t: any) => t.id === leagueId)?.name || leagueId,
       request: {
-        url: getEdgeFunctionUrl('sports_dashboard/sports/standings/${leagueId}'),
+        url: getEdgeFunctionUrl(`sports_dashboard/sports/standings/${leagueId}`),
         method: 'GET',
         headers: {
           Authorization: `Bearer ${getSupabaseAnonKey().substring(0, 20)}...`

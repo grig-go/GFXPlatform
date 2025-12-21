@@ -19,7 +19,7 @@ import {
 } from '@emergent-platform/ui';
 import { Bug, Lightbulb, HelpCircle, MoreHorizontal, Send, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@emergent-platform/supabase-client';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
 
 type TicketType = 'bug' | 'feature' | 'question' | 'other';
@@ -110,8 +110,8 @@ export function SupportRequestDialog({
           description: description.trim(),
           user_id: user?.id || null,
           user_email: user?.email || 'anonymous',
-          user_name: user?.name || null,
-          organization_id: user?.organizationId || null,
+          user_name: user?.full_name || null,
+          organization_id: getOrganizationId(user),
           project_id: project?.id || null,
           project_name: project?.name || null,
           user_agent: navigator.userAgent,
@@ -132,7 +132,7 @@ export function SupportRequestDialog({
             ticketPriority: 'medium',
             ticketDescription: description.trim(),
             userEmail: user?.email || 'anonymous',
-            userName: user?.name,
+            userName: user?.full_name,
             projectName: project?.name,
             app: 'Nova GFX',
           },

@@ -366,7 +366,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_insights/finance/${insightId}'),
+        getEdgeFunctionUrl(`ai_insights/finance/${insightId}`),
         {
           method: 'DELETE',
           headers: {

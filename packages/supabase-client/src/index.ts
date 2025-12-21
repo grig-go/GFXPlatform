@@ -24,6 +24,10 @@ export {
   directRestInsert,
   // Beacon for window close scenarios
   sendBeaconUpdate,
+  // Cookie storage for SSO
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  migrateLocalStorageToCookie,
 } from './client';
 
 export type { User, Session } from './client';

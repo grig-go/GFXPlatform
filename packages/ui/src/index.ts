@@ -4,8 +4,10 @@ export { removeWhiteBackground } from './utils/imageUtils';
 
 // Components
 export * from './components/alert-dialog';
+export * from './components/avatar';
 export * from './components/badge';
 export * from './components/button';
+export * from './components/card';
 export * from './components/checkbox';
 export * from './components/collapsible';
 export * from './components/context-menu';
@@ -23,3 +25,6 @@ export * from './components/switch';
 export * from './components/tabs';
 export * from './components/textarea';
 export * from './components/tooltip';
+
+// Account Settings Dialog
+export * from './components/account-settings';

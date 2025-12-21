@@ -12,9 +12,9 @@ export async function getCurrentOrganization(): Promise<Organization | null> {
 
   // First get the user's organization_id
   const { data: userData, error: userError } = await supabase
-    .from('users')
+    .from('u_users')
     .select('organization_id')
-    .eq('id', user.id)
+    .eq('auth_user_id', user.id)
     .single();
 
   if (userError || !userData?.organization_id) {
@@ -24,7 +24,7 @@ export async function getCurrentOrganization(): Promise<Organization | null> {
 
   // Then get the organization
   const { data, error } = await supabase
-    .from('organizations')
+    .from('u_organizations')
     .select('*')
     .eq('id', userData.organization_id)
     .single();
@@ -44,7 +44,7 @@ export async function getOrganization(organizationId: string): Promise<Organizat
   if (!supabase) return null;
 
   const { data, error } = await supabase
-    .from('organizations')
+    .from('u_organizations')
     .select('*')
     .eq('id', organizationId)
     .single();
@@ -64,7 +64,7 @@ export async function updateOrganization(organizationId: string, updates: Partia
   if (!supabase) return null;
 
   const { data, error } = await supabase
-    .from('organizations')
+    .from('u_organizations')
     .update({
       ...updates,
       updated_at: new Date().toISOString(),
@@ -88,7 +88,7 @@ export async function getOrganizationUsers(organizationId: string): Promise<User
   if (!supabase) return [];
 
   const { data, error } = await supabase
-    .from('users')
+    .from('u_users')
     .select('*')
     .eq('organization_id', organizationId);
 

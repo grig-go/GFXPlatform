@@ -162,7 +162,7 @@ export function StockSearch({
       console.log(`🔍 [StockSearch] Searching for: "${searchTerm}"`);
       
       const response = await fetch(
-        getEdgeFunctionUrl('finance_dashboard/search/stocks?q=${encodeURIComponent(searchTerm)}'),
+        getEdgeFunctionUrl(`finance_dashboard/search/stocks?q=${encodeURIComponent(searchTerm)}`),
         {
           headers: {
             Authorization: `Bearer ${getSupabaseAnonKey()}`,

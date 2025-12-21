@@ -195,7 +195,7 @@ export function ChannelsPage() {
     try {
       setSubmitting(true);
       const response = await fetch(
-        getEdgeFunctionUrl('channels/${editingChannel.id}'),
+        getEdgeFunctionUrl(`channels/${editingChannel.id}`),
         {
           method: "PATCH",
           headers: {
@@ -236,7 +236,7 @@ export function ChannelsPage() {
 
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('channels/${deletingChannel.id}'),
+        getEdgeFunctionUrl(`channels/${deletingChannel.id}`),
         {
           method: "DELETE",
           headers: {

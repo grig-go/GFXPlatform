@@ -117,7 +117,7 @@ export function SchoolClosingsAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_insights/school-closings/${insightId}'),
+        getEdgeFunctionUrl(`ai_insights/school-closings/${insightId}`),
         {
           method: 'DELETE',
           headers: {

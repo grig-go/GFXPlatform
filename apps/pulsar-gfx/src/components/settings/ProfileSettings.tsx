@@ -23,7 +23,7 @@ export function ProfileSettings() {
 
     try {
       const { error } = await supabase
-        .from('users')
+        .from('u_users')
         .update({ name })
         .eq('id', user.id);
 

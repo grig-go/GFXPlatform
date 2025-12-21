@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -31,63 +31,250 @@ import {
   AlertCircle,
   Crown,
   Loader2,
+  Building2,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
 import { supabase } from "../utils/supabase";
+import { OrganizationPanel } from "./settings/OrganizationPanel";
 
 interface AccountSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+interface UserPreferences {
+  theme: "light" | "dark" | "system";
+  timezone: string;
+  date_format: string;
+  language: string;
+  email_notifications: boolean;
+  push_notifications: boolean;
+}
+
 export function AccountSettingsDialog({
   open,
   onOpenChange,
 }: AccountSettingsDialogProps) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { isSuperuser, permissions: userPermissionKeys } = usePermissions();
 
+  // Profile state
   const [fullName, setFullName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Preferences state
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [timezone, setTimezone] = useState("America/New_York");
   const [dateFormat, setDateFormat] = useState("MM/DD/YYYY");
   const [language, setLanguage] = useState("en");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Session state
+  const [isSigningOutSessions, setIsSigningOutSessions] = useState(false);
+
+  // General state
   const [isSaving, setIsSaving] = useState(false);
 
-  // Update form when user changes or dialog opens
+  // Load user data when dialog opens
   useEffect(() => {
     if (user && open) {
       setFullName(user.full_name || "");
+      setAvatarUrl(user.avatar_url || null);
+
+      // Load preferences from user.preferences
+      const prefs = (user as any).preferences as UserPreferences | null;
+      if (prefs) {
+        setTheme(prefs.theme || "system");
+        setTimezone(prefs.timezone || "America/New_York");
+        setDateFormat(prefs.date_format || "MM/DD/YYYY");
+        setLanguage(prefs.language || "en");
+        setEmailNotifications(prefs.email_notifications ?? true);
+        setPushNotifications(prefs.push_notifications ?? true);
+      }
     }
   }, [user, open]);
 
-  const handleSave = async () => {
-    if (!user) return;
+  // Apply theme when it changes
+  const applyTheme = (newTheme: "light" | "dark" | "system") => {
+    const root = document.documentElement;
+    if (newTheme === "system") {
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.classList.toggle("dark", systemDark);
+    } else {
+      root.classList.toggle("dark", newTheme === "dark");
+    }
+  };
 
-    setIsSaving(true);
+  // Handle avatar upload
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be less than 2MB");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
     try {
-      const { error } = await supabase
-        .from('u_users')
-        .update({
-          full_name: fullName,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+      // Upload to Supabase Storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("public")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("public")
+        .getPublicUrl(filePath);
+
+      // Update user record
+      const { error: updateError } = await supabase
+        .from("u_users")
+        .update({ avatar_url: publicUrl })
+        .eq("id", user.id);
+
+      if (updateError) throw updateError;
+
+      setAvatarUrl(publicUrl);
+      toast.success("Profile photo updated");
+
+      // Refresh user data
+      if (refreshUser) {
+        await refreshUser();
+      }
+    } catch (err) {
+      console.error("Error uploading avatar:", err);
+      toast.error("Failed to upload photo");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Handle password change
+  const handlePasswordChange = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error("Please enter a new password");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
 
       if (error) throw error;
 
-      toast.success('Profile updated successfully');
+      toast.success("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      console.error("Error changing password:", err);
+      toast.error(err.message || "Failed to update password");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  // Handle sign out all sessions
+  const handleSignOutAllSessions = async () => {
+    setIsSigningOutSessions(true);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "others" });
+      if (error) throw error;
+      toast.success("All other sessions have been signed out");
+    } catch (err: any) {
+      console.error("Error signing out sessions:", err);
+      toast.error(err.message || "Failed to sign out sessions");
+    } finally {
+      setIsSigningOutSessions(false);
+    }
+  };
+
+  // Handle save (profile + preferences)
+  const handleSave = async () => {
+    console.log('[AccountSettings] handleSave called');
+    if (!user) {
+      console.log('[AccountSettings] No user, returning');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const preferences: UserPreferences = {
+        theme,
+        timezone,
+        date_format: dateFormat,
+        language,
+        email_notifications: emailNotifications,
+        push_notifications: pushNotifications,
+      };
+
+      console.log('[AccountSettings] Saving preferences:', preferences);
+      console.log('[AccountSettings] Saving full_name:', fullName);
+      console.log('[AccountSettings] User ID:', user.id);
+
+      // Use RPC function to bypass RLS issues - pass user_id for auth verification
+      const { data, error } = await supabase.rpc('update_user_profile', {
+        p_user_id: user.id,
+        p_full_name: fullName,
+        p_preferences: preferences,
+        p_avatar_url: avatarUrl,
+      });
+
+      console.log('[AccountSettings] Update result:', { data, error });
+
+      if (error) throw error;
+
+      // Apply theme
+      applyTheme(theme);
+
+      toast.success("Settings saved successfully");
+
+      // Refresh user data
+      if (refreshUser) {
+        console.log('[AccountSettings] Refreshing user...');
+        await refreshUser();
+      }
+
       onOpenChange(false);
     } catch (err) {
-      console.error('Error updating profile:', err);
-      toast.error('Failed to update profile');
+      console.error("[AccountSettings] Error updating settings:", err);
+      toast.error("Failed to save settings");
     } finally {
       setIsSaving(false);
     }
@@ -97,7 +284,11 @@ export function AccountSettingsDialog({
 
   const getInitials = (name: string | null) => {
     if (!name) return "?";
-    return name.split(" ").map((n) => n[0]).join("").toUpperCase();
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase();
   };
 
   return (
@@ -111,8 +302,12 @@ export function AccountSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="organization">
+              <Building2 className="w-4 h-4 mr-1" />
+              Org
+            </TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
@@ -133,16 +328,39 @@ export function AccountSettingsDialog({
                   <div className="flex items-center gap-4">
                     <Avatar className="w-20 h-20">
                       <AvatarImage
-                        src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`}
+                        src={
+                          avatarUrl ||
+                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`
+                        }
                         alt={user.full_name || user.email}
                       />
-                      <AvatarFallback>
-                        {getInitials(user.full_name)}
-                      </AvatarFallback>
+                      <AvatarFallback>{getInitials(user.full_name)}</AvatarFallback>
                     </Avatar>
                     <div className="space-y-2">
-                      <Button variant="outline" size="sm">
-                        Change Photo
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingAvatar}
+                      >
+                        {isUploadingAvatar ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            Change Photo
+                          </>
+                        )}
                       </Button>
                       <p className="text-xs text-muted-foreground">
                         JPG, PNG or GIF. Max size 2MB.
@@ -187,6 +405,11 @@ export function AccountSettingsDialog({
               </Card>
             </TabsContent>
 
+            {/* Organization Tab */}
+            <TabsContent value="organization" className="space-y-4">
+              <OrganizationPanel />
+            </TabsContent>
+
             {/* Preferences Tab */}
             <TabsContent value="preferences" className="space-y-4">
               <Card>
@@ -199,7 +422,10 @@ export function AccountSettingsDialog({
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="theme">Theme</Label>
-                    <Select value={theme} onValueChange={(value: any) => setTheme(value)}>
+                    <Select
+                      value={theme}
+                      onValueChange={(value: "light" | "dark" | "system") => setTheme(value)}
+                    >
                       <SelectTrigger id="theme">
                         <SelectValue />
                       </SelectTrigger>
@@ -332,6 +558,8 @@ export function AccountSettingsDialog({
                         id="currentPassword"
                         type={showCurrentPassword ? "text" : "password"}
                         placeholder="Enter current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
                       />
                       <Button
                         variant="ghost"
@@ -354,6 +582,8 @@ export function AccountSettingsDialog({
                         id="newPassword"
                         type={showNewPassword ? "text" : "password"}
                         placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
                       />
                       <Button
                         variant="ghost"
@@ -375,16 +605,35 @@ export function AccountSettingsDialog({
                       id="confirmPassword"
                       type="password"
                       placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                     />
                   </div>
 
-                  <Button className="w-full">Update Password</Button>
+                  <Button
+                    className="w-full"
+                    onClick={handlePasswordChange}
+                    disabled={isChangingPassword || !newPassword || !confirmPassword}
+                  >
+                    {isChangingPassword ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      "Update Password"
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* Two-Factor Authentication - Grayed Out */}
+              <Card className="opacity-60">
                 <CardHeader>
-                  <CardTitle>Two-Factor Authentication</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Two-Factor Authentication
+                    <Badge variant="secondary">Coming Soon</Badge>
+                  </CardTitle>
                   <CardDescription>
                     Add an extra layer of security to your account
                   </CardDescription>
@@ -394,42 +643,28 @@ export function AccountSettingsDialog({
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <Label htmlFor="twoFactor">Two-Factor Authentication</Label>
-                        {twoFactorEnabled && (
-                          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            <Check className="w-3 h-3 mr-1" />
-                            Enabled
-                          </Badge>
-                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {twoFactorEnabled
-                          ? "Your account is protected with 2FA"
-                          : "Secure your account with 2FA"}
+                        Secure your account with 2FA
                       </p>
                     </div>
-                    <Switch
-                      id="twoFactor"
-                      checked={twoFactorEnabled}
-                      onCheckedChange={setTwoFactorEnabled}
-                    />
+                    <Switch id="twoFactor" checked={false} disabled />
                   </div>
 
-                  {twoFactorEnabled && (
-                    <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
-                      <div className="flex items-start gap-2">
-                        <Smartphone className="w-5 h-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Authenticator App</p>
-                          <p className="text-xs text-muted-foreground">
-                            Use your authenticator app to generate codes
-                          </p>
-                        </div>
+                  <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Smartphone className="w-5 h-5 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Authenticator App</p>
+                        <p className="text-xs text-muted-foreground">
+                          Use your authenticator app to generate codes
+                        </p>
                       </div>
-                      <Button variant="outline" size="sm" className="w-full mt-2">
-                        View Recovery Codes
-                      </Button>
                     </div>
-                  )}
+                    <Button variant="outline" size="sm" className="w-full mt-2" disabled>
+                      View Recovery Codes
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -452,14 +687,29 @@ export function AccountSettingsDialog({
                           <p className="text-xs text-muted-foreground">Active now</p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                      <Badge
+                        variant="outline"
+                        className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                      >
                         Active
                       </Badge>
                     </div>
                   </div>
 
-                  <Button variant="destructive" className="w-full">
-                    Sign Out All Other Sessions
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={handleSignOutAllSessions}
+                    disabled={isSigningOutSessions}
+                  >
+                    {isSigningOutSessions ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Signing out...
+                      </>
+                    ) : (
+                      "Sign Out All Other Sessions"
+                    )}
                   </Button>
                 </CardContent>
               </Card>
@@ -491,8 +741,7 @@ export function AccountSettingsDialog({
                         <p className="text-sm text-muted-foreground">
                           {isSuperuser
                             ? "Full access to all features"
-                            : `${userPermissionKeys.length} permissions assigned`
-                          }
+                            : `${userPermissionKeys.length} permissions assigned`}
                         </p>
                       </div>
                       <Badge variant="secondary">Read-only</Badge>
@@ -512,7 +761,7 @@ export function AccountSettingsDialog({
                             variant="secondary"
                             style={{
                               backgroundColor: group.color ? `${group.color}20` : undefined,
-                              borderColor: group.color || undefined
+                              borderColor: group.color || undefined,
                             }}
                           >
                             {group.name}
@@ -570,9 +819,7 @@ export function AccountSettingsDialog({
               <Card>
                 <CardHeader>
                   <CardTitle>Account Information</CardTitle>
-                  <CardDescription>
-                    View your account details and status
-                  </CardDescription>
+                  <CardDescription>View your account details and status</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -613,9 +860,7 @@ export function AccountSettingsDialog({
 
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">Groups</p>
-                      <p className="text-sm font-medium">
-                        {user.groups?.length || 0} group(s)
-                      </p>
+                      <p className="text-sm font-medium">{user.groups?.length || 0} group(s)</p>
                     </div>
                   </div>
                 </CardContent>
@@ -645,21 +890,29 @@ export function AccountSettingsDialog({
                 </CardContent>
               </Card>
             </TabsContent>
+
           </ScrollArea>
         </Tabs>
 
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={() => {
+              console.log('[AccountSettings] Save button clicked');
+              handleSave();
+            }}
+            disabled={isSaving}
+          >
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              "Save Changes"
             )}
           </Button>
         </div>

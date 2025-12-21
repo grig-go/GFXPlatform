@@ -6,13 +6,13 @@
  * - Script Editor: For creating interactive logic (when interactive mode is enabled)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Code2, Sparkles, BookOpen, Database } from 'lucide-react';
 import { cn } from '@emergent-platform/ui';
 import { ChatPanel } from './ChatPanel';
 import { ScriptEditorPanel } from './ScriptEditorPanel';
 import { useDesignerStore } from '@/stores/designerStore';
-import { AI_MODELS, getAIModel } from '@/lib/ai';
+import { getCurrentModelDisplayInfo, type AIModelDisplayInfo } from '@/lib/ai';
 
 type TabValue = 'chat' | 'script';
 
@@ -21,9 +21,12 @@ export function LeftPanel() {
   const { project, isDocsMode, isDataMode, selectedDataSource } = useDesignerStore();
   const isInteractive = project?.interactive_enabled ?? false;
 
-  // Get AI model info for display
-  const aiModel = AI_MODELS[getAIModel()];
-  const isGemini = aiModel?.provider === 'gemini';
+  // Get AI model info for display (from backend)
+  const [modelDisplayInfo, setModelDisplayInfo] = useState<AIModelDisplayInfo | null>(null);
+  useEffect(() => {
+    getCurrentModelDisplayInfo().then(setModelDisplayInfo).catch(console.warn);
+  }, []);
+  const isGemini = (modelDisplayInfo?.provider || 'gemini') === 'gemini';
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -62,7 +65,7 @@ export function LeftPanel() {
               {isDocsMode ? 'Docs Helper' : isDataMode ? 'Data Design' : 'AI Assistant'}
             </h2>
             <p className="text-[9px] text-muted-foreground leading-tight truncate max-w-[100px]">
-              {isDocsMode ? 'Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (aiModel?.name || 'AI')}
+              {isDocsMode ? 'Nova/Pulsar GFX' : isDataMode ? selectedDataSource?.name : (modelDisplayInfo?.name || 'Loading...')}
             </p>
           </div>
         </button>

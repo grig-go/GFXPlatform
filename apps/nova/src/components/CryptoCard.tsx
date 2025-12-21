@@ -43,7 +43,7 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
   const handleCustomNameSave = async (customName: string | null) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('finance_dashboard/crypto/${crypto.cgId}/custom-name'),
+        getEdgeFunctionUrl(`finance_dashboard/crypto/${crypto.cgId}/custom-name`),
         {
           method: 'POST',
           headers: {
@@ -80,7 +80,7 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
 
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('finance_dashboard/crypto/${crypto.cgId}'),
+        getEdgeFunctionUrl(`finance_dashboard/crypto/${crypto.cgId}`),
         {
           method: 'DELETE',
           headers: {

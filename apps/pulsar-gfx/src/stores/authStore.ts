@@ -118,24 +118,24 @@ async function fetchAndSetUserData(
   if (!supabase) return;
 
   const { data: userData, error: userError } = await supabase
-    .from('users')
+    .from('u_users')
     .select(`
       id,
       email,
       name,
-      role,
+      org_role,
       organization_id,
-      organizations (
+      u_organizations (
         id,
         name,
         slug
       )
     `)
-    .eq('id', userId)
+    .eq('auth_user_id', userId)
     .single();
 
   if (userData && !userError) {
-    const org = userData.organizations as unknown as Organization | null;
+    const org = userData.u_organizations as unknown as Organization | null;
     set({
       user: {
         id: userData.id,
@@ -143,7 +143,7 @@ async function fetchAndSetUserData(
         name: userData.name,
         organizationId: userData.organization_id,
         organizationName: org?.name || null,
-        role: userData.role,
+        role: userData.org_role,
         isEmergentUser: isEmergentEmail(userData.email),
       },
       organization: org ? {
@@ -277,24 +277,24 @@ export const useAuthStore = create<AuthState>()(
 
             // Fetch user data
             const { data: userData } = await supabase
-              .from('users')
+              .from('u_users')
               .select(`
                 id,
                 email,
                 name,
-                role,
+                org_role,
                 organization_id,
-                organizations (
+                u_organizations (
                   id,
                   name,
                   slug
                 )
               `)
-              .eq('id', data.user.id)
+              .eq('auth_user_id', data.user.id)
               .single();
 
             if (userData) {
-              const org = userData.organizations as unknown as Organization | null;
+              const org = userData.u_organizations as unknown as Organization | null;
               set({
                 user: {
                   id: userData.id,
@@ -302,7 +302,7 @@ export const useAuthStore = create<AuthState>()(
                   name: userData.name,
                   organizationId: userData.organization_id,
                   organizationName: org?.name || null,
-                  role: userData.role,
+                  role: userData.org_role,
                   isEmergentUser: isEmergentEmail(userData.email),
                 },
                 organization: org ? {
@@ -397,7 +397,7 @@ export const useAuthStore = create<AuthState>()(
 
               // Get org name
               const { data: org } = await supabase
-                .from('organizations')
+                .from('u_organizations')
                 .select('name')
                 .eq('id', organizationId)
                 .single();
@@ -432,13 +432,13 @@ export const useAuthStore = create<AuthState>()(
 
             // Create user record
             const { error: userError } = await supabase
-              .from('users')
+              .from('u_users')
               .insert({
-                id: authData.user.id,
+                auth_user_id: authData.user.id,
                 email,
                 name,
                 organization_id: organizationId,
-                role: userRole,
+                org_role: userRole,
               });
 
             if (userError) {
@@ -495,7 +495,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { error } = await supabase
-            .from('invitations')
+            .from('u_invitations')
             .insert({
               email: email.toLowerCase(),
               organization_id: organization.id,
@@ -526,7 +526,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { data, error } = await supabase
-            .from('invitations')
+            .from('u_invitations')
             .select('*')
             .eq('organization_id', organization.id)
             .order('created_at', { ascending: false });
@@ -559,7 +559,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { error } = await supabase
-            .from('invitations')
+            .from('u_invitations')
             .delete()
             .eq('id', invitationId);
 
@@ -582,7 +582,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Extend expiration
           const { error } = await supabase
-            .from('invitations')
+            .from('u_invitations')
             .update({
               expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             })
@@ -608,8 +608,8 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { data, error } = await supabase
-            .from('users')
-            .select('id, email, name, role')
+            .from('u_users')
+            .select('id, email, name, org_role')
             .eq('organization_id', organization.id)
             .order('created_at', { ascending: true });
 
@@ -624,7 +624,7 @@ export const useAuthStore = create<AuthState>()(
             name: u.name,
             organizationId: organization.id,
             organizationName: organization.name,
-            role: u.role,
+            role: u.org_role,
             isEmergentUser: isEmergentEmail(u.email),
           }));
         } catch {
@@ -640,8 +640,8 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { error } = await supabase
-            .from('users')
-            .update({ role })
+            .from('u_users')
+            .update({ org_role: role })
             .eq('id', userId);
 
           if (error) {
@@ -668,7 +668,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Set organization to null (soft remove from org)
           const { error } = await supabase
-            .from('users')
+            .from('u_users')
             .update({ organization_id: null })
             .eq('id', userId);
 

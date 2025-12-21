@@ -411,7 +411,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('sports_dashboard/sports-ai-insights/${insightId}'),
+        getEdgeFunctionUrl(`sports_dashboard/sports-ai-insights/${insightId}`),
         {
           method: 'DELETE',
           headers: {

@@ -1,4 +1,12 @@
 {
+  "shortcuts": {
+    "title": "Atajos de Teclado",
+    "description": "Configure atajos de teclado para controles de playlist. Haga clic en un atajo para cambiarlo.",
+    "pressKey": "Presione una tecla...",
+    "save": "Guardar",
+    "reset": "Restablecer Predeterminados",
+    "done": "Hecho"
+  },
   "advanced": {
     "title": "Configuración Avanzada",
     "description": "Configure modelos de IA y claves API para generación.",

@@ -72,14 +72,45 @@ import {
   Loader2,
   RefreshCw,
   Crown,
+  Building2,
+  Send,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { supabase } from "../utils/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
-import type { AppUser, Group, Permission as DbPermission } from "../types/permissions";
+import type { AppUser, Group, Permission as DbPermission, Organization } from "../types/permissions";
 import { getPermissionKey, getPermissionDisplayName } from "../types/permissions";
+import { CreateOrgWizard } from "./admin/CreateOrgWizard";
+
+// Organization display type
+interface DisplayOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  allowed_domains: string[];
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Invitation display type
+interface DisplayInvitation {
+  id: string;
+  email: string;
+  organization_id: string;
+  organization_name?: string;
+  invited_by: string;
+  invited_by_name?: string;
+  role: 'admin' | 'member' | 'viewer';
+  token: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
 
 // Types for the component
 interface DisplayUser {
@@ -124,11 +155,13 @@ export function UsersGroupsPage() {
   const [users, setUsers] = useState<DisplayUser[]>([]);
   const [groups, setGroups] = useState<DisplayGroup[]>([]);
   const [permissions, setPermissions] = useState<DisplayPermission[]>([]);
+  const [organizations, setOrganizations] = useState<DisplayOrganization[]>([]);
+  const [invitations, setInvitations] = useState<DisplayInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'users' | 'groups'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'organizations'>('users');
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
@@ -138,11 +171,18 @@ export function UsersGroupsPage() {
   const [editedUser, setEditedUser] = useState<DisplayUser | null>(null);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
+  const [isCreateOrgWizardOpen, setIsCreateOrgWizardOpen] = useState(false);
   const [isNewGroupDialogOpen, setIsNewGroupDialogOpen] = useState(false);
   const [newGroup, setNewGroup] = useState<DisplayGroup | null>(null);
   const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<DisplayGroup | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Invite dialog state
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  const [inviteOrgId, setInviteOrgId] = useState<string | null>(null);
 
   // New user state
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -306,16 +346,90 @@ export function UsersGroupsPage() {
         action: p.action,
       }));
 
+      // Fetch organizations (superuser only - RLS will handle access)
+      const { data: orgsData, error: orgsError } = await supabase
+        .from('u_organizations')
+        .select('*')
+        .order('name');
+
+      // Transform organizations with member counts
+      let transformedOrgs: DisplayOrganization[] = [];
+      if (!orgsError && orgsData) {
+        // Get member counts per org
+        const orgMemberCounts = new Map<string, number>();
+        (usersData || []).forEach((u: AppUser) => {
+          if (u.organization_id) {
+            orgMemberCounts.set(u.organization_id, (orgMemberCounts.get(u.organization_id) || 0) + 1);
+          }
+        });
+
+        transformedOrgs = orgsData.map((org: any) => ({
+          id: org.id,
+          name: org.name,
+          slug: org.slug,
+          allowed_domains: org.allowed_domains || [],
+          member_count: orgMemberCounts.get(org.id) || 0,
+          created_at: org.created_at,
+          updated_at: org.updated_at,
+        }));
+      }
+
+      // Fetch invitations using RPC (pending only)
+      let invitationsData: any[] = [];
+      if (currentAuthUser?.id) {
+        console.log('[UsersGroupsPage] Fetching invitations for user:', currentAuthUser.id);
+        const { data, error: invitationsError } = await supabase.rpc('list_invitations', {
+          p_user_id: currentAuthUser.id,
+          p_pending_only: true,
+        });
+        console.log('[UsersGroupsPage] Invitations result:', { data, error: invitationsError });
+        if (invitationsError) {
+          console.error('Error fetching invitations:', invitationsError);
+        } else {
+          invitationsData = data || [];
+        }
+      } else {
+        console.log('[UsersGroupsPage] No currentAuthUser, skipping invitations fetch');
+      }
+
+      // Build org name map
+      const orgNameMap = new Map<string, string>();
+      (orgsData || []).forEach((org: any) => {
+        orgNameMap.set(org.id, org.name);
+      });
+
+      // Build user name map
+      const userNameMap = new Map<string, string>();
+      (usersData || []).forEach((u: AppUser) => {
+        userNameMap.set(u.id, u.full_name || u.email);
+      });
+
+      const transformedInvitations: DisplayInvitation[] = (invitationsData || []).map((inv: any) => ({
+        id: inv.id,
+        email: inv.email,
+        organization_id: inv.organization_id,
+        organization_name: orgNameMap.get(inv.organization_id) || 'Unknown',
+        invited_by: inv.invited_by,
+        invited_by_name: userNameMap.get(inv.invited_by) || 'Unknown',
+        role: inv.role,
+        token: inv.token,
+        expires_at: inv.expires_at,
+        accepted_at: inv.accepted_at,
+        created_at: inv.created_at,
+      }));
+
       setUsers(transformedUsers);
       setGroups(transformedGroups);
       setPermissions(transformedPermissions);
+      setOrganizations(transformedOrgs);
+      setInvitations(transformedInvitations);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentAuthUser?.id]);
 
   useEffect(() => {
     fetchData();
@@ -768,6 +882,235 @@ export function UsersGroupsPage() {
     setIsResetPasswordOpen(true);
   };
 
+  // Send invitation
+  const sendInvitation = async () => {
+    if (!inviteEmail || !inviteOrgId) {
+      toast.error('Email and organization are required');
+      return;
+    }
+
+    if (!currentAuthUser?.id) {
+      toast.error('You must be logged in to send invitations');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Use RPC function to bypass RLS issues - pass user_id for auth verification
+      const { data, error } = await supabase.rpc('create_invitation', {
+        p_user_id: currentAuthUser.id,
+        p_email: inviteEmail,
+        p_organization_id: inviteOrgId,
+        p_role: inviteRole,
+      });
+
+      if (error) {
+        // Check for duplicate invitation error
+        if (error.message.includes('already exists')) {
+          toast.error(
+            'An invitation already exists for this email. You can resend or revoke it from the Pending Invitations section.',
+            { duration: 5000 }
+          );
+          setIsInviteDialogOpen(false);
+          return;
+        }
+        throw new Error(error.message);
+      }
+
+      console.log('Invitation created:', data);
+
+      // Get org name for the email
+      const org = organizations.find(o => o.id === inviteOrgId);
+      const orgName = org?.name || 'the organization';
+
+      // Build invite URL
+      const baseUrl = window.location.origin;
+      const inviteUrl = `${baseUrl}/signup?invite=${data.token}`;
+
+      // Send invitation email via edge function
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+        const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const response = await fetch(
+          `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.session?.access_token}`,
+              'apikey': novaAnonKey,
+            },
+            body: JSON.stringify({
+              email: inviteEmail,
+              inviterName: currentAuthUser.full_name || currentAuthUser.email,
+              organizationName: orgName,
+              role: inviteRole,
+              inviteUrl: inviteUrl,
+            }),
+          }
+        );
+
+        const emailResult = await response.json();
+        if (emailResult.warning) {
+          console.log('Email warning:', emailResult.warning);
+        }
+      } catch (emailErr) {
+        console.error('Failed to send invitation email:', emailErr);
+        // Don't fail the invitation if email fails - link is still valid
+      }
+
+      setIsInviteDialogOpen(false);
+      setInviteEmail('');
+      setInviteRole('member');
+      setInviteOrgId(null);
+      toast.success('Invitation sent successfully');
+      await fetchData();
+    } catch (err) {
+      console.error('Error sending invitation:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      if (errorMessage.includes('already exists')) {
+        toast.error(
+          'An invitation already exists for this email. You can resend or revoke it from the Pending Invitations section.',
+          { duration: 5000 }
+        );
+      } else {
+        toast.error('Failed to send invitation: ' + errorMessage);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete/revoke invitation
+  const revokeInvitation = async (invitationId: string) => {
+    if (!currentAuthUser?.id) {
+      toast.error('You must be logged in to revoke invitations');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Use RPC function to bypass RLS issues
+      const { data, error } = await supabase.rpc('revoke_invitation', {
+        p_user_id: currentAuthUser.id,
+        p_invitation_id: invitationId,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast.success('Invitation revoked');
+      await fetchData();
+    } catch (err) {
+      console.error('Error revoking invitation:', err);
+      toast.error('Failed to revoke invitation: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Resend invitation
+  const resendInvitation = async (invitationId: string, email: string) => {
+    if (!currentAuthUser?.id) {
+      toast.error('You must be logged in to resend invitations');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Use RPC function to resend (resets expiry and generates new token)
+      const { data, error } = await supabase.rpc('resend_invitation', {
+        p_user_id: currentAuthUser.id,
+        p_invitation_id: invitationId,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Get the invitation to find org info
+      const invitation = invitations.find(i => i.id === invitationId);
+      const orgName = invitation?.organization_name || 'the organization';
+      const role = invitation?.role || 'member';
+
+      // Copy the new invite link to clipboard and send email
+      if (data?.token) {
+        const baseUrl = window.location.origin;
+        const inviteUrl = `${baseUrl}/signup?invite=${data.token}`;
+        await navigator.clipboard.writeText(inviteUrl);
+
+        // Send invitation email via edge function
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+          const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+          const response = await fetch(
+            `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.session?.access_token}`,
+                'apikey': novaAnonKey,
+              },
+              body: JSON.stringify({
+                email: email,
+                inviterName: currentAuthUser.full_name || currentAuthUser.email,
+                organizationName: orgName,
+                role: role,
+                inviteUrl: inviteUrl,
+              }),
+            }
+          );
+
+          const emailResult = await response.json();
+          if (emailResult.warning) {
+            console.log('Email warning:', emailResult.warning);
+          }
+        } catch (emailErr) {
+          console.error('Failed to send invitation email:', emailErr);
+          // Don't fail - link is still valid and copied
+        }
+
+        toast.success(`Invitation resent to ${email}. New link copied to clipboard!`, { duration: 5000 });
+      } else {
+        toast.success(`Invitation resent to ${email}`);
+      }
+
+      await fetchData();
+    } catch (err) {
+      console.error('Error resending invitation:', err);
+      toast.error('Failed to resend invitation: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Copy invitation link
+  const copyInviteLink = (token: string) => {
+    const baseUrl = window.location.origin;
+    const inviteUrl = `${baseUrl}/signup?invite=${token}`;
+    navigator.clipboard.writeText(inviteUrl);
+    toast.success('Invitation link copied to clipboard');
+  };
+
+  // Open invite dialog for a specific org
+  const openInviteDialog = (orgId: string) => {
+    setInviteOrgId(orgId);
+    setInviteEmail('');
+    setInviteRole('member');
+    setIsInviteDialogOpen(true);
+  };
+
   // Filtered users
   const filteredUsers = useMemo(() => {
     let filtered = users;
@@ -846,6 +1189,28 @@ export function UsersGroupsPage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+          {/* Invite User Button - uses current user's org */}
+          {currentAuthUser?.organization_id && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => openInviteDialog(currentAuthUser.organization_id)}
+            >
+              <Send className="w-4 h-4" />
+              Invite User
+            </Button>
+          )}
+          {/* Create Organization Button (Superuser only) */}
+          {isSuperuser && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setIsCreateOrgWizardOpen(true)}
+            >
+              <Building2 className="w-4 h-4" />
+              New Organization
+            </Button>
+          )}
           {/* New User Dialog */}
           <Dialog open={isNewUserDialogOpen} onOpenChange={(open) => {
             setIsNewUserDialogOpen(open);
@@ -1526,6 +1891,77 @@ export function UsersGroupsPage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Invite User Dialog */}
+          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => {
+            setIsInviteDialogOpen(open);
+            if (!open) {
+              setInviteEmail('');
+              setInviteRole('member');
+              setInviteOrgId(null);
+            }
+          }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Send className="w-5 h-5" />
+                  Invite User to Organization
+                </DialogTitle>
+                <DialogDescription>
+                  {inviteOrgId && (
+                    <>Send an invitation to join <span className="font-medium">{organizations.find(o => o.id === inviteOrgId)?.name || 'the organization'}</span></>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                {/* Email */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email Address *</label>
+                  <Input
+                    type="email"
+                    placeholder="user@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                </div>
+
+                {/* Role */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Role</label>
+                  <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'admin' | 'member' | 'viewer')}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin - Can manage organization settings and users</SelectItem>
+                      <SelectItem value="member">Member - Full access to organization resources</SelectItem>
+                      <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={sendInvitation} disabled={isSaving || !inviteEmail}>
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Invitation
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -1540,6 +1976,12 @@ export function UsersGroupsPage() {
             <UsersRound className="w-4 h-4" />
             Groups ({groups.length})
           </TabsTrigger>
+          {isSuperuser && (
+            <TabsTrigger value="organizations" className="gap-2">
+              <Building2 className="w-4 h-4" />
+              Organizations ({organizations.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Users Tab */}
@@ -1708,7 +2150,7 @@ export function UsersGroupsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center justify-end gap-1">
                               {/* Edit user dialog */}
                               <Dialog open={isDialogOpen && selectedUser?.id === user.id} onOpenChange={(open) => {
                                 setIsDialogOpen(open);
@@ -1971,6 +2413,142 @@ export function UsersGroupsPage() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* Pending Invitations Card - Users Tab */}
+          {invitations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="w-5 h-5" />
+                  Pending Invitations ({invitations.length})
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Invitations waiting to be accepted
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[250px]">Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Invited By</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead className="w-[120px] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invitations.map((invitation) => {
+                      const isExpired = new Date(invitation.expires_at) < new Date();
+                      return (
+                        <TableRow key={invitation.id} className="group">
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                <Mail className="w-4 h-4 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <span className="font-medium">{invitation.email}</span>
+                                <p className="text-xs text-muted-foreground">Pending</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={invitation.role === 'admin' ? 'default' : 'secondary'}
+                            >
+                              {invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {invitation.invited_by_name}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {isExpired ? (
+                                <Badge variant="destructive" className="gap-1">
+                                  <XCircle className="w-3 h-3" />
+                                  Expired
+                                </Badge>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">
+                                  {formatDistanceToNow(new Date(invitation.expires_at), { addSuffix: true })}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => copyInviteLink(invitation.token)}
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Copy Invitation Link</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => resendInvitation(invitation.id, invitation.email)}
+                                      disabled={isSaving}
+                                    >
+                                      <RefreshCw className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Resend Invitation</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Revoke Invitation</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to revoke the invitation for <span className="font-medium">{invitation.email}</span>?
+                                      This link will no longer work.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      onClick={() => revokeInvitation(invitation.id)}
+                                    >
+                                      Revoke
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Groups Tab */}
@@ -2052,7 +2630,294 @@ export function UsersGroupsPage() {
             })}
           </div>
         </TabsContent>
+
+        {/* Organizations Tab (Superuser Only) */}
+        {isSuperuser && (
+          <TabsContent value="organizations" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  All Organizations
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Manage organizations across the platform
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[250px]">Organization</TableHead>
+                      <TableHead>Slug</TableHead>
+                      <TableHead>Allowed Domains</TableHead>
+                      <TableHead>Members</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="w-[100px] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {organizations.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No organizations found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      organizations.map((org) => (
+                        <TableRow key={org.id} className="group">
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                                <Building2 className="w-5 h-5 text-violet-400" />
+                              </div>
+                              <div>
+                                <div className="font-medium">{org.name}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-sm bg-muted px-2 py-1 rounded">{org.slug}</code>
+                          </TableCell>
+                          <TableCell>
+                            {org.allowed_domains.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {org.allowed_domains.map((domain) => (
+                                  <Badge key={domain} variant="outline" className="text-xs">
+                                    @{domain}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">None</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              <span>{org.member_count}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {formatDistanceToNow(new Date(org.created_at), { addSuffix: true })}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openInviteDialog(org.id)}
+                                      title="Invite User"
+                                    >
+                                      <Send className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Invite User</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        // Filter users by this org
+                                        setGroupFilter('all');
+                                        setStatusFilter('all');
+                                        setSearchQuery('');
+                                        toast.info(`${org.name} has ${org.member_count} member(s)`);
+                                      }}
+                                      title="View Members"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View Members</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        toast.info('Organization editing coming soon');
+                                      }}
+                                      title="Edit Organization"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit Organization</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Pending Invitations Card */}
+            {invitations.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="w-5 h-5" />
+                    Pending Invitations ({invitations.length})
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Invitations waiting to be accepted
+                  </p>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[250px]">Email</TableHead>
+                        <TableHead>Organization</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Invited By</TableHead>
+                        <TableHead>Expires</TableHead>
+                        <TableHead className="w-[100px] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invitations.map((invitation) => {
+                        const isExpired = new Date(invitation.expires_at) < new Date();
+                        return (
+                          <TableRow key={invitation.id} className="group">
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-muted-foreground" />
+                                <span className="font-medium">{invitation.email}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{invitation.organization_name}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={invitation.role === 'admin' ? 'default' : 'secondary'}
+                              >
+                                {invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-muted-foreground">
+                                {invitation.invited_by_name}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {isExpired ? (
+                                  <Badge variant="destructive" className="gap-1">
+                                    <XCircle className="w-3 h-3" />
+                                    Expired
+                                  </Badge>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">
+                                    {formatDistanceToNow(new Date(invitation.expires_at), { addSuffix: true })}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => copyInviteLink(invitation.token)}
+                                        title="Copy Link"
+                                      >
+                                        <Copy className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Copy Invitation Link</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => resendInvitation(invitation.id, invitation.email)}
+                                        disabled={isSaving}
+                                        title="Resend"
+                                      >
+                                        <RefreshCw className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Resend Invitation</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      title="Revoke"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Revoke Invitation</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to revoke the invitation for <span className="font-medium">{invitation.email}</span>?
+                                        This link will no longer work.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        onClick={() => revokeInvitation(invitation.id)}
+                                      >
+                                        Revoke
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Create Organization Wizard */}
+      <CreateOrgWizard
+        open={isCreateOrgWizardOpen}
+        onOpenChange={setIsCreateOrgWizardOpen}
+        onSuccess={() => {
+          toast.success('Organization created successfully!');
+          fetchData();
+        }}
+      />
     </div>
   );
 }

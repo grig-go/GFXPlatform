@@ -28,7 +28,7 @@ const app = new Hono().basePath("/create-user");
 app.use("*", cors({
   origin: "*",
   allowMethods: ["POST", "OPTIONS"],
-  allowHeaders: ["Authorization", "Content-Type", "apikey"],
+  allowHeaders: ["Authorization", "Content-Type", "apikey", "x-client-info"],
 }));
 
 // ============================================================================
@@ -95,9 +95,9 @@ app.post("/", async (c) => {
 
     // Parse request body
     const body = await c.req.json();
-    const { email, password, fullName, status = 'active', groupIds = [], sendWelcomeEmail = false } = body;
+    const { email, password, fullName, status = 'active', groupIds = [], sendWelcomeEmail = false, organizationId } = body;
 
-    console.log("Creating user:", { email, fullName, status, groupIds: groupIds.length });
+    console.log("Creating user:", { email, fullName, status, groupIds: groupIds.length, organizationId });
 
     // Validate required fields
     if (!email || !password) {
@@ -134,6 +134,19 @@ app.post("/", async (c) => {
 
     console.log("Auth user created:", authData.user.id);
 
+    // Get the caller's organization if not provided
+    let userOrgId = organizationId;
+    if (!userOrgId) {
+      // Get the caller's organization_id to assign new user to same org
+      const { data: callerOrgData } = await supabaseAdmin
+        .from("u_users")
+        .select("organization_id")
+        .eq("auth_user_id", caller.id)
+        .single();
+
+      userOrgId = callerOrgData?.organization_id;
+    }
+
     // Create user in u_users
     const { data: userData, error: userError } = await supabaseAdmin
       .from("u_users")
@@ -144,6 +157,8 @@ app.post("/", async (c) => {
         status: status,
         is_superuser: false,
         created_by: caller.id,
+        organization_id: userOrgId,
+        org_role: 'member',
       })
       .select()
       .single();

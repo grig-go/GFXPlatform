@@ -38,9 +38,10 @@ import {
   Settings,
 } from 'lucide-react';
 import {
-  getGeminiApiKey,
   getAIImageModel,
-  AI_IMAGE_MODELS,
+  getCurrentImageModelDisplayInfo,
+  resolveImageModelConfig,
+  type AIImageModelDisplayInfo,
 } from '@/lib/ai';
 import { uploadToNovaMedia, type NovaMediaAsset } from '@/services/novaMediaService';
 import { uploadAIGeneratedTexture } from '@/services/textureService';
@@ -103,10 +104,28 @@ export function AIImageGeneratorDialog({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
-  // Get current model info
-  const modelId = getAIImageModel();
-  const modelConfig = AI_IMAGE_MODELS[modelId];
-  const hasApiKey = !!getGeminiApiKey();
+  // Model info loaded from backend
+  const [modelInfo, setModelInfo] = useState<AIImageModelDisplayInfo | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isLoadingModel, setIsLoadingModel] = useState(true);
+
+  // Load model info from backend when dialog opens
+  useEffect(() => {
+    if (open) {
+      setIsLoadingModel(true);
+      Promise.all([
+        getCurrentImageModelDisplayInfo(),
+        resolveImageModelConfig(),
+      ]).then(([displayInfo, resolvedConfig]) => {
+        setModelInfo(displayInfo);
+        setHasApiKey(!!resolvedConfig?.apiKey);
+        setIsLoadingModel(false);
+      }).catch(err => {
+        console.error('[AIImageGenerator] Failed to load model info:', err);
+        setIsLoadingModel(false);
+      });
+    }
+  }, [open]);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -226,17 +245,11 @@ export function AIImageGeneratorDialog({
   }, []);
 
   /**
-   * Generate a new image using Gemini Image API
+   * Generate a new image using AI Image API (resolved from backend)
    */
   const generateImage = useCallback(async () => {
     if (!prompt.trim()) {
       setError('Please enter a prompt');
-      return;
-    }
-
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      setError('No Gemini API key configured. Please set it in AI Model Settings.');
       return;
     }
 
@@ -246,10 +259,15 @@ export function AIImageGeneratorDialog({
     setGeneratedBase64(null);
 
     try {
-      const currentModelId = getAIImageModel();
-      const currentModelConfig = AI_IMAGE_MODELS[currentModelId];
-      const apiModel = currentModelConfig.apiModel;
-      const apiEndpoint = currentModelConfig.apiEndpoint;
+      // Resolve model config from backend (includes API key)
+      const resolvedConfig = await resolveImageModelConfig();
+      if (!resolvedConfig) {
+        setError('No AI image model configured. Please set up an image provider in AI Connections.');
+        setIsGenerating(false);
+        return;
+      }
+
+      const { apiKey, apiModel, apiEndpoint } = resolvedConfig;
 
       // Enhance prompt for better broadcast quality
       const enhancedPrompt = `${prompt}, professional quality, suitable for broadcast graphics, high resolution, cinematic lighting, 16:9 aspect ratio`;
@@ -665,20 +683,22 @@ export function AIImageGeneratorDialog({
             </span>
             <span className="text-xs flex items-center gap-1.5 text-muted-foreground">
               <Settings className="w-3 h-3" />
-              Using: <span className="font-medium text-foreground">{modelConfig.name}</span>
+              Using: <span className="font-medium text-foreground">
+                {isLoadingModel ? 'Loading...' : (modelInfo?.name || 'No model configured')}
+              </span>
             </span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-4">
           {/* API Key Warning */}
-          {!hasApiKey && (
+          {!isLoadingModel && !hasApiKey && (
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
               <div className="text-sm">
-                <p className="font-medium text-amber-500">No API Key Configured</p>
+                <p className="font-medium text-amber-500">No Image Provider Configured</p>
                 <p className="text-muted-foreground">
-                  Please configure your Gemini API key in AI Model Settings to generate images.
+                  Please configure an image generation provider in AI Connections (Nova dashboard) to generate images.
                 </p>
               </div>
             </div>
@@ -825,7 +845,7 @@ export function AIImageGeneratorDialog({
             {/* Generate Button */}
             <Button
               onClick={generateImage}
-              disabled={!prompt.trim() || isGenerating || !hasApiKey}
+              disabled={!prompt.trim() || isGenerating || isLoadingModel || !hasApiKey}
               className="gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
             >
               {isGenerating ? (

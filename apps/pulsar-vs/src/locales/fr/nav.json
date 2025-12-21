@@ -9,7 +9,8 @@
   },
   "tools": {
     "channel": "Chaîne",
-    "projects": "Projets"
+    "projects": "Projets",
+    "keyboardShortcuts": "Raccourcis Clavier"
   },
   "window": {
     "singleView": "Vue unique",

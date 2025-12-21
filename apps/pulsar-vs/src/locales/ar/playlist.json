@@ -15,7 +15,9 @@
     "demoPlaylist": "قائمة تجريبية",
     "createDemoPlaylist": "إنشاء قائمة تجريبية",
     "addItem": "إضافة",
-    "play": "تشغيل",
+    "play": "بدء",
+    "playIn": "إدخال",
+    "playOut": "إخراج",
     "pause": "إيقاف مؤقت",
     "resume": "استئناف",
     "stop": "إيقاف",
@@ -32,7 +34,7 @@
     "apply": "تطبيق"
   },
   "table": {
-    "play": "تشغيل",
+    "play": "بدء",
     "status": "الحالة",
     "name": "الاسم",
     "items": "العناصر",

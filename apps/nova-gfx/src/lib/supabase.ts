@@ -24,6 +24,10 @@ export {
   directRestSelect,
   // Beacon for window close scenarios
   sendBeaconUpdate,
+  // Cookie storage for SSO
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  migrateLocalStorageToCookie,
 } from '@emergent-platform/supabase-client';
 
 export type { User, Session } from '@supabase/supabase-js';

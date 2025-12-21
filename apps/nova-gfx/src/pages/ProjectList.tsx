@@ -66,8 +66,8 @@ import { AIModelSettingsDialog } from '@/components/dialogs/AIModelSettingsDialo
 import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { SystemTemplatesDialog } from '@/components/dialogs/SystemTemplatesDialog';
 import { TopBar } from '@/components/layout/TopBar';
-import { directRestSelect } from '@emergent-platform/supabase-client';
-import { useAuthStore } from '@/stores/authStore';
+import { directRestSelect, supabase } from '@emergent-platform/supabase-client';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   fetchProject,
@@ -109,20 +109,21 @@ export function ProjectList() {
   // Track if we've already started loading to prevent double-loading in strict mode
   const hasStartedLoading = useRef(false);
   const lastOrgId = useRef<string | null | undefined>(undefined);
+  const orgId = getOrganizationId(user);
 
   useEffect(() => {
     // Load projects on initial mount or when organization changes
-    const orgChanged = lastOrgId.current !== undefined && lastOrgId.current !== user?.organizationId;
+    const orgChanged = lastOrgId.current !== undefined && lastOrgId.current !== orgId;
 
     if (!hasStartedLoading.current || orgChanged) {
       hasStartedLoading.current = true;
-      lastOrgId.current = user?.organizationId;
+      lastOrgId.current = orgId;
       loadProjects();
     }
-  }, [user?.organizationId]);
+  }, [orgId]);
 
   const loadProjects = async () => {
-    console.log('[ProjectList] Loading projects via direct REST API...');
+    console.log('[ProjectList] Loading projects...');
     setIsLoading(true);
     try {
       // First, load localStorage projects
@@ -142,52 +143,88 @@ export function ProjectList() {
       }
       console.log('[ProjectList] Found', localProjects.length, 'localStorage projects');
 
-      // Use direct REST API for reliable project loading
-      // Note: directRestSelect doesn't support joins, so we load projects without user info
-      const result = await directRestSelect<Project>(
-        'gfx_projects',
-        '*',
-        user?.organizationId ? { column: 'organization_id', value: user.organizationId } : undefined,
-        10000
-      );
+      // Try Supabase client with joins first (for user info)
+      let supabaseProjects: Project[] = [];
+      let loadError: string | null = null;
 
-      if (result.error) {
-        console.error('[ProjectList] Error loading from Supabase:', result.error);
-        // Use localStorage projects only
-        const sortedLocalProjects = localProjects.sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        );
-        setProjects(sortedLocalProjects);
-      } else {
-        // Filter out archived projects (REST API doesn't support multiple filters easily)
-        const supabaseProjects: Project[] = (result.data || []).filter(p => !p.archived);
-        console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase');
+      if (supabase) {
+        try {
+          // Use Supabase client with joins to get updater/creator info
+          let query = supabase
+            .from('gfx_projects')
+            .select(`
+              *,
+              updater:updated_by(id, email, full_name, avatar_url),
+              creator:created_by(id, email, full_name, avatar_url)
+            `)
+            .eq('archived', false)
+            .order('updated_at', { ascending: false });
 
-        // Create a map with project ID as key to ensure uniqueness
-        const projectMap = new Map<string, Project>();
-
-        // First, add all Supabase projects
-        supabaseProjects.forEach(p => {
-          projectMap.set(p.id, p);
-        });
-
-        // Then, overlay localStorage projects (they take priority but preserve Supabase thumbnail_url)
-        localProjects.forEach(localProject => {
-          const existingProject = projectMap.get(localProject.id);
-          if (existingProject?.thumbnail_url && !localProject.thumbnail_url) {
-            projectMap.set(localProject.id, { ...localProject, thumbnail_url: existingProject.thumbnail_url });
-          } else {
-            projectMap.set(localProject.id, localProject);
+          if (orgId) {
+            query = query.eq('organization_id', orgId);
           }
-        });
 
-        // Convert map to array and sort by updated_at
-        const mergedProjects = Array.from(projectMap.values()).sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        );
-        console.log('[ProjectList] Total merged projects:', mergedProjects.length, '(deduplicated by ID)');
-        setProjects(mergedProjects);
+          const { data, error } = await query;
+
+          if (error) {
+            console.error('[ProjectList] Supabase query error:', error.message);
+            loadError = error.message;
+          } else {
+            supabaseProjects = (data || []) as Project[];
+            console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase with user info');
+          }
+        } catch (err: any) {
+          console.error('[ProjectList] Supabase client error:', err);
+          loadError = err.message;
+        }
       }
+
+      // Fallback to direct REST API if Supabase client failed
+      if (loadError && supabaseProjects.length === 0) {
+        console.log('[ProjectList] Falling back to direct REST API...');
+        const result = await directRestSelect<Project>(
+          'gfx_projects',
+          '*',
+          orgId ? { column: 'organization_id', value: orgId } : undefined,
+          10000
+        );
+
+        if (!result.error) {
+          supabaseProjects = (result.data || []).filter(p => !p.archived);
+          console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects via REST (no user info)');
+        }
+      }
+
+      // Create a map with project ID as key to ensure uniqueness
+      const projectMap = new Map<string, Project>();
+
+      // First, add all Supabase projects
+      supabaseProjects.forEach(p => {
+        projectMap.set(p.id, p);
+      });
+
+      // Then, overlay localStorage projects (they take priority but preserve Supabase data)
+      localProjects.forEach(localProject => {
+        const existingProject = projectMap.get(localProject.id);
+        if (existingProject) {
+          // Merge: keep localStorage data but preserve Supabase-only fields
+          projectMap.set(localProject.id, {
+            ...localProject,
+            thumbnail_url: existingProject.thumbnail_url || localProject.thumbnail_url,
+            updater: (existingProject as any).updater,
+            creator: (existingProject as any).creator,
+          });
+        } else {
+          projectMap.set(localProject.id, localProject);
+        }
+      });
+
+      // Convert map to array and sort by updated_at
+      const mergedProjects = Array.from(projectMap.values()).sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+      console.log('[ProjectList] Total merged projects:', mergedProjects.length, '(deduplicated by ID)');
+      setProjects(mergedProjects);
     } catch (err) {
       console.error('[ProjectList] Unexpected error:', err);
     } finally {
@@ -635,8 +672,8 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
     const creator = (project as any).creator;
     const user = updater || creator;
     if (!user) return '—';
-    if (user.name) {
-      return user.name;
+    if (user.full_name) {
+      return user.full_name;
     }
     // Fall back to email username
     return user.email?.split('@')[0] || '—';
@@ -801,8 +838,8 @@ function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDupl
     const creator = (project as any).creator;
     const user = updater || creator;
     if (!user) return null;
-    if (user.name) {
-      return user.name;
+    if (user.full_name) {
+      return user.full_name;
     }
     // Fall back to email username
     return user.email?.split('@')[0] || null;

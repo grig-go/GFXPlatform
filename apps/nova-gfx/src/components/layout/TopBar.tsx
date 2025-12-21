@@ -39,6 +39,7 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
     saveProject,
     currentTemplateId,
     isScriptPlayMode,
+    setScriptPlayMode,
   } = useDesignerStore();
   const [copiedOBS, setCopiedOBS] = useState(false);
   const [copiedPublish, setCopiedPublish] = useState(false);
@@ -173,12 +174,16 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Script Play Mode Banner - centered in header */}
+      {/* Script Play Mode Banner - centered in header, clickable to exit */}
       {isScriptPlayMode && (
-        <div className="absolute left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2 shadow-lg">
+        <button
+          onClick={() => setScriptPlayMode(false)}
+          className="absolute left-1/2 -translate-x-1/2 bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2 shadow-lg cursor-pointer transition-colors"
+          title="Click to exit Play Mode"
+        >
           <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
           PLAY MODE
-        </div>
+        </button>
       )}
 
       {/* Right side - Menus */}
@@ -238,16 +243,27 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Project</DropdownMenuLabel>
-            <DropdownMenuItem onClick={onOpenSettings}>
-              <Settings className="mr-2 h-4 w-4" />
-              Project Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenDesignSystem}>
-              <Palette className="mr-2 h-4 w-4" />
-              Design Guidelines
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            {(onOpenSettings || onOpenDesignSystem) && (
+              <>
+                <DropdownMenuLabel>Project</DropdownMenuLabel>
+                {onOpenSettings && (
+                  <DropdownMenuItem onClick={() => {
+                    console.log('[TopBar] Project Settings clicked');
+                    onOpenSettings();
+                  }}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Project Settings
+                  </DropdownMenuItem>
+                )}
+                {onOpenDesignSystem && (
+                  <DropdownMenuItem onClick={onOpenDesignSystem}>
+                    <Palette className="mr-2 h-4 w-4" />
+                    Design Guidelines
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuLabel>User Preferences</DropdownMenuLabel>
             <DropdownMenuItem onClick={onOpenAISettings}>
               <Cpu className="mr-2 h-4 w-4" />

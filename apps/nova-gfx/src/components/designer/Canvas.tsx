@@ -63,9 +63,11 @@ export function Canvas() {
     showGrid,
     showGuides,
     showSafeArea,
+    showFps,
     toggleGrid,
     toggleGuides,
     toggleSafeArea,
+    toggleFps,
     guides,
     addGuide,
     moveGuide,
@@ -1714,6 +1716,16 @@ export function Canvas() {
             title="Toggle Safe Area"
           >
             <Maximize className="w-4 h-4" />
+          </Button>
+          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Button
+            variant={showFps ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-8 w-8"
+            onClick={toggleFps}
+            title="Toggle FPS Counter"
+          >
+            <Activity className="w-4 h-4" />
           </Button>
         </div>
 

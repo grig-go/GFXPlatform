@@ -83,10 +83,10 @@ export async function createProject(
   const data = projectResult.data[0];
   console.log(`[createProject] Project created: ${data.id}`);
 
-  // Step 2: Create default design system (fire and forget - not critical)
+  // Step 2: Create default design system (fire and forget - not critical, pass access token for RLS)
   directRestInsert('gfx_project_design_systems', {
     project_id: data.id,
-  }, TIMEOUT).catch((err: unknown) => console.warn('Design system creation failed:', err));
+  }, TIMEOUT, accessToken).catch((err: unknown) => console.warn('Design system creation failed:', err));
 
   // Step 3: Create default layers (ordered by z_index, lowest at bottom)
   // Layer dimensions scale with canvas size
@@ -166,7 +166,7 @@ export async function createProject(
     },
   ];
 
-  // Insert layers and wait for completion
+  // Insert layers and wait for completion (pass access token for RLS)
   const layersResult = await directRestInsert<Layer>('gfx_layers',
     defaultLayers.map((l, i) => ({
       project_id: data.id,
@@ -174,7 +174,8 @@ export async function createProject(
       locked: false,
       sort_order: i,
     })),
-    TIMEOUT
+    TIMEOUT,
+    accessToken
   );
 
   if (layersResult.error) {
@@ -183,7 +184,7 @@ export async function createProject(
     const createdLayers = layersResult.data || [];
     console.log(`[createProject] Created ${createdLayers.length} default layers for project ${data.id}`);
 
-    // Create a default blank template under the Fullscreen layer
+    // Create a default blank template under the Fullscreen layer (pass access token for RLS)
     const fullscreenLayer = createdLayers.find((l: Layer) => l.layer_type === 'fullscreen');
     if (fullscreenLayer) {
       const templateResult = await directRestInsert<Template>('gfx_templates', {
@@ -195,7 +196,7 @@ export async function createProject(
         css_styles: '',
         sort_order: 0,
         enabled: true,
-      }, TIMEOUT);
+      }, TIMEOUT, accessToken);
 
       if (templateResult.error) {
         console.error('Error creating default blank template:', templateResult.error);
@@ -927,6 +928,7 @@ export async function deleteKeyframe(keyframeId: string): Promise<boolean> {
 // ============================================
 
 export async function fetchBindings(templateId: string): Promise<Binding[]> {
+  console.log(`🔍 Fetching bindings for template: ${templateId}`);
   // Use direct REST API for reliable binding loading
   const result = await directRestSelect<Binding>(
     'gfx_bindings',
@@ -939,6 +941,7 @@ export async function fetchBindings(templateId: string): Promise<Binding[]> {
     console.error('Error fetching bindings:', result.error);
     return [];
   }
+  console.log(`📦 Found ${result.data?.length || 0} bindings for template ${templateId}`);
   return result.data || [];
 }
 

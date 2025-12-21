@@ -346,7 +346,7 @@ export function WeatherAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_insights/weather/${insightId}'),
+        getEdgeFunctionUrl(`ai_insights/weather/${insightId}`),
         {
           method: 'DELETE',
           headers: {

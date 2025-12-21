@@ -156,7 +156,7 @@ export function CryptoSearch({
 
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('finance_dashboard/search/crypto?q=${encodeURIComponent(searchTerm)}'),
+        getEdgeFunctionUrl(`finance_dashboard/search/crypto?q=${encodeURIComponent(searchTerm)}`),
         {
           headers: {
             Authorization: `Bearer ${getSupabaseAnonKey()}`,

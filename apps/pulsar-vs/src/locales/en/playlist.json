@@ -15,7 +15,9 @@
     "demoPlaylist": "Demo Playlist",
     "createDemoPlaylist": "Create Demo Playlist",
     "addItem": "Add Item",
-    "play": "Play",
+    "play": "Start",
+    "playIn": "Play In",
+    "playOut": "Play Out",
     "pause": "Pause",
     "resume": "Resume",
     "stop": "Stop",
@@ -32,7 +34,7 @@
     "apply": "Apply"
   },
   "table": {
-    "play": "Play",
+    "play": "Start",
     "status": "Status",
     "name": "Name",
     "items": "Items",

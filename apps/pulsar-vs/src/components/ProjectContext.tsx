@@ -33,7 +33,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const loadProjects = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_projects');
+      const { data, error } = await supabase.rpc('pulsarvs_get_projects');
       
       if (error) {
         console.error('Error fetching projects:', error);
@@ -53,7 +53,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     setError(null);
     
     try {
-      const { data, error } = await supabase.rpc('get_active_project');
+      const { data, error } = await supabase.rpc('pulsarvs_get_active_project');
       
       if (error) {
         console.error('Error fetching active project:', error);
@@ -80,7 +80,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const createProjectFn = useCallback(async (params: CreateProjectParams): Promise<Project | null> => {
     try {
-      const { data, error } = await supabase.rpc('create_project', {
+      const { data, error } = await supabase.rpc('pulsarvs_create_project', {
         p_name: params.name,
         p_description: params.description || null,
         p_default_channel_id: params.default_channel_id || null,
@@ -113,7 +113,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const updateProjectFn = useCallback(async (params: UpdateProjectParams): Promise<Project | null> => {
     try {
-      const { data, error } = await supabase.rpc('update_project', {
+      const { data, error } = await supabase.rpc('pulsarvs_update_project', {
         p_id: params.id,
         p_name: params.name || null,
         p_description: params.description || null,
@@ -155,7 +155,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     }
     
     try {
-      const { data, error } = await supabase.rpc('update_project', {
+      const { data, error } = await supabase.rpc('pulsarvs_update_project', {
         p_id: activeProject.id,
         p_name: null,
         p_description: null,
@@ -186,7 +186,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   const setActiveProjectFn = useCallback(async (projectId: string) => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.rpc('set_active_project', {
+      const { data, error } = await supabase.rpc('pulsarvs_set_active_project', {
         p_id: projectId
       });
       
@@ -213,7 +213,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const deleteProjectFn = useCallback(async (projectId: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('delete_project', {
+      const { data, error } = await supabase.rpc('pulsarvs_delete_project', {
         p_id: projectId
       });
       

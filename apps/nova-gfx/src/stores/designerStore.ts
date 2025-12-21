@@ -27,7 +27,7 @@ import {
   fetchBindings,
 } from '@/services/projectService';
 import { supabase, markSupabaseSuccess, markSupabaseFailure, directRestUpdate } from '@emergent-platform/supabase-client';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
 import { getDataSourceById } from '@/data/sampleDataSources';
 
@@ -74,8 +74,8 @@ async function directRestDelete(
     return { success: true };
   }
 
-  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { success: false, error: 'Supabase not configured' };
@@ -119,14 +119,18 @@ async function directRestDelete(
 async function directRestUpsert(
   table: string,
   data: Record<string, unknown> | Record<string, unknown>[],
-  timeoutMs: number = 15000
+  timeoutMs: number = 15000,
+  accessToken?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { success: false, error: 'Supabase not configured' };
   }
+
+  // Use access token if provided, otherwise fall back to anon key
+  const authToken = accessToken || supabaseKey;
 
   try {
     const controller = new AbortController();
@@ -137,7 +141,7 @@ async function directRestUpsert(
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Prefer': 'resolution=merge-duplicates,return=minimal',
         'Cache-Control': 'no-cache',
       },
@@ -171,10 +175,17 @@ async function directRestUpsert(
  * @returns The public URL of the uploaded image, or null on failure
  */
 async function uploadThumbnailToStorage(projectId: string, dataUrl: string, timeoutMs: number = 10000): Promise<string | null> {
-  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Use the user's access token for authenticated requests (required by RLS policies)
+  const accessToken = useAuthStore.getState().accessToken;
 
-  if (!supabaseUrl || !supabaseKey || !dataUrl) return null;
+  if (!supabaseUrl || !supabaseAnonKey || !dataUrl) return null;
+
+  if (!accessToken) {
+    console.warn('[Thumbnail] No access token available, user may not be authenticated');
+    return dataUrl; // Return base64 as fallback
+  }
 
   try {
     console.log('[Thumbnail] Starting REST upload for project:', projectId);
@@ -207,8 +218,8 @@ async function uploadThumbnailToStorage(projectId: string, dataUrl: string, time
     const response = await fetch(`${supabaseUrl}/storage/v1/object/thumbnails/${fileName}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': supabaseAnonKey,
         'Content-Type': 'image/jpeg',
         'x-upsert': 'true',
         'Cache-Control': 'max-age=3600',
@@ -293,6 +304,7 @@ interface DesignerState {
   showGrid: boolean;
   showGuides: boolean;
   showSafeArea: boolean;
+  showFps: boolean;
   guides: Array<{ id: string; orientation: 'horizontal' | 'vertical'; position: number }>;
 
   // Timeline state
@@ -360,7 +372,7 @@ interface DesignerActions {
   saveProjectAs: (newName: string) => Promise<string | null>;
   setProject: (project: Project) => void;
   updateProjectSettings: (updates: Partial<Project>, options?: { skipSave?: boolean }) => Promise<void>;
-  updateDesignSystem: (designSystem: ProjectDesignSystem) => void;
+  updateDesignSystem: (designSystem: ProjectDesignSystem) => Promise<void>;
 
   // Template operations
   selectTemplate: (id: string | null) => void;
@@ -450,6 +462,7 @@ interface DesignerActions {
   toggleGrid: () => void;
   toggleGuides: () => void;
   toggleSafeArea: () => void;
+  toggleFps: () => void;
   addGuide: (guide: { id: string; orientation: 'horizontal' | 'vertical'; position: number }) => void;
   moveGuide: (id: string, newPosition: number) => void;
   removeGuide: (id: string) => void;
@@ -744,6 +757,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         showGrid: false,
         showGuides: true,
         showSafeArea: true,
+        showFps: false,
         guides: [],
         currentPhase: 'in',
         playheadPosition: 0,
@@ -1264,7 +1278,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 // Validate arrays
                 if (Array.isArray(elements)) allElements.push(...elements);
                 if (Array.isArray(animations)) allAnimations.push(...animations);
-                if (Array.isArray(bindings)) allBindings.push(...bindings);
+                if (Array.isArray(bindings)) {
+                  console.log(`📊 Loaded ${bindings.length} bindings for template ${template.id}:`, bindings.map(b => ({
+                    id: b.id.slice(0, 8),
+                    element_id: b.element_id.slice(0, 8),
+                    binding_key: b.binding_key,
+                  })));
+                  allBindings.push(...bindings);
+                }
 
                 // Fetch keyframes for each animation (batch with timeout)
                 if (animations.length > 0) {
@@ -1376,7 +1397,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               currentRecordIndex: defaultRecordIndex,
             });
 
-            console.log(`✅ Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements, ${allAnimations.length} animations, ${allKeyframes.length} keyframes`);
+            console.log(`✅ Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements, ${allAnimations.length} animations, ${allKeyframes.length} keyframes, ${allBindings.length} bindings`);
           } catch (error) {
             console.error('Error loading project:', error);
             set({ 
@@ -1461,8 +1482,10 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             const SAVE_TIMEOUT = 15000; // 15 second timeout per operation
 
             // 1. Update project metadata using direct REST API
-            // Get current user for updated_by tracking
-            const currentUserId = useAuthStore.getState().user?.id;
+            // Get current user for updated_by tracking and access token for RLS
+            const authState = useAuthStore.getState();
+            const currentUserId = authState.user?.id;
+            const accessToken = authState.accessToken;
 
             const projectData: Record<string, unknown> = {
               name: state.project.name,
@@ -1485,7 +1508,8 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               'gfx_projects',
               projectData,
               { column: 'id', value: projectId },
-              SAVE_TIMEOUT
+              SAVE_TIMEOUT,
+              accessToken || undefined
             );
 
             if (!projectResult.success) {
@@ -1518,7 +1542,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 locked: l.locked ?? false,
                 always_on: l.always_on ?? false,
               }));
-              const layersResult = await directRestUpsert('gfx_layers', layersToSave, SAVE_TIMEOUT);
+              const layersResult = await directRestUpsert('gfx_layers', layersToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!layersResult.success) console.error('Error saving layers:', layersResult.error);
             }
 
@@ -1551,7 +1575,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 sort_order: t.sort_order ?? 0,
                 updated_at: new Date().toISOString(),
               }));
-              const templatesResult = await directRestUpsert('gfx_templates', templatesToSave, SAVE_TIMEOUT);
+              const templatesResult = await directRestUpsert('gfx_templates', templatesToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!templatesResult.success) console.error('Error saving templates:', templatesResult.error);
             }
 
@@ -1583,7 +1607,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 visible: e.visible ?? true,
                 locked: e.locked ?? false,
               }));
-              const elementsResult = await directRestUpsert('gfx_elements', elementsToSave, SAVE_TIMEOUT);
+              const elementsResult = await directRestUpsert('gfx_elements', elementsToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!elementsResult.success) console.error('Error saving elements:', elementsResult.error);
             }
 
@@ -1603,7 +1627,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 easing: a.easing ?? 'ease',
                 preset_id: a.preset_id ?? null, // Ensure null, not undefined
               }));
-              const animationsResult = await directRestUpsert('gfx_animations', animationsToSave, SAVE_TIMEOUT);
+              const animationsResult = await directRestUpsert('gfx_animations', animationsToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!animationsResult.success) console.error('Error saving animations:', animationsResult.error);
             }
 
@@ -1628,12 +1652,18 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 background_color: k.properties?.backgroundColor ?? k.background_color ?? null,
                 sort_order: k.sort_order ?? 0,
               }));
-              const keyframesResult = await directRestUpsert('gfx_keyframes', keyframesToSave, SAVE_TIMEOUT);
+              const keyframesResult = await directRestUpsert('gfx_keyframes', keyframesToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!keyframesResult.success) console.error('Error saving keyframes:', keyframesResult.error);
             }
 
             // 7. Save bindings
             // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
+            console.log(`📊 Bindings in state: ${state.bindings.length}`, state.bindings.map(b => ({
+              id: b.id.slice(0, 8),
+              element_id: b.element_id.slice(0, 8),
+              template_id: b.template_id.slice(0, 8),
+              binding_key: b.binding_key,
+            })));
             if (state.bindings.length > 0) {
               const bindingsToSave = state.bindings.map(b => ({
                 id: b.id,
@@ -1647,8 +1677,15 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 formatter_options: b.formatter_options ?? null,
                 required: b.required ?? false,
               }));
-              const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT);
-              if (!bindingsResult.success) console.error('Error saving bindings:', bindingsResult.error);
+              console.log(`💾 Saving ${bindingsToSave.length} bindings to database...`);
+              const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT, accessToken || undefined);
+              if (!bindingsResult.success) {
+                console.error('❌ Error saving bindings:', bindingsResult.error);
+              } else {
+                console.log(`✅ Bindings saved successfully`);
+              }
+            } else {
+              console.log(`⚠️ No bindings to save`);
             }
 
             // 8. Delete pending items from database
@@ -1765,9 +1802,19 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set({ isSaving: true, error: null });
 
           try {
-            // Get current user and organization
-            const currentUser = useAuthStore.getState().user;
-            const organizationId = state.project.organization_id || currentUser?.organizationId;
+            // Get current user, organization, and access token for RLS
+            const authState = useAuthStore.getState();
+            const currentUser = authState.user;
+            let accessToken = authState.accessToken;
+            const organizationId = state.project.organization_id || getOrganizationId(currentUser);
+
+            // Ensure we have a fresh session before creating project
+            if (supabase) {
+              const { data } = await supabase.auth.getSession();
+              if (data?.session?.access_token) {
+                accessToken = data.session.access_token;
+              }
+            }
 
             if (!organizationId) {
               throw new Error('Organization ID required to create project');
@@ -1785,7 +1832,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               background_color: state.project.background_color,
               organization_id: organizationId,
               created_by: currentUser?.id,
-            });
+            }, accessToken || undefined);
 
             if (!newProject) {
               throw new Error('Failed to create new project');
@@ -2011,19 +2058,53 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           }
         },
 
-        updateDesignSystem: (designSystem) => {
-          set((state) => {
-            state.designSystem = designSystem;
-            state.isDirty = true;
+        updateDesignSystem: async (designSystem) => {
+          const state = get();
+
+          set((s) => {
+            s.designSystem = designSystem;
+            s.isDirty = true;
             // Also store in project settings for persistence
-            if (state.project) {
-              state.project.settings = {
-                ...state.project.settings,
+            if (s.project) {
+              s.project.settings = {
+                ...s.project.settings,
                 designSystem,
               };
             }
           });
           get().pushHistory('Update Design System');
+
+          // Save to database immediately if we have a real project
+          if (state.project?.id && state.project.id !== 'demo') {
+            const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (UUID_REGEX.test(state.project.id)) {
+              try {
+                const authState = useAuthStore.getState();
+                const accessToken = authState.accessToken;
+                const newSettings = {
+                  ...state.project.settings,
+                  designSystem,
+                };
+
+                const result = await directRestUpdate(
+                  'gfx_projects',
+                  { settings: newSettings, updated_at: new Date().toISOString() },
+                  { column: 'id', value: state.project.id },
+                  10000,
+                  accessToken || undefined
+                );
+
+                if (result.success) {
+                  console.log('[designerStore] Design system saved to database');
+                  set({ isDirty: false });
+                } else {
+                  console.warn('[designerStore] Failed to save design system:', result.error);
+                }
+              } catch (err) {
+                console.error('[designerStore] Error saving design system:', err);
+              }
+            }
+          }
         },
 
         // Template operations
@@ -3724,6 +3805,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         toggleSafeArea: () => {
           set((state) => {
             state.showSafeArea = !state.showSafeArea;
+          });
+        },
+
+        toggleFps: () => {
+          set((state) => {
+            state.showFps = !state.showFps;
           });
         },
 

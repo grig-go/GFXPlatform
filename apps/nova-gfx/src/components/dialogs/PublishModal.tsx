@@ -16,6 +16,7 @@ import {
 import { Send, Radio, Square, Loader2, Monitor, Plus } from 'lucide-react';
 import { supabase, directRestUpdate, markSupabaseSuccess, markSupabaseFailure } from '@/lib/supabase';
 import { useDesignerStore } from '@/stores/designerStore';
+import { getBoundValue } from '@/lib/bindingResolver';
 import type { Project } from '@emergent-platform/types';
 
 interface Channel {
@@ -56,6 +57,9 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     elements,
     animations,
     keyframes,
+    bindings,
+    dataPayload,
+    currentRecordIndex,
   } = useDesignerStore();
 
   // Initialize selected project to current project when modal opens
@@ -189,8 +193,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       // Helper to load channels with retry - ALWAYS uses direct REST API
       // This completely bypasses the Supabase client to avoid stale connection issues
       const loadChannelsWithRetry = async (retries = 3): Promise<typeof channels> => {
-        const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
           throw new Error('Supabase configuration missing');
@@ -276,8 +280,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
     // Load projects using direct REST API
     const loadProjectsWithRetry = async () => {
-      const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       if (!supabaseUrl || !supabaseKey) return;
 
@@ -322,26 +326,69 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
     };
   }, [open]);
 
-  // Build payload from current template elements
+  // Get current data record for binding resolution
+  const currentRecord = dataPayload && dataPayload.length > 0
+    ? dataPayload[currentRecordIndex] || null
+    : null;
+
+  // Get bindings for current template
+  const templateBindings = bindings.filter(b => b.template_id === currentTemplateId);
+
+  // Debug: Log binding filtering
+  console.log('[PublishModal] Binding debug:', {
+    totalBindings: bindings.length,
+    currentTemplateId,
+    templateBindings: templateBindings.length,
+    allBindingTemplateIds: [...new Set(bindings.map(b => b.template_id))],
+    hasDataPayload: dataPayload?.length || 0,
+    currentRecordIndex,
+    hasCurrentRecord: !!currentRecord,
+  });
+
+  // Build payload from current template elements, resolving bindings with current data
   const buildPayload = useCallback(() => {
     const payload: Record<string, string | null> = {};
 
     templateElements.forEach(element => {
+      // Check if this element has a binding
+      const binding = templateBindings.find(b => b.element_id === element.id);
+
+      if (binding && currentRecord) {
+        // Resolve the binding using current data record
+        const boundValue = getBoundValue(binding, currentRecord);
+        if (boundValue !== undefined && boundValue !== null) {
+          const valueStr = String(boundValue);
+          payload[element.id] = valueStr;
+          if (element.name) {
+            payload[element.name] = valueStr;
+          }
+          return; // Skip default content extraction
+        }
+      }
+
+      // Fallback to element's static content if no binding or no data
       if (element.content?.type === 'text' && element.content.text) {
-        payload[element.id] = element.content.text;
-        if (element.name) {
-          payload[element.name] = element.content.text;
+        // Check if text contains binding placeholder {{...}} - skip if so (will be resolved by player)
+        const text = element.content.text;
+        if (!text.includes('{{')) {
+          payload[element.id] = text;
+          if (element.name) {
+            payload[element.name] = text;
+          }
         }
       } else if (element.content?.type === 'image' && element.content.src) {
-        payload[element.id] = element.content.src || null;
-        if (element.name) {
-          payload[element.name] = element.content.src || null;
+        const src = element.content.src;
+        if (!src.includes('{{')) {
+          payload[element.id] = src || null;
+          if (element.name) {
+            payload[element.name] = src || null;
+          }
         }
       }
     });
 
     return payload;
-  }, [templateElements]);
+  }, [templateElements, templateBindings, currentRecord]);
 
   // Toggle channel selection
   const toggleChannelSelection = (channelId: string) => {
@@ -436,9 +483,20 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
           // Include interactive mode configuration for interactive projects
           interactive_enabled: project?.interactive_enabled || false,
           interactive_config: project?.interactive_enabled ? project?.interactive_config : undefined,
+          // Include bindings and current data record for runtime resolution
+          bindings: templateBindings,
+          currentRecord: currentRecord,
           payload: buildPayload(),
           timestamp: new Date().toISOString(),
         };
+
+        // Debug: Log what we're sending
+        console.log('[PublishModal] Command data:', {
+          bindingsCount: templateBindings.length,
+          hasCurrentRecord: !!currentRecord,
+          currentRecord: currentRecord,
+          payloadKeys: Object.keys(command.payload || {}),
+        });
       } else {
         // Publishing different project - send initialize command with project ID
         // NovaPlayer will load the project data from DB (including interactive_config)

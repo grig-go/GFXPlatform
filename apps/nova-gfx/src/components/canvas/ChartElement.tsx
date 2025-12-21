@@ -114,11 +114,29 @@ export function ChartElement({
   // Prepare colors
   const colors = options.colors || DEFAULT_COLORS;
 
+  // Calculate scale factor for Chart.js charts (same logic as parliament charts)
+  const chartJsScaleFactor = useMemo(() => {
+    const DEFAULT_REF_WIDTH = 600;
+    const DEFAULT_REF_HEIGHT = 400;
+    const refWidth = options.referenceWidth || DEFAULT_REF_WIDTH;
+    const refHeight = options.referenceHeight || DEFAULT_REF_HEIGHT;
+    return Math.min(width / refWidth, height / refHeight);
+  }, [width, height, options.referenceWidth, options.referenceHeight]);
+
   // Chart.js options with expanded styling
   const chartJsOptions = useMemo(() => {
     const fontFamily = options.fontFamily || 'Inter, sans-serif';
     // Disable Chart.js animations if keyframes are being used (keyframes control the animation)
     const hasKeyframes = animatedProps && Object.keys(animatedProps).length > 0;
+
+    // Scale font sizes based on chart dimensions
+    const sf = chartJsScaleFactor;
+    const baseLegendFontSize = options.legendFontSize || 12;
+    const baseTitleFontSize = options.titleFontSize || 16;
+    const baseAxisFontSize = options.axisFontSize || 12;
+    const baseLabelFontSize = options.labelFontSize || 14;
+    const baseValueFontSize = options.valueFontSize || 12;
+
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -132,70 +150,78 @@ export function ChartElement({
           position: (options.legendPosition || 'top') as any,
           labels: {
             color: options.legendColor || '#FFFFFF',
-            font: { 
-              size: options.legendFontSize || 12, 
+            font: {
+              size: Math.round(baseLegendFontSize * sf),
               family: fontFamily,
               weight: options.legendFontWeight || 'normal',
             },
+            boxWidth: Math.round(40 * sf),
+            boxHeight: Math.round(12 * sf),
+            padding: Math.round(10 * sf),
           },
         },
         title: {
           display: !!options.title,
           text: options.title || '',
           color: options.titleColor || '#FFFFFF',
-          font: { 
-            size: options.titleFontSize || 16, 
-            family: fontFamily, 
+          font: {
+            size: Math.round(baseTitleFontSize * sf),
+            family: fontFamily,
             weight: (options.titleFontWeight || 'bold') as any,
           },
+          padding: Math.round(10 * sf),
         },
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.8)',
-          titleFont: { size: options.labelFontSize || 14, family: fontFamily },
-          bodyFont: { size: options.valueFontSize || 12, family: fontFamily },
+          titleFont: { size: Math.round(baseLabelFontSize * sf), family: fontFamily },
+          bodyFont: { size: Math.round(baseValueFontSize * sf), family: fontFamily },
           titleColor: options.labelColor || '#FFFFFF',
           bodyColor: options.valueColor || '#FFFFFF',
+          padding: Math.round(8 * sf),
+          cornerRadius: Math.round(4 * sf),
         },
       },
       scales: chartType === 'bar' || chartType === 'line' || chartType === 'area' || chartType === 'horizontal-bar' ? {
         x: {
           display: options.showXAxis !== false,
-          ticks: { 
+          ticks: {
             color: options.axisColor || '#9CA3AF',
-            font: { size: options.axisFontSize || 12, family: fontFamily },
+            font: { size: Math.round(baseAxisFontSize * sf), family: fontFamily },
+            padding: Math.round(4 * sf),
           },
-          grid: { 
+          grid: {
             display: options.showGrid !== false,
             color: options.gridColor || 'rgba(255,255,255,0.1)',
-            lineWidth: options.gridLineWidth || 1,
+            lineWidth: Math.max(1, Math.round((options.gridLineWidth || 1) * sf)),
           },
           border: {
             display: options.showXAxis !== false,
             color: options.axisLineColor || 'rgba(255,255,255,0.2)',
-            width: options.axisLineWidth || 1,
+            width: Math.max(1, Math.round((options.axisLineWidth || 1) * sf)),
           },
         },
         y: {
           display: options.showYAxis !== false,
-          ticks: { 
+          ticks: {
             color: options.axisColor || '#9CA3AF',
-            font: { size: options.axisFontSize || 12, family: fontFamily },
+            font: { size: Math.round(baseAxisFontSize * sf), family: fontFamily },
+            padding: Math.round(4 * sf),
           },
-          grid: { 
+          grid: {
             display: options.showGrid !== false,
             color: options.gridColor || 'rgba(255,255,255,0.1)',
-            lineWidth: options.gridLineWidth || 1,
+            lineWidth: Math.max(1, Math.round((options.gridLineWidth || 1) * sf)),
           },
           border: {
             display: options.showYAxis !== false,
             color: options.axisLineColor || 'rgba(255,255,255,0.2)',
-            width: options.axisLineWidth || 1,
+            width: Math.max(1, Math.round((options.axisLineWidth || 1) * sf)),
           },
         },
       } : undefined,
     };
   // Use JSON.stringify for deep comparison of options object
-  }, [chartType, JSON.stringify(options)]);
+  }, [chartType, chartJsScaleFactor, JSON.stringify(options)]);
 
   // Extract animated chart progress (0-1 value for progressive reveal)
   // Priority: 1) animatedProps when playing, 2) options.chartProgress for direct control, 3) default to 1
@@ -723,11 +749,31 @@ export function ChartElement({
     // Options for new features
     const isFlipped = options.flipped === true;
     const showPartyBreakdown = options.showPartyBreakdown === true;
-    const breakdownFontSize = options.breakdownFontSize || 48;
-    const breakdownLabelSize = options.breakdownLabelSize || 14;
+
+    // Calculate proportional scale based on reference dimensions
+    // When user sets seatRadius, rowHeight, etc., we store the dimensions as reference
+    // Then when element is resized, we scale these values proportionally
+    // Default baseline: 600x400 (typical chart size when default values like seatRadius=8 were designed)
+    const DEFAULT_REF_WIDTH = 600;
+    const DEFAULT_REF_HEIGHT = 400;
+    const refWidth = options.referenceWidth || DEFAULT_REF_WIDTH;
+    const refHeight = options.referenceHeight || DEFAULT_REF_HEIGHT;
+    const scaleFactor = Math.min(width / refWidth, height / refHeight);
+
+    // Base values (what the user set, at reference dimensions)
+    const baseSeatRadius = options.seatRadius || 8;
+    const baseRowHeight = options.rowHeight || baseSeatRadius * 2.5;
+    const baseBreakdownFontSize = options.breakdownFontSize || 48;
+    const baseBreakdownLabelSize = options.breakdownLabelSize || 14;
+
+    // Scaled values (adjusted for current dimensions)
+    const seatRadius = baseSeatRadius * scaleFactor;
+    const rowHeight = baseRowHeight * scaleFactor;
+    const breakdownFontSize = baseBreakdownFontSize * scaleFactor;
+    const breakdownLabelSize = baseBreakdownLabelSize * scaleFactor;
 
     // Adjust layout based on whether party breakdown is shown
-    const breakdownHeight = showPartyBreakdown ? 80 : 0;
+    const breakdownHeight = showPartyBreakdown ? 80 * scaleFactor : 0;
     const availableHeight = height - breakdownHeight;
 
     const centerX = width / 2;
@@ -737,8 +783,6 @@ export function ChartElement({
       : (showPartyBreakdown ? breakdownHeight + availableHeight * 0.85 : height * 0.85);
 
     const outerRadius = Math.min(width * 0.45, availableHeight * 0.7);
-    const seatRadius = options.seatRadius || 8;
-    const rowHeight = options.rowHeight || seatRadius * 2.5;
     const partyColors = options.partyColors || colors;
 
     // Calculate number of rows needed
@@ -826,19 +870,23 @@ export function ChartElement({
       // Calculate animated values for display
       const animatedValues = values.map(v => Math.round(v * chartProgress));
 
+      // Scaled padding/margins for labels
+      const labelPadding = 30 * scaleFactor;
+      const labelTopY = 25 * scaleFactor;
+
       // Left party (first party)
       const leftPartyColor = partyColors[0] || colors[0];
       svg.append('text')
-        .attr('x', 30)
-        .attr('y', 25)
+        .attr('x', labelPadding)
+        .attr('y', labelTopY)
         .attr('fill', '#9CA3AF')
         .attr('font-size', breakdownLabelSize)
         .attr('font-family', 'Inter, sans-serif')
         .text(labels[0]);
 
       svg.append('text')
-        .attr('x', 30)
-        .attr('y', 25 + breakdownFontSize * 0.9)
+        .attr('x', labelPadding)
+        .attr('y', labelTopY + breakdownFontSize * 0.9)
         .attr('fill', leftPartyColor)
         .attr('font-size', breakdownFontSize)
         .attr('font-weight', 'bold')
@@ -848,8 +896,8 @@ export function ChartElement({
       // Right party (second party) - align to right
       const rightPartyColor = partyColors[1] || colors[1];
       svg.append('text')
-        .attr('x', width - 30)
-        .attr('y', 25)
+        .attr('x', width - labelPadding)
+        .attr('y', labelTopY)
         .attr('text-anchor', 'end')
         .attr('fill', '#9CA3AF')
         .attr('font-size', breakdownLabelSize)
@@ -857,8 +905,8 @@ export function ChartElement({
         .text(labels[1]);
 
       svg.append('text')
-        .attr('x', width - 30)
-        .attr('y', 25 + breakdownFontSize * 0.9)
+        .attr('x', width - labelPadding)
+        .attr('y', labelTopY + breakdownFontSize * 0.9)
         .attr('text-anchor', 'end')
         .attr('fill', rightPartyColor)
         .attr('font-size', breakdownFontSize)
@@ -880,7 +928,7 @@ export function ChartElement({
 
           svg.append('text')
             .attr('x', xPos)
-            .attr('y', 25)
+            .attr('y', labelTopY)
             .attr('text-anchor', 'middle')
             .attr('fill', '#9CA3AF')
             .attr('font-size', breakdownLabelSize * 0.9)
@@ -889,7 +937,7 @@ export function ChartElement({
 
           svg.append('text')
             .attr('x', xPos)
-            .attr('y', 25 + breakdownFontSize * 0.6)
+            .attr('y', labelTopY + breakdownFontSize * 0.6)
             .attr('text-anchor', 'middle')
             .attr('fill', color)
             .attr('font-size', breakdownFontSize * 0.6)
@@ -902,36 +950,52 @@ export function ChartElement({
 
     // Legend
     if (options.showLegend !== false) {
-      const legendY = height - 30;
-      let legendX = 20;
+      // Base legend values at reference size (600x400)
+      const baseLegendFontSize = options.legendFontSize || 12;
+      const baseLegendDotRadius = options.legendDotRadius || 8;
+      const baseLegendBottomMargin = options.legendBottomMargin || 25;
+      const baseLegendLeftMargin = options.legendLeftMargin || 20;
+      const baseLegendItemSpacing = options.legendItemSpacing || 120;
+
+      // Scale legend values
+      const legendFontSize = baseLegendFontSize * scaleFactor;
+      const legendDotRadius = baseLegendDotRadius * scaleFactor;
+      const legendY = height - baseLegendBottomMargin * scaleFactor;
+      let legendX = baseLegendLeftMargin * scaleFactor;
+      const legendItemSpacing = baseLegendItemSpacing * scaleFactor;
 
       labels.forEach((label, i) => {
         svg.append('circle')
           .attr('cx', legendX)
           .attr('cy', legendY)
-          .attr('r', 6)
+          .attr('r', legendDotRadius)
           .attr('fill', partyColors[i % partyColors.length]);
 
         svg.append('text')
-          .attr('x', legendX + 12)
-          .attr('y', legendY + 4)
+          .attr('x', legendX + legendDotRadius * 2)
+          .attr('y', legendY + legendFontSize * 0.35)
           .attr('fill', '#FFFFFF')
-          .attr('font-size', 11)
+          .attr('font-size', legendFontSize)
+          .attr('font-family', 'Inter, sans-serif')
           .text(`${label}: ${values[i]}`);
 
-        legendX += 100;
+        legendX += legendItemSpacing;
       });
     }
 
     // Balance of Power Bar
     if (options.showBalanceOfPower) {
-      const barHeight = options.balanceBarHeight || 28;
+      const baseBarHeight = options.balanceBarHeight || 28;
+      const barHeight = baseBarHeight * scaleFactor;
       // Use custom Y position if provided, otherwise calculate default based on legend visibility
-      const defaultBarY = options.showLegend !== false ? height - 70 : height - 50;
-      const barY = options.balanceBarY !== undefined ? options.balanceBarY : defaultBarY;
-      const barPadding = options.balanceBarPadding !== undefined ? options.balanceBarPadding : 20;
+      const defaultBarY = options.showLegend !== false ? height - 70 * scaleFactor : height - 50 * scaleFactor;
+      const barY = options.balanceBarY !== undefined ? options.balanceBarY * scaleFactor : defaultBarY;
+      const baseBarPadding = options.balanceBarPadding !== undefined ? options.balanceBarPadding : 20;
+      const barPadding = baseBarPadding * scaleFactor;
       const barWidth = width - barPadding * 2;
       const majority = Math.ceil(totalSeats / 2);
+      const balanceFontSize = 12 * scaleFactor;
+      const balanceLabelFontSize = 10 * scaleFactor;
 
       // Background bar
       svg.append('rect')
@@ -940,7 +1004,7 @@ export function ChartElement({
         .attr('width', barWidth)
         .attr('height', barHeight)
         .attr('fill', '#E5E7EB')
-        .attr('rx', 2);
+        .attr('rx', 2 * scaleFactor);
 
       // Draw each party's segment (scaled by chartProgress)
       let currentX = barPadding;
@@ -956,16 +1020,16 @@ export function ChartElement({
             .attr('width', segmentWidth)
             .attr('height', barHeight)
             .attr('fill', partyColors[i % partyColors.length])
-            .attr('rx', i === 0 ? 2 : 0);
+            .attr('rx', i === 0 ? 2 * scaleFactor : 0);
 
           // Add seat count label inside segment if wide enough
-          if (segmentWidth > 30) {
+          if (segmentWidth > 30 * scaleFactor) {
             svg.append('text')
               .attr('x', currentX + segmentWidth / 2)
-              .attr('y', barY + barHeight / 2 + 4)
+              .attr('y', barY + barHeight / 2 + balanceFontSize * 0.35)
               .attr('text-anchor', 'middle')
               .attr('fill', '#FFFFFF')
-              .attr('font-size', 12)
+              .attr('font-size', balanceFontSize)
               .attr('font-weight', 'bold')
               .attr('font-family', 'Inter, sans-serif')
               .text(animatedValue.toString());
@@ -980,18 +1044,18 @@ export function ChartElement({
       svg.append('line')
         .attr('x1', majorityX)
         .attr('x2', majorityX)
-        .attr('y1', barY - 5)
-        .attr('y2', barY + barHeight + 5)
+        .attr('y1', barY - 5 * scaleFactor)
+        .attr('y2', barY + barHeight + 5 * scaleFactor)
         .attr('stroke', '#374151')
-        .attr('stroke-width', 2);
+        .attr('stroke-width', 2 * scaleFactor);
 
       // Majority label
       svg.append('text')
         .attr('x', majorityX)
-        .attr('y', barY + barHeight + 18)
+        .attr('y', barY + barHeight + 18 * scaleFactor)
         .attr('text-anchor', 'middle')
         .attr('fill', '#6B7280')
-        .attr('font-size', 10)
+        .attr('font-size', balanceLabelFontSize)
         .attr('font-family', 'Inter, sans-serif')
         .text('MAJORITY');
 
@@ -999,9 +1063,9 @@ export function ChartElement({
       if (options.balanceTitle) {
         svg.append('text')
           .attr('x', barPadding)
-          .attr('y', barY - 8)
+          .attr('y', barY - 8 * scaleFactor)
           .attr('fill', '#FFFFFF')
-          .attr('font-size', 11)
+          .attr('font-size', 11 * scaleFactor)
           .attr('font-family', 'Inter, sans-serif')
           .text(options.balanceTitle);
       }

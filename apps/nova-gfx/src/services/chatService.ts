@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured, directRestSelect, directRestInsert } from '@emergent-platform/supabase-client';
 import type { AIChanges } from '@emergent-platform/types';
+import { useAuthStore } from '@/stores/authStore';
 
 export interface StoredChatMessage {
   id: string;
@@ -100,19 +101,9 @@ export async function saveChatMessage(
     };
   }
 
-  // Get current user for user_id - use timeout to prevent hanging
-  let userId: string | null = null;
-  try {
-    const getUserPromise = supabase.auth.getUser();
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('getUser timeout')), 3000)
-    );
-    const result = await Promise.race([getUserPromise, timeoutPromise]);
-    userId = result.data?.user?.id || null;
-  } catch (err) {
-    console.warn('Failed to get user for chat message (will save without user_id):', err);
-    // Continue without user_id - message will still be saved
-  }
+  // Get current user ID from authStore (this is the u_users.id, not auth.users.id)
+  // The foreign key on gfx_chat_messages references u_users(id), not auth.users
+  const userId = useAuthStore.getState().user?.id || null;
 
   // Strip large base64 data from attachments before saving to database
   // We only store metadata (id, type, name) to avoid payload size limits

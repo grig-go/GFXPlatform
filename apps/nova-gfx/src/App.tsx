@@ -9,11 +9,11 @@ import { LoginPage } from '@/pages/LoginPage';
 import { SignUpPage } from '@/pages/SignUpPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
-import { SettingsPage } from '@/components/settings';
 import { PrivateRoute } from '@/components/auth';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore, applyTheme } from '@/stores/themeStore';
 import { ConfirmProvider } from '@/hooks/useConfirm';
+import { initializeMapboxKey } from '@/stores/mapboxStore';
 
 // Apply initial theme from localStorage before React renders to prevent flash
 const storedTheme = localStorage.getItem('nova-theme-preference');
@@ -44,6 +44,11 @@ function AppContent() {
   const isPublicRoute = PUBLIC_ROUTES.some(route => location.pathname.startsWith(route));
 
   useEffect(() => {
+    // Pre-fetch Mapbox API key from backend (non-blocking)
+    initializeMapboxKey().catch((err) => {
+      console.warn('[App] Failed to pre-fetch Mapbox key:', err);
+    });
+
     // Skip auth initialization for public routes
     if (isPublicRoute) {
       setAuthReady(true);
@@ -98,24 +103,6 @@ function AppContent() {
           element={
             <PrivateRoute>
               <Designer />
-            </PrivateRoute>
-          }
-        />
-
-        {/* Settings routes */}
-        <Route
-          path="/settings"
-          element={
-            <PrivateRoute>
-              <SettingsPage />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/settings/:tab"
-          element={
-            <PrivateRoute>
-              <SettingsPage />
             </PrivateRoute>
           }
         />

@@ -483,7 +483,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
 
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${providerToDelete.id}'),
+        getEdgeFunctionUrl(`ai_provider/providers/${providerToDelete.id}`),
         {
           method: "DELETE",
           headers: {
@@ -523,7 +523,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
       
       // First, reveal the API key to test with
       const revealResponse = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${provider.id}/reveal'),
+        getEdgeFunctionUrl(`ai_provider/providers/${provider.id}/reveal`),
         {
           method: "POST",
           headers: {
@@ -608,7 +608,7 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
   const handleToggleEnabled = async (provider: AIProviderWithMaskedKey) => {
     try {
       const response = await fetch(
-        getEdgeFunctionUrl('ai_provider/providers/${provider.id}'),
+        getEdgeFunctionUrl(`ai_provider/providers/${provider.id}`),
         {
           method: "PUT",
           headers: {

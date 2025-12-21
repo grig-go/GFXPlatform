@@ -9,7 +9,8 @@
   },
   "tools": {
     "channel": "القناة",
-    "projects": "المشاريع"
+    "projects": "المشاريع",
+    "keyboardShortcuts": "اختصارات لوحة المفاتيح"
   },
   "window": {
     "singleView": "عرض فردي",

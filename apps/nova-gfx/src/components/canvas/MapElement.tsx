@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { MapStyle, MapMarker, MapMarkerTemplate, MapProjection, MapLocationKeyframe } from '@emergent-platform/types';
 import { useDesignerStore } from '@/stores/designerStore';
+import { useMapboxStore } from '@/stores/mapboxStore';
 import { DEFAULT_MARKER_TEMPLATES } from '@/components/designer/MapPropertiesPanel';
 
 // Map style URLs
@@ -16,9 +17,6 @@ const MAP_STYLES: Record<MapStyle, string> = {
   'navigation-day': 'mapbox://styles/mapbox/navigation-day-v1',
   'navigation-night': 'mapbox://styles/mapbox/navigation-night-v1',
 };
-
-// Default dev key (users will add their own in settings)
-const DEV_MAPBOX_KEY = 'pk.eyJ1IjoiZW1lcmdlbnRzb2x1dGlvbnMiLCJhIjoiY21mbGJuanZ1MDNhdDJqcTU1cHVjcWJycCJ9.Tk2txI10-WExxSoPnHlu_g';
 
 interface MapElementProps {
   content: {
@@ -246,12 +244,24 @@ export function MapElement({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Get Mapbox key from settings (falls back to dev key)
-  const mapboxKey = useDesignerStore((state) => 
-    state.project?.settings?.mapboxApiKey || DEV_MAPBOX_KEY
-  );
+  const [keyReady, setKeyReady] = useState(false);
+
+  // Get Mapbox key from centralized store (fetched from backend data_providers)
+  const mapboxKey = useMapboxStore((state) => state.apiKey);
+  const isKeyLoading = useMapboxStore((state) => state.isLoading);
+  const fetchMapboxKey = useMapboxStore((state) => state.fetchApiKey);
   const updateElement = useDesignerStore((state) => state.updateElement);
+
+  // Fetch Mapbox key from backend on mount and track when ready
+  useEffect(() => {
+    let mounted = true;
+    fetchMapboxKey().then(() => {
+      if (mounted) {
+        setKeyReady(true);
+      }
+    });
+    return () => { mounted = false; };
+  }, [fetchMapboxKey]);
   
   // Helper to update marker position
   const updateMarker = useCallback((markerId: string, updates: { lng?: number; lat?: number }) => {
@@ -268,11 +278,13 @@ export function MapElement({
     });
   }, [elementId, content, updateElement]);
 
-  // Initialize map
+  // Initialize map - wait for key to be ready
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    // Don't initialize until key is fetched from backend
+    if (!keyReady || !mapContainerRef.current || mapRef.current) return;
 
     try {
+      console.log('[MapElement] Initializing map with key:', mapboxKey.substring(0, 15) + '...');
       mapboxgl.accessToken = mapboxKey;
 
       const map = new mapboxgl.Map({
@@ -314,7 +326,7 @@ export function MapElement({
       console.error('Map initialization error:', err);
       setError('Failed to initialize map');
     }
-  }, [mapboxKey]);
+  }, [keyReady, mapboxKey]);
 
   // Update map style
   useEffect(() => {
@@ -610,9 +622,27 @@ export function MapElement({
     }
   }, [content.markers, content.markerTemplates, templateMap, mapLoaded, interactive, elementId, updateMarker, content.mapStyle]);
 
+  // Show loading while fetching API key
+  if (!keyReady || isKeyLoading) {
+    return (
+      <div
+        className="flex items-center justify-center bg-neutral-800 text-neutral-400"
+        style={{ width: width || 400, height: height || 300 }}
+      >
+        <div className="text-center p-4">
+          <svg className="w-8 h-8 mx-auto mb-2 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="text-sm">Loading map...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
-      <div 
+      <div
         className="flex items-center justify-center bg-neutral-800 text-neutral-400"
         style={{ width: width || 400, height: height || 300 }}
       >

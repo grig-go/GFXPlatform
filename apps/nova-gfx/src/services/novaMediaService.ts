@@ -1,13 +1,12 @@
 /**
  * Nova Media Library Service
  * Connects to Nova's media-library edge function for browsing and searching media
- * NOTE: The media-library edge function is deployed on the Pulsar VS Supabase instance
  */
 
-// Use Pulsar VS Supabase instance for media library (where the edge function is deployed)
-const PULSAR_VS_SUPABASE_URL = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const PULSAR_VS_ANON_KEY = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const MEDIA_LIBRARY_URL = `${PULSAR_VS_SUPABASE_URL}/functions/v1/media-library`;
+// Unified Supabase instance for all apps
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const MEDIA_LIBRARY_URL = `${SUPABASE_URL}/functions/v1/media-library`;
 
 export interface NovaMediaAsset {
   id: string;
@@ -73,8 +72,8 @@ export async function searchNovaMedia(
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${PULSAR_VS_ANON_KEY}`,
-        'apikey': PULSAR_VS_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
     });
 
@@ -119,8 +118,8 @@ export async function fetchNovaMedia(
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${PULSAR_VS_ANON_KEY}`,
-        'apikey': PULSAR_VS_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
     });
 
@@ -164,8 +163,8 @@ export async function uploadToNovaMedia(
     const response = await fetch(MEDIA_LIBRARY_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PULSAR_VS_ANON_KEY}`,
-        'apikey': PULSAR_VS_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
       body: formData,
     });

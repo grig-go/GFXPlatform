@@ -13,7 +13,7 @@
  * 6. Return public URL
  */
 
-import { getGeminiApiKey, getAIImageModel, AI_IMAGE_MODELS } from '../../ai';
+import { resolveImageModelConfig } from '../../ai';
 
 // Constants
 const TEXTURES_BUCKET = 'Texures'; // Note: bucket name has typo in Supabase
@@ -27,9 +27,8 @@ const PLACEHOLDER_PATH = 'do-no-delete/placeholder.png';
  * This ensures the URL is always correct regardless of which Supabase project is configured
  */
 export function getFallbackPlaceholderUrl(): string {
-  const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   if (!supabaseUrl) {
-    // Fallback to a generic placeholder
     return '';
   }
   return `${supabaseUrl}/storage/v1/object/public/${TEXTURES_BUCKET}/${PLACEHOLDER_PATH}`;
@@ -128,8 +127,8 @@ async function findExistingGeneratedImage(
 ): Promise<string | null> {
   try {
     // Get Supabase config from env
-    const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn('⚠️ Cache lookup: Missing Supabase env config');
@@ -184,23 +183,24 @@ async function findExistingGeneratedImage(
 }
 
 /**
- * Generate an image using the Gemini API
+ * Generate an image using the AI Image API (resolved from backend providers)
  */
 async function generateImageWithGemini(prompt: string): Promise<Blob | null> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    console.error('❌ No Gemini API key configured for image generation');
+  // Skip invalid prompts that look like data bindings (e.g., {{weather.items[0].icon}})
+  // These are AI mistakes where the model put a data binding instead of a descriptive prompt
+  if (prompt.startsWith('{{') || prompt.includes('}}') || prompt === '...') {
+    console.warn('⚠️ Skipping invalid image prompt (looks like data binding or placeholder):', prompt);
     return null;
   }
 
-  const modelId = getAIImageModel();
-  const modelConfig = AI_IMAGE_MODELS[modelId];
-  if (!modelConfig) {
-    console.error(`❌ Invalid image model: ${modelId}`);
+  // Resolve model config from backend (includes API key)
+  const resolvedConfig = await resolveImageModelConfig();
+  if (!resolvedConfig) {
+    console.error('❌ No AI image provider configured. Please set up an image provider in AI Connections.');
     return null;
   }
 
-  const apiModel = modelConfig.apiModel;
+  const { apiKey, apiModel } = resolvedConfig;
   const enhancedPrompt = enhancePromptForBroadcast(prompt);
 
   console.log(`🎨 Generating image with ${apiModel}: "${enhancedPrompt.substring(0, 100)}..."`);
@@ -299,20 +299,17 @@ async function uploadGeneratedImage(
   try {
     console.log(`📤 [Upload] Starting upload for: ${storagePath}`);
 
-    // Skip thumbnail for now - just upload main image
-    const thumbnailUrl: string | null = null;
-
     // Get Supabase URL and anon key from env
-    const supabaseUrl = import.meta.env.VITE_NOVA_GFX_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_NOVA_GFX_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error('❌ [Upload] Missing Supabase URL or anon key');
       return null;
     }
 
-    // Upload using direct REST API with user's access token (required for authenticated policies)
-    console.log(`📤 [Upload] Uploading via REST (size: ${imageBlob.size} bytes, type: ${imageBlob.type})...`);
+    // Upload main image using direct REST API with user's access token (required for authenticated policies)
+    console.log(`📤 [Upload] Uploading main image via REST (size: ${imageBlob.size} bytes, type: ${imageBlob.type})...`);
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${TEXTURES_BUCKET}/${storagePath}`;
     const uploadResponse = await fetch(uploadUrl, {
@@ -332,13 +329,42 @@ async function uploadGeneratedImage(
       return null;
     }
 
-    console.log(`📤 [Upload] REST upload successful`);
+    console.log(`📤 [Upload] Main image upload successful`);
 
     // Construct public URL directly
     const fileUrl = `${supabaseUrl}/storage/v1/object/public/${TEXTURES_BUCKET}/${storagePath}`;
 
-    // Create database record - skip for now, just return the URL
-    // The file is already uploaded and publicly accessible
+    // Generate and upload thumbnail (non-blocking - don't fail if thumbnail fails)
+    let thumbnailUrl: string | null = null;
+    try {
+      console.log(`🖼️ [Upload] Generating thumbnail...`);
+      const thumbnailBlob = await generateThumbnail(imageBlob, 300);
+      console.log(`🖼️ [Upload] Thumbnail generated (${thumbnailBlob.size} bytes), uploading...`);
+
+      const thumbnailUploadUrl = `${supabaseUrl}/storage/v1/object/${TEXTURES_BUCKET}/${thumbnailPath}`;
+      const thumbnailResponse = await fetch(thumbnailUploadUrl, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: thumbnailBlob,
+      });
+
+      if (thumbnailResponse.ok) {
+        thumbnailUrl = `${supabaseUrl}/storage/v1/object/public/${TEXTURES_BUCKET}/${thumbnailPath}`;
+        console.log(`✅ [Upload] Thumbnail uploaded: ${thumbnailUrl}`);
+      } else {
+        const thumbError = await thumbnailResponse.text();
+        console.warn(`⚠️ [Upload] Thumbnail upload failed (continuing without): ${thumbnailResponse.status} - ${thumbError}`);
+      }
+    } catch (thumbErr) {
+      console.warn(`⚠️ [Upload] Thumbnail generation/upload failed (continuing without):`, thumbErr);
+    }
+
+    // Create database record with texture info
     const textureName = `AI: ${originalPrompt.substring(0, 50)} (${promptHash})`;
 
     // Save to database using REST API (not Supabase client to avoid potential hangs)
@@ -379,14 +405,14 @@ async function uploadGeneratedImage(
         // Don't clean up - the file is still useful even without DB record
         console.warn('⚠️ Continuing with URL despite DB error - file is uploaded');
       } else {
-        console.log(`📤 [Upload] Database record saved`);
+        console.log(`📤 [Upload] Database record saved${thumbnailUrl ? ' (with thumbnail)' : ' (no thumbnail)'}`);
       }
     } catch (dbErr) {
       console.error('❌ [Upload] DB insert exception:', dbErr);
       console.warn('⚠️ Continuing with URL despite DB error - file is uploaded');
     }
 
-    console.log(`✅ AI-generated image saved: ${fileUrl}`);
+    console.log(`✅ AI-generated image saved: ${fileUrl}${thumbnailUrl ? ' (thumbnail: ' + thumbnailUrl + ')' : ''}`);
     return fileUrl;
   } catch (error) {
     console.error('❌ Failed to upload generated image:', error);
@@ -514,20 +540,58 @@ export async function getOrGenerateImageUrl(
 const GENERATE_PATTERN = /\{\{GENERATE:([^}]+)\}\}/g;
 
 /**
+ * Fix broken JavaScript concatenation syntax in GENERATE placeholders
+ * The AI sometimes generates: {{GENERATE:' + variable + ' text}}
+ * Instead of the correct: {{GENERATE:{{variable}} text}}
+ *
+ * This function detects and fixes these broken patterns
+ */
+function fixBrokenPlaceholderSyntax(text: string): string {
+  // Pattern to detect JavaScript concatenation inside GENERATE placeholders
+  // Matches patterns like: ' + varName + ', " + varName + "
+  const jsConcat = /\{\{GENERATE:([^}]*?)['"]\s*\+\s*(\w+)\s*\+\s*['"]([^}]*?)\}\}/g;
+
+  let fixed = text;
+  let match;
+
+  // Reset regex
+  jsConcat.lastIndex = 0;
+
+  while ((match = jsConcat.exec(text)) !== null) {
+    const before = match[1] || '';
+    const varName = match[2];
+    const after = match[3] || '';
+    const original = match[0];
+    const corrected = `{{GENERATE:${before}{{${varName}}}${after}}}`;
+
+    console.warn(`⚠️ Fixing broken GENERATE placeholder syntax:`);
+    console.warn(`   Original: ${original}`);
+    console.warn(`   Corrected: ${corrected}`);
+
+    fixed = fixed.replace(original, corrected);
+  }
+
+  return fixed;
+}
+
+/**
  * Extract all GENERATE placeholders from text
  */
 export function extractGeneratePlaceholders(text: string): string[] {
+  // First, fix any broken JavaScript concatenation syntax
+  const fixedText = fixBrokenPlaceholderSyntax(text);
+
   const placeholders: string[] = [];
   let match;
 
   // Debug: Log what we're searching in
-  console.log(`🔍 Extracting GENERATE placeholders from text (length: ${text.length})`);
-  console.log(`🔍 Text sample: ${text.substring(0, 200)}...`);
+  console.log(`🔍 Extracting GENERATE placeholders from text (length: ${fixedText.length})`);
+  console.log(`🔍 Text sample: ${fixedText.substring(0, 200)}...`);
 
   // Reset regex state before starting
   GENERATE_PATTERN.lastIndex = 0;
 
-  while ((match = GENERATE_PATTERN.exec(text)) !== null) {
+  while ((match = GENERATE_PATTERN.exec(fixedText)) !== null) {
     console.log(`🔍 Found placeholder: ${match[0]} -> query: ${match[1]}`);
     placeholders.push(match[1].trim());
   }
@@ -550,10 +614,13 @@ export async function resolveGeneratePlaceholders(
   userId: string,
   accessToken: string
 ): Promise<string> {
-  const placeholders = extractGeneratePlaceholders(text);
+  // First, fix any broken JavaScript concatenation syntax in the text
+  const fixedText = fixBrokenPlaceholderSyntax(text);
+
+  const placeholders = extractGeneratePlaceholders(fixedText);
 
   if (placeholders.length === 0) {
-    return text;
+    return fixedText;
   }
 
   console.log(`🖼️ Resolving ${placeholders.length} GENERATE placeholder(s)...`);
@@ -566,7 +633,7 @@ export async function resolveGeneratePlaceholders(
   const urls = await Promise.all(urlPromises);
 
   // Replace placeholders with URLs
-  let result = text;
+  let result = fixedText;
   placeholders.forEach((prompt, index) => {
     const placeholder = `{{GENERATE:${prompt}}}`;
     result = result.replace(placeholder, urls[index]);

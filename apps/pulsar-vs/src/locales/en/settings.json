@@ -1,4 +1,12 @@
 {
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "description": "Configure keyboard shortcuts for playlist controls. Click on a shortcut to change it.",
+    "pressKey": "Press a key...",
+    "save": "Save",
+    "reset": "Reset to Defaults",
+    "done": "Done"
+  },
   "advanced": {
     "title": "Advanced Settings",
     "description": "Configure AI models and API keys for generation.",

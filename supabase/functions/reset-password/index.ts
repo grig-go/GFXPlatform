@@ -28,7 +28,7 @@ const app = new Hono().basePath("/reset-password");
 app.use("*", cors({
   origin: "*",
   allowMethods: ["POST", "OPTIONS"],
-  allowHeaders: ["Authorization", "Content-Type", "apikey"],
+  allowHeaders: ["Authorization", "Content-Type", "apikey", "x-client-info"],
 }));
 
 // ============================================================================

@@ -644,7 +644,7 @@ export function FeedsDashboardWithSupabase({
       
       // Call backend test endpoint
       const response = await fetch(
-        getEdgeFunctionUrl('${edgeFunction}/test-provider'),
+        getEdgeFunctionUrl(`${edgeFunction}/test-provider`),
         {
           method: 'POST',
           headers: {

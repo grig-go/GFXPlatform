@@ -1,15 +1,15 @@
 // services/projectService.ts
 // Service for project CRUD operations via Supabase RPC
 
-import { supabase } from '../lib/supabase';
-import type { Project, CreateProjectParams, UpdateProjectParams } from '../types/project';
+import { supabase } from '../../lib/supabase';
+import type { Project, CreateProjectParams, UpdateProjectParams } from '../../types/project';
 
 /**
  * Fetch all projects
  */
 export async function getProjects(): Promise<{ success: boolean; data?: Project[]; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('get_projects');
+    const { data, error } = await supabase.rpc('pulsarvs_get_projects');
     
     if (error) {
       console.error('Error fetching projects:', error);
@@ -32,7 +32,7 @@ export async function getProjects(): Promise<{ success: boolean; data?: Project[
  */
 export async function getActiveProject(): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('get_active_project');
+    const { data, error } = await supabase.rpc('pulsarvs_get_active_project');
     
     if (error) {
       console.error('Error fetching active project:', error);
@@ -55,7 +55,7 @@ export async function getActiveProject(): Promise<{ success: boolean; data?: Pro
  */
 export async function createProject(params: CreateProjectParams): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('create_project', {
+    const { data, error } = await supabase.rpc('pulsarvs_create_project', {
       p_name: params.name,
       p_description: params.description || null,
       p_default_channel_id: params.default_channel_id || null,
@@ -86,7 +86,7 @@ export async function createProject(params: CreateProjectParams): Promise<{ succ
  */
 export async function updateProject(params: UpdateProjectParams): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('update_project', {
+    const { data, error } = await supabase.rpc('pulsarvs_update_project', {
       p_id: params.id,
       p_name: params.name || null,
       p_description: params.description || null,
@@ -118,7 +118,7 @@ export async function updateProject(params: UpdateProjectParams): Promise<{ succ
  */
 export async function setActiveProject(projectId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('set_active_project', {
+    const { data, error } = await supabase.rpc('pulsarvs_set_active_project', {
       p_id: projectId
     });
     
@@ -143,7 +143,7 @@ export async function setActiveProject(projectId: string): Promise<{ success: bo
  */
 export async function deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('delete_project', {
+    const { data, error } = await supabase.rpc('pulsarvs_delete_project', {
       p_id: projectId
     });
     
