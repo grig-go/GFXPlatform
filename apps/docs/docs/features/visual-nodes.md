@@ -64,8 +64,8 @@ Condition nodes branch the flow based on a comparison:
 | `notEquals` | Value does not equal |
 | `greaterThan` | Value is greater than |
 | `lessThan` | Value is less than |
-| `greaterOrEqual` | Value is >= |
-| `lessOrEqual` | Value is <= |
+| `greaterOrEqual` | Value is greater than or equal |
+| `lessOrEqual` | Value is less than or equal |
 | `contains` | String contains substring |
 | `startsWith` | String starts with |
 | `endsWith` | String ends with |

@@ -1337,15 +1337,23 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             const savedPhaseDurations = project.settings?.phaseDurations;
             const phaseDurations = savedPhaseDurations || { in: 1500, loop: 3000, out: 1500 };
 
-            // Find the first template with a data source, and use that as the selected template
-            // This ensures data binding loads on project open
-            console.log(`🔍 Checking ${templates.length} templates for data sources...`);
+            // Find the best template to select on load:
+            // 1. First, try to find a template with a data source connected
+            // 2. If not, try to find a template that has bindings (data-driven design)
+            // 3. If not, try to find a template that has elements (not blank)
+            // 4. Finally, fall back to the first template
+            console.log(`🔍 Checking ${templates.length} templates for data sources/bindings...`);
             templates.forEach((t, i) => {
-              console.log(`  [${i}] "${t.name}" - data_source_id: ${t.data_source_id || 'null'}`);
+              const bindingCount = allBindings.filter(b => b.template_id === t.id).length;
+              const elementCount = allElements.filter(e => e.template_id === t.id).length;
+              console.log(`  [${i}] "${t.name}" - data_source_id: ${t.data_source_id || 'null'}, bindings: ${bindingCount}, elements: ${elementCount}`);
             });
 
             const templateWithDataSource = templates.find(t => t.data_source_id);
-            const selectedTemplateId = templateWithDataSource?.id || templates[0]?.id || null;
+            const templateWithBindings = templates.find(t => allBindings.some(b => b.template_id === t.id));
+            const templateWithElements = templates.find(t => allElements.some(e => e.template_id === t.id));
+            const selectedTemplateId = templateWithDataSource?.id || templateWithBindings?.id || templateWithElements?.id || templates[0]?.id || null;
+            console.log(`📌 Selected template: ${selectedTemplateId} (dataSource: ${!!templateWithDataSource}, bindings: ${!!templateWithBindings}, elements: ${!!templateWithElements})`);
 
             let dataSourceId: string | null = null;
             let dataSourceName: string | null = null;
