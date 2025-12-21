@@ -4,6 +4,119 @@
 
 export type WeatherIconLibrary = 'animated' | 'meteocons' | 'weather-icons' | 'basicons';
 
+// ============================================================
+// WEATHER API ICON MAPPINGS (User-customizable)
+// ============================================================
+
+// Default mappings from weather API icon strings to our animated icons
+// These can be customized by users in the icon picker
+export const DEFAULT_WEATHER_MAPPINGS: Record<string, string> = {
+  // Clear/Sunny conditions
+  'sunny': 'animated-clear-day',
+  'clear': 'animated-clear-day',
+  'fair': 'animated-clear-day',
+  // Cloudy conditions
+  'partly cloudy': 'animated-partly-cloudy-day',
+  'mostly cloudy': 'animated-cloudy',
+  'cloudy': 'animated-cloudy',
+  'overcast': 'animated-cloudy',
+  // Fog/Mist/Haze
+  'fog': 'animated-fog',
+  'mist': 'animated-fog',
+  'haze': 'animated-fog',
+  // Rain
+  'rain': 'animated-rain',
+  'showers': 'animated-rain',
+  'drizzle': 'animated-rain',
+  'thunderstorm': 'animated-rain',
+  // Snow
+  'snow': 'animated-snow',
+  'flurries': 'animated-snow',
+  'blizzard': 'animated-snow',
+  'sleet': 'animated-sleet',
+  // Wind
+  'wind': 'animated-wind',
+  'windy': 'animated-wind',
+  'breezy': 'animated-wind',
+};
+
+// LocalStorage key for custom mappings
+const WEATHER_MAPPINGS_STORAGE_KEY = 'nova-gfx-weather-icon-mappings';
+
+/**
+ * Get the current weather icon mappings (user customizations merged with defaults)
+ */
+export function getWeatherMappings(): Record<string, string> {
+  try {
+    const stored = localStorage.getItem(WEATHER_MAPPINGS_STORAGE_KEY);
+    if (stored) {
+      const customMappings = JSON.parse(stored);
+      return { ...DEFAULT_WEATHER_MAPPINGS, ...customMappings };
+    }
+  } catch (e) {
+    console.warn('Failed to load custom weather mappings:', e);
+  }
+  return { ...DEFAULT_WEATHER_MAPPINGS };
+}
+
+/**
+ * Save a custom weather icon mapping
+ */
+export function setWeatherMapping(apiIcon: string, animatedIconName: string): void {
+  try {
+    const stored = localStorage.getItem(WEATHER_MAPPINGS_STORAGE_KEY);
+    const customMappings = stored ? JSON.parse(stored) : {};
+    customMappings[apiIcon.toLowerCase()] = animatedIconName;
+    localStorage.setItem(WEATHER_MAPPINGS_STORAGE_KEY, JSON.stringify(customMappings));
+  } catch (e) {
+    console.warn('Failed to save weather mapping:', e);
+  }
+}
+
+/**
+ * Add a new weather mapping
+ */
+export function addWeatherMapping(apiIcon: string, animatedIconName: string): void {
+  setWeatherMapping(apiIcon.toLowerCase(), animatedIconName);
+}
+
+/**
+ * Remove a custom weather mapping (reverts to default if available)
+ */
+export function removeWeatherMapping(apiIcon: string): void {
+  try {
+    const stored = localStorage.getItem(WEATHER_MAPPINGS_STORAGE_KEY);
+    if (stored) {
+      const customMappings = JSON.parse(stored);
+      delete customMappings[apiIcon.toLowerCase()];
+      localStorage.setItem(WEATHER_MAPPINGS_STORAGE_KEY, JSON.stringify(customMappings));
+    }
+  } catch (e) {
+    console.warn('Failed to remove weather mapping:', e);
+  }
+}
+
+/**
+ * Reset all custom mappings to defaults
+ */
+export function resetWeatherMappings(): void {
+  try {
+    localStorage.removeItem(WEATHER_MAPPINGS_STORAGE_KEY);
+  } catch (e) {
+    console.warn('Failed to reset weather mappings:', e);
+  }
+}
+
+/**
+ * Get all API icon names that map to a specific animated icon
+ */
+export function getMappingsForIcon(animatedIconName: string): string[] {
+  const mappings = getWeatherMappings();
+  return Object.entries(mappings)
+    .filter(([_, iconName]) => iconName === animatedIconName)
+    .map(([apiIcon, _]) => apiIcon);
+}
+
 export interface WeatherIcon {
   name: string;
   displayName: string;
@@ -172,16 +285,24 @@ const BASICONS_MAP: Record<string, { name: string; category: string }> = {
 
 // Animated weather icons (react-animated-weather)
 // These are canvas-based animated icons - the default and recommended library
+// Note: react-animated-weather only supports 10 unique animations
+// For weather API mapping, use mapWeatherApiIcon() function which handles aliases
 const ANIMATED_ICONS: Array<{ name: string; displayName: string; category: string; animatedIcon: string }> = [
+  // Clear conditions
   { name: 'animated-clear-day', displayName: 'Clear Day', category: 'Clear', animatedIcon: 'CLEAR_DAY' },
   { name: 'animated-clear-night', displayName: 'Clear Night', category: 'Clear', animatedIcon: 'CLEAR_NIGHT' },
+  // Cloudy conditions
   { name: 'animated-partly-cloudy-day', displayName: 'Partly Cloudy Day', category: 'Cloudy', animatedIcon: 'PARTLY_CLOUDY_DAY' },
   { name: 'animated-partly-cloudy-night', displayName: 'Partly Cloudy Night', category: 'Cloudy', animatedIcon: 'PARTLY_CLOUDY_NIGHT' },
   { name: 'animated-cloudy', displayName: 'Cloudy', category: 'Cloudy', animatedIcon: 'CLOUDY' },
+  // Rain conditions
   { name: 'animated-rain', displayName: 'Rain', category: 'Rain', animatedIcon: 'RAIN' },
+  // Snow conditions
   { name: 'animated-sleet', displayName: 'Sleet', category: 'Snow', animatedIcon: 'SLEET' },
   { name: 'animated-snow', displayName: 'Snow', category: 'Snow', animatedIcon: 'SNOW' },
+  // Wind
   { name: 'animated-wind', displayName: 'Wind', category: 'Wind', animatedIcon: 'WIND' },
+  // Fog/Mist/Haze (all use same animation)
   { name: 'animated-fog', displayName: 'Fog', category: 'Fog', animatedIcon: 'FOG' },
 ];
 
@@ -273,4 +394,91 @@ export function isValidWeatherIcon(name: string): boolean {
 // Get icon names for AI reference
 export function getWeatherIconNamesForAI(): string[] {
   return WEATHER_ICONS.map(icon => icon.name);
+}
+
+/**
+ * Map weather API icon strings to our animated icon names
+ * Uses customizable mappings stored in localStorage
+ *
+ * Note: react-animated-weather only has 10 unique animations:
+ * CLEAR_DAY, CLEAR_NIGHT, PARTLY_CLOUDY_DAY, PARTLY_CLOUDY_NIGHT, CLOUDY,
+ * RAIN, SLEET, SNOW, WIND, FOG
+ *
+ * @param apiIcon - The icon string from a weather API
+ * @param isNight - Whether it's nighttime (affects day/night icon selection)
+ * @returns The corresponding animated icon name (one of the 10 valid icons)
+ */
+export function mapWeatherApiIcon(apiIcon: string, isNight: boolean = false): string {
+  if (!apiIcon) return isNight ? 'animated-clear-night' : 'animated-clear-day';
+
+  const normalized = apiIcon.toLowerCase().trim();
+  const mappings = getWeatherMappings();
+
+  // Check for exact match in user/default mappings first
+  if (mappings[normalized]) {
+    let iconName = mappings[normalized];
+    // Handle day/night variants for clear and partly cloudy
+    if (isNight) {
+      if (iconName === 'animated-clear-day') iconName = 'animated-clear-night';
+      if (iconName === 'animated-partly-cloudy-day') iconName = 'animated-partly-cloudy-night';
+    }
+    return iconName;
+  }
+
+  // Check for partial matches in mappings
+  for (const [key, iconName] of Object.entries(mappings)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      let result = iconName;
+      if (isNight) {
+        if (result === 'animated-clear-day') result = 'animated-clear-night';
+        if (result === 'animated-partly-cloudy-day') result = 'animated-partly-cloudy-night';
+      }
+      return result;
+    }
+  }
+
+  // Fallback keyword-based matching for unmapped terms
+  if (normalized.includes('sun') || normalized.includes('clear')) {
+    return isNight ? 'animated-clear-night' : 'animated-clear-day';
+  }
+  if (normalized.includes('cloud')) {
+    if (normalized.includes('partly') || normalized.includes('partial')) {
+      return isNight ? 'animated-partly-cloudy-night' : 'animated-partly-cloudy-day';
+    }
+    return 'animated-cloudy';
+  }
+  if (normalized.includes('rain') || normalized.includes('shower')) {
+    return 'animated-rain';
+  }
+  if (normalized.includes('snow') || normalized.includes('flurr')) {
+    return 'animated-snow';
+  }
+  if (normalized.includes('fog') || normalized.includes('mist') || normalized.includes('haze')) {
+    return 'animated-fog';
+  }
+  if (normalized.includes('wind')) {
+    return 'animated-wind';
+  }
+  if (normalized.includes('storm') || normalized.includes('thunder')) {
+    return 'animated-rain';
+  }
+  if (normalized.includes('sleet') || normalized.includes('ice') || normalized.includes('freezing')) {
+    return 'animated-sleet';
+  }
+
+  // Default fallback
+  return isNight ? 'animated-clear-night' : 'animated-clear-day';
+}
+
+/**
+ * Get the animated icon code (e.g., CLEAR_DAY) for a given icon name
+ * Used by components that need to render react-animated-weather
+ */
+export function getAnimatedIconCode(iconName: string): string {
+  const icon = WEATHER_ICONS.find(i => i.name === iconName);
+  if (icon?.animatedIcon) {
+    return icon.animatedIcon;
+  }
+  // Default to CLEAR_DAY if not found
+  return 'CLEAR_DAY';
 }

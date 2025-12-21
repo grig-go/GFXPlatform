@@ -103,6 +103,7 @@ export function BindingSettingsModal({
     if (options.timeFormat && options.timeFormat !== 'none') cleanOptions.timeFormat = options.timeFormat;
     if (options.showSeconds) cleanOptions.showSeconds = options.showSeconds;
 
+    console.log('🔧 BindingSettingsModal.handleSave:', { rawOptions: options, cleanOptions });
     onSave(cleanOptions);
     onOpenChange(false);
   };

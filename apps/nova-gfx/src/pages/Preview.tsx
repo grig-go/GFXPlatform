@@ -124,8 +124,15 @@ export function Preview() {
     phaseDurations: state.phaseDurations,
   }));
 
-  // Get setters for syncing localStorage data to designer store (for visual node runtime)
-  const { setTemplates: setDesignerTemplates, setElements: setDesignerElements, setLayers: setDesignerLayers } = useDesignerStore();
+  // Get setters for syncing localStorage data to designer store (for visual node runtime / scripts)
+  const {
+    setTemplates: setDesignerTemplates,
+    setElements: setDesignerElements,
+    setLayers: setDesignerLayers,
+    setAnimations: setDesignerAnimations,
+    setKeyframes: setDesignerKeyframes,
+    setProject: setDesignerProject,
+  } = useDesignerStore();
 
   // Load from localStorage if store is empty (new window case)
   const [localData, setLocalData] = useState<PreviewData | null>(null);
@@ -159,7 +166,7 @@ export function Preview() {
           setLocalData(parsed);
           console.log('Preview loaded from localStorage:', parsed);
 
-          // Sync to designer store for visual node runtime access
+          // Sync to designer store for visual node runtime / scripts access
           if (parsed.templates?.length > 0) {
             setDesignerTemplates(parsed.templates);
             console.log('[Preview] Synced templates to designer store:', parsed.templates.length);
@@ -172,12 +179,25 @@ export function Preview() {
             setDesignerLayers(parsed.layers);
             console.log('[Preview] Synced layers to designer store:', parsed.layers.length);
           }
+          if (parsed.animations?.length > 0) {
+            setDesignerAnimations(parsed.animations);
+            console.log('[Preview] Synced animations to designer store:', parsed.animations.length);
+          }
+          if (parsed.keyframes?.length > 0) {
+            setDesignerKeyframes(parsed.keyframes);
+            console.log('[Preview] Synced keyframes to designer store:', parsed.keyframes.length);
+          }
+          // Sync project to designer store (needed for interactive mode scripts to access project settings)
+          if (parsed.project) {
+            setDesignerProject(parsed.project);
+            console.log('[Preview] Synced project to designer store:', parsed.project.id);
+          }
         } catch (e) {
           console.error('Failed to parse preview data:', e);
         }
       }
     }
-  }, [storeData.templates.length, setDesignerTemplates, setDesignerElements, setDesignerLayers, isEmbeddedByPulsar, embeddedProjectId]);
+  }, [storeData.templates.length, setDesignerTemplates, setDesignerElements, setDesignerLayers, setDesignerAnimations, setDesignerKeyframes, setDesignerProject, isEmbeddedByPulsar, embeddedProjectId]);
 
   // Use store data if available, otherwise use localStorage data
   // IMPORTANT: When embedded by Pulsar, ONLY use data from postMessage (localData), never from Nova's store
@@ -246,6 +266,7 @@ export function Preview() {
     enableInteractiveMode,
     disableInteractiveMode,
     setVisualNodes,
+    setCodeScript,
     isInteractiveMode,
     dispatchEvent,
   } = useInteractiveStore();
@@ -266,14 +287,23 @@ export function Preview() {
       console.log('[Preview] Enabling interactive mode for interactive project');
       enableInteractiveMode();
 
-      // Load visual nodes from project's interactive_config
+      // Load visual nodes and code script from project's interactive_config
       const interactiveConfig = currentProject?.interactive_config as {
+        mode?: 'visual' | 'code';
+        script?: string;
         visualNodes?: Node[];
         visualEdges?: Edge[];
       } | null;
 
       console.log('[Preview] Interactive config:', interactiveConfig);
 
+      // Load code script if present
+      if (interactiveConfig?.script && interactiveConfig.script.trim()) {
+        console.log('[Preview] Setting code script:', interactiveConfig.script.length, 'chars');
+        setCodeScript(interactiveConfig.script);
+      }
+
+      // Load visual nodes if present
       if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
         console.log('[Preview] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
         // Log the event nodes specifically
@@ -292,12 +322,48 @@ export function Preview() {
       // Cleanup on unmount
       disableInteractiveMode();
     };
-  }, [isInteractiveProject, currentProject?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes]);
+  }, [isInteractiveProject, currentProject?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes, setCodeScript]);
 
   // Log interactive mode state changes
   useEffect(() => {
     console.log('[Preview] isInteractiveMode state changed:', isInteractiveMode);
   }, [isInteractiveMode]);
+
+  // Subscribe to designer store's playback state changes (for script actions.play(), stop(), restart())
+  // When scripts call actions.restart(), it updates the designer store's isPlaying/currentPhase
+  // We need to sync these to Preview's local playback state
+  useEffect(() => {
+    if (!isInteractiveMode || isEmbeddedByPulsar) return;
+
+    // Subscribe to playback state changes
+    const unsubscribe = useDesignerStore.subscribe(
+      (state) => ({
+        isPlaying: state.isPlaying,
+        currentPhase: state.currentPhase,
+        playheadPosition: state.playheadPosition,
+      }),
+      (newState, prevState) => {
+        // Check what changed
+        if (newState.isPlaying !== prevState?.isPlaying) {
+          console.log('[Preview] Designer store isPlaying changed:', newState.isPlaying);
+          setIsPlaying(newState.isPlaying);
+        }
+        if (newState.currentPhase !== prevState?.currentPhase) {
+          console.log('[Preview] Designer store currentPhase changed:', newState.currentPhase);
+          setCurrentPhase(newState.currentPhase);
+        }
+        // Sync playhead position when it resets to 0 (e.g., restart)
+        if (newState.playheadPosition === 0 && prevState?.playheadPosition !== 0) {
+          console.log('[Preview] Designer store playhead reset to 0');
+          setPlayheadPosition(0);
+          lastTimeRef.current = 0;
+        }
+      },
+      { equalityFn: (a, b) => a.isPlaying === b.isPlaying && a.currentPhase === b.currentPhase && a.playheadPosition === b.playheadPosition }
+    );
+
+    return unsubscribe;
+  }, [isInteractiveMode, isEmbeddedByPulsar]);
 
   // Subscribe to designer store's onAirTemplates changes (for visual node runtime playback)
   // When visual node scripts call designerStore.playIn(), we trigger the animation
@@ -794,25 +860,13 @@ export function Preview() {
   const previewBindings = localData?.bindings || [];
   const previewDataPayload = localData?.dataPayload || [];
 
-  // Debug: Log binding data state
-  console.log('[Preview] Data binding state:', {
-    bindingsCount: previewBindings.length,
-    dataPayloadCount: previewDataPayload.length,
-    currentRecordIndex,
-    hasLocalData: !!localData,
-    localDataKeys: localData ? Object.keys(localData) : [],
-  });
-
   // Get the current data record for binding resolution
   // Use currentRecordIndex from state (controlled via postMessage) for external control
   const currentDataRecord = useMemo(() => {
     if (previewDataPayload.length === 0) {
-      console.log('[Preview] currentDataRecord: no data payload');
       return null;
     }
-    const record = previewDataPayload[currentRecordIndex] || previewDataPayload[0] || null;
-    console.log('[Preview] currentDataRecord:', { index: currentRecordIndex, record });
-    return record;
+    return previewDataPayload[currentRecordIndex] || previewDataPayload[0] || null;
   }, [previewDataPayload, currentRecordIndex]);
 
   // Resolve bindings for all elements (replace {{...}} placeholders with actual data)
@@ -1298,6 +1352,30 @@ export function Preview() {
             console.log('[Preview] setDataRecordIndex received:', payload.recordIndex, 'current:', currentRecordIndex);
             setCurrentRecordIndex(payload.recordIndex);
             console.log('[Preview] Data record index set to:', payload.recordIndex);
+          }
+          break;
+
+        case 'setDataPayload':
+          // Set data payload from external control (Pulsar GFX)
+          // This updates the data used for binding resolution
+          if (payload?.data && Array.isArray(payload.data)) {
+            console.log('[Preview] setDataPayload received:', payload.data.length, 'records');
+            setLocalData((prev: PreviewData | null) => ({
+              ...(prev || {}),
+              layers: prev?.layers || [],
+              templates: prev?.templates || [],
+              elements: prev?.elements || [],
+              animations: prev?.animations || [],
+              keyframes: prev?.keyframes || [],
+              bindings: prev?.bindings || [],
+              currentTemplateId: prev?.currentTemplateId || null,
+              project: prev?.project || null,
+              dataPayload: payload.data,
+            }));
+            // Also set record index if provided
+            if (payload.recordIndex !== undefined) {
+              setCurrentRecordIndex(payload.recordIndex);
+            }
           }
           break;
 

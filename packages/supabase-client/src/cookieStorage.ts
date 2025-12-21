@@ -64,7 +64,7 @@ export const cookieStorage = {
     const domainAttr = domain ? `; domain=${domain}` : '';
 
     // Set cookie with:
-    // - 7 day expiry (Supabase handles token refresh)
+    // - 30 day expiry (longer than Supabase refresh token, allows long sessions)
     // - Secure flag in production (HTTPS)
     // - SameSite=Lax for CSRF protection while allowing cross-subdomain
     // - Path=/ to be accessible from all paths
@@ -72,7 +72,7 @@ export const cookieStorage = {
     const secureAttr = isSecure ? '; Secure' : '';
 
     const encodedValue = encodeURIComponent(value);
-    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 
     document.cookie = `${key}=${encodedValue}; path=/${domainAttr}; expires=${expires}; SameSite=Lax${secureAttr}`;
   },

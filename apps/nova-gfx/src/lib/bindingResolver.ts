@@ -62,8 +62,34 @@ export function resolveElementBindings(
   // Apply formatter if specified
   const formattedValue = applyFormatter(rawValue, binding.formatter, binding.formatter_options);
 
+  // Fix: For icon elements, automatically correct wrong target_property
+  // Old bindings may have 'content.text' or 'content.src' instead of 'content.iconName'
+  let targetProperty = binding.target_property;
+  if (element.content?.type === 'icon' &&
+      (targetProperty === 'content.text' || targetProperty === 'content.src')) {
+    targetProperty = 'content.iconName';
+    console.log('[bindingResolver] Auto-correcting icon binding target_property from',
+      binding.target_property, 'to', targetProperty);
+  }
+
   // Apply to target property
-  const updatedElement = applyToProperty(element, binding.target_property, formattedValue);
+  const updatedElement = applyToProperty(element, targetProperty, formattedValue);
+
+  // Debug logging for icon bindings
+  if (element.content?.type === 'icon') {
+    console.log('[bindingResolver] Icon binding resolution:', {
+      elementName: element.name,
+      elementId: element.id,
+      bindingKey: binding.binding_key,
+      targetProperty,
+      rawValue,
+      rawValueType: typeof rawValue,
+      formattedValue,
+      originalIconName: element.content.iconName,
+      resolvedIconName: updatedElement.content?.iconName,
+      contentChanged: element.content.iconName !== updatedElement.content?.iconName,
+    });
+  }
 
   return updatedElement;
 }
@@ -470,6 +496,8 @@ export function getDefaultTargetProperty(elementType: string): string {
       return 'content.text';
     case 'image':
       return 'content.src';
+    case 'icon':
+      return 'content.iconName';
     default:
       return 'content.text';
   }

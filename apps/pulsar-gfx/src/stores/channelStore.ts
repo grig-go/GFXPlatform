@@ -66,6 +66,17 @@ export interface PlayerCommand {
   pageId?: string;
   projectId?: string;
   forceReload?: boolean;
+  // Data binding support
+  bindings?: Array<{
+    id: string;
+    element_id: string;
+    template_id: string;
+    binding_key: string;
+    target_property: string;
+    binding_type: string;
+    formatter_options?: Record<string, any> | null;
+  }>;
+  currentRecord?: Record<string, unknown> | null;
   // Template info for Nova Player
   template?: {
     id: string;
@@ -168,7 +179,17 @@ interface ChannelStore {
     },
     payload?: Record<string, any>,
     pageName?: string,
-    projectName?: string
+    projectName?: string,
+    bindings?: Array<{
+      id: string;
+      element_id: string;
+      template_id: string;
+      binding_key: string;
+      target_property: string;
+      binding_type: string;
+      formatter_options?: Record<string, any> | null;
+    }>,
+    currentRecord?: Record<string, unknown> | null
   ) => Promise<void>;
   stopOnChannel: (channelId: string, layerIndex: number, layerId?: string) => Promise<void>;
 
@@ -486,9 +507,9 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     });
   },
 
-  playOnChannel: async (channelId, pageId, layerIndex, template, payload, pageName?: string, projectName?: string) => {
+  playOnChannel: async (channelId, pageId, layerIndex, template, payload, pageName?: string, projectName?: string, bindings?, currentRecord?) => {
     const channel = get().channels.find((c) => c.id === channelId);
-    console.log('[channelStore] playOnChannel called:', { channelId, pageId, layerIndex, pageName, projectName, channel: !!channel });
+    console.log('[channelStore] playOnChannel called:', { channelId, pageId, layerIndex, pageName, projectName, channel: !!channel, hasBindings: !!bindings?.length, hasRecord: !!currentRecord });
 
     // Fire-and-forget: Log events async without blocking command execution
     // This ensures logging doesn't affect graphics performance or FPS
@@ -541,6 +562,9 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         keyframes: template.keyframes,
       },
       payload,
+      // Data binding support - include bindings and current record if available
+      bindings,
+      currentRecord,
     });
   },
 

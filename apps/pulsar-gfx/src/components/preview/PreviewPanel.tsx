@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Button,
   cn,
@@ -16,7 +16,7 @@ import { usePreviewStore } from '@/stores/previewStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { usePageStore } from '@/stores/pageStore';
 import { supabase } from '@emergent-platform/supabase-client';
-import { useMemo } from 'react';
+import { fetchEndpointData } from '@/services/novaEndpointService';
 
 // Nova GFX preview URL - configurable via environment variable
 // In dev: uses VITE_NOVA_GFX_PORT (default 3003) or VITE_NOVA_PREVIEW_URL
@@ -49,6 +49,16 @@ export function PreviewPanel() {
     loadedProjectId,
     setLoadedProjectId,
     dataRecordIndex,
+    setDataRecordIndex,
+    // Data source state
+    dataSourceId,
+    dataSourceName,
+    dataSourceSlug,
+    dataPayload,
+    dataLoading,
+    setDataSource,
+    setDataLoading,
+    setDataError,
   } = usePreviewStore();
 
   const { getTemplate, templates, currentProject } = useProjectStore();
@@ -89,6 +99,12 @@ export function PreviewPanel() {
   const selectedTemplate = selectedTemplateId ? getTemplate(selectedTemplateId) : null;
   const pageTemplate = previewPage ? templates.find(t => t.id === previewPage.templateId) : null;
   const displayTemplate = selectedTemplate || pageTemplate;
+
+  // Extract the data source slug for use in effect dependencies (avoids object reference issues)
+  const templateDataSourceSlug = useMemo(() => {
+    const config = displayTemplate?.dataSourceConfig as { slug?: string } | null;
+    return config?.slug || null;
+  }, [displayTemplate?.dataSourceConfig]);
 
   // Get the payload to use - merge page payload with preview payload for real-time updates
   // previewPayload contains any edits made in the ContentEditor
@@ -371,6 +387,61 @@ export function PreviewPanel() {
     // Send data record index to Nova GFX
     sendToPreview('setDataRecordIndex', { recordIndex: dataRecordIndex });
   }, [dataRecordIndex, iframeLoaded, previewReady, sendToPreview]);
+
+  // Fetch data from Nova endpoint when template with dataSourceConfig is selected
+  useEffect(() => {
+    if (!displayTemplate) return;
+
+    const slug = templateDataSourceSlug;
+
+    if (!slug) {
+      // No data source configured, clear any existing data
+      if (dataSourceSlug) {
+        setDataSource(null, null, null, null);
+      }
+      return;
+    }
+
+    // Skip if we already have data for this SAME slug (and have data loaded)
+    if (slug === dataSourceSlug && dataPayload && dataPayload.length > 0) {
+      return;
+    }
+
+    // Fetch data from endpoint
+    setDataLoading(true);
+
+    (async () => {
+      try {
+        // Fetch data first - this is the critical path
+        const data = await fetchEndpointData(slug);
+
+        if (data && data.length > 0) {
+          // Use template's dataSourceId or generate a placeholder ID from slug
+          const sourceId = displayTemplate.dataSourceId || `endpoint:${slug}`;
+          setDataSource(
+            sourceId,
+            slug,
+            slug,
+            data
+          );
+        } else {
+          setDataError('No data returned from endpoint');
+        }
+      } catch (err) {
+        setDataError('Failed to fetch data');
+      }
+    })();
+    // Only re-run when template changes or when the data source slug changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayTemplate?.id, templateDataSourceSlug, dataSourceSlug]);
+
+  // Send data payload to Nova GFX when it changes
+  useEffect(() => {
+    if (!iframeLoaded || !previewReady || !dataPayload) return;
+
+    console.log('[PreviewPanel] Sending data payload to Nova GFX:', dataPayload.length, 'records');
+    sendToPreview('setDataPayload', { data: dataPayload, recordIndex: dataRecordIndex });
+  }, [dataPayload, dataRecordIndex, iframeLoaded, previewReady, sendToPreview]);
 
   // Handle template/page change via postMessage (no iframe reload!)
   // This handles both direct template selection AND page selection

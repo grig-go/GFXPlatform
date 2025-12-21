@@ -271,7 +271,7 @@ export async function directRestInsert<T = any>(
  */
 export async function directRestDelete(
   table: string,
-  filter: { column: string; value: string },
+  filter: { column: string; value: string } | string[],
   timeoutMs = 10000,
   accessToken?: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -285,10 +285,28 @@ export async function directRestDelete(
   const authToken = accessToken || supabaseAnonKey;
 
   try {
-    console.log(`[Supabase REST] DELETE ${table} where ${filter.column}=${filter.value}`);
+    // Support both array of IDs and single filter object
+    let queryString: string;
+    let logMessage: string;
+
+    if (Array.isArray(filter)) {
+      // Array of IDs - use in() filter
+      if (filter.length === 0) {
+        return { success: true }; // Nothing to delete
+      }
+      const idsParam = filter.map(id => `"${id}"`).join(',');
+      queryString = `id=in.(${idsParam})`;
+      logMessage = `[Supabase REST] DELETE ${table} where id in (${filter.length} items)`;
+    } else {
+      // Single filter object
+      queryString = `${filter.column}=eq.${filter.value}`;
+      logMessage = `[Supabase REST] DELETE ${table} where ${filter.column}=${filter.value}`;
+    }
+
+    console.log(logMessage);
 
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/${table}?${filter.column}=eq.${filter.value}`,
+      `${supabaseUrl}/rest/v1/${table}?${queryString}`,
       {
         method: 'DELETE',
         headers: {

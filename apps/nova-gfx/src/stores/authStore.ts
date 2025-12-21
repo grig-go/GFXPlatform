@@ -209,6 +209,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         if (event === 'SIGNED_OUT') {
           set({ user: null, organization: null, accessToken: null, error: null });
         } else if (event === 'TOKEN_REFRESHED' && session) {
+          console.log('[Auth] Token refreshed successfully');
           set({ accessToken: session.access_token });
         } else if (event === 'SIGNED_IN' && session) {
           // Update access token
@@ -234,6 +235,45 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           }
         }
       });
+
+      // Handle visibility change - refresh session when user comes back to the app
+      // This prevents stale connections after long idle periods
+      let lastVisibilityCheck = Date.now();
+      const REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+
+      const handleVisibilityChange = async () => {
+        if (document.visibilityState === 'visible') {
+          const timeSinceLastCheck = Date.now() - lastVisibilityCheck;
+
+          // Only refresh if we've been away for more than 5 minutes
+          if (timeSinceLastCheck > REFRESH_THRESHOLD) {
+            console.log(`[Auth] App became visible after ${Math.round(timeSinceLastCheck / 1000)}s, refreshing session...`);
+
+            try {
+              // This will trigger TOKEN_REFRESHED if the token was refreshed
+              const { data, error } = await supabase.auth.getSession();
+
+              if (error) {
+                console.warn('[Auth] Session refresh failed:', error.message);
+              } else if (data.session) {
+                console.log('[Auth] Session still valid');
+                set({ accessToken: data.session.access_token });
+              } else {
+                console.log('[Auth] No session found after visibility change');
+                set({ user: null, organization: null, accessToken: null });
+              }
+            } catch (err) {
+              console.warn('[Auth] Error refreshing session on visibility change:', err);
+            }
+          }
+
+          lastVisibilityCheck = Date.now();
+        }
+      };
+
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+      }
     }
   },
 

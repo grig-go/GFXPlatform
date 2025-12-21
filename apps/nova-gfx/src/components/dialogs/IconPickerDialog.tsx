@@ -14,7 +14,7 @@ import {
   Label,
 } from '@emergent-platform/ui';
 import * as LucideIcons from 'lucide-react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Plus, RotateCcw, Pencil } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { fas } from '@fortawesome/free-solid-svg-icons';
 import { far } from '@fortawesome/free-regular-svg-icons';
@@ -31,6 +31,12 @@ import {
   getWeatherIconCategories,
   getWeatherIconsByLibrary,
   getWeatherIconLibraries,
+  getMappingsForIcon,
+  getWeatherMappings,
+  setWeatherMapping,
+  addWeatherMapping,
+  removeWeatherMapping,
+  resetWeatherMappings,
   type WeatherIconLibrary,
   type WeatherIcon
 } from '@/lib/weatherIcons';
@@ -225,6 +231,11 @@ export function IconPickerDialog({
   const [lottieJson, setLottieJson] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [showCustomInput, setShowCustomInput] = useState(false);
+
+  // Weather icon mapping editing state
+  const [editingMappingIcon, setEditingMappingIcon] = useState<string | null>(null);
+  const [newMappingInput, setNewMappingInput] = useState('');
+  const [mappingsVersion, setMappingsVersion] = useState(0); // Force re-render when mappings change
 
   // Filter Lucide icons
   const filteredLucideIcons = useMemo(() => {
@@ -572,29 +583,57 @@ export function IconPickerDialog({
                 </div>
               </div>
 
-              {/* Icon count */}
-              <p className="text-xs text-muted-foreground flex-shrink-0">
-                Showing {filteredWeatherIcons.length} icons
-              </p>
+              {/* Icon count and reset button */}
+              <div className="flex items-center justify-between flex-shrink-0">
+                <p className="text-xs text-muted-foreground">
+                  Showing {filteredWeatherIcons.length} icons
+                </p>
+                {weatherLibrary === 'animated' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      resetWeatherMappings();
+                      setMappingsVersion(v => v + 1);
+                    }}
+                    title="Reset all mappings to defaults"
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Reset Mappings
+                  </Button>
+                )}
+              </div>
 
               <ScrollArea className="flex-1 min-h-0">
                 <div className="grid grid-cols-6 gap-2 p-2">
                   {filteredWeatherIcons.map((icon) => {
                     const isSelected = currentLibrary === 'weather' && currentIconName === icon.name;
+                    const isAnimated = icon.animated && icon.animatedIcon;
+                    // Get mappings for this animated icon (re-calculate when mappingsVersion changes)
+                    const iconMappings = isAnimated ? getMappingsForIcon(icon.name) : [];
+                    const isEditing = editingMappingIcon === icon.name;
 
                     return (
-                      <button
+                      <div
                         key={icon.name}
-                        onClick={() => handleIconSelect('weather', icon.name)}
                         className={`
-                          flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-colors
+                          flex flex-col items-center p-2 rounded-lg border-2 transition-colors cursor-pointer
                           hover:bg-violet-500/20 hover:border-violet-500
                           ${isSelected
                             ? 'bg-violet-500/30 border-violet-500'
                             : 'border-border bg-neutral-800'
                           }
                         `}
-                        title={`${icon.displayName} (${icon.library})`}
+                        title={`${icon.displayName} (${icon.library})${isAnimated ? '\nDouble-click to edit mappings' : ''}`}
+                        onClick={() => handleIconSelect('weather', icon.name)}
+                        onDoubleClick={(e) => {
+                          if (isAnimated) {
+                            e.stopPropagation();
+                            setEditingMappingIcon(isEditing ? null : icon.name);
+                            setNewMappingInput('');
+                          }
+                        }}
                       >
                         {icon.animated && icon.animatedIcon ? (
                           <div className="w-8 h-8 flex items-center justify-center">
@@ -625,10 +664,101 @@ export function IconPickerDialog({
                           />
                         )}
                         <span className="text-[9px] mt-1 text-center line-clamp-1 text-white">{icon.displayName}</span>
-                        <span className="text-[8px] text-neutral-400">
-                          {icon.library === 'animated' ? 'Animated' : icon.library}
-                        </span>
-                      </button>
+
+                        {/* Show mappings for animated icons instead of "Animated" label */}
+                        {isAnimated ? (
+                          <div className="w-full mt-0.5">
+                            {isEditing ? (
+                              // Editing mode - show editable list
+                              <div
+                                className="bg-neutral-900 rounded p-1.5 mt-1 space-y-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex items-center gap-1 mb-1">
+                                  <span className="text-[8px] text-violet-400 font-medium">API Mappings:</span>
+                                  <button
+                                    className="ml-auto p-0.5 hover:bg-neutral-700 rounded"
+                                    onClick={() => setEditingMappingIcon(null)}
+                                    title="Close"
+                                  >
+                                    <X className="w-2.5 h-2.5 text-neutral-400" />
+                                  </button>
+                                </div>
+                                {iconMappings.map((mapping) => (
+                                  <div key={mapping} className="flex items-center gap-1 text-[8px]">
+                                    <span className="flex-1 text-neutral-300 truncate">{mapping}</span>
+                                    <button
+                                      className="p-0.5 hover:bg-red-500/20 rounded"
+                                      onClick={() => {
+                                        removeWeatherMapping(mapping);
+                                        setMappingsVersion(v => v + 1);
+                                      }}
+                                      title="Remove mapping"
+                                    >
+                                      <X className="w-2 h-2 text-red-400" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {/* Add new mapping input */}
+                                <div className="flex items-center gap-1 mt-1">
+                                  <input
+                                    type="text"
+                                    value={newMappingInput}
+                                    onChange={(e) => setNewMappingInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && newMappingInput.trim()) {
+                                        addWeatherMapping(newMappingInput.trim(), icon.name);
+                                        setNewMappingInput('');
+                                        setMappingsVersion(v => v + 1);
+                                      }
+                                    }}
+                                    placeholder="Add mapping..."
+                                    className="flex-1 text-[8px] bg-neutral-800 border border-neutral-600 rounded px-1 py-0.5 text-white placeholder:text-neutral-500 focus:outline-none focus:border-violet-500"
+                                  />
+                                  <button
+                                    className="p-0.5 hover:bg-green-500/20 rounded"
+                                    onClick={() => {
+                                      if (newMappingInput.trim()) {
+                                        addWeatherMapping(newMappingInput.trim(), icon.name);
+                                        setNewMappingInput('');
+                                        setMappingsVersion(v => v + 1);
+                                      }
+                                    }}
+                                    title="Add mapping"
+                                  >
+                                    <Plus className="w-2.5 h-2.5 text-green-400" />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              // Display mode - show mappings as tags with edit hint
+                              <div className="flex flex-col items-center">
+                                <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+                                  {iconMappings.slice(0, 3).map((mapping) => (
+                                    <span
+                                      key={mapping}
+                                      className="text-[7px] bg-neutral-700 text-neutral-300 px-1 rounded truncate max-w-[50px]"
+                                      title={mapping}
+                                    >
+                                      {mapping}
+                                    </span>
+                                  ))}
+                                  {iconMappings.length > 3 && (
+                                    <span className="text-[7px] text-neutral-500">+{iconMappings.length - 3}</span>
+                                  )}
+                                </div>
+                                <span className="text-[7px] text-neutral-500 mt-0.5 flex items-center gap-0.5">
+                                  <Pencil className="w-2 h-2" /> double-click
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[8px] text-neutral-400">
+                            {icon.library}
+                          </span>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

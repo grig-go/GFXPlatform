@@ -154,6 +154,9 @@ interface LayerTemplateState {
   embeddedElements?: Element[];
   embeddedAnimations?: Animation[];
   embeddedKeyframes?: Keyframe[];
+  // Embedded binding data - used directly to bypass React state timing issues
+  embeddedBindings?: Binding[];
+  embeddedRecord?: Record<string, unknown> | null;
 }
 
 export function NovaPlayer() {
@@ -173,12 +176,20 @@ export function NovaPlayer() {
     enableInteractiveMode,
     disableInteractiveMode,
     setVisualNodes,
+    setCodeScript,
     isInteractiveMode,
     dispatchEvent,
   } = useInteractiveStore();
 
   // Designer store - needed to sync templates for visual node runtime
-  const { setTemplates: setDesignerTemplates, setElements: setDesignerElements, setLayers: setDesignerLayers } = useDesignerStore();
+  const {
+    setTemplates: setDesignerTemplates,
+    setElements: setDesignerElements,
+    setLayers: setDesignerLayers,
+    setAnimations: setDesignerAnimations,
+    setKeyframes: setDesignerKeyframes,
+    setProject: setDesignerProject,
+  } = useDesignerStore();
 
   // Project data (from Supabase)
   const [project, setProject] = useState<Project | null>(null);
@@ -187,6 +198,8 @@ export function NovaPlayer() {
   const [elements, setElements] = useState<Element[]>([]);
   const [animations, setAnimations] = useState<Animation[]>([]);
   const [keyframes, setKeyframes] = useState<Keyframe[]>([]);
+  const [bindings, setBindings] = useState<Binding[]>([]);
+  const [projectDataPayload, setProjectDataPayload] = useState<Record<string, unknown>[] | null>(null);
 
   // localStorage data (same as Preview uses) - fallback when DB data is incomplete
   const [localStorageData, setLocalStorageData] = useState<{
@@ -296,14 +309,23 @@ export function NovaPlayer() {
       console.log('[Nova Player] Enabling interactive mode for interactive project');
       enableInteractiveMode();
 
-      // Load visual nodes from project's interactive_config
+      // Load visual nodes and code script from project's interactive_config
       const interactiveConfig = project?.interactive_config as {
+        mode?: 'visual' | 'code';
+        script?: string;
         visualNodes?: Node[];
         visualEdges?: Edge[];
       } | null;
 
       console.log('[Nova Player] Interactive config:', interactiveConfig);
 
+      // Load code script if present
+      if (interactiveConfig?.script && interactiveConfig.script.trim()) {
+        console.log('[Nova Player] Setting code script:', interactiveConfig.script.length, 'chars');
+        setCodeScript(interactiveConfig.script);
+      }
+
+      // Load visual nodes if present
       if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
         console.log('[Nova Player] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
         // Log the event nodes specifically
@@ -322,7 +344,7 @@ export function NovaPlayer() {
       // Cleanup on unmount
       disableInteractiveMode();
     };
-  }, [isInteractiveProject, project?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes]);
+  }, [isInteractiveProject, project?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes, setCodeScript]);
 
   // Log interactive mode state changes
   useEffect(() => {
@@ -420,6 +442,11 @@ export function NovaPlayer() {
   // Cache loaded data in refs for immediate access (React state updates are async)
   const loadedLayersRef = useRef<Layer[]>([]);
   const loadedTemplatesRef = useRef<Template[]>([]);
+  // Cache bindings and data payload in refs for immediate access during play commands
+  const loadedBindingsRef = useRef<Binding[]>([]);
+  const loadedDataPayloadRef = useRef<Record<string, unknown>[] | null>(null);
+  // Track in-flight project load promise to allow play commands to wait for it
+  const projectLoadPromiseRef = useRef<Promise<{ success: boolean; templates: Template[]; layers: Layer[] }> | null>(null);
 
   // Load project data using DIRECT REST API (bypasses Supabase client to avoid timeout issues)
   // Returns templates AND layers for immediate use (since state updates are async)
@@ -448,6 +475,8 @@ export function NovaPlayer() {
 
       const projectData = projectResult.data[0];
       setProject(projectData);
+      // Sync project to designer store for interactive mode scripts
+      setDesignerProject(projectData);
       console.log(`[Nova Player] Project metadata loaded: ${projectData.name} (${Date.now() - startTime}ms)`);
 
       // Fetch layers and templates via direct REST (in parallel)
@@ -551,9 +580,79 @@ export function NovaPlayer() {
       setAnimations(allAnimations);
       setKeyframes(allKeyframes);
 
-      // Sync elements to designer store for visual node runtime
+      // Sync elements, animations, and keyframes to designer store for visual node runtime / scripts
       setDesignerElements(allElements);
-      console.log('[Nova Player] Synced elements to designer store:', allElements.length);
+      setDesignerAnimations(allAnimations);
+      setDesignerKeyframes(allKeyframes);
+      console.log('[Nova Player] Synced to designer store:', allElements.length, 'elements,', allAnimations.length, 'animations,', allKeyframes.length, 'keyframes');
+
+      // Load bindings for all templates
+      const allBindings: Binding[] = [];
+      const bindingFetches = templatesData.map(async (template: Template) => {
+        const bindingsResult = await directRestSelect<Binding>(
+          'gfx_bindings',
+          '*',
+          { column: 'template_id', value: template.id },
+          5000
+        );
+        return bindingsResult.data || [];
+      });
+
+      const bindingResults = await Promise.all(bindingFetches);
+      for (const templateBindings of bindingResults) {
+        allBindings.push(...templateBindings);
+      }
+      // Update ref immediately for synchronous access in play commands
+      loadedBindingsRef.current = allBindings;
+      setBindings(allBindings);
+      console.log(`[Nova Player] Loaded ${allBindings.length} bindings total`);
+
+      // Load data from endpoints for templates with data sources
+      // Find first template with a data source config that has a slug
+      const templateWithDataSource = templatesData.find((t: Template) => {
+        const config = t.data_source_config as { slug?: string } | null;
+        return config?.slug;
+      });
+
+      if (templateWithDataSource) {
+        const config = templateWithDataSource.data_source_config as unknown as { slug: string };
+        const slug = config.slug;
+        console.log(`[Nova Player] Found template with data source: ${slug}`);
+
+        try {
+          // Fetch data from Nova endpoint via Supabase edge function
+          // Use supabase.functions.invoke() for proper authentication (same as novaEndpointService)
+          const { data, error } = await supabase.functions.invoke<Record<string, unknown>[]>(
+            `api-endpoints/${slug}`,
+            { method: 'GET' }
+          );
+
+          if (error) {
+            console.warn(`[Nova Player] Edge function error for ${slug}:`, error);
+          } else if (data && Array.isArray(data) && data.length > 0) {
+            // Update ref immediately for synchronous access in play commands
+            loadedDataPayloadRef.current = data;
+            setProjectDataPayload(data);
+            console.log(`[Nova Player] Loaded ${data.length} records from endpoint: ${slug}`);
+
+            // Store in instanceBindingData for all templates with this data source
+            // This ensures bindings are applied when templates are played
+            templatesData.forEach((t: Template) => {
+              const tConfig = t.data_source_config as { slug?: string } | null;
+              if (tConfig?.slug === slug) {
+                const templateBindings = allBindings.filter(b => b.template_id === t.id);
+                if (templateBindings.length > 0 && data.length > 0) {
+                  console.log(`[Nova Player] Pre-loading binding data for template ${t.id} (${templateBindings.length} bindings, ${data.length} records)`);
+                }
+              }
+            });
+          } else {
+            console.warn(`[Nova Player] No data returned from endpoint: ${slug}`);
+          }
+        } catch (err) {
+          console.warn('[Nova Player] Failed to fetch endpoint data (non-critical):', err);
+        }
+      }
 
       // Mark as loaded
       loadedProjectIdRef.current = projectId;
@@ -566,7 +665,7 @@ export function NovaPlayer() {
       console.error(`[Nova Player] Failed to load project after ${totalTime}ms:`, err);
     }
     return { success: false, templates: [], layers: [] };
-  }, [setDesignerLayers, setDesignerTemplates, setDesignerElements]);
+  }, [setDesignerLayers, setDesignerTemplates, setDesignerElements, setDesignerAnimations, setDesignerKeyframes, setDesignerProject]);
 
 
   // Helper to resolve layerIndex to layerId (Pulsar GFX uses numeric indices)
@@ -637,17 +736,18 @@ export function NovaPlayer() {
               data_source_config: null,
             };
 
+            // Track what was updated for designer store sync (done outside setState to avoid render-phase updates)
+            let updatedTemplates: Template[] | null = null;
+            let updatedElements: Element[] | null = null;
+
             setTemplates(prev => {
               const exists = prev.some(t => t.id === templateId);
               if (!exists) {
                 console.log(`[Nova Player] Adding template to state:`, newTemplate.id);
-                const updated = [...prev, newTemplate];
-                // Sync to designer store for visual node runtime
-                setDesignerTemplates(updated);
-                return updated;
+                updatedTemplates = [...prev, newTemplate];
+                return updatedTemplates;
               }
-              // Also sync existing templates
-              setDesignerTemplates(prev);
+              updatedTemplates = prev;
               return prev;
             });
 
@@ -660,10 +760,14 @@ export function NovaPlayer() {
                 ...el,
                 template_id: templateId,
               }));
-              const updated = [...otherElements, ...newElements];
-              // Sync to designer store for visual node runtime
-              setDesignerElements(updated);
-              return updated;
+              updatedElements = [...otherElements, ...newElements];
+              return updatedElements;
+            });
+
+            // Sync to designer store AFTER state updates (deferred to avoid render-phase issues)
+            queueMicrotask(() => {
+              if (updatedTemplates) setDesignerTemplates(updatedTemplates);
+              if (updatedElements) setDesignerElements(updatedElements);
             });
 
             // Merge embedded animations if present
@@ -695,17 +799,36 @@ export function NovaPlayer() {
             layerId = resolveLayerId(cmd.layerIndex, loadedLayersRef.current);
           }
 
-          // Background load project data for future use (non-blocking)
-          // Only if we don't have embedded data or need layer resolution
-          if (cmd.template.projectId && (!hasEmbeddedData || !layerId)) {
-            // Fire and forget - don't await
-            loadProject(cmd.template.projectId).then(result => {
-              if (!layerId && result.layers.length > 0 && cmd.layerIndex !== undefined) {
-                // Late resolution - template may have already started playing
-                console.log(`[Nova Player] Late layer resolution from loaded project`);
+          // Generate unique instance ID for this play command (moved up for use in load callback)
+          const newInstanceId = crypto.randomUUID();
+
+          // Background load project data (bindings, endpoint data) for future use
+          // This is non-blocking and ensures data is available for subsequent plays
+          // IMPORTANT: Always load project even if we have embedded data - we need bindings/endpoint data
+          if (cmd.template.projectId && loadedProjectIdRef.current !== cmd.template.projectId) {
+            console.log(`[Nova Player] Starting background project load for ${cmd.template.projectId}`);
+            const loadPromise = loadProject(cmd.template.projectId);
+            projectLoadPromiseRef.current = loadPromise;
+            loadPromise.then(() => {
+              console.log(`[Nova Player] Background project load complete: ${loadedBindingsRef.current.length} bindings, ${loadedDataPayloadRef.current?.length || 0} data records`);
+              // Update instance binding data now that we have the data
+              const projectBindings = loadedBindingsRef.current;
+              const templateBindings = projectBindings.filter(b => b.template_id === templateId);
+              const projectData = loadedDataPayloadRef.current;
+              const effectiveRecord = projectData && projectData.length > 0 ? projectData[0] : null;
+              if (templateBindings.length > 0 || effectiveRecord) {
+                console.log(`[Nova Player] Late-updating binding data for instance ${newInstanceId.slice(0,8)}: ${templateBindings.length} bindings, record: ${!!effectiveRecord}`);
+                setInstanceBindingData(prev => {
+                  const next = new Map(prev);
+                  next.set(newInstanceId, {
+                    bindings: templateBindings as Binding[],
+                    currentRecord: effectiveRecord,
+                  });
+                  return next;
+                });
               }
             }).catch(err => {
-              console.warn(`[Nova Player] Background project load failed (non-critical):`, err);
+              console.warn(`[Nova Player] Background project load failed:`, err);
             });
           }
 
@@ -719,9 +842,6 @@ export function NovaPlayer() {
           console.log(`[Nova Player] Current layerTemplates size:`, layerTemplates.size);
           console.log(`[Nova Player] Elements count:`, elements.length);
 
-          // Generate unique instance ID for this play command
-          const newInstanceId = crypto.randomUUID();
-
           // Prepare embedded elements for direct use (bypasses React state timing)
           const embeddedElementsForInstance = hasEmbeddedData ? cmd.template.elements!.map((el: any) => ({
             ...el,
@@ -730,29 +850,48 @@ export function NovaPlayer() {
           const embeddedAnimationsForInstance = cmd.template.animations as Animation[] | undefined;
           const embeddedKeyframesForInstance = cmd.template.keyframes as Keyframe[] | undefined;
 
+          // If project data is loading, wait briefly for it (max 500ms to keep animation responsive)
+          // This ensures bindings have data available for resolution without blocking too long
+          const noDataYet = loadedDataPayloadRef.current === null;
+          const cmdRecord = cmd.currentRecord || null;
+          if (noDataYet && !cmdRecord && projectLoadPromiseRef.current) {
+            console.log('[Nova Player] Waiting briefly for project data (max 500ms)...');
+            try {
+              await Promise.race([
+                projectLoadPromiseRef.current,
+                new Promise(resolve => setTimeout(resolve, 500)) // Don't reject, just continue
+              ]);
+              if (loadedDataPayloadRef.current) {
+                console.log('[Nova Player] Project data ready, bindings:', loadedBindingsRef.current.length, 'data records:', loadedDataPayloadRef.current.length);
+              } else {
+                console.log('[Nova Player] Continuing without data (will update when ready)');
+              }
+            } catch (err) {
+              console.warn('[Nova Player] Error waiting for project data:', err);
+            }
+          }
+
+          // Calculate effective bindings and record BEFORE setLayerTemplates
+          // This ensures binding data is available immediately for rendering
+          const cmdBindings = cmd.bindings || [];
+          const projectBindings = loadedBindingsRef.current.length > 0 ? loadedBindingsRef.current : bindings;
+          const templateBindingsFromProject = projectBindings.filter(b => b.template_id === templateId);
+          const effectiveBindings = cmdBindings.length > 0 ? cmdBindings : templateBindingsFromProject;
+          const projectData = loadedDataPayloadRef.current || projectDataPayload;
+          const effectiveRecord = cmd.currentRecord || (projectData && projectData.length > 0 ? projectData[0] : null);
+
           if (layerId) {
             // Layer-based animated switching
             setLayerTemplates(prev => {
-              console.log(`[Nova Player] setLayerTemplates called for layer ${layerId}, prev size:`, prev.size);
-              console.log(`[Nova Player] Prev entries:`, Array.from(prev.entries()).map(([lid, states]) =>
-                `${lid}: [${states.map(s => `${s.templateId}(${s.phase}, outgoing=${s.isOutgoing}, instance=${s.instanceId?.slice(0,8)})`).join(', ')}]`
-              ));
-
               const next = new Map(prev);
               const existingStates = next.get(layerId!) || [];
-              console.log(`[Nova Player] Existing states for layer ${layerId}:`, existingStates.length,
-                existingStates.map(s => `${s.templateId}(${s.phase}, outgoing=${s.isOutgoing})`));
 
               // Check if there's already a template playing on this layer (not outgoing)
               const currentTemplate = existingStates.find(s => !s.isOutgoing && s.phase !== 'out');
-              console.log(`[Nova Player] Current template on layer:`, currentTemplate
-                ? `${currentTemplate.templateId} (phase=${currentTemplate.phase})`
-                : 'none');
 
               if (currentTemplate) {
                 // Template already playing - animate it OUT while new one comes IN
                 // This works for BOTH different templates AND same template with new payload
-                console.log(`[Nova Player] *** ANIMATED SWITCH *** on layer ${layerId}: ${currentTemplate.templateId} -> ${templateId} (new instance)`);
 
                 // Mark existing template as outgoing and start its OUT animation
                 const outgoingState: LayerTemplateState = {
@@ -775,12 +914,14 @@ export function NovaPlayer() {
                   embeddedElements: embeddedElementsForInstance,
                   embeddedAnimations: embeddedAnimationsForInstance,
                   embeddedKeyframes: embeddedKeyframesForInstance,
+                  // Store binding data directly for immediate resolution (bypasses React state timing)
+                  embeddedBindings: effectiveBindings as Binding[],
+                  embeddedRecord: effectiveRecord,
                 };
 
                 next.set(layerId!, [outgoingState, incomingState]);
               } else {
                 // No template currently playing - just add the new one
-                console.log(`[Nova Player] No current template on layer ${layerId} - adding ${templateId}`);
                 next.set(layerId!, [{
                   templateId,
                   instanceId: newInstanceId,
@@ -792,10 +933,12 @@ export function NovaPlayer() {
                   embeddedElements: embeddedElementsForInstance,
                   embeddedAnimations: embeddedAnimationsForInstance,
                   embeddedKeyframes: embeddedKeyframesForInstance,
+                  // Store binding data directly for immediate resolution (bypasses React state timing)
+                  embeddedBindings: effectiveBindings as Binding[],
+                  embeddedRecord: effectiveRecord,
                 }]);
               }
 
-              console.log(`[Nova Player] setLayerTemplates result, next size:`, next.size, 'entries:', Array.from(next.entries()));
               return next;
             });
           } else {
@@ -817,6 +960,9 @@ export function NovaPlayer() {
                 embeddedElements: embeddedElementsForInstance,
                 embeddedAnimations: embeddedAnimationsForInstance,
                 embeddedKeyframes: embeddedKeyframesForInstance,
+                // Store binding data directly for immediate resolution (bypasses React state timing)
+                embeddedBindings: effectiveBindings as Binding[],
+                embeddedRecord: effectiveRecord,
               }]);
               console.log(`[Nova Player] Using fallback layer for template ${templateId}`);
               return next;
@@ -835,20 +981,13 @@ export function NovaPlayer() {
             });
           }
 
-          // Store bindings and current record for runtime resolution
-          console.log('[Nova Player] Checking bindings in command:', {
-            hasBindings: !!cmd.bindings,
-            bindingsCount: cmd.bindings?.length || 0,
-            hasCurrentRecord: !!cmd.currentRecord,
-            currentRecord: cmd.currentRecord,
-          });
-          if (cmd.bindings || cmd.currentRecord) {
-            console.log('[Nova Player] Storing binding data for instance:', newInstanceId);
+          // Also store in instanceBindingData for fallback (in case embedded data isn't used)
+          if (effectiveBindings.length > 0 || effectiveRecord) {
             setInstanceBindingData(prev => {
               const next = new Map(prev);
               next.set(newInstanceId, {
-                bindings: (cmd.bindings || []) as Binding[],
-                currentRecord: cmd.currentRecord || null,
+                bindings: effectiveBindings as Binding[],
+                currentRecord: effectiveRecord,
               });
               return next;
             });
@@ -885,20 +1024,10 @@ export function NovaPlayer() {
         const loadInstanceId = crypto.randomUUID();
         const templateId = cmd.template?.id;
 
-        // CRITICAL DEBUG: Log everything about the command
-        console.log('[Nova Player] === LOAD COMMAND START ===');
-        console.log('[Nova Player] instanceId:', loadInstanceId);
-        console.log('[Nova Player] templateId:', templateId);
-        console.log('[Nova Player] cmd.bindings exists:', !!cmd.bindings, 'length:', cmd.bindings?.length);
-        console.log('[Nova Player] cmd.currentRecord exists:', !!cmd.currentRecord);
-        console.log('[Nova Player] cmd.template.elements:', cmd.template?.elements?.length || 0);
-        console.log('[Nova Player] cmd keys:', Object.keys(cmd));
-
         // MERGE EMBEDDED DATA: Use embedded command data if available (same as play command)
         const hasEmbeddedData = cmd.template?.elements && cmd.template.elements.length > 0;
         if (hasEmbeddedData && templateId) {
           const embeddedElements = cmd.template!.elements!;
-          console.log(`[Nova Player] LOAD: Using embedded command data (${embeddedElements.length} elements)`);
 
           // Add/update the template in templates state
           const newTemplate: Template = {
@@ -932,15 +1061,17 @@ export function NovaPlayer() {
             data_source_config: null,
           };
 
+          // Track what was updated for designer store sync (done outside setState to avoid render-phase updates)
+          let loadUpdatedTemplates: Template[] | null = null;
+          let loadUpdatedElements: Element[] | null = null;
+
           setTemplates(prev => {
             const exists = prev.some(t => t.id === templateId);
             if (!exists) {
-              console.log(`[Nova Player] LOAD: Adding template to state:`, templateId);
-              const updated = [...prev, newTemplate];
-              setDesignerTemplates(updated);
-              return updated;
+              loadUpdatedTemplates = [...prev, newTemplate];
+              return loadUpdatedTemplates;
             }
-            setDesignerTemplates(prev);
+            loadUpdatedTemplates = prev;
             return prev;
           });
 
@@ -951,10 +1082,14 @@ export function NovaPlayer() {
               ...el,
               template_id: templateId,
             }));
-            console.log(`[Nova Player] LOAD: Merging ${newElements.length} embedded elements`);
-            const updated = [...otherElements, ...newElements];
-            setDesignerElements(updated);
-            return updated;
+            loadUpdatedElements = [...otherElements, ...newElements];
+            return loadUpdatedElements;
+          });
+
+          // Sync to designer store AFTER state updates (use queueMicrotask to avoid render-phase issues)
+          queueMicrotask(() => {
+            if (loadUpdatedTemplates) setDesignerTemplates(loadUpdatedTemplates);
+            if (loadUpdatedElements) setDesignerElements(loadUpdatedElements);
           });
 
           // Merge embedded animations if present
@@ -979,31 +1114,22 @@ export function NovaPlayer() {
         }
 
         // Load project in background - don't await since we have embedded data
-        // The await was causing the rest of the handler to not run properly
-        console.log('[Nova Player] LOAD: About to check project loading...');
         if (cmd.template?.projectId) {
-          console.log('[Nova Player] LOAD: Project ID exists, starting background load...');
           if (!project || project.id !== cmd.template.projectId) {
             // Fire and forget - don't block on project load since we have embedded data
-            loadProject(cmd.template.projectId).then(() => {
-              console.log('[Nova Player] LOAD: Background project load completed');
-            }).catch(err => {
+            loadProject(cmd.template.projectId).catch(err => {
               console.warn('[Nova Player] LOAD: Background project load failed:', err);
             });
           }
         }
-        console.log('[Nova Player] LOAD: Continuing after project check...');
 
         // Set current template
-        console.log('[Nova Player] LOAD: Setting current template...');
         if (templateId) {
           setCurrentTemplateId(templateId);
         }
 
         // Store payload per-instance
-        console.log('[Nova Player] LOAD: Checking payload...', !!cmd.payload, 'keys:', cmd.payload ? Object.keys(cmd.payload).length : 0);
         if (cmd.payload) {
-          console.log('[Nova Player] Storing payload for load instance:', loadInstanceId, 'payload sample keys:', Object.keys(cmd.payload).slice(0, 5));
           setInstanceOverrides(prev => {
             const next = new Map(prev);
             next.set(loadInstanceId, cmd.payload!);
@@ -1012,17 +1138,32 @@ export function NovaPlayer() {
         }
 
         // Store bindings and current record for runtime resolution
-        console.log('[Nova Player] LOAD: Checking bindings...', !!cmd.bindings, !!cmd.currentRecord);
-        if (cmd.bindings || cmd.currentRecord) {
-          console.log('[Nova Player] Storing binding data for load instance:', loadInstanceId, {
-            bindingsCount: cmd.bindings?.length || 0,
-            hasCurrentRecord: !!cmd.currentRecord,
-          });
+        // Use command bindings if provided, otherwise fall back to project-level bindings
+        const cmdBindingsLoad = cmd.bindings || [];
+        const cmdRecordLoad = cmd.currentRecord || null;
+
+        // If no bindings/data available yet and there's a pending project load, wait for it
+        const noBindingsYetLoad = loadedBindingsRef.current.length === 0;
+        const noDataYetLoad = loadedDataPayloadRef.current === null;
+        if (noBindingsYetLoad && noDataYetLoad && projectLoadPromiseRef.current) {
+          await projectLoadPromiseRef.current;
+        }
+
+        // If no bindings in command, try to use project-level bindings loaded during initialize
+        const projectBindingsLoad = loadedBindingsRef.current.length > 0 ? loadedBindingsRef.current : bindings;
+        const templateBindingsFromProjectLoad = projectBindingsLoad.filter(b => b.template_id === templateId);
+        const effectiveBindingsLoad = cmdBindingsLoad.length > 0 ? cmdBindingsLoad : templateBindingsFromProjectLoad;
+
+        // If no current record in command, use first record from projectDataPayload
+        const projectDataLoad = loadedDataPayloadRef.current || projectDataPayload;
+        const effectiveRecordLoad = cmdRecordLoad || (projectDataLoad && projectDataLoad.length > 0 ? projectDataLoad[0] : null);
+
+        if (effectiveBindingsLoad.length > 0 || effectiveRecordLoad) {
           setInstanceBindingData(prev => {
             const next = new Map(prev);
             next.set(loadInstanceId, {
-              bindings: (cmd.bindings || []) as Binding[],
-              currentRecord: cmd.currentRecord || null,
+              bindings: effectiveBindingsLoad as Binding[],
+              currentRecord: effectiveRecordLoad,
             });
             return next;
           });
@@ -1038,13 +1179,6 @@ export function NovaPlayer() {
             ...el,
             template_id: templateId,
           })) as Element[] : undefined;
-
-          console.log('[Nova Player] Adding loaded template to layerTemplates:', {
-            templateId,
-            instanceId: loadInstanceId,
-            layerId: targetLayerId,
-            embeddedElementCount: embeddedElements?.length || 0,
-          });
 
           setLayerTemplates(prev => {
             const next = new Map(prev);
@@ -1065,10 +1199,8 @@ export function NovaPlayer() {
 
         // Handle interactive mode from command
         if (cmd.interactive_enabled) {
-          console.log('[Nova Player] Enabling interactive mode from load command');
           enableInteractiveMode();
           if (cmd.interactive_config?.visualNodes && cmd.interactive_config?.visualEdges) {
-            console.log('[Nova Player] Setting visual nodes from command:', cmd.interactive_config.visualNodes.length, 'nodes');
             setVisualNodes(cmd.interactive_config.visualNodes, cmd.interactive_config.visualEdges);
           }
         }
@@ -1198,19 +1330,30 @@ export function NovaPlayer() {
         setCurrentPhase('in');
         setPlayheadPosition(0);
         setLayerTemplates(new Map());
+        // Reset cached refs for fresh project load
+        loadedProjectIdRef.current = null;
+        loadedLayersRef.current = [];
+        loadedTemplatesRef.current = [];
+        loadedBindingsRef.current = [];
+        loadedDataPayloadRef.current = null;
+        projectLoadPromiseRef.current = null;
 
         // Load the project data if projectId is provided
+        // Store the promise so play commands can wait for it if they arrive before load completes
         if (cmd.projectId) {
           console.log(`[Nova Player] Initialize: Loading project ${cmd.projectId}`);
-          loadProject(cmd.projectId).then(() => {
-            console.log(`[Nova Player] Initialize: Project loaded successfully`);
+          const loadPromise = loadProject(cmd.projectId);
+          projectLoadPromiseRef.current = loadPromise;
+
+          loadPromise.then(() => {
+            console.log(`[Nova Player] Initialize: Project loaded successfully, bindings:`, loadedBindingsRef.current.length, 'data records:', loadedDataPayloadRef.current?.length || 0);
           }).catch(err => {
             console.error(`[Nova Player] Initialize: Failed to load project:`, err);
           });
         }
         break;
     }
-  }, [isOnAir, loadProject, layerTemplates, resolveLayerId, currentTemplateId]);
+  }, [isOnAir, loadProject, layerTemplates, resolveLayerId, currentTemplateId, bindings, projectDataPayload]);
 
   // Ref to track current handleCommand to avoid stale closures in subscription
   const handleCommandRef = useRef(handleCommand);
@@ -1388,10 +1531,6 @@ export function NovaPlayer() {
           const cmdId = stateData.pending_command.id;
           const cmd = stateData.pending_command;
           console.log(`[Nova Player] Processing initial pending command (id: ${cmdId?.slice(0, 8)}):`, cmd.type);
-          const bindingsCount = Array.isArray(cmd.bindings) ? cmd.bindings.length : 0;
-          const hasCurrentRecord = !!cmd.currentRecord;
-          const recordKeys = cmd.currentRecord ? Object.keys(cmd.currentRecord) : [];
-          console.log(`[Nova Player] Initial command bindings: hasBindings=${bindingsCount > 0}, count=${bindingsCount}, hasRecord=${hasCurrentRecord}, recordKeys=${recordKeys.slice(0, 5).join(',')}`);
           if (cmdId) lastProcessedCommandId = cmdId;
           handleCommandRef.current(stateData.pending_command);
         }
@@ -1658,27 +1797,19 @@ export function NovaPlayer() {
   // Apply content overrides to elements for a specific instance
   // This function allows each instance to have its own payload data
   // Also resolves bindings using the instance's current data record
-  const applyInstanceOverrides = useCallback((elements: Element[], instanceId: string): Element[] => {
+  const applyInstanceOverrides = useCallback((
+    elements: Element[],
+    instanceId: string,
+    embeddedBindings?: Binding[],
+    embeddedRecord?: Record<string, unknown> | null
+  ): Element[] => {
     const overrides = instanceOverrides.get(instanceId);
-    const bindingData = instanceBindingData.get(instanceId);
+    // Try embedded bindings first (from LayerTemplateState), then fall back to instanceBindingData
+    const stateBindingData = instanceBindingData.get(instanceId);
+    const bindingData = (embeddedBindings && embeddedBindings.length > 0)
+      ? { bindings: embeddedBindings, currentRecord: embeddedRecord || null }
+      : stateBindingData;
 
-    // Debug: Log binding data availability and element ID matching
-    if (bindingData) {
-      const elementIds = new Set(elements.map(e => e.id));
-      const bindingElementIds = bindingData.bindings?.map(b => b.element_id) || [];
-      const matchingBindings = bindingElementIds.filter(id => elementIds.has(id));
-      console.log('[Nova Player] applyInstanceOverrides: bindingData available', {
-        instanceId: instanceId.slice(0, 8),
-        bindingsCount: bindingData.bindings?.length || 0,
-        hasCurrentRecord: !!bindingData.currentRecord,
-        elementsCount: elements.length,
-        elementIdsSample: Array.from(elementIds).slice(0, 3),
-        bindingElementIdsSample: bindingElementIds.slice(0, 3),
-        matchingBindingsCount: matchingBindings.length,
-        // This is critical - if 0, bindings won't be applied!
-        willApplyBindings: matchingBindings.length > 0,
-      });
-    }
 
     return elements.map(element => {
       let updatedElement = element;
@@ -1688,12 +1819,6 @@ export function NovaPlayer() {
         const binding = bindingData.bindings.find(b => b.element_id === element.id);
         if (binding) {
           const boundValue = getBoundValue(binding, bindingData.currentRecord);
-          console.log('[Nova Player] Binding resolution:', {
-            elementId: element.id,
-            elementName: element.name,
-            bindingKey: binding.binding_key,
-            boundValue,
-          });
           if (boundValue !== undefined && boundValue !== null) {
             const valueStr = String(boundValue);
             if (element.content?.type === 'text') {
@@ -1715,14 +1840,11 @@ export function NovaPlayer() {
       if (updatedElement.content?.type === 'text' && bindingData?.currentRecord) {
         const text = updatedElement.content.text;
         if (text && typeof text === 'string' && text.includes('{{')) {
-          console.log('[Nova Player] Resolving placeholder:', { elementName: element.name, text });
           const resolvedText = text.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
             const value = getNestedValue(bindingData.currentRecord!, path.trim());
-            console.log('[Nova Player] Placeholder path:', path.trim(), '-> value:', value);
             return value !== undefined && value !== null ? String(value) : match;
           });
           if (resolvedText !== text) {
-            console.log('[Nova Player] Resolved text:', resolvedText);
             updatedElement = {
               ...updatedElement,
               content: { ...updatedElement.content, text: resolvedText },
@@ -1733,32 +1855,14 @@ export function NovaPlayer() {
 
       // Then apply payload overrides (these take priority over binding resolution)
       if (overrides && Object.keys(overrides).length > 0) {
-        const overrideKeys = Object.keys(overrides);
-        const hasMatch = overrideKeys.includes(element.id) || (element.name && overrideKeys.includes(element.name));
-        console.log('[Nova Player] Payload override check:', {
-          elementId: element.id,
-          elementName: element.name,
-          hasMatch,
-          sampleOverrideKeys: overrideKeys.slice(0, 3),
-          totalOverrideKeys: overrideKeys.length,
-        });
         // Check by ID
         if (overrides[element.id] !== undefined) {
           const override = overrides[element.id];
-          console.log('[Nova Player] Found payload override by ID:', element.id, '->', override);
           if (element.content?.type === 'text') {
-            const oldText = (updatedElement.content as any).text;
             updatedElement = {
               ...updatedElement,
               content: { ...updatedElement.content, text: override },
             } as Element;
-            console.log('[Nova Player] TEXT OVERRIDE APPLIED:', {
-              elementId: element.id,
-              elementName: element.name,
-              oldText,
-              newText: override,
-              verifyNewContent: (updatedElement.content as any).text,
-            });
           } else if (element.content?.type === 'image') {
             updatedElement = {
               ...updatedElement,
@@ -1806,15 +1910,6 @@ export function NovaPlayer() {
         }
       }
 
-      // Final log for text elements to trace resolved content
-      if (updatedElement.content?.type === 'text' && updatedElement !== element) {
-        console.log('[Nova Player] FINAL resolved content:', {
-          elementId: element.id,
-          elementName: element.name,
-          originalText: (element.content as { type: 'text'; text?: string }).text,
-          resolvedText: (updatedElement.content as { type: 'text'; text?: string }).text,
-        });
-      }
 
       return updatedElement;
     });
@@ -1861,14 +1956,6 @@ export function NovaPlayer() {
         instances.push(state);
       }
     }
-    // Enhanced debug: log embedded elements status for each instance
-    console.log('[Nova Player] activeInstances computed:', instances.length, 'instances:', instances.map(i => ({
-      templateId: i.templateId,
-      phase: i.phase,
-      instanceId: i.instanceId?.slice(0, 8),
-      hasEmbeddedElements: !!i.embeddedElements,
-      embeddedCount: i.embeddedElements?.length || 0,
-    })));
     return instances;
   }, [layerTemplates]);
 
@@ -2021,11 +2108,6 @@ export function NovaPlayer() {
             const templateMaxDuration = getDuration(state.templateId, state.phase);
             const newPosition = state.playheadPosition + delta;
 
-            // Log state during OUT animation for debugging
-            if (state.phase === 'out' || state.isOutgoing) {
-              console.log(`[Nova Player] OUT animation: ${state.templateId} on layer ${layerId}: pos=${Math.round(newPosition)}/${templateMaxDuration}, outgoing=${state.isOutgoing}`);
-            }
-
             if (newPosition >= templateMaxDuration) {
               // Phase complete for this template
               if (state.phase === 'in') {
@@ -2037,7 +2119,6 @@ export function NovaPlayer() {
                   playheadPosition: 0,
                   lastTime: timestamp,
                 };
-                console.log('[Nova Player] Phase IN->LOOP transition, embeddedElements preserved:', !!newState.embeddedElements);
                 updatedStates.push(newState);
               } else if (state.phase === 'loop' && !state.isOutgoing) {
                 // Continue looping
@@ -2049,7 +2130,6 @@ export function NovaPlayer() {
               } else if (state.phase === 'out' || state.isOutgoing) {
                 // OUT complete - remove this template from the layer
                 hasChanges = true;
-                console.log(`[Nova Player] Template ${state.templateId} (instance ${state.instanceId}) finished OUT animation on layer ${layerId}`);
                 // Track for payload cleanup
                 finishedInstanceIds.push(state.instanceId);
                 // Don't add to updatedStates - effectively removes it
@@ -2063,10 +2143,10 @@ export function NovaPlayer() {
                 lastTime: timestamp,
               };
               // Verify embedded elements are preserved during animation
-              if (state.embeddedElements && !updatedState.embeddedElements) {
+              if (state.embeddedElements && !(updatedState as LayerTemplateState).embeddedElements) {
                 console.error('[Nova Player] BUG: embeddedElements lost during animation update!', {
                   stateHad: state.embeddedElements?.length,
-                  updatedHas: updatedState.embeddedElements?.length,
+                  updatedHas: (updatedState as LayerTemplateState).embeddedElements?.length,
                 });
               }
               updatedStates.push(updatedState);
@@ -2102,7 +2182,6 @@ export function NovaPlayer() {
           const next = new Map(prev);
           for (const instanceId of finishedInstanceIds) {
             next.delete(instanceId);
-            console.log(`[Nova Player] Cleaned up payload for finished instance: ${instanceId}`);
           }
           return next;
         });
@@ -2253,14 +2332,6 @@ export function NovaPlayer() {
           // Fall back to mergedElements from state if no embedded data
           const hasEmbeddedData = !!instance.embeddedElements && instance.embeddedElements.length > 0;
 
-          // DEBUG: Log the exact state of embeddedElements
-          if (!hasEmbeddedData) {
-            console.log('[Nova Player] WARNING: No embedded data for instance', {
-              instanceId: instance.instanceId.slice(0, 8),
-              embeddedElements: instance.embeddedElements,
-              instanceKeys: Object.keys(instance),
-            });
-          }
           const sourceElements: Element[] = hasEmbeddedData ? instance.embeddedElements! : mergedElements;
           const sourceAnimations: Animation[] = instance.embeddedAnimations || mergedAnimations;
           const sourceKeyframes: Keyframe[] = instance.embeddedKeyframes || mergedKeyframes;
@@ -2282,52 +2353,22 @@ export function NovaPlayer() {
                      !e.parent_element_id
               );
 
-          // Debug: log what elements we found for this instance
-          const instanceBindingInfo = instanceBindingData.get(instance.instanceId);
-          const instanceOverrideInfo = instanceOverrides.get(instance.instanceId);
-
-          // DEBUG: Check why only 1 element is being found
-          const withParent = sourceElements.filter(e => e.parent_element_id);
-          const withoutParent = sourceElements.filter(e => !e.parent_element_id);
-          const invisible = sourceElements.filter(e => e.visible === false);
-
-          console.log('[Nova Player] Element matching debug:', {
-            resolvedTemplateId,
-            hasEmbeddedData,
-            instanceHasEmbeddedElements: 'embeddedElements' in instance,
-            embeddedCount: instance.embeddedElements?.length || 0,
-            sourceElementCount: sourceElements.length,
-            templateElementsFound: templateElements.length,
-            instanceId: instance.instanceId.slice(0, 8),
-            // Why are elements being filtered out?
-            withParentCount: withParent.length,
-            withoutParentCount: withoutParent.length,
-            invisibleCount: invisible.length,
-            // Sample of source elements
-            sampleSourceElements: sourceElements.slice(0, 3).map(e => ({
-              id: e.id?.slice(0, 8),
-              name: e.name,
-              parent_element_id: e.parent_element_id,
-              visible: e.visible,
-            })),
-            // Binding/override status for this instance
-            hasBindingData: !!instanceBindingInfo,
-            bindingsCount: instanceBindingInfo?.bindings?.length || 0,
-            hasCurrentRecord: !!instanceBindingInfo?.currentRecord,
-            hasPayloadOverrides: !!instanceOverrideInfo,
-            payloadOverrideCount: instanceOverrideInfo ? Object.keys(instanceOverrideInfo).length : 0,
-          });
-
-          if (templateElements.length === 0) {
-            console.warn('[Nova Player] ⚠️ No elements found for template:', instance.templateId, '(resolved:', resolvedTemplateId, ')');
-          } else {
-            console.log('[Nova Player] Rendering instance:', resolvedTemplateId, 'with', templateElements.length, 'elements (from', hasEmbeddedData ? 'embedded' : 'state', ')');
-          }
 
           // Apply this instance's payload overrides (each instance has its own payload data)
-          const instanceElements = applyInstanceOverrides(templateElements, instance.instanceId);
+          // Pass embedded binding data from LayerTemplateState for immediate resolution
+          const instanceElements = applyInstanceOverrides(
+            templateElements,
+            instance.instanceId,
+            instance.embeddedBindings,
+            instance.embeddedRecord
+          );
           // Also apply overrides to allElements for child element lookups
-          const allElementsForInstance = applyInstanceOverrides(sourceElements, instance.instanceId);
+          const allElementsForInstance = applyInstanceOverrides(
+            sourceElements,
+            instance.instanceId,
+            instance.embeddedBindings,
+            instance.embeddedRecord
+          );
 
           return instanceElements
             .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
@@ -2489,11 +2530,6 @@ function PlayerElement({
   };
 
   const renderContent = () => {
-    // Debug logging for text elements - show the actual text being rendered
-    if (element.content?.type === 'text') {
-      console.log(`[Nova Player] renderContent TEXT: "${element.name}" = "${element.content.text}"`);
-    }
-
     switch (element.content.type) {
       case 'text': {
         const textContent = element.content;
@@ -2987,15 +3023,6 @@ function PlayerElement({
         );
 
       case 'interactive':
-        console.log('[Nova Player] Rendering InteractiveElement:', {
-          elementId: element.id,
-          isInteractiveMode,
-          isPreview: !isInteractiveMode,
-          hasInteractions: !!element.interactions,
-          hasHandlers: !!element.interactions?.handlers,
-          handlers: element.interactions?.handlers,
-          inputType: (element.content as any)?.type || (element.content as any)?.inputType
-        });
         return (
           <InteractiveElement
             config={element.content}
@@ -3023,11 +3050,6 @@ function PlayerElement({
     // Stop propagation so parent elements don't also trigger
     e.stopPropagation();
 
-    console.log('[Nova Player] Element clicked:', {
-      elementId: element.id,
-      elementName: element.name,
-      contentType: element.content?.type
-    });
 
     onElementClick(element.id, element.name);
   }, [isInteractiveMode, onElementClick, element.id, element.name, element.content?.type]);

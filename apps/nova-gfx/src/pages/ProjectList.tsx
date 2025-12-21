@@ -66,7 +66,7 @@ import { AIModelSettingsDialog } from '@/components/dialogs/AIModelSettingsDialo
 import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { SystemTemplatesDialog } from '@/components/dialogs/SystemTemplatesDialog';
 import { TopBar } from '@/components/layout/TopBar';
-import { directRestSelect, supabase } from '@emergent-platform/supabase-client';
+import { directRestSelect, supabase, ensureFreshConnection } from '@emergent-platform/supabase-client';
 import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
@@ -125,6 +125,14 @@ export function ProjectList() {
   const loadProjects = async () => {
     console.log('[ProjectList] Loading projects...');
     setIsLoading(true);
+
+    // Force fresh connection before loading projects to prevent stale connections
+    try {
+      await ensureFreshConnection(true);
+    } catch (err) {
+      console.warn('[ProjectList] Failed to ensure fresh connection:', err);
+    }
+
     try {
       // First, load localStorage projects
       const localProjects: Project[] = [];
@@ -149,14 +157,10 @@ export function ProjectList() {
 
       if (supabase) {
         try {
-          // Use Supabase client with joins to get updater/creator info
+          // Load projects without user joins - PostgREST schema cache may not have FK relationships
           let query = supabase
             .from('gfx_projects')
-            .select(`
-              *,
-              updater:updated_by(id, email, full_name, avatar_url),
-              creator:created_by(id, email, full_name, avatar_url)
-            `)
+            .select('*')
             .eq('archived', false)
             .order('updated_at', { ascending: false });
 
@@ -170,8 +174,10 @@ export function ProjectList() {
             console.error('[ProjectList] Supabase query error:', error.message);
             loadError = error.message;
           } else {
-            supabaseProjects = (data || []) as Project[];
-            console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase with user info');
+            // Double-check filter in case DB query didn't work
+            supabaseProjects = (data || []).filter((p: any) => p.archived !== true) as Project[];
+            console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase');
+            console.log('[ProjectList] Project names:', supabaseProjects.map(p => p.name));
           }
         } catch (err: any) {
           console.error('[ProjectList] Supabase client error:', err);
@@ -203,7 +209,8 @@ export function ProjectList() {
         projectMap.set(p.id, p);
       });
 
-      // Then, overlay localStorage projects (they take priority but preserve Supabase data)
+      // Then, overlay localStorage projects ONLY if they exist in Supabase
+      // This prevents showing deleted/archived projects that are still in localStorage
       localProjects.forEach(localProject => {
         const existingProject = projectMap.get(localProject.id);
         if (existingProject) {
@@ -214,9 +221,8 @@ export function ProjectList() {
             updater: (existingProject as any).updater,
             creator: (existingProject as any).creator,
           });
-        } else {
-          projectMap.set(localProject.id, localProject);
         }
+        // Don't add localStorage-only projects - they may have been deleted from DB
       });
 
       // Convert map to array and sort by updated_at
@@ -275,12 +281,16 @@ export function ProjectList() {
   const deleteProject = async () => {
     if (!projectToDelete) return;
 
+    const idToDelete = projectToDelete;
+
     try {
       const { deleteProject: deleteProjectService } = await import('@/services/projectService');
-      const success = await deleteProjectService(projectToDelete);
+      const success = await deleteProjectService(idToDelete);
 
       if (success) {
-        setProjects(projects.filter(p => p.id !== projectToDelete));
+        // Use functional update to avoid stale closure
+        setProjects(prev => prev.filter(p => p.id !== idToDelete));
+        console.log('[ProjectList] Project removed from UI:', idToDelete);
       } else {
         console.error('Failed to delete project');
       }
@@ -666,18 +676,8 @@ function ProjectListRow({ project, onClick, onPreview, onPublish, onControl, onD
   const hue = colorHash % 360;
   const avatarColor = `hsl(${hue}, 60%, 45%)`;
 
-  // Get updater display name (fall back to creator if no updater)
-  const updaterName = (() => {
-    const updater = (project as any).updater;
-    const creator = (project as any).creator;
-    const user = updater || creator;
-    if (!user) return '—';
-    if (user.full_name) {
-      return user.full_name;
-    }
-    // Fall back to email username
-    return user.email?.split('@')[0] || '—';
-  })();
+  // Get updater display name - simplified since we're not joining user data
+  const updaterName = '—';
 
   return (
     <div
@@ -832,18 +832,8 @@ function ProjectCard({ project, onClick, onPreview, onPublish, onControl, onDupl
 
   const hasThumbnail = !!project.thumbnail_url;
 
-  // Get updater display name (fall back to creator if no updater)
-  const updaterName = (() => {
-    const updater = (project as any).updater;
-    const creator = (project as any).creator;
-    const user = updater || creator;
-    if (!user) return null;
-    if (user.full_name) {
-      return user.full_name;
-    }
-    // Fall back to email username
-    return user.email?.split('@')[0] || null;
-  })();
+  // Get updater display name - simplified since we're not joining user data
+  const updaterName: string | null = null;
 
   return (
     <div

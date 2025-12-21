@@ -12,11 +12,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
   Input,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
 } from '@emergent-platform/ui';
 import {
   Database,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Plus,
   X,
   Type,
@@ -26,6 +30,10 @@ import {
   Play,
   Pin,
   Settings,
+  RefreshCw,
+  Loader2,
+  Clock,
+  Check,
 } from 'lucide-react';
 import { useDesignerStore } from '@/stores/designerStore';
 import { AddDataModal } from '@/components/dialogs/AddDataModal';
@@ -44,10 +52,15 @@ export function DataBindingTab() {
   const {
     dataSourceId,
     dataSourceName,
+    dataSourceSlug,
     dataPayload,
     currentRecordIndex,
     dataDisplayField,
+    dataLastFetched,
+    dataLoading,
+    dataError,
     clearDataSource,
+    refreshDataSource,
     setCurrentRecordIndex,
     setDefaultRecordIndex,
     nextRecord,
@@ -115,32 +128,40 @@ export function DataBindingTab() {
   // Check if current record is the default
   const isCurrentDefault = currentRecordIndex === defaultRecordIndex;
 
-  // Get which element is bound to a specific field
-  const getBindingForField = (fieldPath: string) => {
-    return templateBindings.find((b) => b.binding_key === fieldPath);
+  // Get all bindings for a specific field (supports multiple elements bound to same field)
+  const getBindingsForField = (fieldPath: string) => {
+    return templateBindings.filter((b) => b.binding_key === fieldPath);
   };
 
-  // Handle binding a field to an element
-  const handleBindField = (fieldPath: string, elementId: string | null) => {
-    if (!currentTemplateId) return;
+  // Get array of element IDs bound to a specific field
+  const getBoundElementIds = (fieldPath: string): string[] => {
+    return getBindingsForField(fieldPath).map(b => b.element_id);
+  };
 
-    // First, remove any existing binding for this field
-    const existingBinding = getBindingForField(fieldPath);
+  // Handle toggling a binding for a field to an element (multi-select support)
+  const handleToggleBinding = (fieldPath: string, elementId: string) => {
+    if (!currentTemplateId || !elementId) return;
+
+    // Check if this element is already bound to this field
+    const existingBindings = getBindingsForField(fieldPath);
+    const existingBinding = existingBindings.find(b => b.element_id === elementId);
+
     if (existingBinding) {
+      // Already bound - remove this specific binding
       deleteBinding(existingBinding.id);
+      return;
     }
 
-    // If elementId is null or "none", just remove the binding
-    if (!elementId || elementId === 'none') return;
-
-    // Find the element to determine target property
+    // Not bound - add new binding for this element
     const element = elements.find((e) => e.id === elementId);
     if (!element) return;
 
     // Determine target property based on element type
     let targetProperty = 'content.text';
-    if (element.element_type === 'image' || element.element_type === 'icon' || element.element_type === 'svg') {
+    if (element.element_type === 'image' || element.element_type === 'svg') {
       targetProperty = 'content.src';
+    } else if (element.element_type === 'icon') {
+      targetProperty = 'content.iconName';
     } else if (element.element_type === 'lottie') {
       targetProperty = 'content.animationUrl';
     }
@@ -151,7 +172,8 @@ export function DataBindingTab() {
     if (field) {
       if (field.type === 'number') bindingType = 'number';
       else if (field.type === 'boolean') bindingType = 'boolean';
-      else if (element.element_type === 'image' || element.element_type === 'icon' || element.element_type === 'svg' || element.element_type === 'lottie') {
+      else if (element.element_type === 'image' || element.element_type === 'svg' || element.element_type === 'lottie') {
+        // Icons use text binding for iconName, not image
         bindingType = 'image';
       }
     }
@@ -208,10 +230,16 @@ export function DataBindingTab() {
 
   // Handle saving settings from modal
   const handleSaveSettings = useCallback((options: FormatterOptions) => {
-    if (!settingsBindingId) return;
+    console.log(`🔧 handleSaveSettings called:`, { settingsBindingId, options });
+    if (!settingsBindingId) {
+      console.warn(`🔧 No settingsBindingId, aborting save`);
+      return;
+    }
 
+    const formatterOptions = Object.keys(options).length > 0 ? options : null;
+    console.log(`🔧 Calling updateBinding with formatter_options:`, formatterOptions);
     updateBinding(settingsBindingId, {
-      formatter_options: Object.keys(options).length > 0 ? options : null,
+      formatter_options: formatterOptions,
     });
   }, [settingsBindingId, updateBinding]);
 
@@ -352,6 +380,18 @@ export function DataBindingTab() {
     );
   }
 
+  // Format "time ago" for last fetched
+  const getTimeAgo = (timestamp: number | null): string => {
+    if (!timestamp) return '';
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Data Source Header */}
@@ -359,24 +399,72 @@ export function DataBindingTab() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <Database className="w-4 h-4 text-primary flex-shrink-0" />
-            <span className="text-xs font-medium truncate">{dataSourceName}</span>
+            <div className="min-w-0">
+              <span className="text-xs font-medium truncate block">{dataSourceName}</span>
+              {dataSourceSlug && (
+                <span className="text-[9px] text-muted-foreground truncate block">
+                  /api/{dataSourceSlug}
+                </span>
+              )}
+            </div>
           </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={clearDataSource}
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Disconnect data source</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <div className="flex items-center gap-1">
+            {/* Refresh button - only show if we have a slug */}
+            {dataSourceSlug && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={refreshDataSource}
+                      disabled={dataLoading}
+                    >
+                      {dataLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {dataLoading ? 'Refreshing...' : 'Refresh data'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={clearDataSource}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Disconnect data source</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
+
+        {/* Last updated & error info */}
+        {(dataLastFetched || dataError) && (
+          <div className="flex items-center gap-2 text-[9px]">
+            {dataError ? (
+              <span className="text-destructive">{dataError}</span>
+            ) : dataLastFetched ? (
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                Updated {getTimeAgo(dataLastFetched)}
+              </span>
+            ) : null}
+          </div>
+        )}
 
         {/* Record Navigation */}
         <div className="flex items-center gap-1">
@@ -469,12 +557,15 @@ export function DataBindingTab() {
             <div className="space-y-1">
               {fields.map((field) => {
                 const value = currentRecord ? getNestedValue(currentRecord, field.path) : null;
-                const binding = getBindingForField(field.path);
-                const boundElementId = binding?.element_id || 'none';
-                const formatterOptions = (binding?.formatter_options || {}) as FormatterOptions;
-                const boundElement = binding ? elements.find(e => e.id === binding.element_id) : null;
-                const isTextBinding = boundElement?.element_type === 'text';
+                const boundElementIds = getBoundElementIds(field.path);
+                const fieldBindings = getBindingsForField(field.path);
                 const fieldAddress = buildDataAddress(field.path);
+
+                // Get the first binding for settings (when only one element is bound)
+                const firstBinding = fieldBindings[0];
+                const firstBoundElement = firstBinding ? elements.find(e => e.id === firstBinding.element_id) : null;
+                const isTextBinding = firstBoundElement?.element_type === 'text';
+                const formatterOptions = (firstBinding?.formatter_options || {}) as FormatterOptions;
 
                 return (
                   <AddressContextMenu
@@ -494,87 +585,139 @@ export function DataBindingTab() {
                           </div>
                         </div>
 
-                      {/* Element dropdown */}
-                      <Select
-                        value={boundElementId}
-                        onValueChange={(elementId) => handleBindField(field.path, elementId)}
-                      >
-                        <SelectTrigger className="h-6 w-[120px] text-[10px]">
-                          <SelectValue placeholder="Not bound" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">
-                            <span className="text-muted-foreground">Not bound</span>
-                          </SelectItem>
-                          {bindableElements.map((element) => (
-                            <SelectItem key={element.id} value={element.id}>
-                              <div className="flex items-center gap-1">
-                                {getElementIcon(element.element_type)}
-                                <span className="truncate">{element.name}</span>
+                        {/* Multi-select Element Dropdown */}
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <button className="h-6 min-w-[120px] max-w-[140px] px-2 flex items-center justify-between gap-1 text-[10px] border border-input rounded-md bg-background hover:bg-accent hover:text-accent-foreground transition-colors">
+                              <span className="truncate">
+                                {boundElementIds.length === 0 ? (
+                                  <span className="text-muted-foreground">Not bound</span>
+                                ) : boundElementIds.length === 1 ? (
+                                  <span className="flex items-center gap-1">
+                                    {getElementIcon(elements.find(e => e.id === boundElementIds[0])?.element_type || '')}
+                                    {elements.find(e => e.id === boundElementIds[0])?.name || 'Element'}
+                                  </span>
+                                ) : (
+                                  <span className="text-primary">{boundElementIds.length} elements</span>
+                                )}
+                              </span>
+                              <ChevronDown className="w-3 h-3 opacity-50 flex-shrink-0" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            className="w-[180px] p-1"
+                            align="end"
+                            onCloseAutoFocus={(e) => e.preventDefault()}
+                          >
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-0.5 pr-2">
+                                {bindableElements.map((element) => {
+                                  const isChecked = boundElementIds.includes(element.id);
+                                  return (
+                                    <button
+                                      key={element.id}
+                                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-[10px] rounded hover:bg-accent transition-colors ${
+                                        isChecked ? 'bg-accent/50' : ''
+                                      }`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleToggleBinding(field.path, element.id);
+                                      }}
+                                    >
+                                      <div className={`w-3.5 h-3.5 border rounded flex items-center justify-center ${
+                                        isChecked ? 'bg-primary border-primary' : 'border-input'
+                                      }`}>
+                                        {isChecked && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                                      </div>
+                                      {getElementIcon(element.element_type)}
+                                      <span className="truncate flex-1 text-left">{element.name}</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Prefix/Suffix + Settings button row - show when bound */}
-                    {binding && (
-                      <div className="flex items-center gap-1 pl-1 flex-wrap">
-                        {/* Prefix/Suffix - only for text bindings */}
-                        {isTextBinding && (
-                          <>
-                            <Input
-                              className="h-5 w-12 text-[10px] px-1"
-                              placeholder="prefix"
-                              value={formatterOptions.prefix || ''}
-                              onChange={(e) => handleUpdateFormatterOptions(binding.id, 'prefix', e.target.value)}
-                            />
-                            <span className="text-[9px] text-muted-foreground">+</span>
-                            <span className="text-[9px] text-primary font-mono truncate max-w-[60px]">{formatFieldValue(value)}</span>
-                            <span className="text-[9px] text-muted-foreground">+</span>
-                            <Input
-                              className="h-5 w-12 text-[10px] px-1"
-                              placeholder="suffix"
-                              value={formatterOptions.suffix || ''}
-                              onChange={(e) => handleUpdateFormatterOptions(binding.id, 'suffix', e.target.value)}
-                            />
-                          </>
-                        )}
-                        {/* Settings button - opens modal with all formatting options */}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                onClick={() => handleOpenSettings(binding.id, field.path, field.type)}
-                                className={`h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors ${
-                                  hasAdvancedSettings(formatterOptions)
-                                    ? 'text-violet-400'
-                                    : 'text-muted-foreground'
-                                }`}
-                              >
-                                <Settings className="w-3 h-3" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[200px]">
-                              {(() => {
-                                const summary = getSettingsSummary(formatterOptions);
-                                if (summary.length === 0) {
-                                  return <span>Format settings</span>;
-                                }
-                                return (
-                                  <div className="space-y-0.5">
-                                    <div className="font-medium text-violet-400">Active settings:</div>
-                                    {summary.map((item, i) => (
-                                      <div key={i} className="text-muted-foreground">{item}</div>
-                                    ))}
-                                  </div>
-                                );
-                              })()}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                            </ScrollArea>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
+
+                      {/* Prefix/Suffix + Settings button row - show when at least one element is bound */}
+                      {fieldBindings.length > 0 && (
+                        <div className="flex items-center gap-1 pl-1 flex-wrap">
+                          {/* Show bound elements as chips */}
+                          {fieldBindings.length > 1 && (
+                            <div className="flex flex-wrap gap-0.5 mr-1">
+                              {fieldBindings.map((binding) => {
+                                const el = elements.find(e => e.id === binding.element_id);
+                                return (
+                                  <span
+                                    key={binding.id}
+                                    className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[8px] bg-primary/20 text-primary rounded"
+                                    title={el?.name}
+                                  >
+                                    {getElementIcon(el?.element_type || '')}
+                                    <span className="truncate max-w-[40px]">{el?.name}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {/* Prefix/Suffix - only for text bindings with single element */}
+                          {isTextBinding && fieldBindings.length === 1 && (
+                            <>
+                              <Input
+                                className="h-5 w-12 text-[10px] px-1"
+                                placeholder="prefix"
+                                value={formatterOptions.prefix || ''}
+                                onChange={(e) => handleUpdateFormatterOptions(firstBinding.id, 'prefix', e.target.value)}
+                              />
+                              <span className="text-[9px] text-muted-foreground">+</span>
+                              <span className="text-[9px] text-primary font-mono truncate max-w-[60px]">{formatFieldValue(value)}</span>
+                              <span className="text-[9px] text-muted-foreground">+</span>
+                              <Input
+                                className="h-5 w-12 text-[10px] px-1"
+                                placeholder="suffix"
+                                value={formatterOptions.suffix || ''}
+                                onChange={(e) => handleUpdateFormatterOptions(firstBinding.id, 'suffix', e.target.value)}
+                              />
+                            </>
+                          )}
+                          {/* Settings button - opens modal with all formatting options (only when single binding) */}
+                          {fieldBindings.length === 1 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => handleOpenSettings(firstBinding.id, field.path, field.type)}
+                                    className={`h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors ${
+                                      hasAdvancedSettings(formatterOptions)
+                                        ? 'text-violet-400'
+                                        : 'text-muted-foreground'
+                                    }`}
+                                  >
+                                    <Settings className="w-3 h-3" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                  {(() => {
+                                    const summary = getSettingsSummary(formatterOptions);
+                                    if (summary.length === 0) {
+                                      return <span>Format settings</span>;
+                                    }
+                                    return (
+                                      <div className="space-y-0.5">
+                                        <div className="font-medium text-violet-400">Active settings:</div>
+                                        {summary.map((item, i) => (
+                                          <div key={i} className="text-muted-foreground">{item}</div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       )}
                     </div>
                   </AddressContextMenu>

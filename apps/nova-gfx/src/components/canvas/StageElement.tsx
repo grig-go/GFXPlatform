@@ -8,7 +8,7 @@ import { getAnimatedProperties } from '@/lib/animation';
 import { resolveElementBindings, shouldHideElement } from '@/lib/bindingResolver';
 import { ChartElement } from './ChartElement';
 import { MapElement } from './MapElement';
-import { VideoElement } from './VideoElement';
+import { VideoElement, type AnimatedMediaProps } from './VideoElement';
 import { SVGElement } from './SVGElement';
 import { IconElement } from './IconElement';
 import { TableElement } from './TableElement';
@@ -268,15 +268,59 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
 
   // Get current data record for bindings - now uses element's template_id
   // This ensures each element gets data from ITS template, not the globally selected one
+  const isIconElement = element.content?.type === 'icon';
+  const hasIconBinding = isIconElement && bindings.some(b => b.element_id === element.id);
+
   const currentRecord = useMemo(() => {
-    return getDataRecordForTemplate(element.template_id);
+    const record = getDataRecordForTemplate(element.template_id);
+    // Debug: log for icon elements with bindings
+    if (hasIconBinding) {
+      console.log('[StageElement] currentRecord for icon:', {
+        elementName: element.name,
+        currentRecordIndex,
+        hasRecord: !!record,
+        recordPreview: record ? Object.keys(record).slice(0, 5).join(', ') : null,
+      });
+    }
+    return record;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [element.template_id, getDataRecordForTemplate, templateDataCache, currentTemplateId, dataPayload, currentRecordIndex]);
 
+  // Find binding for this element (for debugging)
+  const elementBinding = bindings.find(b => b.element_id === element.id);
+
   // Resolve bindings - apply data values to element content
   const resolvedElement = useMemo(() => {
-    return resolveElementBindings(element, bindings, currentRecord);
-  }, [element, bindings, currentRecord]);
+    const resolved = resolveElementBindings(element, bindings, currentRecord);
+    // Debug: log binding resolution for elements with bindings
+    if (elementBinding) {
+      // Log differently based on element type
+      if (element.content?.type === 'icon') {
+        console.log('[StageElement] Icon binding resolution:', {
+          elementName: element.name,
+          elementId: element.id,
+          templateId: element.template_id,
+          bindingKey: elementBinding.binding_key,
+          targetProperty: elementBinding.target_property,
+          hasCurrentRecord: !!currentRecord,
+          currentRecordPreview: currentRecord ? JSON.stringify(currentRecord).slice(0, 200) : null,
+          originalIconName: element.content?.iconName,
+          resolvedIconName: resolved.content?.iconName,
+        });
+      } else {
+        console.log('[StageElement] Binding resolution:', {
+          elementName: element.name,
+          elementId: element.id,
+          templateId: element.template_id,
+          bindingKey: elementBinding.binding_key,
+          hasCurrentRecord: !!currentRecord,
+          originalText: element.content?.text,
+          resolvedText: resolved.content?.text,
+        });
+      }
+    }
+    return resolved;
+  }, [element, bindings, currentRecord, elementBinding]);
 
   // Check if element should be hidden based on binding options (hideOnZero, hideOnNull)
   const isHiddenByBinding = useMemo(() => {
@@ -1399,6 +1443,14 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         );
 
       case 'video':
+        // Extract animated media properties from animatedProps
+        const animatedMediaProps: AnimatedMediaProps = {
+          media_time: animatedProps.media_time as number | undefined,
+          media_playing: animatedProps.media_playing as number | undefined,
+          media_volume: animatedProps.media_volume as number | undefined,
+          media_muted: animatedProps.media_muted as number | undefined,
+          media_speed: animatedProps.media_speed as number | undefined,
+        };
         return (
           <VideoElement
             content={element.content}
@@ -1407,6 +1459,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             elementId={element.id}
             isSelected={isSelected}
             isPreview={false} // In designer, show overlay when selected
+            animatedMediaProps={animatedMediaProps}
+            isPlaying={isPlaying}
           />
         );
 
@@ -1469,9 +1523,17 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
         // Extract shadow from element.styles and convert to filter for icon shape
         const iconShadow = element.styles?.boxShadow;
         const iconFilter = iconShadow ? convertBoxShadowToFilter(iconShadow) : undefined;
+        // Debug: log icon resolution
+        if (element.content?.iconName !== resolvedElement.content?.iconName) {
+          console.log('[StageElement] Icon binding applied:', {
+            elementName: element.name,
+            originalIconName: element.content?.iconName,
+            resolvedIconName: resolvedElement.content?.iconName,
+          });
+        }
         return (
           <IconElement
-            content={element.content}
+            content={resolvedElement.content}
             width={element.width}
             height={element.height}
             isSelected={isSelected}

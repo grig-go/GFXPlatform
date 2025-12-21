@@ -29,7 +29,6 @@ import {
 import { supabase, markSupabaseSuccess, markSupabaseFailure, directRestUpdate } from '@emergent-platform/supabase-client';
 import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { captureCanvasSnapshot } from '@/lib/canvasSnapshot';
-import { getDataSourceById } from '@/data/sampleDataSources';
 
 /**
  * Wrap a promise with a timeout
@@ -350,15 +349,20 @@ interface DesignerState {
   // Data binding state
   dataSourceId: string | null;
   dataSourceName: string | null;
+  dataSourceSlug: string | null; // Endpoint slug for refresh capability
   dataPayload: Record<string, unknown>[] | null;
   currentRecordIndex: number;
   dataDisplayField: string | null;
+  dataLastFetched: number | null; // Timestamp of last data fetch
+  dataLoading: boolean; // Loading state for data refresh
+  dataError: string | null; // Error state for data operations
 
   // Cache of data payloads per template (templateId -> payload data)
   // This preserves data bindings when switching between templates
   templateDataCache: Record<string, {
     dataSourceId: string;
     dataSourceName: string;
+    dataSourceSlug: string | null;
     dataPayload: Record<string, unknown>[];
     dataDisplayField: string | null;
     currentRecordIndex: number;
@@ -514,7 +518,8 @@ interface DesignerActions {
   clearHistory: () => void;
 
   // Data binding operations
-  setDataSource: (id: string, name: string, data: Record<string, unknown>[], displayField: string) => Promise<void>;
+  setDataSource: (id: string, name: string, data: Record<string, unknown>[], displayField: string, slug?: string) => Promise<void>;
+  refreshDataSource: () => Promise<void>;
   clearDataSource: () => Promise<void>;
   setCurrentRecordIndex: (index: number) => void;
   setDefaultRecordIndex: (index: number) => Promise<void>;
@@ -726,6 +731,30 @@ function getDefaultStyles(type: ElementType): Record<string, string | number> {
   }
 }
 
+// Debounced autosave timer for binding updates
+let bindingAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
+const BINDING_AUTOSAVE_DELAY = 1500; // 1.5 seconds after last change
+
+function triggerBindingAutosave() {
+  // Clear existing timer
+  if (bindingAutosaveTimer) {
+    clearTimeout(bindingAutosaveTimer);
+  }
+
+  // Set new timer
+  bindingAutosaveTimer = setTimeout(() => {
+    const store = useDesignerStore.getState();
+    if (store.isDirty && !store.isSaving) {
+      console.log('🔧 Auto-saving binding changes...');
+      store.saveProject().then(() => {
+        console.log('🔧 Binding auto-save complete');
+      }).catch((err) => {
+        console.error('🔧 Binding auto-save failed:', err);
+      });
+    }
+  }, BINDING_AUTOSAVE_DELAY);
+}
+
 export const useDesignerStore = create<DesignerState & DesignerActions>()(
   devtools(
     subscribeWithSelector(
@@ -784,9 +813,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         // Data binding state
         dataSourceId: null,
         dataSourceName: null,
+        dataSourceSlug: null,
         dataPayload: null,
         currentRecordIndex: 0,
         dataDisplayField: null,
+        dataLastFetched: null,
+        dataLoading: false,
+        dataError: null,
         templateDataCache: {},
 
         // Project operations
@@ -837,20 +870,20 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                   const firstTemplate = safeData.templates?.[0];
                   let localDataSourceId: string | null = null;
                   let localDataSourceName: string | null = null;
+                  let localDataSourceSlug: string | null = null;
                   let localDataPayload: Record<string, unknown>[] | null = null;
                   let localDataDisplayField: string | null = null;
                   let localDefaultRecordIndex = 0;
 
                   if (firstTemplate?.data_source_id) {
-                    const dataSource = getDataSourceById(firstTemplate.data_source_id);
-                    if (dataSource) {
-                      localDataSourceId = dataSource.id;
-                      localDataSourceName = dataSource.name;
-                      localDataPayload = dataSource.data;
-                      const config = firstTemplate.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-                      localDataDisplayField = config?.displayField || dataSource.displayField;
-                      localDefaultRecordIndex = config?.defaultRecordIndex ?? 0;
-                      console.log(`📊 Auto-hydrated data source "${dataSource.name}" for template "${firstTemplate.name}" (default record: ${localDefaultRecordIndex})`);
+                    const config = firstTemplate.data_source_config as { displayField?: string; slug?: string; defaultRecordIndex?: number } | null;
+                    localDataSourceId = firstTemplate.data_source_id;
+                    localDataSourceSlug = config?.slug || null;
+                    localDataDisplayField = config?.displayField || null;
+                    localDefaultRecordIndex = config?.defaultRecordIndex ?? 0;
+                    // Data will be fetched from endpoint when user refreshes or reopens data modal
+                    if (localDataSourceSlug) {
+                      console.log(`📊 Template "${firstTemplate.name}" has endpoint "${localDataSourceSlug}" - use refresh to fetch data`);
                     }
                   }
 
@@ -865,9 +898,13 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                     // Hydrate data source state for first template
                     dataSourceId: localDataSourceId,
                     dataSourceName: localDataSourceName,
+                    dataSourceSlug: localDataSourceSlug,
                     dataPayload: localDataPayload,
                     dataDisplayField: localDataDisplayField,
                     currentRecordIndex: localDefaultRecordIndex,
+                    dataLastFetched: null,
+                    dataLoading: false,
+                    dataError: null,
                   });
                   console.log('✅ Loaded project from localStorage:', safeData.project?.name);
                   return;
@@ -1358,23 +1395,21 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             let dataSourceId: string | null = null;
             let dataSourceName: string | null = null;
+            let dataSourceSlug: string | null = null;
             let dataPayload: Record<string, unknown>[] | null = null;
             let dataDisplayField: string | null = null;
             let defaultRecordIndex = 0;
 
             if (templateWithDataSource?.data_source_id) {
-              const dataSource = getDataSourceById(templateWithDataSource.data_source_id);
-              if (dataSource) {
-                dataSourceId = dataSource.id;
-                dataSourceName = dataSource.name;
-                dataPayload = dataSource.data;
-                const config = templateWithDataSource.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-                dataDisplayField = config?.displayField || dataSource.displayField;
-                defaultRecordIndex = config?.defaultRecordIndex ?? 0;
-                console.log(`📊 Auto-hydrated data source "${dataSource.name}" for template "${templateWithDataSource.name}" (default record: ${defaultRecordIndex})`);
-              }
+              const config = templateWithDataSource.data_source_config as { displayField?: string; slug?: string; defaultRecordIndex?: number } | null;
+              dataSourceId = templateWithDataSource.data_source_id;
+              dataSourceSlug = config?.slug || null;
+              dataDisplayField = config?.displayField || null;
+              defaultRecordIndex = config?.defaultRecordIndex ?? 0;
+              console.log(`📋 [loadProject] Template data source config:`, { dataSourceId, dataSourceSlug, dataDisplayField, config });
             }
 
+            // Set initial state first (without dataPayload if we need to fetch it)
             set({
               project,
               layers,
@@ -1401,12 +1436,202 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               // Hydrate data source state for first template
               dataSourceId,
               dataSourceName,
+              dataSourceSlug,
               dataPayload,
               dataDisplayField,
               currentRecordIndex: defaultRecordIndex,
+              dataLastFetched: null,
+              dataLoading: false,
+              dataError: null,
             });
 
             console.log(`✅ Loaded project: ${project.name} with ${templates.length} templates, ${allElements.length} elements, ${allAnimations.length} animations, ${allKeyframes.length} keyframes, ${allBindings.length} bindings`);
+
+            // Update localStorage with fresh DB data to prevent stale/deleted items from showing
+            // This ensures localStorage mirrors the database state
+            if (isValidUUID && projectId !== 'demo') {
+              try {
+                const localData = {
+                  project,
+                  layers,
+                  templates,
+                  elements: allElements,
+                  animations: allAnimations,
+                  keyframes: allKeyframes,
+                  bindings: allBindings,
+                  chatMessages,
+                };
+                localStorage.setItem(`nova-project-${projectId}`, JSON.stringify(localData));
+                console.log(`📦 Updated localStorage with fresh DB data (${templates.length} templates)`);
+              } catch (e) {
+                console.warn('Failed to update localStorage after DB load:', e);
+              }
+            }
+
+            // Auto-fetch data from endpoint if template has a slug
+            if (dataSourceSlug && selectedTemplateId) {
+              console.log(`📊 Auto-fetching data from endpoint "${dataSourceSlug}"...`);
+              set({ dataLoading: true });
+
+              import('@/services/novaEndpointService').then(async ({ fetchEndpointData, getEndpointBySlug }) => {
+                try {
+                  console.log(`🔄 [loadProject] Starting fetch for ${dataSourceSlug}...`);
+                  const [fetchedData, endpoint] = await Promise.all([
+                    fetchEndpointData(dataSourceSlug!),
+                    getEndpointBySlug(dataSourceSlug!)
+                  ]);
+                  console.log(`📦 [loadProject] Fetch complete: ${fetchedData?.length || 0} records, endpoint: ${endpoint?.name || 'null'}`);
+
+                  if (fetchedData && fetchedData.length > 0) {
+                    const endpointName = endpoint?.name || dataSourceSlug;
+                    console.log(`📝 [loadProject] Updating state with ${fetchedData.length} records...`);
+                    set((draft) => {
+                      draft.dataPayload = fetchedData;
+                      draft.dataSourceName = endpointName;
+                      draft.dataLastFetched = Date.now();
+                      draft.dataLoading = false;
+                      draft.dataError = null;
+
+                      // Update cache for this template
+                      draft.templateDataCache[selectedTemplateId!] = {
+                        dataSourceId: dataSourceId!,
+                        dataSourceName: endpointName || '',
+                        dataSourceSlug: dataSourceSlug,
+                        dataPayload: fetchedData,
+                        dataDisplayField: dataDisplayField,
+                        currentRecordIndex: defaultRecordIndex,
+                      };
+                    });
+                    console.log(`✅ [loadProject] Auto-fetched ${fetchedData.length} records from ${dataSourceSlug}. State updated.`);
+                  } else {
+                    set({ dataLoading: false, dataError: 'No data returned from endpoint' });
+                  }
+                } catch (error) {
+                  console.error('[loadProject] Failed to auto-fetch data:', error);
+                  set({ dataLoading: false, dataError: 'Failed to fetch data' });
+                }
+              });
+            } else if (!dataSourceSlug && selectedTemplateId && allBindings.some(b => b.template_id === selectedTemplateId)) {
+              // FALLBACK: Template has bindings but no slug - try to find matching endpoint
+              // This handles projects created before the slug fix was implemented
+              const templateBindings = allBindings.filter(b => b.template_id === selectedTemplateId);
+              const bindingKeys = templateBindings.map(b => b.binding_key);
+              const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+              const templateDataSourceId = selectedTemplate?.data_source_id;
+
+              console.log(`🔍 [loadProject] Template has ${templateBindings.length} bindings but no slug. Looking up endpoint...`);
+              console.log(`   Template data_source_id: ${templateDataSourceId || 'null'}`);
+              console.log(`   Binding keys: ${bindingKeys.join(', ')}`);
+
+              set({ dataLoading: true });
+
+              import('@/services/novaEndpointService').then(async ({ listNovaEndpoints, fetchEndpointData, getEndpointById }) => {
+                try {
+                  // FAST PATH: If template has data_source_id, look up endpoint by ID
+                  if (templateDataSourceId) {
+                    const endpoint = await getEndpointById(templateDataSourceId);
+                    if (endpoint) {
+                      console.log(`✅ [loadProject] Found endpoint by ID: "${endpoint.name}" (slug: ${endpoint.slug})`);
+                      const fetchedData = await fetchEndpointData(endpoint.slug);
+
+                      if (fetchedData && fetchedData.length > 0) {
+                        // Update template config with slug for future loads
+                        if (selectedTemplate) {
+                          selectedTemplate.data_source_config = {
+                            ...(selectedTemplate.data_source_config as Record<string, unknown> || {}),
+                            slug: endpoint.slug
+                          };
+                        }
+
+                        set((draft) => {
+                          draft.dataSourceId = endpoint.id;
+                          draft.dataSourceName = endpoint.name;
+                          draft.dataSourceSlug = endpoint.slug;
+                          draft.dataPayload = fetchedData;
+                          draft.dataLastFetched = Date.now();
+                          draft.dataLoading = false;
+                          draft.dataError = null;
+                          draft.isDirty = true; // Mark dirty so it saves the slug fix
+
+                          draft.templateDataCache[selectedTemplateId!] = {
+                            dataSourceId: endpoint.id,
+                            dataSourceName: endpoint.name,
+                            dataSourceSlug: endpoint.slug,
+                            dataPayload: fetchedData,
+                            dataDisplayField: null,
+                            currentRecordIndex: 0,
+                          };
+                        });
+                        console.log(`✅ [loadProject] Auto-fetched ${fetchedData.length} records and saved slug to config`);
+                        return;
+                      }
+                    } else {
+                      console.warn(`⚠️ [loadProject] Endpoint not found by ID: ${templateDataSourceId}`);
+                    }
+                  }
+
+                  // SLOW PATH: No data_source_id, search by matching field names
+                  const endpoints = await listNovaEndpoints();
+                  const { getNestedValue } = await import('@/data/sampleDataSources');
+                  console.log(`   Searching ${endpoints.length} endpoints by field matching...`);
+
+                  for (const endpoint of endpoints) {
+                    try {
+                      const testData = await fetchEndpointData(endpoint.slug);
+                      if (testData && testData.length > 0) {
+                        const firstRecord = testData[0];
+                        // Check if nested paths can be resolved in this data structure
+                        const matchingKeys = bindingKeys.filter(key => {
+                          const value = getNestedValue(firstRecord, key);
+                          return value !== undefined;
+                        });
+                        const matchPercentage = matchingKeys.length / bindingKeys.length;
+
+                        console.log(`   Endpoint "${endpoint.name}": ${matchingKeys.length}/${bindingKeys.length} keys match (${Math.round(matchPercentage * 100)}%)`);
+
+                        if (matchPercentage >= 0.5) {
+                          console.log(`✅ [loadProject] Auto-matched endpoint "${endpoint.name}" for orphaned bindings`);
+
+                          if (selectedTemplate) {
+                            selectedTemplate.data_source_id = endpoint.id;
+                            selectedTemplate.data_source_config = { slug: endpoint.slug };
+                          }
+
+                          set((draft) => {
+                            draft.dataSourceId = endpoint.id;
+                            draft.dataSourceName = endpoint.name;
+                            draft.dataSourceSlug = endpoint.slug;
+                            draft.dataPayload = testData;
+                            draft.dataLastFetched = Date.now();
+                            draft.dataLoading = false;
+                            draft.dataError = null;
+                            draft.isDirty = true;
+
+                            draft.templateDataCache[selectedTemplateId!] = {
+                              dataSourceId: endpoint.id,
+                              dataSourceName: endpoint.name,
+                              dataSourceSlug: endpoint.slug,
+                              dataPayload: testData,
+                              dataDisplayField: null,
+                              currentRecordIndex: 0,
+                            };
+                          });
+                          return;
+                        }
+                      }
+                    } catch (endpointError) {
+                      console.warn(`   Failed to fetch endpoint "${endpoint.slug}":`, endpointError);
+                    }
+                  }
+
+                  console.warn('⚠️ [loadProject] No matching endpoint found for orphaned bindings');
+                  set({ dataLoading: false });
+                } catch (error) {
+                  console.error('[loadProject] Failed to auto-match endpoint:', error);
+                  set({ dataLoading: false });
+                }
+              });
+            }
           } catch (error) {
             console.error('Error loading project:', error);
             set({ 
@@ -1513,6 +1738,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               projectData.settings = state.project.settings;
             }
 
+            // Save interactive configuration (scripts, event handlers, etc.)
+            if (state.project.interactive_config) {
+              projectData.interactive_config = state.project.interactive_config;
+            }
+
             const projectResult = await directRestUpdate(
               'gfx_projects',
               projectData,
@@ -1558,6 +1788,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             // 3. Save templates (only include DB columns)
             // IMPORTANT: PostgREST bulk upsert requires all objects to have the same keys
             if (state.templates.length > 0) {
+              // Debug: Log data source info for templates before save
+              state.templates.forEach(t => {
+                if (t.data_source_id || t.data_source_config) {
+                  console.log(`📋 Template "${t.name}" has data_source_id: ${t.data_source_id}, config:`, t.data_source_config);
+                }
+              });
               const templatesToSave = state.templates.map(t => ({
                 id: t.id,
                 project_id: projectId,
@@ -1583,6 +1819,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 version: t.version ?? 1,
                 sort_order: t.sort_order ?? 0,
                 updated_at: new Date().toISOString(),
+                // Data source fields for dynamic data binding
+                data_source_id: t.data_source_id ?? null,
+                data_source_config: t.data_source_config ?? null,
               }));
               const templatesResult = await directRestUpsert('gfx_templates', templatesToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!templatesResult.success) console.error('Error saving templates:', templatesResult.error);
@@ -1672,6 +1911,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               element_id: b.element_id.slice(0, 8),
               template_id: b.template_id.slice(0, 8),
               binding_key: b.binding_key,
+              formatter_options: b.formatter_options,
             })));
             if (state.bindings.length > 0) {
               const bindingsToSave = state.bindings.map(b => ({
@@ -1686,7 +1926,11 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 formatter_options: b.formatter_options ?? null,
                 required: b.required ?? false,
               }));
-              console.log(`💾 Saving ${bindingsToSave.length} bindings to database...`);
+              console.log(`💾 Saving ${bindingsToSave.length} bindings to database:`, bindingsToSave.map(b => ({
+                id: b.id.slice(0, 8),
+                binding_key: b.binding_key,
+                formatter_options: b.formatter_options,
+              })));
               const bindingsResult = await directRestUpsert('gfx_bindings', bindingsToSave, SAVE_TIMEOUT, accessToken || undefined);
               if (!bindingsResult.success) {
                 console.error('❌ Error saving bindings:', bindingsResult.error);
@@ -1703,37 +1947,37 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             if (pendingDeletions.keyframes.length > 0) {
               console.log(`Deleting ${pendingDeletions.keyframes.length} keyframes from DB`);
-              const keyframesDeleteResult = await directRestDelete('gfx_keyframes', pendingDeletions.keyframes, SAVE_TIMEOUT);
+              const keyframesDeleteResult = await directRestDelete('gfx_keyframes', pendingDeletions.keyframes, SAVE_TIMEOUT, accessToken || undefined);
               if (!keyframesDeleteResult.success) console.error('Error deleting keyframes:', keyframesDeleteResult.error);
             }
 
             if (pendingDeletions.animations.length > 0) {
               console.log(`Deleting ${pendingDeletions.animations.length} animations from DB`);
-              const animationsDeleteResult = await directRestDelete('gfx_animations', pendingDeletions.animations, SAVE_TIMEOUT);
+              const animationsDeleteResult = await directRestDelete('gfx_animations', pendingDeletions.animations, SAVE_TIMEOUT, accessToken || undefined);
               if (!animationsDeleteResult.success) console.error('Error deleting animations:', animationsDeleteResult.error);
             }
 
             if (pendingDeletions.bindings.length > 0) {
               console.log(`Deleting ${pendingDeletions.bindings.length} bindings from DB`);
-              const bindingsDeleteResult = await directRestDelete('gfx_bindings', pendingDeletions.bindings, SAVE_TIMEOUT);
+              const bindingsDeleteResult = await directRestDelete('gfx_bindings', pendingDeletions.bindings, SAVE_TIMEOUT, accessToken || undefined);
               if (!bindingsDeleteResult.success) console.error('Error deleting bindings:', bindingsDeleteResult.error);
             }
 
             if (pendingDeletions.elements.length > 0) {
               console.log(`Deleting ${pendingDeletions.elements.length} elements from DB`);
-              const elementsDeleteResult = await directRestDelete('gfx_elements', pendingDeletions.elements, SAVE_TIMEOUT);
+              const elementsDeleteResult = await directRestDelete('gfx_elements', pendingDeletions.elements, SAVE_TIMEOUT, accessToken || undefined);
               if (!elementsDeleteResult.success) console.error('Error deleting elements:', elementsDeleteResult.error);
             }
 
             if (pendingDeletions.templates.length > 0) {
               console.log(`Deleting ${pendingDeletions.templates.length} templates from DB`);
-              const templatesDeleteResult = await directRestDelete('gfx_templates', pendingDeletions.templates, SAVE_TIMEOUT);
+              const templatesDeleteResult = await directRestDelete('gfx_templates', pendingDeletions.templates, SAVE_TIMEOUT, accessToken || undefined);
               if (!templatesDeleteResult.success) console.error('Error deleting templates:', templatesDeleteResult.error);
             }
 
             if (pendingDeletions.layers.length > 0) {
               console.log(`Deleting ${pendingDeletions.layers.length} layers from DB`);
-              const layersDeleteResult = await directRestDelete('gfx_layers', pendingDeletions.layers, SAVE_TIMEOUT);
+              const layersDeleteResult = await directRestDelete('gfx_layers', pendingDeletions.layers, SAVE_TIMEOUT, accessToken || undefined);
               if (!layersDeleteResult.success) console.error('Error deleting layers:', layersDeleteResult.error);
             }
 
@@ -2158,26 +2402,56 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             dataDisplayField = cached.dataDisplayField;
             recordIndex = cached.currentRecordIndex;
           } else if (template?.data_source_id) {
-            // Load from data source
-            const dataSource = getDataSourceById(template.data_source_id);
-            const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-            if (dataSource) {
-              dataSourceId = dataSource.id;
-              dataSourceName = dataSource.name;
-              dataPayload = dataSource.data;
-              dataDisplayField = config?.displayField || dataSource.displayField;
-              recordIndex = config?.defaultRecordIndex ?? 0;
+            // Load from template config - auto-fetch data if slug is available
+            const config = template?.data_source_config as { displayField?: string; slug?: string; defaultRecordIndex?: number } | null;
+            dataSourceId = template.data_source_id;
+            dataDisplayField = config?.displayField || null;
+            recordIndex = config?.defaultRecordIndex ?? 0;
+            const slug = config?.slug || null;
 
-              // Also populate cache for this template so StageElement can use it
-              if (id) {
-                newCache[id] = {
-                  dataSourceId: dataSource.id,
-                  dataSourceName: dataSource.name,
-                  dataPayload: dataSource.data,
-                  dataDisplayField: dataDisplayField,
-                  currentRecordIndex: recordIndex,
-                };
-              }
+            // If we have a slug, auto-fetch the data
+            if (slug) {
+              // Set slug immediately so UI shows it
+              set({ dataSourceSlug: slug, dataLoading: true });
+
+              // Fetch data asynchronously
+              import('@/services/novaEndpointService').then(async ({ fetchEndpointData, getEndpointBySlug }) => {
+                try {
+                  const [fetchedData, endpoint] = await Promise.all([
+                    fetchEndpointData(slug),
+                    getEndpointBySlug(slug)
+                  ]);
+
+                  if (fetchedData && fetchedData.length > 0) {
+                    const endpointName = endpoint?.name || slug;
+                    set((draft) => {
+                      draft.dataPayload = fetchedData;
+                      draft.dataSourceName = endpointName;
+                      draft.dataLastFetched = Date.now();
+                      draft.dataLoading = false;
+                      draft.dataError = null;
+
+                      // Update cache for this template
+                      if (id) {
+                        draft.templateDataCache[id] = {
+                          dataSourceId: dataSourceId!,
+                          dataSourceName: endpointName,
+                          dataSourceSlug: slug,
+                          dataPayload: fetchedData,
+                          dataDisplayField: dataDisplayField,
+                          currentRecordIndex: recordIndex,
+                        };
+                      }
+                    });
+                    console.log(`[selectTemplate] Auto-fetched ${fetchedData.length} records from ${slug}`);
+                  } else {
+                    set({ dataLoading: false, dataError: 'No data returned from endpoint' });
+                  }
+                } catch (error) {
+                  console.error('[selectTemplate] Failed to auto-fetch data:', error);
+                  set({ dataLoading: false, dataError: 'Failed to fetch data' });
+                }
+              });
             }
           }
 
@@ -2200,15 +2474,19 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             return;
           }
 
+          // Get config to check if we're doing async fetch
+          const templateConfig = template?.data_source_config as { slug?: string } | null;
+          const isAsyncFetch = !!(templateConfig?.slug && !dataPayload);
+
           set({
             currentTemplateId: id,
             selectedElementIds: [],
             currentPhase: 'in',
             playheadPosition: 0,
-            // Hydrate data source state
+            // Hydrate data source state - but don't overwrite dataPayload if async fetch is in progress
             dataSourceId,
             dataSourceName,
-            dataPayload,
+            ...(isAsyncFetch ? {} : { dataPayload }),
             dataDisplayField,
             currentRecordIndex: recordIndex,
             templateDataCache: newCache,
@@ -2374,22 +2652,50 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
           // Archive in database immediately (for real projects with valid template UUID)
           if (isValidProjectUUID && isValidTemplateUUID && projectId !== 'demo') {
-            try {
-              // Use directRestUpdate for consistency with other save operations
-              const result = await directRestUpdate(
-                'gfx_templates',
-                { archived: true, updated_at: new Date().toISOString() },
-                { column: 'id', value: templateId },
-                10000 // 10 second timeout
-              );
+            let dbArchiveSuccess = false;
 
-              if (!result.success) {
-                console.error('Failed to archive template in database:', result.error);
-              } else {
-                console.log('✅ Template archived in database:', templateId);
+            try {
+              // Use Supabase client directly with .select() to verify the update worked
+              if (supabase) {
+                console.log('[deleteTemplate] Archiving template via Supabase client...');
+                const { data, error } = await supabase
+                  .from('gfx_templates')
+                  .update({ archived: true, updated_at: new Date().toISOString() })
+                  .eq('id', templateId)
+                  .select()
+                  .single();
+
+                if (error) {
+                  console.error('[deleteTemplate] Supabase error:', error.message);
+                } else if (data && data.archived === true) {
+                  console.log('✅ Template archived in database (confirmed):', templateId);
+                  dbArchiveSuccess = true;
+                } else {
+                  console.error('[deleteTemplate] Archive not confirmed - data:', data);
+                }
               }
             } catch (err) {
-              console.error('Error archiving template:', err);
+              console.error('[deleteTemplate] Error archiving template:', err);
+            }
+
+            // Fallback to REST API if Supabase client failed
+            if (!dbArchiveSuccess) {
+              console.log('[deleteTemplate] Trying REST API fallback...');
+              try {
+                const result = await directRestUpdate(
+                  'gfx_templates',
+                  { archived: true, updated_at: new Date().toISOString() },
+                  { column: 'id', value: templateId },
+                  10000
+                );
+                if (result.success) {
+                  console.log('✅ Template archived via REST API:', templateId);
+                } else {
+                  console.error('[deleteTemplate] REST API failed:', result.error);
+                }
+              } catch (restErr) {
+                console.error('[deleteTemplate] REST API error:', restErr);
+              }
             }
           } else {
             console.log('[deleteTemplate] Skipping database archive - demo project or invalid UUID');
@@ -2436,6 +2742,27 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             draft.isDirty = true;
           });
+
+          // Update localStorage to sync with deleted state
+          if (isValidProjectUUID && projectId !== 'demo') {
+            try {
+              const state = get();
+              const localData = {
+                project: state.project,
+                layers: state.layers,
+                templates: state.templates,
+                elements: state.elements,
+                animations: state.animations,
+                keyframes: state.keyframes,
+                bindings: state.bindings,
+                chatMessages: state.chatMessages,
+              };
+              localStorage.setItem(`nova-project-${projectId}`, JSON.stringify(localData));
+              console.log(`📦 [deleteTemplate] Updated localStorage (${state.templates.length} templates remaining)`);
+            } catch (e) {
+              console.warn('[deleteTemplate] Failed to update localStorage:', e);
+            }
+          }
         },
 
         // Element operations
@@ -3339,31 +3666,62 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
                 dataDisplayField = cached.dataDisplayField;
                 recordIndex = cached.currentRecordIndex;
               } else if (template?.data_source_id) {
-                const dataSource = getDataSourceById(template.data_source_id);
-                const config = template?.data_source_config as { displayField?: string; defaultRecordIndex?: number } | null;
-                if (dataSource) {
-                  dataSourceId = dataSource.id;
-                  dataSourceName = dataSource.name;
-                  dataPayload = dataSource.data;
-                  dataDisplayField = config?.displayField || dataSource.displayField;
-                  recordIndex = config?.defaultRecordIndex ?? 0;
+                // Load from template config - auto-fetch data if slug is available
+                const config = template?.data_source_config as { displayField?: string; slug?: string; defaultRecordIndex?: number } | null;
+                dataSourceId = template.data_source_id;
+                dataDisplayField = config?.displayField || null;
+                recordIndex = config?.defaultRecordIndex ?? 0;
+                const slug = config?.slug || null;
 
-                  // Also populate cache for this template so StageElement can use it
-                  newCache[targetTemplateId] = {
-                    dataSourceId: dataSource.id,
-                    dataSourceName: dataSource.name,
-                    dataPayload: dataSource.data,
-                    dataDisplayField: dataDisplayField,
-                    currentRecordIndex: recordIndex,
-                  };
+                // If we have a slug, auto-fetch the data
+                if (slug) {
+                  set({ dataSourceSlug: slug, dataLoading: true });
+
+                  import('@/services/novaEndpointService').then(async ({ fetchEndpointData, getEndpointBySlug }) => {
+                    try {
+                      const [fetchedData, endpoint] = await Promise.all([
+                        fetchEndpointData(slug),
+                        getEndpointBySlug(slug)
+                      ]);
+
+                      if (fetchedData && fetchedData.length > 0) {
+                        const endpointName = endpoint?.name || slug;
+                        set((draft) => {
+                          draft.dataPayload = fetchedData;
+                          draft.dataSourceName = endpointName;
+                          draft.dataLastFetched = Date.now();
+                          draft.dataLoading = false;
+                          draft.dataError = null;
+
+                          draft.templateDataCache[targetTemplateId] = {
+                            dataSourceId: dataSourceId!,
+                            dataSourceName: endpointName,
+                            dataSourceSlug: slug,
+                            dataPayload: fetchedData,
+                            dataDisplayField: dataDisplayField,
+                            currentRecordIndex: recordIndex,
+                          };
+                        });
+                      } else {
+                        set({ dataLoading: false, dataError: 'No data returned from endpoint' });
+                      }
+                    } catch (error) {
+                      console.error('[setSelectedElements] Failed to auto-fetch data:', error);
+                      set({ dataLoading: false, dataError: 'Failed to fetch data' });
+                    }
+                  });
                 }
               }
+
+              // Check if we're doing async fetch
+              const templateConfig = template?.data_source_config as { slug?: string } | null;
+              const isAsyncFetch = !!(templateConfig?.slug && !dataPayload);
 
               set({
                 currentTemplateId: targetTemplateId,
                 dataSourceId,
                 dataSourceName,
-                dataPayload,
+                ...(isAsyncFetch ? {} : { dataPayload }),
                 dataDisplayField,
                 currentRecordIndex: recordIndex,
                 templateDataCache: newCache,
@@ -3617,17 +3975,32 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             console.log(`🔗 Added binding: ${bindingKey} → ${elementId}, isDirty: ${state.isDirty}`);
           });
 
+          // Trigger debounced autosave for binding changes
+          triggerBindingAutosave();
+
           return id;
         },
 
         updateBinding: (bindingId, updates) => {
+          console.log(`🔧 updateBinding called:`, { bindingId, updates });
           set((state) => {
             const idx = state.bindings.findIndex((b) => b.id === bindingId);
             if (idx !== -1) {
+              const oldBinding = state.bindings[idx];
               state.bindings[idx] = { ...state.bindings[idx], ...updates };
+              console.log(`🔧 Binding updated:`, {
+                before: { formatter_options: oldBinding.formatter_options },
+                after: { formatter_options: state.bindings[idx].formatter_options },
+                isDirty: state.isDirty,
+              });
               state.isDirty = true;
+            } else {
+              console.warn(`🔧 Binding not found for update:`, bindingId);
             }
           });
+
+          // Trigger debounced autosave for binding changes
+          triggerBindingAutosave();
         },
 
         deleteBinding: (bindingId) => {
@@ -3637,6 +4010,9 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             state.isDirty = true;
             console.log(`🗑️ Deleted binding: ${bindingId}, isDirty: ${state.isDirty}`);
           });
+
+          // Trigger debounced autosave for binding changes
+          triggerBindingAutosave();
         },
 
         // Layer operations
@@ -4341,16 +4717,19 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         // Data binding operations
-        setDataSource: async (id, name, data, displayField) => {
+        setDataSource: async (id, name, data, displayField, slug) => {
           const { currentTemplateId } = get();
 
           // Update local state AND update the template record in the local store
           set((draft) => {
             draft.dataSourceId = id;
             draft.dataSourceName = name;
+            draft.dataSourceSlug = slug || null;
             draft.dataPayload = data;
             draft.currentRecordIndex = 0;
             draft.dataDisplayField = displayField;
+            draft.dataLastFetched = Date.now();
+            draft.dataError = null;
             draft.isDirty = true;
 
             // Also update the template's data_source_id in the local templates array
@@ -4359,7 +4738,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               const template = draft.templates.find(t => t.id === currentTemplateId);
               if (template) {
                 template.data_source_id = id;
-                template.data_source_config = { displayField };
+                template.data_source_config = { displayField, slug };
               }
 
               // Update the template data cache - this is the resilient storage
@@ -4367,6 +4746,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               draft.templateDataCache[currentTemplateId] = {
                 dataSourceId: id,
                 dataSourceName: name,
+                dataSourceSlug: slug || null,
                 dataPayload: data,
                 dataDisplayField: displayField,
                 currentRecordIndex: 0,
@@ -4382,7 +4762,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               'gfx_templates',
               {
                 data_source_id: id,
-                data_source_config: { displayField },
+                data_source_config: { displayField, slug },
               },
               { column: 'id', value: currentTemplateId },
               10000,
@@ -4396,6 +4776,50 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           }
         },
 
+        refreshDataSource: async () => {
+          const { dataSourceSlug, dataSourceId, dataSourceName, dataDisplayField, currentTemplateId } = get();
+
+          if (!dataSourceSlug) {
+            console.warn('[designerStore] Cannot refresh: no endpoint slug');
+            return;
+          }
+
+          set({ dataLoading: true, dataError: null });
+
+          try {
+            // Dynamic import to avoid circular dependencies
+            const { fetchEndpointData } = await import('@/services/novaEndpointService');
+            const data = await fetchEndpointData(dataSourceSlug);
+
+            set((draft) => {
+              draft.dataPayload = data;
+              draft.dataLastFetched = Date.now();
+              draft.dataLoading = false;
+              draft.dataError = null;
+
+              // Update cache
+              if (currentTemplateId && dataSourceId && dataSourceName) {
+                draft.templateDataCache[currentTemplateId] = {
+                  dataSourceId,
+                  dataSourceName,
+                  dataSourceSlug,
+                  dataPayload: data,
+                  dataDisplayField,
+                  currentRecordIndex: draft.currentRecordIndex,
+                };
+              }
+            });
+
+            console.log(`🔄 Data refreshed from ${dataSourceSlug}: ${data.length} records`);
+          } catch (err) {
+            console.error('[designerStore] Failed to refresh data:', err);
+            set({
+              dataLoading: false,
+              dataError: err instanceof Error ? err.message : 'Failed to refresh data',
+            });
+          }
+        },
+
         clearDataSource: async () => {
           const { currentTemplateId } = get();
 
@@ -4403,9 +4827,12 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           set((draft) => {
             draft.dataSourceId = null;
             draft.dataSourceName = null;
+            draft.dataSourceSlug = null;
             draft.dataPayload = null;
             draft.currentRecordIndex = 0;
             draft.dataDisplayField = null;
+            draft.dataLastFetched = null;
+            draft.dataError = null;
             draft.isDirty = true;
 
             // Also clear the template's data_source_id in the local templates array
@@ -4528,17 +4955,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             return cached.dataPayload[cached.currentRecordIndex] || null;
           }
 
-          // Fallback: try to load from data source
-          const template = templates.find(t => t.id === templateId);
-          if (template?.data_source_id) {
-            const dataSource = getDataSourceById(template.data_source_id);
-            if (dataSource?.data?.length > 0) {
-              const config = template.data_source_config as { defaultRecordIndex?: number } | null;
-              const recordIndex = config?.defaultRecordIndex ?? 0;
-              return dataSource.data[recordIndex] || null;
-            }
-          }
-
+          // No cached data available - data needs to be fetched via refresh
           return null;
         },
       }))

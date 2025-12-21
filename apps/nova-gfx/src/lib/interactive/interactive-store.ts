@@ -658,6 +658,759 @@ export const useInteractiveStore = create<InteractiveStoreState>()(
             log: (message: string) => {
               console.log(`[Script] ${message}`);
             },
+            // Timeline Animation APIs
+            addAnimation: (elementName: string, phase: 'in' | 'loop' | 'out' = 'in') => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                const animationId = designerStore.addAnimation(el.id, phase);
+                console.log(`[Script] Created animation ${animationId} for ${elementName} (${phase})`);
+                return animationId;
+              }
+              console.warn(`[Script] Element not found: ${elementName}`);
+              return null;
+            },
+            addKeyframe: (animationId: string, position: number, properties: Record<string, unknown>) => {
+              if (!animationId) {
+                console.warn('[Script] addKeyframe: animationId is required');
+                return null;
+              }
+              const keyframeId = designerStore.addKeyframe(animationId, position, properties as Record<string, string | number | null>);
+              console.log(`[Script] Created keyframe ${keyframeId} at position ${position}ms`);
+              return keyframeId;
+            },
+            updateAnimation: (animationId: string, updates: Record<string, unknown>) => {
+              if (!animationId) return;
+              designerStore.updateAnimation(animationId, updates as Partial<typeof designerStore.animations[0]>);
+              console.log(`[Script] Updated animation ${animationId}`);
+            },
+            updateKeyframe: (keyframeId: string, updates: Record<string, unknown>) => {
+              if (!keyframeId) return;
+              designerStore.updateKeyframe(keyframeId, updates as Partial<typeof designerStore.keyframes[0]>);
+              console.log(`[Script] Updated keyframe ${keyframeId}`);
+            },
+            removeAnimation: (animationId: string) => {
+              if (!animationId) return;
+              designerStore.deleteAnimation(animationId);
+              console.log(`[Script] Removed animation ${animationId}`);
+            },
+            getAnimations: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                return designerStore.animations.filter(a => a.element_id === el.id);
+              }
+              return [];
+            },
+            getKeyframes: (animationId: string) => {
+              return designerStore.keyframes.filter(k => k.animation_id === animationId);
+            },
+            // Playback controls
+            play: () => {
+              designerStore.play();
+              console.log('[Script] Timeline play');
+            },
+            pause: () => {
+              designerStore.pause();
+              console.log('[Script] Timeline pause');
+            },
+            stop: () => {
+              designerStore.stop();
+              console.log('[Script] Timeline stop');
+            },
+            setPhase: (phase: 'in' | 'loop' | 'out') => {
+              designerStore.setPhase(phase);
+              console.log(`[Script] Set phase to ${phase}`);
+            },
+            setPlayhead: (ms: number) => {
+              designerStore.setPlayhead(ms);
+              console.log(`[Script] Set playhead to ${ms}ms`);
+            },
+            getPlayhead: () => {
+              return designerStore.playheadPosition;
+            },
+            getCurrentPhase: () => {
+              return designerStore.currentPhase;
+            },
+            isPlaying: () => {
+              return designerStore.isPlaying;
+            },
+            // Convenience method to restart animation from beginning
+            restart: () => {
+              designerStore.stop();
+              // Small delay to ensure state updates before playing
+              setTimeout(() => {
+                designerStore.play();
+              }, 10);
+              console.log('[Script] Timeline restart');
+            },
+            // Element property helpers
+            getElement: (elementName: string) => {
+              return designerStore.elements.find(e => e.name === elementName);
+            },
+            updateElement: (elementName: string, updates: Record<string, unknown>) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.updateElement(el.id, updates as Partial<typeof el>);
+                console.log(`[Script] Updated element ${elementName}`);
+              }
+            },
+            getAllElements: () => {
+              return designerStore.elements;
+            },
+
+            // ============================================================
+            // ELEMENT CREATION / DELETION
+            // ============================================================
+            addElement: (type: string, options: { x?: number; y?: number; name?: string; width?: number; height?: number; content?: Record<string, unknown> } = {}) => {
+              const { x = 100, y = 100, name, width, height, content } = options;
+              const elementId = designerStore.addElement(type as Parameters<typeof designerStore.addElement>[0], { x, y });
+              if (name) {
+                designerStore.updateElement(elementId, { name });
+              }
+              if (width !== undefined || height !== undefined) {
+                designerStore.updateElement(elementId, { width, height });
+              }
+              if (content) {
+                designerStore.updateElement(elementId, { content });
+              }
+              console.log(`[Script] Created element ${elementId} (${type})`);
+              return elementId;
+            },
+            deleteElement: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.deleteElements([el.id]);
+                console.log(`[Script] Deleted element ${elementName}`);
+                return true;
+              }
+              console.warn(`[Script] Element not found: ${elementName}`);
+              return false;
+            },
+            duplicateElement: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                const newId = designerStore.duplicateElement(el.id);
+                console.log(`[Script] Duplicated element ${elementName} -> ${newId}`);
+                return newId;
+              }
+              console.warn(`[Script] Element not found: ${elementName}`);
+              return null;
+            },
+
+            // ============================================================
+            // TEMPLATE MANAGEMENT
+            // ============================================================
+            getTemplates: () => {
+              return designerStore.templates;
+            },
+            getCurrentTemplate: () => {
+              const templateId = designerStore.currentTemplateId;
+              return templateId ? designerStore.templates.find(t => t.id === templateId) : null;
+            },
+            getCurrentTemplateId: () => {
+              return designerStore.currentTemplateId;
+            },
+            switchToTemplate: (templateName: string) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                designerStore.selectTemplate(template.id);
+                console.log(`[Script] Switched to template ${templateName}`);
+                return true;
+              }
+              console.warn(`[Script] Template not found: ${templateName}`);
+              return false;
+            },
+            addTemplate: (layerName: string, templateName?: string) => {
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                const templateId = designerStore.addTemplate(layer.id, templateName);
+                console.log(`[Script] Created template ${templateId}`);
+                return templateId;
+              }
+              console.warn(`[Script] Layer not found: ${layerName}`);
+              return null;
+            },
+            duplicateTemplate: (templateName: string) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                const newId = designerStore.duplicateTemplate(template.id);
+                console.log(`[Script] Duplicated template ${templateName} -> ${newId}`);
+                return newId;
+              }
+              console.warn(`[Script] Template not found: ${templateName}`);
+              return null;
+            },
+            updateTemplate: (templateName: string, updates: Record<string, unknown>) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                designerStore.updateTemplate(template.id, updates as Partial<typeof template>);
+                console.log(`[Script] Updated template ${templateName}`);
+              }
+            },
+            toggleTemplateVisibility: (templateName: string) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                designerStore.toggleTemplateVisibility(template.id);
+                console.log(`[Script] Toggled template visibility: ${templateName}`);
+              }
+            },
+            toggleTemplateLock: (templateName: string) => {
+              const template = designerStore.templates.find(t => t.name === templateName);
+              if (template) {
+                designerStore.toggleTemplateLock(template.id);
+                console.log(`[Script] Toggled template lock: ${templateName}`);
+              }
+            },
+
+            // ============================================================
+            // LAYER CONTROL
+            // ============================================================
+            getLayers: () => {
+              return designerStore.layers || [];
+            },
+            getLayer: (layerName: string) => {
+              return designerStore.layers?.find(l => l.name === layerName);
+            },
+            toggleLayerVisibility: (layerName: string) => {
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                designerStore.toggleLayerVisibility(layer.id);
+                console.log(`[Script] Toggled layer visibility: ${layerName}`);
+              }
+            },
+            toggleLayerLock: (layerName: string) => {
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                designerStore.toggleLayerLock(layer.id);
+                console.log(`[Script] Toggled layer lock: ${layerName}`);
+              }
+            },
+            showAllLayers: () => {
+              designerStore.showAllLayers();
+              console.log('[Script] Showing all layers');
+            },
+            showAllTemplates: () => {
+              designerStore.showAllTemplates();
+              console.log('[Script] Showing all templates');
+            },
+            showAll: () => {
+              designerStore.showAll();
+              console.log('[Script] Showing all layers and templates');
+            },
+
+            // ============================================================
+            // DATA BINDING / DATA SOURCE
+            // ============================================================
+            getDataRecord: () => {
+              const { dataPayload, currentRecordIndex } = designerStore;
+              if (dataPayload && dataPayload.length > currentRecordIndex) {
+                return dataPayload[currentRecordIndex];
+              }
+              return null;
+            },
+            getDataRecordAt: (index: number) => {
+              const { dataPayload } = designerStore;
+              if (dataPayload && dataPayload.length > index && index >= 0) {
+                return dataPayload[index];
+              }
+              return null;
+            },
+            getAllDataRecords: () => {
+              return designerStore.dataPayload || [];
+            },
+            getDataRecordCount: () => {
+              return designerStore.dataPayload?.length || 0;
+            },
+            getCurrentRecordIndex: () => {
+              return designerStore.currentRecordIndex;
+            },
+            setRecordIndex: (index: number) => {
+              designerStore.setCurrentRecordIndex(index);
+              console.log(`[Script] Set record index to ${index}`);
+            },
+            nextRecord: () => {
+              designerStore.nextRecord();
+              console.log(`[Script] Next record: ${designerStore.currentRecordIndex}`);
+            },
+            prevRecord: () => {
+              designerStore.prevRecord();
+              console.log(`[Script] Previous record: ${designerStore.currentRecordIndex}`);
+            },
+            getDataSourceInfo: () => {
+              return {
+                id: designerStore.dataSourceId,
+                name: designerStore.dataSourceName,
+                displayField: designerStore.dataDisplayField,
+                recordCount: designerStore.dataPayload?.length || 0,
+                currentIndex: designerStore.currentRecordIndex,
+              };
+            },
+
+            // ============================================================
+            // PHASE DURATION CONTROL
+            // ============================================================
+            getPhaseDuration: (phase: 'in' | 'loop' | 'out') => {
+              return designerStore.phaseDurations[phase];
+            },
+            setPhaseDuration: (phase: 'in' | 'loop' | 'out', durationMs: number) => {
+              designerStore.setPhaseDuration(phase, durationMs);
+              console.log(`[Script] Set ${phase} phase duration to ${durationMs}ms`);
+            },
+            getAllPhaseDurations: () => {
+              return { ...designerStore.phaseDurations };
+            },
+
+            // ============================================================
+            // Z-ORDER CONTROL
+            // ============================================================
+            bringToFront: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.bringToFront(el.id);
+                console.log(`[Script] Brought ${elementName} to front`);
+              }
+            },
+            sendToBack: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.sendToBack(el.id);
+                console.log(`[Script] Sent ${elementName} to back`);
+              }
+            },
+            bringForward: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.bringForward(el.id);
+                console.log(`[Script] Brought ${elementName} forward`);
+              }
+            },
+            sendBackward: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.sendBackward(el.id);
+                console.log(`[Script] Sent ${elementName} backward`);
+              }
+            },
+            setZIndex: (elementName: string, zIndex: number) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (el) {
+                designerStore.setZIndex(el.id, zIndex);
+                console.log(`[Script] Set ${elementName} z-index to ${zIndex}`);
+              }
+            },
+
+            // ============================================================
+            // ELEMENT GROUPING
+            // ============================================================
+            groupElements: (elementNames: string[]) => {
+              const ids = elementNames
+                .map(name => designerStore.elements.find(e => e.name === name)?.id)
+                .filter((id): id is string => id !== undefined);
+              if (ids.length > 1) {
+                const groupId = designerStore.groupElements(ids);
+                console.log(`[Script] Grouped ${elementNames.join(', ')} -> ${groupId}`);
+                return groupId;
+              }
+              console.warn('[Script] Need at least 2 elements to group');
+              return null;
+            },
+            ungroupElements: (groupName: string) => {
+              const el = designerStore.elements.find(e => e.name === groupName && e.element_type === 'group');
+              if (el) {
+                designerStore.ungroupElements(el.id);
+                console.log(`[Script] Ungrouped ${groupName}`);
+                return true;
+              }
+              console.warn(`[Script] Group not found: ${groupName}`);
+              return false;
+            },
+
+            // ============================================================
+            // SELECTION
+            // ============================================================
+            selectElements: (elementNames: string[]) => {
+              const ids = elementNames
+                .map(name => designerStore.elements.find(e => e.name === name)?.id)
+                .filter((id): id is string => id !== undefined);
+              designerStore.selectElements(ids, 'replace');
+              console.log(`[Script] Selected: ${elementNames.join(', ')}`);
+            },
+            addToSelection: (elementNames: string[]) => {
+              const ids = elementNames
+                .map(name => designerStore.elements.find(e => e.name === name)?.id)
+                .filter((id): id is string => id !== undefined);
+              designerStore.selectElements(ids, 'add');
+              console.log(`[Script] Added to selection: ${elementNames.join(', ')}`);
+            },
+            toggleSelection: (elementNames: string[]) => {
+              const ids = elementNames
+                .map(name => designerStore.elements.find(e => e.name === name)?.id)
+                .filter((id): id is string => id !== undefined);
+              designerStore.selectElements(ids, 'toggle');
+              console.log(`[Script] Toggled selection: ${elementNames.join(', ')}`);
+            },
+            selectAll: () => {
+              designerStore.selectAll();
+              console.log('[Script] Selected all elements');
+            },
+            deselectAll: () => {
+              designerStore.deselectAll();
+              console.log('[Script] Deselected all elements');
+            },
+            getSelectedElements: () => {
+              return designerStore.selectedElementIds
+                .map(id => designerStore.elements.find(e => e.id === id))
+                .filter((el): el is NonNullable<typeof el> => el !== undefined);
+            },
+            getSelectedElementNames: () => {
+              return designerStore.selectedElementIds
+                .map(id => designerStore.elements.find(e => e.id === id)?.name)
+                .filter((name): name is string => name !== undefined);
+            },
+
+            // ============================================================
+            // VIEW CONTROLS
+            // ============================================================
+            setZoom: (zoom: number) => {
+              designerStore.setZoom(zoom);
+              console.log(`[Script] Set zoom to ${zoom}`);
+            },
+            getZoom: () => {
+              return designerStore.zoom;
+            },
+            fitToScreen: () => {
+              designerStore.fitToScreen();
+              console.log('[Script] Fit to screen');
+            },
+            resetView: () => {
+              designerStore.resetView();
+              console.log('[Script] Reset view');
+            },
+            setPan: (x: number, y: number) => {
+              designerStore.setPan(x, y);
+              console.log(`[Script] Set pan to (${x}, ${y})`);
+            },
+            getPan: () => {
+              return { x: designerStore.panX, y: designerStore.panY };
+            },
+            toggleGrid: () => {
+              designerStore.toggleGrid();
+              console.log('[Script] Toggled grid');
+            },
+            toggleGuides: () => {
+              designerStore.toggleGuides();
+              console.log('[Script] Toggled guides');
+            },
+            toggleSafeArea: () => {
+              designerStore.toggleSafeArea();
+              console.log('[Script] Toggled safe area');
+            },
+
+            // ============================================================
+            // TIMERS / ASYNC
+            // ============================================================
+            delay: (ms: number) => {
+              return new Promise<void>(resolve => setTimeout(resolve, ms));
+            },
+            setTimeout: (callback: () => void, ms: number) => {
+              const id = window.setTimeout(callback, ms);
+              console.log(`[Script] Set timeout ${id} for ${ms}ms`);
+              return id;
+            },
+            clearTimeout: (id: number) => {
+              window.clearTimeout(id);
+              console.log(`[Script] Cleared timeout ${id}`);
+            },
+            setInterval: (callback: () => void, ms: number) => {
+              const id = window.setInterval(callback, ms);
+              console.log(`[Script] Set interval ${id} every ${ms}ms`);
+              return id;
+            },
+            clearInterval: (id: number) => {
+              window.clearInterval(id);
+              console.log(`[Script] Cleared interval ${id}`);
+            },
+
+            // ============================================================
+            // AUDIO
+            // ============================================================
+            playSound: (url: string, volume: number = 1.0) => {
+              try {
+                const audio = new Audio(url);
+                audio.volume = Math.max(0, Math.min(1, volume));
+                audio.play().catch(err => console.warn('[Script] Audio play failed:', err));
+                console.log(`[Script] Playing sound: ${url}`);
+                return audio;
+              } catch (err) {
+                console.warn('[Script] Failed to create audio:', err);
+                return null;
+              }
+            },
+            stopSound: (audio: HTMLAudioElement | null) => {
+              if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                console.log('[Script] Stopped sound');
+              }
+            },
+
+            // ============================================================
+            // HTTP FETCH
+            // ============================================================
+            fetch: async (url: string, options?: RequestInit) => {
+              try {
+                console.log(`[Script] Fetching: ${url}`);
+                const response = await fetch(url, options);
+                const data = await response.json();
+                console.log('[Script] Fetch complete');
+                return data;
+              } catch (err) {
+                console.error('[Script] Fetch error:', err);
+                throw err;
+              }
+            },
+            fetchText: async (url: string, options?: RequestInit) => {
+              try {
+                console.log(`[Script] Fetching text: ${url}`);
+                const response = await fetch(url, options);
+                const text = await response.text();
+                console.log('[Script] Fetch text complete');
+                return text;
+              } catch (err) {
+                console.error('[Script] Fetch error:', err);
+                throw err;
+              }
+            },
+
+            // ============================================================
+            // MEDIA ELEMENT CONTROL (Videos/Audio on Stage)
+            // ============================================================
+            /**
+             * Get video element by name and return its DOM reference
+             */
+            getMediaElement: (elementName: string): HTMLVideoElement | HTMLAudioElement | null => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el || (el.content.type !== 'video' && el.content.type !== 'audio')) {
+                console.warn(`[Script] Element ${elementName} is not a media element`);
+                return null;
+              }
+              // Find the video/audio element in the DOM
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLVideoElement | HTMLAudioElement;
+              return mediaEl || null;
+            },
+
+            /**
+             * Set media playback position (currentTime)
+             */
+            setMediaTime: (elementName: string, timeSeconds: number) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.currentTime = Math.max(0, timeSeconds);
+                console.log(`[Script] Set ${elementName} time to ${timeSeconds}s`);
+              }
+            },
+
+            /**
+             * Get media playback position (currentTime)
+             */
+            getMediaTime: (elementName: string): number => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return 0;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              return mediaEl?.currentTime || 0;
+            },
+
+            /**
+             * Get media duration
+             */
+            getMediaDuration: (elementName: string): number => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return 0;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              return mediaEl?.duration || 0;
+            },
+
+            /**
+             * Play a media element
+             */
+            playMedia: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.play().catch(err => console.warn('[Script] Media play failed:', err));
+                console.log(`[Script] Playing media: ${elementName}`);
+              }
+            },
+
+            /**
+             * Pause a media element
+             */
+            pauseMedia: (elementName: string) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.pause();
+                console.log(`[Script] Paused media: ${elementName}`);
+              }
+            },
+
+            /**
+             * Set media volume (0 to 1)
+             */
+            setMediaVolume: (elementName: string, volume: number) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.volume = Math.max(0, Math.min(1, volume));
+                console.log(`[Script] Set ${elementName} volume to ${volume}`);
+              }
+            },
+
+            /**
+             * Set media muted state
+             */
+            setMediaMuted: (elementName: string, muted: boolean) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.muted = muted;
+                console.log(`[Script] Set ${elementName} muted to ${muted}`);
+              }
+            },
+
+            /**
+             * Set media playback speed (0.25 to 4)
+             */
+            setMediaSpeed: (elementName: string, speed: number) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+              const mediaEl = document.querySelector(`[data-element-id="${el.id}"] video, [data-element-id="${el.id}"] audio`) as HTMLMediaElement;
+              if (mediaEl) {
+                mediaEl.playbackRate = Math.max(0.25, Math.min(4, speed));
+                console.log(`[Script] Set ${elementName} speed to ${speed}x`);
+              }
+            },
+
+            /**
+             * Create media keyframe animation for a video element
+             * This adds keyframes that control media_time to sync with timeline
+             */
+            addMediaTimeAnimation: (elementName: string, phase: 'in' | 'loop' | 'out' = 'in', startTime: number = 0, endTime?: number) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el || el.content.type !== 'video') {
+                console.warn(`[Script] Element ${elementName} is not a video element`);
+                return null;
+              }
+
+              // Get the phase duration to know how long the animation should be
+              const phaseDuration = designerStore.phaseDurations[phase];
+
+              // If endTime not specified, calculate based on phase duration
+              const videoEndTime = endTime !== undefined ? endTime : startTime + (phaseDuration / 1000);
+
+              // Add animation for this element in the specified phase
+              const animationId = designerStore.addAnimation(el.id, phase);
+
+              // Add keyframes for media_time
+              designerStore.addKeyframe(animationId, 0, { media_time: startTime });
+              designerStore.addKeyframe(animationId, phaseDuration, { media_time: videoEndTime });
+
+              console.log(`[Script] Added media time animation to ${elementName}: ${startTime}s → ${videoEndTime}s over ${phaseDuration}ms`);
+              return animationId;
+            },
+
+            /**
+             * Sync video playback with timeline
+             * When timeline plays, video plays in sync
+             */
+            syncMediaToTimeline: (elementName: string, videoStartTime: number = 0) => {
+              const el = designerStore.elements.find(e => e.name === elementName);
+              if (!el) return;
+
+              // Add media_time keyframes that map timeline position to video position
+              // At playhead 0ms, video is at videoStartTime
+              // As timeline advances, video advances proportionally
+              const inDuration = designerStore.phaseDurations.in;
+              const loopDuration = designerStore.phaseDurations.loop;
+
+              // Create animation for 'in' phase
+              const inAnimId = designerStore.addAnimation(el.id, 'in');
+              designerStore.addKeyframe(inAnimId, 0, { media_time: videoStartTime, media_playing: 1 });
+              designerStore.addKeyframe(inAnimId, inDuration, { media_time: videoStartTime + (inDuration / 1000), media_playing: 1 });
+
+              // Create animation for 'loop' phase
+              const loopAnimId = designerStore.addAnimation(el.id, 'loop');
+              const loopStartTime = videoStartTime + (inDuration / 1000);
+              designerStore.addKeyframe(loopAnimId, 0, { media_time: loopStartTime, media_playing: 1 });
+              designerStore.addKeyframe(loopAnimId, loopDuration, { media_time: loopStartTime + (loopDuration / 1000), media_playing: 1 });
+
+              console.log(`[Script] Synced ${elementName} to timeline starting at ${videoStartTime}s`);
+            },
+
+            // ============================================================
+            // FULL PREVIEW MODE
+            // ============================================================
+            playFullPreview: () => {
+              designerStore.playFullPreview();
+              console.log('[Script] Playing full preview (IN → LOOP → OUT)');
+            },
+            endPreviewPlayback: () => {
+              designerStore.endPreviewPlayback();
+              console.log('[Script] Ended preview playback');
+            },
+            isPlayingFullPreview: () => {
+              return designerStore.isPlayingFullPreview;
+            },
+
+            // ============================================================
+            // ON-AIR CONTROLS (Extended)
+            // ============================================================
+            switchTemplate: (newTemplateName: string, layerName: string) => {
+              const template = designerStore.templates.find(t => t.name === newTemplateName);
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (template && layer) {
+                designerStore.switchTemplate(template.id, layer.id);
+                console.log(`[Script] Switched to template ${newTemplateName} on layer ${layerName}`);
+              }
+            },
+            getOnAirState: (layerName: string) => {
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                return designerStore.onAirTemplates[layer.id] || null;
+              }
+              return null;
+            },
+            clearOnAir: (layerName: string) => {
+              const layer = designerStore.layers?.find(l => l.name === layerName);
+              if (layer) {
+                designerStore.clearOnAir(layer.id);
+                console.log(`[Script] Cleared on-air for layer ${layerName}`);
+              }
+            },
+
+            // ============================================================
+            // UTILITY / MATH HELPERS
+            // ============================================================
+            random: (min: number = 0, max: number = 1) => {
+              return Math.random() * (max - min) + min;
+            },
+            randomInt: (min: number, max: number) => {
+              return Math.floor(Math.random() * (max - min + 1)) + min;
+            },
+            clamp: (value: number, min: number, max: number) => {
+              return Math.max(min, Math.min(max, value));
+            },
+            lerp: (start: number, end: number, t: number) => {
+              return start + (end - start) * t;
+            },
+            map: (value: number, inMin: number, inMax: number, outMin: number, outMax: number) => {
+              return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+            },
           };
 
           try {

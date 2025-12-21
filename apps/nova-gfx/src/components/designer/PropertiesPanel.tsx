@@ -7459,6 +7459,15 @@ function ContentEditor({ element, selectedKeyframe, currentAnimation }: EditorPr
           </div>
         </PropertySection>
 
+        {/* Media Keyframe Properties - only for direct video files */}
+        {isDirectVideo && (
+          <VideoTimelineControls
+            element={element}
+            selectedKeyframe={selectedKeyframe}
+            currentAnimation={currentAnimation}
+          />
+        )}
+
         <PropertySection title="Object Fit">
           <select
             value={videoContentExtended.fit || 'cover'}
@@ -8653,6 +8662,215 @@ function SearchableSection({ title, children, icon }: { title: string; children:
       </div>
       {children}
     </div>
+  );
+}
+
+// Video Timeline Controls component for media keyframe properties
+function VideoTimelineControls({
+  element,
+  selectedKeyframe,
+  currentAnimation,
+}: {
+  element: Element;
+  selectedKeyframe: Keyframe | null;
+  currentAnimation: Animation | null;
+}) {
+  const [videoDuration, setVideoDuration] = useState<number>(30); // Default 30 seconds
+  const [isLoadingDuration, setIsLoadingDuration] = useState(true);
+
+  // Try to get video duration from DOM
+  useEffect(() => {
+    const getVideoDuration = () => {
+      const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+      if (videoEl && videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
+        setVideoDuration(videoEl.duration);
+        setIsLoadingDuration(false);
+      } else {
+        // Retry after a delay if video not ready
+        setTimeout(getVideoDuration, 500);
+      }
+    };
+
+    getVideoDuration();
+
+    // Also listen for loadedmetadata event
+    const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+    if (videoEl) {
+      const handleMetadata = () => {
+        if (videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
+          setVideoDuration(videoEl.duration);
+          setIsLoadingDuration(false);
+        }
+      };
+      videoEl.addEventListener('loadedmetadata', handleMetadata);
+      return () => videoEl.removeEventListener('loadedmetadata', handleMetadata);
+    }
+  }, [element.id]);
+
+  // Format time display (mm:ss.s)
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toFixed(1);
+    return `${mins}:${secs.padStart(4, '0')}`;
+  };
+
+  return (
+    <PropertySection title="Timeline Control">
+      <div className="space-y-3">
+        <p className="text-[10px] text-muted-foreground mb-2">
+          Control video playback with timeline keyframes
+          {isLoadingDuration && ' (loading duration...)'}
+        </p>
+
+        {/* Video Time Scrubber */}
+        <KeyframableProperty
+          title="Video Time"
+          propertyKey="media_time"
+          elementId={element.id}
+          elementName={element.name}
+          selectedKeyframe={selectedKeyframe}
+          currentAnimation={currentAnimation}
+          currentValue={0}
+          onChange={() => {}}
+        >
+          {(displayValue, onChange) => {
+            const currentTime = Number(displayValue) || 0;
+            return (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max={videoDuration}
+                    step="0.1"
+                    value={currentTime}
+                    onChange={(e) => onChange(parseFloat(e.target.value))}
+                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>{formatTime(currentTime)}</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={videoDuration}
+                    step="0.1"
+                    value={currentTime.toFixed(1)}
+                    onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                    className="h-6 w-16 text-[10px] text-center"
+                  />
+                  <span>{formatTime(videoDuration)}</span>
+                </div>
+              </div>
+            );
+          }}
+        </KeyframableProperty>
+
+        {/* Volume */}
+        <KeyframableProperty
+          title="Volume"
+          propertyKey="media_volume"
+          elementId={element.id}
+          elementName={element.name}
+          selectedKeyframe={selectedKeyframe}
+          currentAnimation={currentAnimation}
+          currentValue={1}
+          onChange={() => {}}
+        >
+          {(displayValue, onChange) => (
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={Number(displayValue) ?? 1}
+                onChange={(e) => onChange(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
+              <span className="text-xs text-muted-foreground w-10 text-right">
+                {Math.round((Number(displayValue) ?? 1) * 100)}%
+              </span>
+            </div>
+          )}
+        </KeyframableProperty>
+
+        {/* Speed */}
+        <KeyframableProperty
+          title="Speed"
+          propertyKey="media_speed"
+          elementId={element.id}
+          elementName={element.name}
+          selectedKeyframe={selectedKeyframe}
+          currentAnimation={currentAnimation}
+          currentValue={1}
+          onChange={() => {}}
+        >
+          {(displayValue, onChange) => (
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.25"
+                max="4"
+                step="0.25"
+                value={Number(displayValue) ?? 1}
+                onChange={(e) => onChange(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
+              <span className="text-xs text-muted-foreground w-10 text-right">
+                {(Number(displayValue) ?? 1).toFixed(2)}x
+              </span>
+            </div>
+          )}
+        </KeyframableProperty>
+
+        {/* Playing State */}
+        <KeyframableProperty
+          title="Playing"
+          propertyKey="media_playing"
+          elementId={element.id}
+          elementName={element.name}
+          selectedKeyframe={selectedKeyframe}
+          currentAnimation={currentAnimation}
+          currentValue={1}
+          onChange={() => {}}
+        >
+          {(displayValue, onChange) => (
+            <select
+              value={Number(displayValue) >= 0.5 ? "1" : "0"}
+              onChange={(e) => onChange(parseInt(e.target.value))}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="1">Playing</option>
+              <option value="0">Paused</option>
+            </select>
+          )}
+        </KeyframableProperty>
+
+        {/* Muted State */}
+        <KeyframableProperty
+          title="Muted"
+          propertyKey="media_muted"
+          elementId={element.id}
+          elementName={element.name}
+          selectedKeyframe={selectedKeyframe}
+          currentAnimation={currentAnimation}
+          currentValue={1}
+          onChange={() => {}}
+        >
+          {(displayValue, onChange) => (
+            <select
+              value={Number(displayValue) >= 0.5 ? "1" : "0"}
+              onChange={(e) => onChange(parseInt(e.target.value))}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="1">Muted</option>
+              <option value="0">Unmuted</option>
+            </select>
+          )}
+        </KeyframableProperty>
+      </div>
+    </PropertySection>
   );
 }
 

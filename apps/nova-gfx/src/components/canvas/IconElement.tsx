@@ -9,7 +9,7 @@ import { library, findIconDefinition } from '@fortawesome/fontawesome-svg-core';
 import lottie from 'lottie-web';
 // @ts-ignore - react-animated-weather types
 import ReactAnimatedWeather from 'react-animated-weather';
-import { getWeatherIcon } from '@/lib/weatherIcons';
+import { getWeatherIcon, mapWeatherApiIcon } from '@/lib/weatherIcons';
 type AnimationItem = any;
 
 // Add FontAwesome icon libraries
@@ -231,9 +231,28 @@ export function IconElement({
   }, [content.library, content.iconName, content.weight]);
 
   // Get weather icon
+  // Supports both direct icon names (e.g., "animated-clear-day") and
+  // API icon strings (e.g., "sunny", "partly cloudy") via mapping
   const weatherIcon = useMemo(() => {
+    // Debug log for icon rendering
+    console.log('[IconElement] Rendering with:', {
+      library: content.library,
+      iconName: content.iconName,
+    });
+
     if (content.library === 'weather') {
-      return getWeatherIcon(content.iconName);
+      // First try direct lookup
+      let icon = getWeatherIcon(content.iconName);
+
+      // If not found directly, try mapping the API icon string
+      if (!icon && content.iconName) {
+        const mappedIconName = mapWeatherApiIcon(content.iconName);
+        console.log('[IconElement] Mapped icon name:', content.iconName, '->', mappedIconName);
+        icon = getWeatherIcon(mappedIconName);
+      }
+
+      console.log('[IconElement] Weather icon result:', icon ? 'found' : 'not found');
+      return icon;
     }
     return null;
   }, [content.library, content.iconName]);

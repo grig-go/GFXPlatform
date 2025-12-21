@@ -68,6 +68,15 @@ function getVimeoId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+// Animated media properties that can be controlled via keyframes
+export interface AnimatedMediaProps {
+  media_time?: number;      // Video currentTime in seconds
+  media_playing?: number;   // 0 = paused, 1 = playing
+  media_volume?: number;    // 0 to 1
+  media_muted?: number;     // 0 = unmuted, 1 = muted
+  media_speed?: number;     // Playback rate (0.25 to 4)
+}
+
 interface VideoElementProps {
   content: {
     type: 'video';
@@ -83,6 +92,8 @@ interface VideoElementProps {
   elementId?: string;
   isSelected?: boolean;
   isPreview?: boolean;
+  animatedMediaProps?: AnimatedMediaProps;  // Keyframe-controlled media properties
+  isPlaying?: boolean;  // Timeline playing state
 }
 
 export function VideoElement({
@@ -92,15 +103,35 @@ export function VideoElement({
   elementId,
   isSelected = false,
   isPreview = true, // Default to true (hide overlay) unless explicitly in designer
+  animatedMediaProps,
+  isPlaying: timelinePlaying = false,
 }: VideoElementProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(content.autoplay ?? true);
-  const [isMuted, setIsMuted] = useState(content.muted ?? true);
+  const [localIsPlaying, setLocalIsPlaying] = useState(content.autoplay ?? true);
+  const [localIsMuted, setLocalIsMuted] = useState(content.muted ?? true);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState(content.src || DEFAULT_VIDEO_URL);
   const [error, setError] = useState<string | null>(null);
-  
+  const lastTimeRef = useRef<number | null>(null);
+
   const updateElement = useDesignerStore((state) => state.updateElement);
+
+  // Determine if we're using keyframe control
+  const hasKeyframeControl = animatedMediaProps && (
+    animatedMediaProps.media_time !== undefined ||
+    animatedMediaProps.media_playing !== undefined ||
+    animatedMediaProps.media_volume !== undefined ||
+    animatedMediaProps.media_muted !== undefined ||
+    animatedMediaProps.media_speed !== undefined
+  );
+
+  // Use animated values when keyframe-controlled, otherwise use local state
+  const isPlaying = hasKeyframeControl && animatedMediaProps?.media_playing !== undefined
+    ? animatedMediaProps.media_playing >= 0.5
+    : localIsPlaying;
+  const isMuted = hasKeyframeControl && animatedMediaProps?.media_muted !== undefined
+    ? animatedMediaProps.media_muted >= 0.5
+    : localIsMuted;
   
   // Detect video type
   const videoType = useMemo(() => 
@@ -165,12 +196,42 @@ export function VideoElement({
       }
     }
   }, [isPlaying, videoType]);
-  
+
   useEffect(() => {
     if (videoRef.current && videoType === 'file') {
       videoRef.current.muted = isMuted;
     }
   }, [isMuted, videoType]);
+
+  // Apply animated media properties from keyframes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || videoType !== 'file' || !hasKeyframeControl || !timelinePlaying) return;
+
+    // Apply media_time - sync video playback position with timeline
+    if (animatedMediaProps?.media_time !== undefined) {
+      const targetTime = animatedMediaProps.media_time;
+      // Only seek if the difference is significant (avoid micro-seeks causing stuttering)
+      const timeDiff = Math.abs(video.currentTime - targetTime);
+      if (timeDiff > 0.1) {
+        video.currentTime = targetTime;
+        lastTimeRef.current = targetTime;
+      }
+    }
+
+    // Apply media_volume
+    if (animatedMediaProps?.media_volume !== undefined) {
+      video.volume = Math.max(0, Math.min(1, animatedMediaProps.media_volume));
+    }
+
+    // Apply media_speed (playback rate)
+    if (animatedMediaProps?.media_speed !== undefined) {
+      const speed = Math.max(0.25, Math.min(4, animatedMediaProps.media_speed));
+      if (video.playbackRate !== speed) {
+        video.playbackRate = speed;
+      }
+    }
+  }, [animatedMediaProps, hasKeyframeControl, videoType, timelinePlaying]);
   
   // Update element when URL changes
   const handleUrlSubmit = () => {
@@ -316,7 +377,7 @@ export function VideoElement({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-white hover:bg-white/20"
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={() => setLocalIsPlaying(!localIsPlaying)}
               >
                 {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               </Button>
@@ -324,7 +385,7 @@ export function VideoElement({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-white hover:bg-white/20"
-                onClick={() => setIsMuted(!isMuted)}
+                onClick={() => setLocalIsMuted(!localIsMuted)}
               >
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </Button>

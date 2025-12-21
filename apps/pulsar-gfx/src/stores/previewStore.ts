@@ -29,6 +29,18 @@ interface PreviewStore {
   dataRecordIndex: number;
   setDataRecordIndex: (index: number) => void;
 
+  // Data source state (from Nova endpoints)
+  dataSourceId: string | null;
+  dataSourceName: string | null;
+  dataSourceSlug: string | null;
+  dataPayload: Record<string, unknown>[] | null;
+  dataLoading: boolean;
+  dataError: string | null;
+  setDataSource: (id: string | null, name: string | null, slug: string | null, data: Record<string, unknown>[] | null) => void;
+  setDataLoading: (loading: boolean) => void;
+  setDataError: (error: string | null) => void;
+  clearDataSource: () => void;
+
   // Composite mode state
   compositeLayers: CompositeLayer[];
 
@@ -65,6 +77,13 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
   previewPayload: {},
   animationPhase: 'idle',
   dataRecordIndex: 0,
+  // Data source state
+  dataSourceId: null,
+  dataSourceName: null,
+  dataSourceSlug: null,
+  dataPayload: null,
+  dataLoading: false,
+  dataError: null,
   compositeLayers: [
     { layerIndex: 0, isVisible: true },
     { layerIndex: 1, isVisible: true },
@@ -75,6 +94,27 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
   setMode: (mode) => set({ mode }),
   setLoadedProjectId: (projectId) => set({ loadedProjectId: projectId }),
   setDataRecordIndex: (index) => set({ dataRecordIndex: index }),
+
+  // Data source methods
+  setDataSource: (id, name, slug, data) => set({
+    dataSourceId: id,
+    dataSourceName: name,
+    dataSourceSlug: slug,
+    dataPayload: data,
+    dataLoading: false,
+    dataError: null,
+  }),
+  setDataLoading: (loading) => set({ dataLoading: loading }),
+  setDataError: (error) => set({ dataError: error, dataLoading: false }),
+  clearDataSource: () => set({
+    dataSourceId: null,
+    dataSourceName: null,
+    dataSourceSlug: null,
+    dataPayload: null,
+    dataLoading: false,
+    dataError: null,
+    dataRecordIndex: 0,
+  }),
 
   selectTemplate: (templateId) => {
     set({
@@ -195,6 +235,13 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
       previewPayload: {},
       animationPhase: 'idle',
       dataRecordIndex: 0,
+      // Clear data source state
+      dataSourceId: null,
+      dataSourceName: null,
+      dataSourceSlug: null,
+      dataPayload: null,
+      dataLoading: false,
+      dataError: null,
       compositeLayers: [
         { layerIndex: 0, isVisible: true },
         { layerIndex: 1, isVisible: true },

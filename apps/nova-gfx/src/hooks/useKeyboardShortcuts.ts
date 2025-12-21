@@ -88,6 +88,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     const globalShortcuts = ['save', 'escape', 'showShortcuts'];
 
     if (isInputField && !globalShortcuts.includes(action)) {
+      if (action === 'delete') {
+        console.log('[Shortcuts] Delete blocked - focus in input field:', activeElement?.tagName, activeElement?.className);
+      }
       return false;
     }
 
@@ -199,10 +202,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         return false;
 
       case 'delete':
+        console.log('[Shortcuts] Delete action triggered', { selectedElementIds: selectedElementIds.length });
         if (selectedElementIds.length > 0) {
+          console.log('[Shortcuts] Deleting elements:', selectedElementIds);
           deleteElements(selectedElementIds);
           return true;
         }
+        console.log('[Shortcuts] No elements selected to delete');
         return false;
 
       case 'selectAll':
@@ -497,6 +503,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
 
       const combo = eventToKeyCombo(e);
       const shortcut = findShortcutByCombo(combo, shortcutsRef.current);
+
+      // Debug delete key
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        console.log('[Shortcuts] Key pressed:', e.key, 'combo:', combo, 'shortcut:', shortcut?.action, 'activeElement:', document.activeElement?.tagName);
+      }
 
       if (shortcut) {
         const handled = handleAction(shortcut.action);

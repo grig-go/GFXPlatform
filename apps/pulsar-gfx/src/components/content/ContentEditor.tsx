@@ -27,7 +27,7 @@ import { useChannelStore } from '@/stores/channelStore';
 import { useMapboxStore } from '@/stores/mapboxStore';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
-import { getDataSourceById, getNestedValue } from '@/data/sampleDataSources';
+import { getNestedValue } from '@/data/sampleDataSources';
 import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
 
 // Common Lucide icons for the icon picker
@@ -151,7 +151,21 @@ function getElementsFromLocalStorage(templateId: string): any[] {
 
 export function ContentEditor() {
   const { pages, updatePagePayload, createPage } = usePageStore();
-  const { selectedTemplateId, selectedPageId, updatePreviewField, setPreviewPayload, dataRecordIndex, setDataRecordIndex } = usePreviewStore();
+  const {
+    selectedTemplateId,
+    selectedPageId,
+    updatePreviewField,
+    setPreviewPayload,
+    dataRecordIndex,
+    setDataRecordIndex,
+    // Data source state from Nova endpoints
+    dataSourceId,
+    dataSourceName,
+    dataSourceSlug,
+    dataPayload: storeDataPayload,
+    dataLoading,
+    dataError,
+  } = usePreviewStore();
   const { templates } = useProjectStore();
   const { currentPlaylist } = usePlaylistStore();
   const { selectedChannel } = useChannelStore();
@@ -224,38 +238,30 @@ export function ContentEditor() {
     { id: 'dubai', name: 'Dubai', lng: 55.2708, lat: 25.2048, zoom: 11 },
   ], []);
 
-  // Data source for template with bindings
+  // Data source info from previewStore (populated when project loads or template is selected)
   const dataSource = useMemo(() => {
-    const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
-    console.log('[ContentEditor] Data source check:', {
-      selectedTemplateId,
-      selectedPageId,
-      previewPageTemplateId: previewPage?.templateId,
-      foundTemplateId: template?.id,
-      foundTemplateName: template?.name,
-      dataSourceId: template?.dataSourceId,
-      dataSourceConfig: template?.dataSourceConfig,
-      templatesCount: templates.length,
-    });
-    if (!template?.dataSourceId) {
-      console.log('[ContentEditor] No dataSourceId set on template');
-      return null;
+    if (dataSourceId && storeDataPayload && storeDataPayload.length > 0) {
+      return {
+        id: dataSourceId,
+        name: dataSourceName || 'Data Source',
+        slug: dataSourceSlug,
+        data: storeDataPayload,
+      };
     }
-    const ds = getDataSourceById(template.dataSourceId);
-    console.log('[ContentEditor] Found data source:', ds?.name, 'with', ds?.data?.length, 'records');
-    return ds;
-  }, [selectedTemplate, previewPage?.templateId, templates, selectedTemplateId, selectedPageId]);
+    return null;
+  }, [dataSourceId, dataSourceName, dataSourceSlug, storeDataPayload]);
 
-  // Data payload (array of records)
+  // Data payload (array of records) from previewStore
   const dataPayload = useMemo(() => {
-    return dataSource?.data || null;
-  }, [dataSource]);
+    return storeDataPayload || null;
+  }, [storeDataPayload]);
 
   // Display field for record selector dropdown
   const dataDisplayField = useMemo(() => {
     const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
-    return template?.dataSourceConfig?.displayField || dataSource?.displayField || null;
-  }, [selectedTemplate, previewPage?.templateId, templates, dataSource]);
+    // The displayField comes from template's dataSourceConfig, set when binding was created
+    return template?.dataSourceConfig?.displayField || null;
+  }, [selectedTemplate, previewPage?.templateId, templates]);
 
   // Current record based on index
   const currentRecord = useMemo(() => {
@@ -294,12 +300,29 @@ export function ContentEditor() {
   // Navigation handlers
   const prevRecord = useCallback(() => {
     setDataRecordIndex(Math.max(0, currentRecordIndex - 1));
-  }, [currentRecordIndex, setDataRecordIndex]);
+    // Mark as changed if we're editing a page
+    if (previewPage) {
+      setHasChanges(true);
+    }
+  }, [currentRecordIndex, setDataRecordIndex, previewPage]);
 
   const nextRecord = useCallback(() => {
     if (!dataPayload) return;
     setDataRecordIndex(Math.min(dataPayload.length - 1, currentRecordIndex + 1));
-  }, [dataPayload, currentRecordIndex, setDataRecordIndex]);
+    // Mark as changed if we're editing a page
+    if (previewPage) {
+      setHasChanges(true);
+    }
+  }, [dataPayload, currentRecordIndex, setDataRecordIndex, previewPage]);
+
+  // Handle record index change from dropdown
+  const handleRecordChange = useCallback((val: string) => {
+    setDataRecordIndex(parseInt(val, 10));
+    // Mark as changed if we're editing a page
+    if (previewPage) {
+      setHasChanges(true);
+    }
+  }, [setDataRecordIndex, previewPage]);
 
   // Get bindings for the current template from localStorage
   const templateBindings = useMemo(() => {
@@ -1240,7 +1263,7 @@ export function ContentEditor() {
 
             <Select
               value={String(currentRecordIndex)}
-              onValueChange={(val) => setDataRecordIndex(parseInt(val, 10))}
+              onValueChange={handleRecordChange}
             >
               <SelectTrigger className="h-7 flex-1 text-xs">
                 <SelectValue>

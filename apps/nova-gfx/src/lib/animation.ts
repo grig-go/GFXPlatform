@@ -256,7 +256,13 @@ const elementProperties = new Set([
   'screenMask_x', 'screenMask_y', 'screenMask_width', 'screenMask_height',
   'screenMask_feather_top', 'screenMask_feather_right', 'screenMask_feather_bottom', 'screenMask_feather_left',
   // Character animation progress
-  'charAnimation_progress'
+  'charAnimation_progress',
+  // Media (video/audio) control properties
+  'media_time',      // Controls video/audio currentTime (in seconds)
+  'media_playing',   // Controls play/pause state (0 = paused, 1 = playing)
+  'media_volume',    // Controls volume (0 to 1)
+  'media_muted',     // Controls muted state (0 = unmuted, 1 = muted)
+  'media_speed',     // Controls playback rate (0.25 to 4)
 ]);
 
 // Calculate animated properties for an element at a given time

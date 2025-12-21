@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, ensureFreshConnection } from '@emergent-platform/supabase-client';
 import { usePlaylistStore } from './playlistStore';
 import { usePageStore } from './pageStore';
 import { useAuthStore } from './authStore';
+import { fetchEndpointData } from '@/services/novaEndpointService';
+import { usePreviewStore } from './previewStore';
 
 // Types - these will move to @emergent-platform/types
 export interface Project {
@@ -40,6 +42,7 @@ export interface Template {
   // Data binding fields
   dataSourceId?: string | null;
   dataSourceConfig?: {
+    slug?: string;
     displayField?: string;
     defaultRecordIndex?: number;
   } | null;
@@ -105,6 +108,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   loadProjects: async () => {
     set({ isLoading: true, error: null });
+
+    // Force fresh connection before loading to prevent stale data
+    try {
+      await ensureFreshConnection(true);
+    } catch (err) {
+      console.warn('[projectStore] Failed to ensure fresh connection:', err);
+    }
+
     try {
       // Get user's organization from auth store
       const { user } = useAuthStore.getState();
@@ -112,7 +123,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Build query - filter by organization if user is logged in
       let query = supabase
         .from('gfx_projects')
-        .select('*');
+        .select('*')
+        .eq('archived', false);  // Filter out archived/deleted projects
 
       // Filter by user's organization if they have one
       if (user?.organizationId) {
@@ -200,7 +212,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       const templates: Template[] = (templateData || []).map((t: any) => {
         const layerInfo = layerMap.get(t.layer_id) || { name: 'Unknown', type: 'custom' };
-        return {
+        const template = {
           id: t.id,
           projectId: t.project_id,
           layerId: t.layer_id,
@@ -225,10 +237,38 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           dataSourceId: t.data_source_id || null,
           dataSourceConfig: t.data_source_config || null,
         };
+        return template;
       });
 
       console.log('[projectStore] Setting currentProject:', currentProject.name, 'with', templates.length, 'templates');
       set({ currentProject, templates, isLoading: false });
+
+      // Find first template with a data source and load its data immediately
+      const templateWithDataSource = templates.find(t => {
+        const config = t.dataSourceConfig as { slug?: string } | null;
+        return config?.slug;
+      });
+
+      if (templateWithDataSource) {
+        const config = templateWithDataSource.dataSourceConfig as { slug: string };
+        const slug = config.slug;
+
+        // Load data immediately (non-blocking) and store in previewStore
+        fetchEndpointData(slug).then(data => {
+          if (data && data.length > 0) {
+            // Use template's dataSourceId or generate a placeholder ID from slug
+            const sourceId = templateWithDataSource.dataSourceId || `endpoint:${slug}`;
+            usePreviewStore.getState().setDataSource(
+              sourceId,
+              slug,
+              slug,
+              data
+            );
+          }
+        }).catch(() => {
+          // Ignore errors on prefetch
+        });
+      }
 
       // Clear and reload playlists for the new project
       console.log('[projectStore] Clearing and reloading playlists for project:', projectId);

@@ -11,7 +11,18 @@ import { useDesignerStore } from '@/stores/designerStore';
 import { useInteractiveStore } from '@/lib/interactive/interactive-store';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { AIContext, AIChanges, ChatAttachment, AIVisualScriptNode, AIVisualScriptEdge } from '@emergent-platform/types';
-import { sampleDataSources, type DataSourceConfig, extractFieldsFromData } from '@/data/sampleDataSources';
+import { extractFieldsFromData } from '@/data/sampleDataSources';
+import { listNovaEndpoints, fetchEndpointData } from '@/services/novaEndpointService';
+import type { NovaEndpoint } from '@/types/dataEndpoint';
+
+// Data source config for chat panel (simplified from full endpoint)
+interface ChatDataSource {
+  id: string;
+  name: string;
+  slug: string;
+  data: Record<string, unknown>[];
+  displayField: string;
+}
 
 interface Attachment {
   id: string;
@@ -483,7 +494,10 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isDocsMode, setIsDocsMode] = useState(false);
   const [isDataMode, setIsDataMode] = useState(false);
-  const [selectedDataSource, setSelectedDataSource] = useState<DataSourceConfig | null>(null);
+  const [selectedDataSource, setSelectedDataSource] = useState<ChatDataSource | null>(null);
+  const [availableEndpoints, setAvailableEndpoints] = useState<NovaEndpoint[]>([]);
+  const [endpointsLoading, setEndpointsLoading] = useState(false);
+  const [endpointDataLoading, setEndpointDataLoading] = useState(false);
   const [showQuickPrompts, setShowQuickPrompts] = useState(() => {
     const saved = localStorage.getItem('nova-chat-show-quick-prompts');
     return saved !== null ? saved === 'true' : true; // Default to showing
@@ -554,6 +568,67 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   useEffect(() => {
     getCurrentModelDisplayInfo().then(setModelDisplayInfo).catch(console.warn);
   }, []);
+
+  // Load available endpoints on mount
+  useEffect(() => {
+    const loadEndpoints = async () => {
+      setEndpointsLoading(true);
+      try {
+        const endpoints = await listNovaEndpoints();
+        setAvailableEndpoints(endpoints);
+      } catch (err) {
+        console.error('[ChatPanel] Failed to load endpoints:', err);
+      } finally {
+        setEndpointsLoading(false);
+      }
+    };
+    loadEndpoints();
+  }, []);
+
+  // Handle endpoint selection - fetch data and set as data source
+  const handleSelectEndpoint = async (endpoint: NovaEndpoint) => {
+    setEndpointDataLoading(true);
+    try {
+      const data = await fetchEndpointData(endpoint.slug);
+
+      // Determine display field
+      let displayField = '';
+      if (data.length > 0) {
+        const firstRecord = data[0];
+        const candidates = ['name', 'title', 'label', 'State', 'Title', 'location.name'];
+        for (const candidate of candidates) {
+          if (candidate.includes('.')) {
+            const parts = candidate.split('.');
+            let val: unknown = firstRecord;
+            for (const part of parts) {
+              val = (val as Record<string, unknown>)?.[part];
+            }
+            if (val && typeof val === 'string') {
+              displayField = candidate;
+              break;
+            }
+          } else if (firstRecord[candidate] && typeof firstRecord[candidate] === 'string') {
+            displayField = candidate;
+            break;
+          }
+        }
+      }
+
+      setSelectedDataSource({
+        id: endpoint.id,
+        name: endpoint.name,
+        slug: endpoint.slug,
+        data,
+        displayField,
+      });
+      setIsDataMode(true);
+      setIsDocsMode(false);
+    } catch (err) {
+      console.error('[ChatPanel] Failed to fetch endpoint data:', err);
+    } finally {
+      setEndpointDataLoading(false);
+    }
+  };
 
   // Handle drag to resize input area
   const handleResizeDragStart = useCallback((e: React.MouseEvent) => {
@@ -989,9 +1064,10 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
               selectedDataSource.id,
               selectedDataSource.name,
               selectedDataSource.data,
-              selectedDataSource.displayField
+              selectedDataSource.displayField,
+              selectedDataSource.slug // Pass slug for auto-fetch on reload
             );
-            console.log(`📊 Set data source "${selectedDataSource.name}" on new template`);
+            console.log(`📊 Set data source "${selectedDataSource.name}" (slug: ${selectedDataSource.slug}) on new template`);
           }
         } else {
           console.error('❌ No layer available to create template in');
@@ -1371,9 +1447,10 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
             selectedDataSource.id,
             selectedDataSource.name,
             selectedDataSource.data,
-            selectedDataSource.displayField
+            selectedDataSource.displayField,
+            selectedDataSource.slug // Pass slug for auto-fetch on reload
           );
-          console.log(`📊 Linked data source "${selectedDataSource.name}" to template after creating bindings`);
+          console.log(`📊 Linked data source "${selectedDataSource.name}" (slug: ${selectedDataSource.slug}) to template after creating bindings`);
         }
       }
 
@@ -3281,34 +3358,46 @@ The AI provider will be automatically available once configured.`,
                   Clear data selection
                 </DropdownMenuItem>
               )}
-              {/* Group data sources by category */}
-              {Array.from(new Set(sampleDataSources.map(ds => ds.category))).map(category => (
-                <div key={category}>
+              {/* Loading state */}
+              {endpointsLoading && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {/* Empty state */}
+              {!endpointsLoading && availableEndpoints.length === 0 && (
+                <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                  No data endpoints available
+                </div>
+              )}
+              {/* Available endpoints */}
+              {!endpointsLoading && availableEndpoints.length > 0 && (
+                <div>
                   <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {category}
+                    Nova GFX Endpoints
                   </div>
-                  {sampleDataSources.filter(ds => ds.category === category).map(ds => (
+                  {availableEndpoints.map(endpoint => (
                     <DropdownMenuItem
-                      key={ds.id}
-                      onClick={() => {
-                        setSelectedDataSource(ds);
-                        setIsDataMode(true);
-                        setIsDocsMode(false); // Turn off docs mode when data mode is on
-                      }}
+                      key={endpoint.id}
+                      onClick={() => handleSelectEndpoint(endpoint)}
+                      disabled={endpointDataLoading}
                       className={cn(
                         "text-xs",
-                        selectedDataSource?.id === ds.id && "bg-emerald-500/10 text-emerald-600"
+                        selectedDataSource?.id === endpoint.id && "bg-emerald-500/10 text-emerald-600"
                       )}
                     >
                       <Database className="w-3.5 h-3.5 mr-2" />
-                      {ds.name}
-                      {selectedDataSource?.id === ds.id && (
+                      <span className="flex-1 truncate">{endpoint.name}</span>
+                      {endpointDataLoading && selectedDataSource?.id === endpoint.id && (
+                        <Loader2 className="w-3 h-3 animate-spin ml-2" />
+                      )}
+                      {!endpointDataLoading && selectedDataSource?.id === endpoint.id && (
                         <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-emerald-500" />
                       )}
                     </DropdownMenuItem>
                   ))}
                 </div>
-              ))}
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

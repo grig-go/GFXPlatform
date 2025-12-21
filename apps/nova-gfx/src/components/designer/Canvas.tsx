@@ -331,10 +331,7 @@ export function Canvas() {
           setTool('select');
           deselectAll();
           break;
-        case 'delete':
-        case 'backspace':
-          // Delete selected elements (handled by Stage)
-          break;
+        // Note: delete/backspace are handled by useKeyboardShortcuts hook
       }
     };
 

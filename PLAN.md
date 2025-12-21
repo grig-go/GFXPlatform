@@ -96,25 +96,160 @@ interface NovaEndpoint {
 
 ---
 
-### Step 3: Update AddDataModal
+### Step 3: Update AddDataModal (Primary Data Source Selector)
 
 **File:** `apps/nova-gfx/src/components/dialogs/AddDataModal.tsx`
 
-**Changes:**
-1. Remove static `sampleDataSources` references
-2. Fetch endpoint list from `novaEndpointService.listNovaEndpoints()`
-3. Show endpoint cards with name, description, format
-4. Preview endpoint data (live fetch)
-5. On select: fetch data and pass to store in same format as before
+This is the main modal used by `DataBindingTab` to add data sources to templates.
 
-**UI Flow:**
+**Current State (static):**
+```typescript
+// Lines 21-25 - imports static data
+import {
+  getCategories,
+  getDataSourcesForCategory,
+  type DataSourceConfig,
+} from '@/data/sampleDataSources';
+
+// Line 38 - gets static categories
+const categories = useMemo(() => getCategories(), []);
+
+// Lines 40-43 - filters static data by category
+const dataSources = useMemo(() => {
+  if (!selectedCategory) return [];
+  return getDataSourcesForCategory(selectedCategory);
+}, [selectedCategory]);
 ```
-┌─────────────────────────────────┐
-│ Nova GFX Weather                │
-│ /api/nova-gfx-current-weather   │
-│ Format: JSON | Records: 150     │
-│ [Preview] [Select]              │
-└─────────────────────────────────┘
+
+**Changes:**
+1. Remove static `sampleDataSources` imports (`getCategories`, `getDataSourcesForCategory`)
+2. Add state for endpoints: `const [endpoints, setEndpoints] = useState<NovaEndpoint[]>([])`
+3. Add loading state: `const [loading, setLoading] = useState(false)`
+4. Fetch endpoints on modal open using `novaEndpointService.listNovaEndpoints()`
+5. Remove category dropdown (endpoints are already filtered by `target_app='nova-gfx'`)
+6. Show all endpoints in a flat list with name, description, record count
+7. When user selects endpoint, fetch data via `fetchEndpointData(slug)`
+8. Show loading spinner while fetching
+9. Preview first record of fetched data
+10. On apply: pass fetched data to store
+
+**Updated Flow:**
+```typescript
+// On modal open
+useEffect(() => {
+  if (open) {
+    setLoading(true);
+    listNovaEndpoints()
+      .then(setEndpoints)
+      .finally(() => setLoading(false));
+  }
+}, [open]);
+
+// When user clicks endpoint card
+const handleSelectEndpoint = async (endpoint: NovaEndpoint) => {
+  setLoading(true);
+  const data = await fetchEndpointData(endpoint.slug);
+  setSelectedEndpoint(endpoint);
+  setFetchedData(data);
+  setLoading(false);
+};
+
+// On apply - uses fetched data
+setDataSource(endpoint.id, endpoint.name, fetchedData, 'auto');
+```
+
+**UI Updates:**
+```
+┌─────────────────────────────────────────────────┐
+│ Add Data Source                                 │
+├─────────────────────────────────────────────────┤
+│ Available Nova GFX Endpoints:                   │
+│                                                 │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ● Nova GFX Current Weather                  │ │
+│ │   /api/nova-gfx-current-weather             │ │
+│ │   JSON • 12 records                         │ │
+│ └─────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ○ Nova GFX Election                         │ │
+│ │   /api/nova-gfx-election                    │ │
+│ │   JSON • 51 records                         │ │
+│ └─────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ○ Nova GFX Forecast Weather                 │ │
+│ │   /api/nova-gfx-forecast-weather            │ │
+│ │   JSON • 12 records                         │ │
+│ └─────────────────────────────────────────────┘ │
+│                                                 │
+│ Preview (First Record):                         │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ { "location": { "name": "Atlanta", ... } }  │ │
+│ └─────────────────────────────────────────────┘ │
+│                                                 │
+│                        [Cancel] [Apply]         │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+### Step 3b: Update ChatPanel Data Source Dropdown
+
+**File:** `apps/nova-gfx/src/components/designer/ChatPanel.tsx`
+
+**Current State (static):**
+```typescript
+// Line 14 - imports static data
+import { sampleDataSources, type DataSourceConfig, extractFieldsFromData } from '@/data/sampleDataSources';
+
+// Lines 3285-3310 - builds dropdown from static array
+{sampleDataSources.filter(ds => ds.category === category).map(ds => (
+  <DropdownMenuItem ... />
+))}
+```
+
+**Changes:**
+1. Remove `sampleDataSources` import
+2. Add state for dynamically loaded endpoints: `const [availableEndpoints, setAvailableEndpoints] = useState<NovaEndpoint[]>([])`
+3. Fetch endpoints on mount using `novaEndpointService.listNovaEndpoints()`
+4. Update dropdown to iterate `availableEndpoints` instead of `sampleDataSources`
+5. When user selects endpoint, fetch data via `novaEndpointService.fetchEndpointData(slug)`
+6. Keep `extractFieldsFromData()` - already works dynamically with any JSON structure
+
+**Updated Dropdown Flow:**
+```typescript
+// On mount or when dropdown opens
+useEffect(() => {
+  async function loadEndpoints() {
+    const endpoints = await listNovaEndpoints();
+    setAvailableEndpoints(endpoints);
+  }
+  loadEndpoints();
+}, []);
+
+// In dropdown menu
+{availableEndpoints.map(endpoint => (
+  <DropdownMenuItem
+    onClick={async () => {
+      const data = await fetchEndpointData(endpoint.slug);
+      setSelectedDataSource({
+        id: endpoint.id,
+        name: endpoint.name,
+        data: data, // fetched array
+        displayField: 'auto' // or from endpoint config
+      });
+      setIsDataMode(true);
+    }}
+  >
+    {endpoint.name}
+  </DropdownMenuItem>
+))}
+```
+
+**AI Context Building (UNCHANGED):**
+The `buildContext()` function already uses `extractFieldsFromData()` which dynamically walks any JSON structure. No changes needed - it will work with any endpoint schema:
+```typescript
+// Line 2107 - already dynamic
+const fields = extractFieldsFromData(selectedDataSource.data);
 ```
 
 ---
@@ -213,9 +348,10 @@ Remove all static sample data. All data comes from Nova endpoints.
 | `services/novaEndpointService.ts` | CREATE | API calls to fetch endpoints and data |
 | `types/dataEndpoint.ts` | CREATE | TypeScript interfaces |
 | `dialogs/AddDataModal.tsx` | MODIFY | Fetch endpoints instead of static data |
+| `designer/ChatPanel.tsx` | MODIFY | Dynamic endpoint dropdown for AI data mode |
 | `stores/designerStore.ts` | MODIFY | Add endpoint state, keep dataPayload format |
 | `designer/DataBindingTab.tsx` | MODIFY | Show endpoint info, refresh button |
-| `data/sampleDataSources.ts` | DELETE | Remove static sample data |
+| `data/sampleDataSources.ts` | KEEP (utilities only) | Keep `extractFieldsFromData()` and `getNestedValue()`, remove static data arrays |
 | `lib/bindingResolver.ts` | UNCHANGED | Data format unchanged |
 | `pages/Preview.tsx` | UNCHANGED | Uses same dataPayload |
 | `components/canvas/StageElement.tsx` | UNCHANGED | Uses same resolution |
@@ -228,10 +364,120 @@ Remove all static sample data. All data comes from Nova endpoints.
 - `listEndpointsByTargetApp('nova-gfx')` - Returns endpoints with target_apps containing 'nova-gfx'
 - Edge function: `agent-wizard/list-by-target-app`
 - Database: `api_endpoints.target_apps` column with GIN index
+- Endpoint serving: `api-endpoints/{slug}` routes that serve actual data
 
-### Need to Verify
-- Nova API endpoint serving: `/api/{slug}` routes that serve actual data
-- Endpoints must return JSON array in same format as current sample data
+---
+
+## Endpoint Compatibility Analysis
+
+Three Nova GFX endpoints currently exist. The refactor must be **dynamic** - it should work with any endpoint structure, not just these specific ones.
+
+### Current Endpoints
+
+#### 1. Election (`nova-gfx-election`) - ✅ 100% Compatible
+Flat structure with top-level fields: `Title`, `State`, `Candidate1`, `Votes1`, `Pct1`, `Winner1`, etc.
+
+#### 2. Current Weather (`nova-gfx-current-weather`) - ⚠️ 90% Compatible
+Nested structure: `location.name`, `weather.temperature.value`, etc.
+
+**Missing fields (need to add to endpoint):**
+- `weather.temperature.valueAndUnit` - computed convenience field
+- `weather.feelsLike.valueAndUnit` - computed convenience field
+- `lastUpdated` - timestamp field
+
+#### 3. Forecast Weather (`nova-gfx-forecast-weather`) - ❌ Structure Mismatch
+
+**Sample format** (parallel arrays):
+```json
+{
+  "weather": {
+    "items": [{
+      "date": ["2025-12-18", "2025-12-19"],
+      "temperatureMax": { "valueAndUnit": ["59°F", "48°F"] },
+      "icon": ["am showers", "sunny"]
+    }]
+  }
+}
+```
+
+**Endpoint format** (array of objects):
+```json
+{
+  "forecast": {
+    "daily": [
+      { "date": "2025-12-21", "icon": "sunny", "tempMax": { "value": 64.6, "unit": "°F" } },
+      { "date": "2025-12-22", ... }
+    ]
+  }
+}
+```
+
+**Recommendation:** Update endpoint to use array-of-objects format (modern, cleaner). The field extraction in Nova GFX already supports both structures dynamically.
+
+---
+
+## Dynamic Data Handling Design
+
+### Key Principle: Schema-Agnostic
+
+The refactor must NOT hardcode any specific field names or structures. Future endpoints with completely different schemas should "just work."
+
+### How It Works
+
+1. **Endpoint returns JSON array** - Any structure allowed
+2. **Field extraction is dynamic** - `extractFieldsFromData()` in `sampleDataSources.ts` already walks any JSON structure recursively
+3. **Bindings use dot-notation paths** - e.g., `location.name`, `forecast.daily[0].tempMax.value`
+4. **No schema validation** - Nova GFX accepts whatever the endpoint returns
+
+### Example: Adding a New "Sports Scores" Endpoint
+
+A future endpoint like `nova-gfx-sports` could return:
+```json
+[
+  {
+    "game": { "home": "Giants", "away": "Eagles", "score": { "home": 24, "away": 17 } },
+    "status": "Final",
+    "quarter": 4
+  }
+]
+```
+
+Nova GFX would automatically:
+1. Discover the endpoint via `listEndpointsByTargetApp('nova-gfx')`
+2. Extract fields: `game.home`, `game.away`, `game.score.home`, `status`, `quarter`
+3. Allow binding any field to any element
+4. No code changes required
+
+### Implementation Requirements
+
+| Component | Dynamic Behavior |
+|-----------|------------------|
+| `AddDataModal` | Shows ALL endpoints with `target_app='nova-gfx'`, no filtering |
+| `extractFieldsFromData()` | Already dynamic - walks any JSON structure |
+| `getNestedValue()` | Already supports dot notation + array indices |
+| `bindingResolver` | Already uses dynamic path resolution |
+| `dataPayload` | Holds raw array, no schema assumptions |
+
+### Endpoint Schema Contract
+
+The only requirement for an endpoint to work with Nova GFX:
+```typescript
+// Endpoint must return:
+Record<string, unknown>[]  // Array of objects, any structure
+```
+
+No specific fields required. Nova GFX discovers and displays whatever fields exist.
+
+---
+
+## Endpoint Update Tasks (Pre-requisite)
+
+| Endpoint | Task | Priority |
+|----------|------|----------|
+| `nova-gfx-current-weather` | Add `valueAndUnit` computed fields | High |
+| `nova-gfx-current-weather` | Add `lastUpdated` timestamp | High |
+| `nova-gfx-forecast-weather` | Change to array-of-objects structure | High |
+| `nova-gfx-election` | None - ready to use | ✅ Done |
 
 ---
 

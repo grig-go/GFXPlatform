@@ -80,6 +80,8 @@ import { PAGE_DRAG_TYPE } from '@/components/pages/PageList';
 import { useConfirm } from '@/hooks/useConfirm';
 import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
 import { getDataSourceById } from '@/data/sampleDataSources';
+import { supabase } from '@emergent-platform/supabase-client';
+import { fetchEndpointData } from '@/services/novaEndpointService';
 
 // Helper to generate next group name like "Group 1", "Group 2", etc.
 const generateGroupName = (existingGroups: PageGroup[]): string => {
@@ -520,35 +522,58 @@ export function PlaylistPanel() {
     const layerIndex = getLayerIndex(template.layerType);
 
     // Resolve data bindings using the page's saved dataRecordIndex
+    // Also collect bindings and currentRecord to send with the play command
     let resolvedPayload = { ...page.payload };
-    if (template.dataSourceId) {
-      try {
-        const dataSource = getDataSourceById(template.dataSourceId);
-        if (dataSource?.data && dataSource.data.length > 0) {
-          // Get bindings from localStorage
-          const previewDataStr = localStorage.getItem('pulsar-preview-data');
-          if (previewDataStr) {
-            const previewData = JSON.parse(previewDataStr);
-            const allBindings = previewData.bindings || [];
-            const templateBindings = allBindings.filter((b: Binding) => b.template_id === template.id);
+    let bindingsForCommand: Binding[] = [];
+    let currentRecordForCommand: Record<string, unknown> | null = null;
 
-            if (templateBindings.length > 0) {
-              // Use the page's saved dataRecordIndex (or default to template's default)
-              const recordIndex = page.dataRecordIndex ?? template.dataSourceConfig?.defaultRecordIndex ?? 0;
-              const safeIndex = Math.max(0, Math.min(recordIndex, dataSource.data.length - 1));
-              const currentRecord = dataSource.data[safeIndex];
+    // Fetch bindings and endpoint data directly - same approach as nova-gfx PublishModal
+    try {
+      // 1. Load bindings from database
+      const { data: dbBindings, error: bindingsError } = await supabase
+        .from('gfx_bindings')
+        .select('*')
+        .eq('template_id', template.id);
 
-              if (currentRecord) {
-                console.log('[PlaylistPanel] Resolving data bindings for page:', page.name, 'recordIndex:', safeIndex);
-                resolvedPayload = resolvePayloadBindings(resolvedPayload, templateBindings, currentRecord);
-                console.log('[PlaylistPanel] Resolved payload:', resolvedPayload);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[PlaylistPanel] Error resolving data bindings:', err);
+      if (bindingsError) {
+        console.warn('[PlaylistPanel] Error fetching bindings from DB:', bindingsError);
       }
+
+      const templateBindings = (dbBindings || []) as Binding[];
+
+      // 2. Fetch endpoint data using the template's dataSourceConfig slug
+      let endpointData: Record<string, unknown>[] = [];
+      const dataSourceConfig = template.dataSourceConfig as { slug?: string } | null;
+      const slug = dataSourceConfig?.slug;
+
+      if (slug) {
+        try {
+          endpointData = await fetchEndpointData(slug);
+        } catch (endpointErr) {
+          console.warn('[PlaylistPanel] Error fetching endpoint data:', endpointErr);
+        }
+      }
+
+      // 3. Get current record based on page's dataRecordIndex
+      if (endpointData.length > 0) {
+        const recordIndex = page.dataRecordIndex ?? dataSourceConfig?.defaultRecordIndex ?? 0;
+        const safeIndex = Math.max(0, Math.min(recordIndex, endpointData.length - 1));
+        const currentRecord = endpointData[safeIndex];
+
+        if (currentRecord) {
+          // Resolve bindings into payload (for pre-resolved values)
+          resolvedPayload = resolvePayloadBindings(resolvedPayload, templateBindings, currentRecord);
+
+          // Store bindings and record to send with command (for runtime resolution)
+          bindingsForCommand = templateBindings;
+          currentRecordForCommand = currentRecord;
+        }
+      } else if (templateBindings.length > 0) {
+        // No endpoint data but have bindings - send bindings for NovaPlayer to resolve
+        bindingsForCommand = templateBindings;
+      }
+    } catch (err) {
+      console.error('[PlaylistPanel] Error loading bindings/data:', err);
     }
 
     // Filter payload to only include keys that belong to this template's elements
@@ -622,7 +647,10 @@ export function PlaylistPanel() {
         },
         filteredPayload,
         page.name,
-        currentProject.name
+        currentProject.name,
+        // Pass bindings and currentRecord for Nova Player data binding resolution
+        bindingsForCommand.length > 0 ? bindingsForCommand : undefined,
+        currentRecordForCommand
       );
 
       // Clear on-air state from other pages on the same channel + layer
@@ -825,13 +853,62 @@ export function PlaylistPanel() {
 
     const layerIndex = getLayerIndex(template.layerType);
 
+    // Resolve data bindings for loop mode - same approach as regular play
+    let resolvedPayload = { ...page.payload };
+    let bindingsForCommand: Binding[] = [];
+    let currentRecordForCommand: Record<string, unknown> | null = null;
+
+    try {
+      // 1. Load bindings from database
+      const { data: dbBindings, error: bindingsError } = await supabase
+        .from('gfx_bindings')
+        .select('*')
+        .eq('template_id', template.id);
+
+      if (bindingsError) {
+        console.warn('[PlaylistPanel] Error fetching bindings (loop mode):', bindingsError);
+      }
+
+      const templateBindings = (dbBindings || []) as Binding[];
+
+      // 2. Fetch endpoint data
+      let endpointData: Record<string, unknown>[] = [];
+      const dataSourceConfig = template.dataSourceConfig as { slug?: string } | null;
+      const slug = dataSourceConfig?.slug;
+
+      if (slug) {
+        try {
+          endpointData = await fetchEndpointData(slug);
+        } catch (endpointErr) {
+          console.warn('[PlaylistPanel] Error fetching endpoint data (loop mode):', endpointErr);
+        }
+      }
+
+      // 3. Get current record
+      if (endpointData.length > 0) {
+        const recordIndex = page.dataRecordIndex ?? dataSourceConfig?.defaultRecordIndex ?? 0;
+        const safeIndex = Math.max(0, Math.min(recordIndex, endpointData.length - 1));
+        const currentRecord = endpointData[safeIndex];
+
+        if (currentRecord) {
+          resolvedPayload = resolvePayloadBindings(resolvedPayload, templateBindings, currentRecord);
+          bindingsForCommand = templateBindings;
+          currentRecordForCommand = currentRecord;
+        }
+      } else if (templateBindings.length > 0) {
+        bindingsForCommand = templateBindings;
+      }
+    } catch (err) {
+      console.error('[PlaylistPanel] Error loading bindings/data (loop mode):', err);
+    }
+
     // Filter payload
-    let filteredPayload = page.payload;
+    let filteredPayload = resolvedPayload;
     if (template.elements && template.elements.length > 0) {
       const elementIds = new Set(template.elements.map(el => el.id));
       const elementNames = new Set(template.elements.map(el => el.name?.toLowerCase().replace(/\s+/g, '_')));
       filteredPayload = Object.fromEntries(
-        Object.entries(page.payload).filter(([key]) => {
+        Object.entries(resolvedPayload).filter(([key]) => {
           const keyLower = key.toLowerCase().replace(/\s+/g, '_');
           return elementIds.has(key) || elementNames.has(keyLower);
         })
@@ -884,7 +961,10 @@ export function PlaylistPanel() {
       },
       filteredPayload,
       page.name,
-      currentProject.name
+      currentProject.name,
+      // Pass bindings and currentRecord for Nova Player data binding resolution
+      bindingsForCommand.length > 0 ? bindingsForCommand : undefined,
+      currentRecordForCommand
     );
 
     // Clear on-air from other pages on same channel + layer, then set this page

@@ -229,20 +229,38 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 export async function deleteProject(projectId: string): Promise<boolean> {
   console.log('[deleteProject] Starting deletion:', projectId);
 
-  // Delete from Supabase (archive) using direct REST API
-  const result = await directRestUpdate(
-    'gfx_projects',
-    { archived: true, updated_at: new Date().toISOString() },
-    { column: 'id', value: projectId },
-    10000
-  );
+  // Use Supabase client directly for better reliability
+  const { data, error } = await supabase
+    .from('gfx_projects')
+    .update({ archived: true, updated_at: new Date().toISOString() })
+    .eq('id', projectId)
+    .select()
+    .single();
 
-  if (!result.success) {
-    console.error('[deleteProject] Error deleting project from Supabase:', result.error);
-    return false;
+  if (error) {
+    console.error('[deleteProject] Supabase error:', error.message, error.code);
+
+    // Fallback to direct REST API if Supabase client fails
+    console.log('[deleteProject] Trying direct REST API fallback...');
+    const { useAuthStore } = await import('@/stores/authStore');
+    const accessToken = useAuthStore.getState().accessToken;
+
+    const result = await directRestUpdate(
+      'gfx_projects',
+      { archived: true, updated_at: new Date().toISOString() },
+      { column: 'id', value: projectId },
+      10000,
+      accessToken || undefined
+    );
+
+    if (!result.success) {
+      console.error('[deleteProject] REST API also failed:', result.error);
+      return false;
+    }
+    console.log('[deleteProject] ✅ Project archived via REST API fallback');
+  } else {
+    console.log('[deleteProject] ✅ Project archived in database:', data?.name, 'archived:', data?.archived);
   }
-
-  console.log('[deleteProject] ✅ Project archived in database');
 
   // Also delete from localStorage if it exists
   try {
