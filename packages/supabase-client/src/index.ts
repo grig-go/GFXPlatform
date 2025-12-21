@@ -22,6 +22,7 @@ export {
   directRestUpdate,
   directRestSelect,
   directRestInsert,
+  directRestDelete,
   // Beacon for window close scenarios
   sendBeaconUpdate,
   // Cookie storage for SSO

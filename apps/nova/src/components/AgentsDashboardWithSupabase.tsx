@@ -140,7 +140,8 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     dataSources: connectedDataSources,
     relationships: [],
     fieldMappings: [],
-    transforms: endpoint.transform_config?.transformations || []
+    transforms: endpoint.transform_config?.transformations || [],
+    targetApps: (endpoint as any).target_apps || []
   };
 }
 
@@ -462,7 +463,8 @@ export function AgentsDashboardWithSupabase({
         requiresAuth: agent.requiresAuth,
         authConfig: agent.authConfig,
         status: agent.status,
-        dataSourceIds
+        dataSourceIds,
+        targetApps: agent.targetApps
       });
 
       console.log('[DashboardSave] API call took:', Date.now() - saveStartTime, 'ms');
@@ -679,6 +681,7 @@ export function AgentsDashboardWithSupabase({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Target Apps</TableHead>
                 <TableHead>Agent URL</TableHead>
                 <TableHead>Format</TableHead>
                 <TableHead>Status</TableHead>
@@ -691,7 +694,7 @@ export function AgentsDashboardWithSupabase({
             <TableBody>
               {filteredAgents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     {searchTerm ? 'No agents found matching your search.' : 'No agents found. Create your first agent to get started.'}
                   </TableCell>
                 </TableRow>
@@ -710,6 +713,25 @@ export function AgentsDashboardWithSupabase({
                           {(Array.isArray(agent.dataType) ? agent.dataType : [agent.dataType]).map((category, idx) => (
                             <Badge key={idx} variant="secondary">{category}</Badge>
                           ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {agent.targetApps && agent.targetApps.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {agent.targetApps.map((appId, idx) => {
+                            const appLabels: Record<string, string> = {
+                              'nova-gfx': 'Nova GFX',
+                              'pulsar-vs': 'Pulsar VS',
+                              'fusion': 'Fusion',
+                              'pulsar-mcr': 'Pulsar MCR'
+                            };
+                            return (
+                              <Badge key={idx} variant="outline">{appLabels[appId] || appId}</Badge>
+                            );
+                          })}
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">-</span>

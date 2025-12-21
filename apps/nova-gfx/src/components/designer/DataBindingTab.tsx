@@ -12,8 +12,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
   Input,
-  Checkbox,
-  Label,
 } from '@emergent-platform/ui';
 import {
   Database,
@@ -27,15 +25,21 @@ import {
   FileCode,
   Play,
   Pin,
+  Settings,
 } from 'lucide-react';
 import { useDesignerStore } from '@/stores/designerStore';
 import { AddDataModal } from '@/components/dialogs/AddDataModal';
+import { BindingSettingsModal, FormatterOptions } from '@/components/dialogs/BindingSettingsModal';
 import { extractFieldsFromData, getNestedValue } from '@/data/sampleDataSources';
 import { AddressContextMenu } from '@/components/common/AddressContextMenu';
 import { buildDataAddress, sanitizeName } from '@/lib/address';
 
 export function DataBindingTab() {
   const [showAddDataModal, setShowAddDataModal] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsBindingId, setSettingsBindingId] = useState<string | null>(null);
+  const [settingsFieldPath, setSettingsFieldPath] = useState<string>('');
+  const [settingsFieldType, setSettingsFieldType] = useState<'string' | 'number' | 'boolean' | 'date' | 'unknown'>('unknown');
 
   const {
     dataSourceId,
@@ -160,7 +164,7 @@ export function DataBindingTab() {
     const binding = bindings.find(b => b.id === bindingId);
     if (!binding) return;
 
-    const currentOptions = (binding.formatter_options || {}) as { prefix?: string; suffix?: string; hideOnZero?: boolean; hideOnNull?: boolean };
+    const currentOptions = (binding.formatter_options || {}) as FormatterOptions;
     const newOptions = {
       ...currentOptions,
       [key]: value || undefined, // Remove key if empty
@@ -175,27 +179,47 @@ export function DataBindingTab() {
     });
   }, [bindings, updateBinding]);
 
-  // Handle toggling hide options (hideOnZero, hideOnNull)
-  const handleToggleHideOption = useCallback((bindingId: string, key: 'hideOnZero' | 'hideOnNull', checked: boolean) => {
-    const binding = bindings.find(b => b.id === bindingId);
-    if (!binding) return;
+  // Handle opening settings modal
+  const handleOpenSettings = useCallback((bindingId: string, fieldPath: string, fieldType: string) => {
+    setSettingsBindingId(bindingId);
+    setSettingsFieldPath(fieldPath);
+    // Map field type to settings modal type
+    let mappedType: 'string' | 'number' | 'boolean' | 'date' | 'unknown' = 'unknown';
+    if (fieldType === 'number') mappedType = 'number';
+    else if (fieldType === 'boolean') mappedType = 'boolean';
+    else if (fieldType === 'string') {
+      // Check if it looks like a date
+      const field = fields.find(f => f.path === fieldPath);
+      if (field) {
+        const value = currentRecord ? getNestedValue(currentRecord, fieldPath) : null;
+        if (value && typeof value === 'string' && (
+          /^\d{4}-\d{2}-\d{2}/.test(value) || // ISO date
+          /^\d{2}[/-]\d{2}[/-]\d{4}/.test(value) // Common date formats
+        )) {
+          mappedType = 'date';
+        } else {
+          mappedType = 'string';
+        }
+      }
+    }
+    setSettingsFieldType(mappedType);
+    setSettingsModalOpen(true);
+  }, [fields, currentRecord]);
 
-    const currentOptions = (binding.formatter_options || {}) as { prefix?: string; suffix?: string; hideOnZero?: boolean; hideOnNull?: boolean };
-    const newOptions = {
-      ...currentOptions,
-      [key]: checked || undefined, // Only store if true
-    };
+  // Handle saving settings from modal
+  const handleSaveSettings = useCallback((options: FormatterOptions) => {
+    if (!settingsBindingId) return;
 
-    // Clean up false/undefined values
-    if (!newOptions.hideOnZero) delete newOptions.hideOnZero;
-    if (!newOptions.hideOnNull) delete newOptions.hideOnNull;
-    if (!newOptions.prefix) delete newOptions.prefix;
-    if (!newOptions.suffix) delete newOptions.suffix;
-
-    updateBinding(bindingId, {
-      formatter_options: Object.keys(newOptions).length > 0 ? newOptions : null,
+    updateBinding(settingsBindingId, {
+      formatter_options: Object.keys(options).length > 0 ? options : null,
     });
-  }, [bindings, updateBinding]);
+  }, [settingsBindingId, updateBinding]);
+
+  // Get current binding for settings modal
+  const settingsBinding = useMemo(() => {
+    if (!settingsBindingId) return null;
+    return bindings.find(b => b.id === settingsBindingId);
+  }, [settingsBindingId, bindings]);
 
   // Get element icon based on type
   const getElementIcon = (elementType: string) => {
@@ -222,6 +246,92 @@ export function DataBindingTab() {
     if (typeof value === 'number') return value.toLocaleString();
     const str = String(value);
     return str.length > 20 ? str.slice(0, 20) + '...' : str;
+  };
+
+  // Get active settings summary for tooltip
+  const getSettingsSummary = (opts: FormatterOptions): string[] => {
+    const summary: string[] = [];
+
+    // Text settings
+    if (opts.textCase && opts.textCase !== 'none') {
+      const caseLabels: Record<string, string> = {
+        uppercase: 'UPPERCASE',
+        lowercase: 'lowercase',
+        capitalize: 'Capitalize',
+        titlecase: 'Title Case',
+      };
+      summary.push(`Case: ${caseLabels[opts.textCase] || opts.textCase}`);
+    }
+
+    // Trim settings
+    if (opts.trimStart && opts.trimStart > 0) {
+      summary.push(`Trim start: ${opts.trimStart}`);
+    }
+    if (opts.trimEnd && opts.trimEnd > 0) {
+      summary.push(`Trim end: ${opts.trimEnd}`);
+    }
+
+    // Number settings
+    if (opts.numberFormat && opts.numberFormat !== 'none') {
+      const formatLabels: Record<string, string> = {
+        comma: 'Comma (1,000)',
+        space: 'Space (1 000)',
+        compact: 'Compact (1K)',
+      };
+      summary.push(`Format: ${formatLabels[opts.numberFormat] || opts.numberFormat}`);
+    }
+    if (opts.decimals !== undefined) {
+      if (opts.decimals === -1) {
+        summary.push('Decimals: Whole');
+      } else {
+        summary.push(`Decimals: ${opts.decimals}`);
+      }
+    }
+    if (opts.roundTo && opts.roundTo !== 'none') {
+      summary.push(`Round to: ${opts.roundTo}`);
+    }
+    if (opts.padZeros && opts.padZeros > 0) {
+      summary.push(`Pad zeros: ${opts.padZeros}`);
+    }
+    if (opts.showSign) {
+      summary.push('Show + sign');
+    }
+
+    // Date settings
+    if (opts.dateFormat && opts.dateFormat !== 'none') {
+      summary.push(`Date: ${opts.dateFormat}`);
+    }
+    if (opts.timeFormat && opts.timeFormat !== 'none') {
+      summary.push(`Time: ${opts.timeFormat}`);
+    }
+
+    // Hide conditions
+    if (opts.hideOnZero) {
+      summary.push('Hide on 0');
+    }
+    if (opts.hideOnNull) {
+      summary.push('Hide on empty');
+    }
+
+    return summary;
+  };
+
+  // Check if settings are configured (beyond just prefix/suffix)
+  const hasAdvancedSettings = (opts: FormatterOptions): boolean => {
+    return !!(
+      opts.textCase && opts.textCase !== 'none' ||
+      opts.trimStart && opts.trimStart > 0 ||
+      opts.trimEnd && opts.trimEnd > 0 ||
+      opts.numberFormat && opts.numberFormat !== 'none' ||
+      opts.decimals !== undefined ||
+      opts.roundTo && opts.roundTo !== 'none' ||
+      opts.padZeros && opts.padZeros > 0 ||
+      opts.showSign ||
+      opts.dateFormat && opts.dateFormat !== 'none' ||
+      opts.timeFormat && opts.timeFormat !== 'none' ||
+      opts.hideOnZero ||
+      opts.hideOnNull
+    );
   };
 
   // No data source connected
@@ -361,7 +471,7 @@ export function DataBindingTab() {
                 const value = currentRecord ? getNestedValue(currentRecord, field.path) : null;
                 const binding = getBindingForField(field.path);
                 const boundElementId = binding?.element_id || 'none';
-                const formatterOptions = (binding?.formatter_options || {}) as { prefix?: string; suffix?: string; hideOnZero?: boolean; hideOnNull?: boolean };
+                const formatterOptions = (binding?.formatter_options || {}) as FormatterOptions;
                 const boundElement = binding ? elements.find(e => e.id === binding.element_id) : null;
                 const isTextBinding = boundElement?.element_type === 'text';
                 const fieldAddress = buildDataAddress(field.path);
@@ -408,7 +518,7 @@ export function DataBindingTab() {
                       </Select>
                     </div>
 
-                    {/* Prefix/Suffix + Hide options row - show when bound */}
+                    {/* Prefix/Suffix + Settings button row - show when bound */}
                     {binding && (
                       <div className="flex items-center gap-1 pl-1 flex-wrap">
                         {/* Prefix/Suffix - only for text bindings */}
@@ -429,32 +539,41 @@ export function DataBindingTab() {
                               value={formatterOptions.suffix || ''}
                               onChange={(e) => handleUpdateFormatterOptions(binding.id, 'suffix', e.target.value)}
                             />
-                            <span className="text-muted-foreground mx-1">|</span>
                           </>
                         )}
-                        {/* Hide options - for all bindings */}
-                        <div className="flex items-center gap-1">
-                          <Checkbox
-                            id={`${binding.id}-hide-zero`}
-                            className="h-3 w-3"
-                            checked={formatterOptions.hideOnZero || false}
-                            onCheckedChange={(checked) => handleToggleHideOption(binding.id, 'hideOnZero', checked === true)}
-                          />
-                          <Label htmlFor={`${binding.id}-hide-zero`} className="text-[8px] text-muted-foreground cursor-pointer">
-                            0
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Checkbox
-                            id={`${binding.id}-hide-null`}
-                            className="h-3 w-3"
-                            checked={formatterOptions.hideOnNull || false}
-                            onCheckedChange={(checked) => handleToggleHideOption(binding.id, 'hideOnNull', checked === true)}
-                          />
-                          <Label htmlFor={`${binding.id}-hide-null`} className="text-[8px] text-muted-foreground cursor-pointer">
-                            empty
-                          </Label>
-                        </div>
+                        {/* Settings button - opens modal with all formatting options */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => handleOpenSettings(binding.id, field.path, field.type)}
+                                className={`h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors ${
+                                  hasAdvancedSettings(formatterOptions)
+                                    ? 'text-violet-400'
+                                    : 'text-muted-foreground'
+                                }`}
+                              >
+                                <Settings className="w-3 h-3" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[200px]">
+                              {(() => {
+                                const summary = getSettingsSummary(formatterOptions);
+                                if (summary.length === 0) {
+                                  return <span>Format settings</span>;
+                                }
+                                return (
+                                  <div className="space-y-0.5">
+                                    <div className="font-medium text-violet-400">Active settings:</div>
+                                    {summary.map((item, i) => (
+                                      <div key={i} className="text-muted-foreground">{item}</div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                       )}
                     </div>
@@ -467,6 +586,16 @@ export function DataBindingTab() {
       </ScrollArea>
 
       <AddDataModal open={showAddDataModal} onOpenChange={setShowAddDataModal} />
+
+      {/* Binding Settings Modal */}
+      <BindingSettingsModal
+        open={settingsModalOpen}
+        onOpenChange={setSettingsModalOpen}
+        fieldPath={settingsFieldPath}
+        fieldType={settingsFieldType}
+        currentOptions={(settingsBinding?.formatter_options || {}) as FormatterOptions}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 }

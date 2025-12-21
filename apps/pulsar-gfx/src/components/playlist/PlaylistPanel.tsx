@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -78,6 +78,8 @@ import { useChannelStore, type Channel } from '@/stores/channelStore';
 import { usePageLibraryStore } from '@/stores/pageRepositoryStore';
 import { PAGE_DRAG_TYPE } from '@/components/pages/PageList';
 import { useConfirm } from '@/hooks/useConfirm';
+import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
+import { getDataSourceById } from '@/data/sampleDataSources';
 
 // Helper to generate next group name like "Group 1", "Group 2", etc.
 const generateGroupName = (existingGroups: PageGroup[]): string => {
@@ -517,15 +519,47 @@ export function PlaylistPanel() {
 
     const layerIndex = getLayerIndex(template.layerType);
 
+    // Resolve data bindings using the page's saved dataRecordIndex
+    let resolvedPayload = { ...page.payload };
+    if (template.dataSourceId) {
+      try {
+        const dataSource = getDataSourceById(template.dataSourceId);
+        if (dataSource?.data && dataSource.data.length > 0) {
+          // Get bindings from localStorage
+          const previewDataStr = localStorage.getItem('pulsar-preview-data');
+          if (previewDataStr) {
+            const previewData = JSON.parse(previewDataStr);
+            const allBindings = previewData.bindings || [];
+            const templateBindings = allBindings.filter((b: Binding) => b.template_id === template.id);
+
+            if (templateBindings.length > 0) {
+              // Use the page's saved dataRecordIndex (or default to template's default)
+              const recordIndex = page.dataRecordIndex ?? template.dataSourceConfig?.defaultRecordIndex ?? 0;
+              const safeIndex = Math.max(0, Math.min(recordIndex, dataSource.data.length - 1));
+              const currentRecord = dataSource.data[safeIndex];
+
+              if (currentRecord) {
+                console.log('[PlaylistPanel] Resolving data bindings for page:', page.name, 'recordIndex:', safeIndex);
+                resolvedPayload = resolvePayloadBindings(resolvedPayload, templateBindings, currentRecord);
+                console.log('[PlaylistPanel] Resolved payload:', resolvedPayload);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[PlaylistPanel] Error resolving data bindings:', err);
+      }
+    }
+
     // Filter payload to only include keys that belong to this template's elements
     // This ensures we only send relevant data for this specific template
-    let filteredPayload = page.payload;
+    let filteredPayload = resolvedPayload;
     if (template.elements && template.elements.length > 0) {
       const elementIds = new Set(template.elements.map(el => el.id));
       const elementNames = new Set(template.elements.map(el => el.name?.toLowerCase().replace(/\s+/g, '_')));
 
       filteredPayload = Object.fromEntries(
-        Object.entries(page.payload).filter(([key]) => {
+        Object.entries(resolvedPayload).filter(([key]) => {
           const keyLower = key.toLowerCase().replace(/\s+/g, '_');
           return elementIds.has(key) || elementNames.has(keyLower);
         })
@@ -1295,6 +1329,47 @@ export function PlaylistPanel() {
     setSelectedPageIds(new Set());
   };
 
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedPageIds.size === 0) return;
+
+    const confirmed = await confirm({
+      title: 'Delete Pages',
+      description: `Are you sure you want to delete ${selectedPageIds.size} page${selectedPageIds.size > 1 ? 's' : ''}?`,
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+
+    if (confirmed) {
+      for (const pageId of selectedPageIds) {
+        try {
+          await deletePage(pageId);
+        } catch (error) {
+          console.error('[PlaylistPanel] Failed to delete page:', pageId, error);
+        }
+      }
+      setSelectedPageIds(new Set());
+    }
+  }, [selectedPageIds, confirm, deletePage]);
+
+  // Keyboard shortcut for deleting selected pages (Delete or Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Delete/Backspace if pages are selected and not editing
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPageIds.size > 0) {
+        // Don't trigger if user is typing in an input
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        handleDeleteSelected();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPageIds.size, handleDeleteSelected]);
+
   if (!currentPlaylist) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -1376,6 +1451,23 @@ export function PlaylistPanel() {
 
           {/* Right side controls */}
           <div className="flex items-center gap-1.5 flex-1 justify-end">
+            {/* Delete Button - appears when pages are selected */}
+            {selectedPageIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs shrink-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                onClick={handleDeleteSelected}
+                title={`Delete ${selectedPageIds.size} selected page${selectedPageIds.size > 1 ? 's' : ''}`}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Delete
+                <span className="ml-1 text-[10px] bg-red-500/20 px-1 rounded">
+                  {selectedPageIds.size}
+                </span>
+              </Button>
+            )}
+
             {/* Group Button with Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

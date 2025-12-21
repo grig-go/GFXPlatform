@@ -1,4 +1,4 @@
-import { supabase, directRestSelect, directRestInsert } from '@emergent-platform/supabase-client';
+import { supabase, directRestSelect, directRestInsert, directRestUpdate, directRestDelete } from '@emergent-platform/supabase-client';
 import type {
   Project, Layer, Template, Element,
   Animation, Keyframe, Binding,
@@ -211,13 +211,16 @@ export async function createProject(
 }
 
 export async function updateProject(projectId: string, updates: Partial<Project>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_projects')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', projectId);
+  // Use direct REST API for reliable updates (avoids stale connection issues)
+  const result = await directRestUpdate(
+    'gfx_projects',
+    { ...updates, updated_at: new Date().toISOString() },
+    { column: 'id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating project:', error);
+  if (!result.success) {
+    console.error('Error updating project:', result.error);
     return false;
   }
   return true;
@@ -226,19 +229,20 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 export async function deleteProject(projectId: string): Promise<boolean> {
   console.log('[deleteProject] Starting deletion:', projectId);
 
-  // Delete from Supabase (archive)
-  const { error, data } = await supabase
-    .from('gfx_projects')
-    .update({ archived: true, updated_at: new Date().toISOString() })
-    .eq('id', projectId)
-    .select();
+  // Delete from Supabase (archive) using direct REST API
+  const result = await directRestUpdate(
+    'gfx_projects',
+    { archived: true, updated_at: new Date().toISOString() },
+    { column: 'id', value: projectId },
+    10000
+  );
 
-  if (error) {
-    console.error('[deleteProject] Error deleting project from Supabase:', error);
+  if (!result.success) {
+    console.error('[deleteProject] Error deleting project from Supabase:', result.error);
     return false;
   }
 
-  console.log('[deleteProject] ✅ Project archived in database:', data);
+  console.log('[deleteProject] ✅ Project archived in database');
 
   // Also delete from localStorage if it exists
   try {
@@ -594,13 +598,16 @@ export async function createTemplate(template: Partial<Template>): Promise<Templ
 }
 
 export async function updateTemplate(templateId: string, updates: Partial<Template>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_templates')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', templateId);
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_templates',
+    { ...updates, updated_at: new Date().toISOString() },
+    { column: 'id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating template:', error);
+  if (!result.success) {
+    console.error('Error updating template:', result.error);
     return false;
   }
   return true;
@@ -609,18 +616,20 @@ export async function updateTemplate(templateId: string, updates: Partial<Templa
 export async function deleteTemplate(templateId: string): Promise<boolean> {
   console.log('[deleteTemplate service] Starting deletion:', templateId);
 
-  const { error, data } = await supabase
-    .from('gfx_templates')
-    .update({ archived: true, updated_at: new Date().toISOString() })
-    .eq('id', templateId)
-    .select();
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_templates',
+    { archived: true, updated_at: new Date().toISOString() },
+    { column: 'id', value: templateId },
+    10000
+  );
 
-  if (error) {
-    console.error('[deleteTemplate service] Error deleting template:', error);
+  if (!result.success) {
+    console.error('[deleteTemplate service] Error deleting template:', result.error);
     return false;
   }
 
-  console.log('[deleteTemplate service] ✅ Template archived:', data);
+  console.log('[deleteTemplate service] ✅ Template archived');
   return true;
 }
 
@@ -724,26 +733,31 @@ export async function createElement(element: Partial<Element>): Promise<Element 
 }
 
 export async function updateElement(elementId: string, updates: Partial<Element>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_elements')
-    .update(updates)
-    .eq('id', elementId);
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_elements',
+    updates,
+    { column: 'id', value: elementId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating element:', error);
+  if (!result.success) {
+    console.error('Error updating element:', result.error);
     return false;
   }
   return true;
 }
 
 export async function deleteElement(elementId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_elements')
-    .delete()
-    .eq('id', elementId);
+  // Use direct REST API for reliable deletes
+  const result = await directRestDelete(
+    'gfx_elements',
+    { column: 'id', value: elementId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error deleting element:', error);
+  if (!result.success) {
+    console.error('Error deleting element:', result.error);
     return false;
   }
   return true;
@@ -784,26 +798,31 @@ export async function createAnimation(animation: Partial<Animation>): Promise<An
 }
 
 export async function updateAnimation(animationId: string, updates: Partial<Animation>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_animations')
-    .update(updates)
-    .eq('id', animationId);
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_animations',
+    updates,
+    { column: 'id', value: animationId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating animation:', error);
+  if (!result.success) {
+    console.error('Error updating animation:', result.error);
     return false;
   }
   return true;
 }
 
 export async function deleteAnimation(animationId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_animations')
-    .delete()
-    .eq('id', animationId);
+  // Use direct REST API for reliable deletes
+  const result = await directRestDelete(
+    'gfx_animations',
+    { column: 'id', value: animationId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error deleting animation:', error);
+  if (!result.success) {
+    console.error('Error deleting animation:', result.error);
     return false;
   }
   return true;
@@ -898,26 +917,31 @@ export async function createKeyframe(keyframe: Partial<Keyframe>): Promise<Keyfr
 }
 
 export async function updateKeyframe(keyframeId: string, updates: Partial<Keyframe>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_keyframes')
-    .update(updates)
-    .eq('id', keyframeId);
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_keyframes',
+    updates,
+    { column: 'id', value: keyframeId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating keyframe:', error);
+  if (!result.success) {
+    console.error('Error updating keyframe:', result.error);
     return false;
   }
   return true;
 }
 
 export async function deleteKeyframe(keyframeId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_keyframes')
-    .delete()
-    .eq('id', keyframeId);
+  // Use direct REST API for reliable deletes
+  const result = await directRestDelete(
+    'gfx_keyframes',
+    { column: 'id', value: keyframeId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error deleting keyframe:', error);
+  if (!result.success) {
+    console.error('Error deleting keyframe:', result.error);
     return false;
   }
   return true;
@@ -960,26 +984,31 @@ export async function createBinding(binding: Partial<Binding>): Promise<Binding 
 }
 
 export async function updateBinding(bindingId: string, updates: Partial<Binding>): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_bindings')
-    .update(updates)
-    .eq('id', bindingId);
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'gfx_bindings',
+    updates,
+    { column: 'id', value: bindingId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error updating binding:', error);
+  if (!result.success) {
+    console.error('Error updating binding:', result.error);
     return false;
   }
   return true;
 }
 
 export async function deleteBinding(bindingId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('gfx_bindings')
-    .delete()
-    .eq('id', bindingId);
+  // Use direct REST API for reliable deletes
+  const result = await directRestDelete(
+    'gfx_bindings',
+    { column: 'id', value: bindingId },
+    10000
+  );
 
-  if (error) {
-    console.error('Error deleting binding:', error);
+  if (!result.success) {
+    console.error('Error deleting binding:', result.error);
     return false;
   }
   return true;

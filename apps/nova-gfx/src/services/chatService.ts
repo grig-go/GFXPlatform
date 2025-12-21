@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, directRestSelect, directRestInsert } from '@emergent-platform/supabase-client';
+import { isSupabaseConfigured, directRestSelect, directRestInsert, directRestDelete } from '@emergent-platform/supabase-client';
 import type { AIChanges } from '@emergent-platform/types';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -156,40 +156,42 @@ export async function saveChatMessage(
   return result.data[0];
 }
 
-// Delete a chat message
+// Delete a chat message using direct REST API
 export async function deleteChatMessage(messageId: string): Promise<boolean> {
   // Skip if Supabase not configured or message ID is not a valid UUID
   if (!isSupabaseConfigured() || !isValidUUID(messageId)) {
     return true;
   }
 
-  const { error } = await supabase
-    .from('gfx_chat_messages')
-    .delete()
-    .eq('id', messageId);
+  const result = await directRestDelete(
+    'gfx_chat_messages',
+    { column: 'id', value: messageId },
+    REST_TIMEOUT
+  );
 
-  if (error) {
-    console.error('Error deleting chat message:', error);
+  if (!result.success) {
+    console.error('Error deleting chat message:', result.error);
     return false;
   }
 
   return true;
 }
 
-// Clear all chat history for a project
+// Clear all chat history for a project using direct REST API
 export async function clearChatHistory(projectId: string): Promise<boolean> {
   // Skip if Supabase not configured or project ID is not a valid UUID
   if (!isSupabaseConfigured() || !isValidUUID(projectId)) {
     return true;
   }
 
-  const { error } = await supabase
-    .from('gfx_chat_messages')
-    .delete()
-    .eq('project_id', projectId);
+  const result = await directRestDelete(
+    'gfx_chat_messages',
+    { column: 'project_id', value: projectId },
+    REST_TIMEOUT
+  );
 
-  if (error) {
-    console.error('Error clearing chat history:', error);
+  if (!result.success) {
+    console.error('Error clearing chat history:', result.error);
     return false;
   }
 

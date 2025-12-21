@@ -61,10 +61,49 @@ interface LocationKeyframe {
   locationName?: string;
 }
 
+// Gradient color stop type
+interface GradientColorStop {
+  color: string;
+  stop: number;
+}
+
+// Gradient config matching nova-gfx
+interface GradientConfig {
+  enabled: boolean;
+  type: 'linear' | 'radial' | 'conic';
+  direction: number;
+  colors: GradientColorStop[];
+}
+
+// Texture config matching nova-gfx
+interface TextureConfig {
+  enabled: boolean;
+  url: string;
+  thumbnailUrl?: string;
+  mediaType?: 'image' | 'video';
+  fit: 'cover' | 'contain' | 'fill' | 'tile';
+  scale: number;
+  position?: { x: number; y: number };
+  rotation?: number;
+  opacity: number;
+  blur?: number;
+  blendMode: string;
+  playbackMode?: 'loop' | 'pingpong' | 'once';
+  playbackSpeed?: number;
+}
+
+// Fill data for shape elements
+interface FillData {
+  fillType: 'solid' | 'gradient' | 'texture';
+  color?: string;
+  gradient?: GradientConfig;
+  texture?: TextureConfig;
+}
+
 interface FieldConfig {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select' | 'ticker' | 'background';
+  type: 'text' | 'textarea' | 'number' | 'image' | 'icon' | 'icon-picker' | 'color' | 'map' | 'select' | 'ticker' | 'background' | 'fill';
   placeholder?: string;
   defaultValue?: string | number;
   options?: { value: string; label: string }[];
@@ -75,6 +114,8 @@ interface FieldConfig {
   // For background fields (shape textures)
   textureUrl?: string;
   textureMediaType?: 'image' | 'video';
+  // For fill fields (shape solid/gradient/texture)
+  fillData?: FillData;
   // Element reference for grouping
   elementId?: string;
   elementName?: string;
@@ -691,35 +732,62 @@ export function ContentEditor() {
               _sortIndex: element._sortIndex,
             };
           } else if (isShape) {
-            // Shape elements may have texture or color
-            const hasTexture = element.content?.texture?.enabled && element.content?.texture?.url;
+            // Shape elements - create fill field for texture, gradient, or solid color
+            const hasTexture = element.content?.texture?.enabled;
+            const hasGradient = element.content?.gradient?.enabled;
+            const hasFill = element.content?.fill && element.content?.fill !== 'transparent';
 
-            if (hasTexture) {
-              return {
-                id: key,
-                label: 'Background',
-                type: 'background' as const,
-                textureUrl: element.content?.texture?.url || '',
-                textureMediaType: element.content?.texture?.mediaType || 'image',
-                defaultValue: value ?? element.content?.texture?.url ?? '',
-                elementId: element.id,
-                elementName: element.name || 'Shape',
-                elementType: 'shape',
-                _sortIndex: element._sortIndex,
+            if (hasTexture || hasGradient || hasFill) {
+              // Determine the current fill type
+              let fillType: 'solid' | 'gradient' | 'texture' = 'solid';
+              if (hasTexture) {
+                fillType = 'texture';
+              } else if (hasGradient) {
+                fillType = 'gradient';
+              }
+
+              // Build fillData from element content
+              const fillData: FillData = {
+                fillType,
+                color: element.content?.fill || '#000000',
+                gradient: hasGradient ? {
+                  enabled: true,
+                  type: element.content.gradient.type || 'linear',
+                  direction: element.content.gradient.direction || 0,
+                  colors: element.content.gradient.colors || [
+                    { color: '#3B82F6', stop: 0 },
+                    { color: '#8B5CF6', stop: 100 },
+                  ],
+                } : undefined,
+                texture: hasTexture ? {
+                  enabled: true,
+                  url: element.content.texture.url || '',
+                  thumbnailUrl: element.content.texture.thumbnailUrl,
+                  mediaType: element.content.texture.mediaType || 'image',
+                  fit: element.content.texture.fit || 'cover',
+                  scale: element.content.texture.scale ?? 1,
+                  position: element.content.texture.position,
+                  rotation: element.content.texture.rotation,
+                  opacity: element.content.texture.opacity ?? 1,
+                  blur: element.content.texture.blur,
+                  blendMode: element.content.texture.blendMode || 'normal',
+                  playbackMode: element.content.texture.playbackMode,
+                  playbackSpeed: element.content.texture.playbackSpeed,
+                } : undefined,
               };
-            } else if (element.content?.fill && element.content?.fill !== 'transparent') {
+
               return {
                 id: key,
-                label: 'Fill Color',
-                type: 'color' as const,
-                defaultValue: value ?? element.content?.fill ?? '#000000',
+                label: 'Fill',
+                type: 'fill' as const,
+                fillData,
                 elementId: element.id,
                 elementName: element.name || 'Shape',
                 elementType: 'shape',
                 _sortIndex: element._sortIndex,
               };
             }
-            // Don't return fields for shapes without texture or meaningful fill
+            // Don't return fields for shapes without texture, gradient, or fill
             return null;
           }
         }
@@ -828,35 +896,61 @@ export function ContentEditor() {
             });
           }
         } else if (isShape) {
-          // Shape elements - only add field if has texture with URL OR has fill color
-          const hasTexture = el.content?.texture?.enabled && el.content?.texture?.url;
+          // Shape elements - create fill field for texture, gradient, or solid color
+          const hasTexture = el.content?.texture?.enabled;
+          const hasGradient = el.content?.gradient?.enabled;
+          const hasFill = el.content?.fill && el.content?.fill !== 'transparent';
 
-          if (hasTexture) {
-            // Has actual texture - show background picker
+          // Only add field if shape has some kind of fill
+          if (hasTexture || hasGradient || hasFill) {
+            // Determine the current fill type
+            let fillType: 'solid' | 'gradient' | 'texture' = 'solid';
+            if (hasTexture) {
+              fillType = 'texture';
+            } else if (hasGradient) {
+              fillType = 'gradient';
+            }
+
+            // Build fillData from element content
+            const fillData: FillData = {
+              fillType,
+              color: el.content?.fill || '#000000',
+              gradient: hasGradient ? {
+                enabled: true,
+                type: el.content.gradient.type || 'linear',
+                direction: el.content.gradient.direction || 0,
+                colors: el.content.gradient.colors || [
+                  { color: '#3B82F6', stop: 0 },
+                  { color: '#8B5CF6', stop: 100 },
+                ],
+              } : undefined,
+              texture: hasTexture ? {
+                enabled: true,
+                url: el.content.texture.url || '',
+                thumbnailUrl: el.content.texture.thumbnailUrl,
+                mediaType: el.content.texture.mediaType || 'image',
+                fit: el.content.texture.fit || 'cover',
+                scale: el.content.texture.scale ?? 1,
+                position: el.content.texture.position,
+                rotation: el.content.texture.rotation,
+                opacity: el.content.texture.opacity ?? 1,
+                blur: el.content.texture.blur,
+                blendMode: el.content.texture.blendMode || 'normal',
+                playbackMode: el.content.texture.playbackMode,
+                playbackSpeed: el.content.texture.playbackSpeed,
+              } : undefined,
+            };
+
             fields.push({
               id: el.id,
-              label: 'Background',
-              type: 'background' as const,
-              textureUrl: el.content?.texture?.url || '',
-              textureMediaType: el.content?.texture?.mediaType || 'image',
-              defaultValue: el.content?.texture?.url || '',
-              elementId: el.id,
-              elementName: el.name,
-              elementType: 'shape',
-            });
-          } else if (el.content?.fill && el.content?.fill !== 'transparent') {
-            // Has fill color - show color picker
-            fields.push({
-              id: el.id,
-              label: 'Fill Color',
-              type: 'color' as const,
-              defaultValue: el.content?.fill || '#000000',
+              label: 'Fill',
+              type: 'fill' as const,
+              fillData,
               elementId: el.id,
               elementName: el.name,
               elementType: 'shape',
             });
           }
-          // Don't add fields for shapes without texture or fill
         }
       });
 
@@ -1357,6 +1451,48 @@ export function ContentEditor() {
                     </div>
                   )}
                 </div>
+              ) : field.type === 'fill' ? (
+                <FillEditor
+                  fillData={(() => {
+                    // Use payload fill data if available, otherwise use field's default fillData
+                    const payloadFill = localPayload[field.id];
+                    if (payloadFill && typeof payloadFill === 'object') {
+                      return payloadFill as FillData;
+                    }
+                    return field.fillData || {
+                      fillType: 'solid',
+                      color: '#000000',
+                    };
+                  })()}
+                  onFillChange={(newFill) => {
+                    // Store the fill data in payload
+                    setLocalPayload((prev) => ({
+                      ...prev,
+                      [field.id]: newFill,
+                    }));
+                    setHasChanges(true);
+
+                    // Send update to preview - format for nova-gfx element content
+                    // The preview needs to receive the fill data in the format it expects
+                    if (newFill.fillType === 'solid') {
+                      updatePreviewField(field.id, JSON.stringify({
+                        fill: newFill.color,
+                        gradient: { enabled: false },
+                        texture: { enabled: false },
+                      }));
+                    } else if (newFill.fillType === 'gradient' && newFill.gradient) {
+                      updatePreviewField(field.id, JSON.stringify({
+                        gradient: newFill.gradient,
+                        texture: { enabled: false },
+                      }));
+                    } else if (newFill.fillType === 'texture' && newFill.texture) {
+                      updatePreviewField(field.id, JSON.stringify({
+                        texture: newFill.texture,
+                        gradient: { enabled: false },
+                      }));
+                    }
+                  }}
+                />
               ) : field.type === 'icon-picker' ? (
                 <Button
                   variant="outline"
@@ -2060,6 +2196,479 @@ function TickerContentEditor({ fieldId, items, onItemsChange }: TickerContentEdi
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================
+// FILL EDITOR COMPONENT
+// Allows editing shape fills (solid, gradient, texture)
+// ============================================
+interface FillEditorProps {
+  fillData: FillData;
+  onFillChange: (fill: FillData) => void;
+}
+
+function FillEditor({ fillData, onFillChange }: FillEditorProps) {
+  const [activeTab, setActiveTab] = useState<'solid' | 'gradient' | 'texture'>(fillData.fillType);
+  const [showTexturePicker, setShowTexturePicker] = useState(false);
+
+  // Update local state when fillData changes
+  useEffect(() => {
+    setActiveTab(fillData.fillType);
+  }, [fillData.fillType]);
+
+  const handleTabChange = (tab: 'solid' | 'gradient' | 'texture') => {
+    setActiveTab(tab);
+    // When switching tabs, enable/disable the appropriate fill type
+    const newFill: FillData = {
+      ...fillData,
+      fillType: tab,
+    };
+
+    // Enable/disable gradient and texture based on tab
+    if (tab === 'solid') {
+      if (newFill.gradient) newFill.gradient = { ...newFill.gradient, enabled: false };
+      if (newFill.texture) newFill.texture = { ...newFill.texture, enabled: false };
+    } else if (tab === 'gradient') {
+      // Enable gradient, ensure it has default values
+      newFill.gradient = newFill.gradient || {
+        enabled: true,
+        type: 'linear',
+        direction: 0,
+        colors: [
+          { color: '#3B82F6', stop: 0 },
+          { color: '#8B5CF6', stop: 100 },
+        ],
+      };
+      newFill.gradient.enabled = true;
+      if (newFill.texture) newFill.texture = { ...newFill.texture, enabled: false };
+    } else if (tab === 'texture') {
+      // Enable texture, ensure it has default values
+      newFill.texture = newFill.texture || {
+        enabled: true,
+        url: '',
+        fit: 'cover',
+        scale: 1,
+        opacity: 1,
+        blendMode: 'normal',
+      };
+      newFill.texture.enabled = true;
+      if (newFill.gradient) newFill.gradient = { ...newFill.gradient, enabled: false };
+    }
+
+    onFillChange(newFill);
+  };
+
+  const handleColorChange = (color: string) => {
+    onFillChange({
+      ...fillData,
+      color,
+    });
+  };
+
+  const handleGradientTypeChange = (type: 'linear' | 'radial' | 'conic') => {
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        type,
+      },
+    });
+  };
+
+  const handleGradientDirectionChange = (direction: number) => {
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        direction,
+      },
+    });
+  };
+
+  const handleGradientColorChange = (index: number, color: string) => {
+    const newColors = [...(fillData.gradient?.colors || [])];
+    newColors[index] = { ...newColors[index], color };
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        colors: newColors,
+      },
+    });
+  };
+
+  const handleGradientStopChange = (index: number, stop: number) => {
+    const newColors = [...(fillData.gradient?.colors || [])];
+    newColors[index] = { ...newColors[index], stop };
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        colors: newColors,
+      },
+    });
+  };
+
+  const handleAddColorStop = () => {
+    const currentColors = fillData.gradient?.colors || [];
+    const lastStop = currentColors[currentColors.length - 1]?.stop || 0;
+    const newColor = { color: '#000000', stop: Math.min(lastStop + 20, 100) };
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        colors: [...currentColors, newColor],
+      },
+    });
+  };
+
+  const handleRemoveColorStop = (index: number) => {
+    const newColors = (fillData.gradient?.colors || []).filter((_, i) => i !== index);
+    onFillChange({
+      ...fillData,
+      gradient: {
+        ...fillData.gradient!,
+        colors: newColors,
+      },
+    });
+  };
+
+  const handleTextureSelect = (url: string, asset?: { thumbnail_url?: string; media_type?: string }) => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        enabled: true,
+        url,
+        thumbnailUrl: asset?.thumbnail_url,
+        mediaType: (asset?.media_type as 'image' | 'video') || 'image',
+      },
+    });
+    setShowTexturePicker(false);
+  };
+
+  const handleTextureFitChange = (fit: 'cover' | 'contain' | 'fill' | 'tile') => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        fit,
+      },
+    });
+  };
+
+  const handleTextureScaleChange = (scale: number) => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        scale,
+      },
+    });
+  };
+
+  const handleTextureOpacityChange = (opacity: number) => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        opacity,
+      },
+    });
+  };
+
+  const handleTextureBlendModeChange = (blendMode: string) => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        blendMode,
+      },
+    });
+  };
+
+  const handleClearTexture = () => {
+    onFillChange({
+      ...fillData,
+      texture: {
+        ...fillData.texture!,
+        url: '',
+        thumbnailUrl: undefined,
+      },
+    });
+  };
+
+  return (
+    <div className="flex flex-col border border-violet-500/30 rounded-md bg-violet-500/5 p-2">
+      {/* Tab selector */}
+      <div className="flex gap-1 mb-3">
+        <button
+          onClick={() => handleTabChange('solid')}
+          className={cn(
+            'flex-1 px-2 py-1 text-[10px] font-medium rounded transition-colors',
+            activeTab === 'solid'
+              ? 'bg-violet-500 text-white'
+              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+          )}
+        >
+          Solid
+        </button>
+        <button
+          onClick={() => handleTabChange('gradient')}
+          className={cn(
+            'flex-1 px-2 py-1 text-[10px] font-medium rounded transition-colors',
+            activeTab === 'gradient'
+              ? 'bg-violet-500 text-white'
+              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+          )}
+        >
+          Gradient
+        </button>
+        <button
+          onClick={() => handleTabChange('texture')}
+          className={cn(
+            'flex-1 px-2 py-1 text-[10px] font-medium rounded transition-colors',
+            activeTab === 'texture'
+              ? 'bg-violet-500 text-white'
+              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+          )}
+        >
+          Texture
+        </button>
+      </div>
+
+      {/* Solid color tab */}
+      {activeTab === 'solid' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={fillData.color || '#000000'}
+              onChange={(e) => handleColorChange(e.target.value)}
+              className="h-8 w-12 rounded border border-input cursor-pointer"
+            />
+            <Input
+              type="text"
+              value={fillData.color || '#000000'}
+              onChange={(e) => handleColorChange(e.target.value)}
+              className="flex-1 h-8 text-xs font-mono"
+              placeholder="#000000"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Gradient tab */}
+      {activeTab === 'gradient' && (
+        <div className="space-y-3">
+          {/* Gradient type */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Type</label>
+            <select
+              value={fillData.gradient?.type || 'linear'}
+              onChange={(e) => handleGradientTypeChange(e.target.value as 'linear' | 'radial' | 'conic')}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="linear">Linear</option>
+              <option value="radial">Radial</option>
+              <option value="conic">Conic</option>
+            </select>
+          </div>
+
+          {/* Direction (for linear gradients) */}
+          {fillData.gradient?.type === 'linear' && (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">
+                Direction: {fillData.gradient?.direction || 0}°
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                step="1"
+                value={fillData.gradient?.direction || 0}
+                onChange={(e) => handleGradientDirectionChange(parseFloat(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+          )}
+
+          {/* Color stops */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Colors</label>
+            <div className="space-y-2">
+              {(fillData.gradient?.colors || []).map((colorStop, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={colorStop.color}
+                    onChange={(e) => handleGradientColorChange(index, e.target.value)}
+                    className="h-7 w-10 cursor-pointer rounded border border-input"
+                  />
+                  <Input
+                    type="number"
+                    value={colorStop.stop}
+                    onChange={(e) => handleGradientStopChange(index, parseFloat(e.target.value) || 0)}
+                    min="0"
+                    max="100"
+                    className="h-7 w-14 text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                  {(fillData.gradient?.colors || []).length > 2 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleRemoveColorStop(index)}
+                    >
+                      <X className="w-3 h-3 text-red-400" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-7 text-xs"
+                onClick={handleAddColorStop}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Color
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Texture tab */}
+      {activeTab === 'texture' && (
+        <div className="space-y-3">
+          {/* Texture preview/select */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Image/Video</label>
+            <div className="flex gap-2 items-start">
+              {fillData.texture?.url ? (
+                <div
+                  className="relative w-14 h-14 rounded border border-input overflow-hidden cursor-pointer group"
+                  onClick={() => setShowTexturePicker(true)}
+                >
+                  {fillData.texture?.mediaType === 'video' ? (
+                    <video
+                      src={fillData.texture.url}
+                      className="w-full h-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <img
+                      src={fillData.texture.thumbnailUrl || fillData.texture.url}
+                      alt="Texture"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-white text-[9px]">Change</span>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTexturePicker(true)}
+                  className="h-14 w-full text-xs"
+                >
+                  <ImagePlus className="w-4 h-4 mr-2" />
+                  Select
+                </Button>
+              )}
+              {fillData.texture?.url && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={handleClearTexture}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Fit mode */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Fit</label>
+            <select
+              value={fillData.texture?.fit || 'cover'}
+              onChange={(e) => handleTextureFitChange(e.target.value as 'cover' | 'contain' | 'fill' | 'tile')}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="fill">Fill</option>
+              <option value="tile">Tile</option>
+            </select>
+          </div>
+
+          {/* Scale */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">
+              Scale: {((fillData.texture?.scale ?? 1) * 100).toFixed(0)}%
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="3"
+              step="0.1"
+              value={fillData.texture?.scale ?? 1}
+              onChange={(e) => handleTextureScaleChange(parseFloat(e.target.value))}
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Opacity */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">
+              Opacity: {Math.round((fillData.texture?.opacity ?? 1) * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={fillData.texture?.opacity ?? 1}
+              onChange={(e) => handleTextureOpacityChange(parseFloat(e.target.value))}
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Blend mode */}
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Blend Mode</label>
+            <select
+              value={fillData.texture?.blendMode || 'normal'}
+              onChange={(e) => handleTextureBlendModeChange(e.target.value)}
+              className="w-full h-7 text-xs bg-muted border border-input rounded-md px-2 cursor-pointer"
+            >
+              <option value="normal">Normal</option>
+              <option value="multiply">Multiply</option>
+              <option value="screen">Screen</option>
+              <option value="overlay">Overlay</option>
+              <option value="darken">Darken</option>
+              <option value="lighten">Lighten</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Media picker dialog */}
+      <MediaPickerDialog
+        open={showTexturePicker}
+        onOpenChange={setShowTexturePicker}
+        onSelect={handleTextureSelect}
+        mediaType="all"
+        title="Select Texture"
+      />
     </div>
   );
 }

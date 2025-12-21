@@ -17,8 +17,14 @@ import {
   AgentFieldMapping,
   AgentTransform
 } from "../types/agents";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle, Trash2, ChevronsUpDown } from "lucide-react";
 import { Switch } from "./ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import * as agentWizardApi from "../utils/agentWizardApi";
 
 const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
@@ -1471,11 +1477,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         url: `${novaBaseUrl}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
         created: editAgent?.created || new Date().toISOString(),
         lastRun: editAgent?.lastRun,
-        runCount: editAgent?.runCount || 0
+        runCount: editAgent?.runCount || 0,
+        targetApps: formData.targetApps || []
       };
 
       // Pass closeDialog parameter to parent and await the result
-      console.log('[HandleSave] Calling onSave with agent:', newAgent.name);
+      console.log('[HandleSave] Calling onSave with agent:', newAgent.name, 'targetApps:', newAgent.targetApps);
       const onSaveStart = Date.now();
       await onSave(newAgent, closeDialog);
       console.log('[HandleSave] onSave completed in:', Date.now() - onSaveStart, 'ms');
@@ -4129,6 +4136,59 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             </Select>
           </div>
 
+          <div>
+            <Label>Target Apps (optional)</Label>
+            <p className="text-sm text-muted-foreground mb-2">Select which apps this endpoint is built for</p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-start font-normal h-auto min-h-10 py-2">
+                  <div className="flex flex-wrap gap-1 flex-1">
+                    {(formData.targetApps || []).length > 0 ? (
+                      (formData.targetApps || []).map(appId => {
+                        const appLabels: Record<string, string> = {
+                          'nova-gfx': 'Nova GFX',
+                          'pulsar-vs': 'Pulsar VS',
+                          'fusion': 'Fusion',
+                          'pulsar-mcr': 'Pulsar MCR'
+                        };
+                        return (
+                          <Badge key={appId} variant="secondary" className="text-xs">
+                            {appLabels[appId] || appId}
+                          </Badge>
+                        );
+                      })
+                    ) : (
+                      <span className="text-muted-foreground">Select target apps...</span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                {[
+                  { id: 'nova-gfx', label: 'Nova GFX' },
+                  { id: 'pulsar-vs', label: 'Pulsar VS' },
+                  { id: 'fusion', label: 'Fusion' },
+                  { id: 'pulsar-mcr', label: 'Pulsar MCR' }
+                ].map(app => (
+                  <DropdownMenuCheckboxItem
+                    key={app.id}
+                    checked={(formData.targetApps || []).includes(app.id)}
+                    onCheckedChange={(checked) => {
+                      const current = formData.targetApps || [];
+                      const updated = checked
+                        ? [...current, app.id]
+                        : current.filter(id => id !== app.id);
+                      setFormData({ ...formData, targetApps: updated });
+                    }}
+                  >
+                    {app.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <div className="space-y-3">
             <div className="flex items-center space-x-2">
               <Switch
@@ -4196,6 +4256,28 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 <p className="font-medium">{formData.status}</p>
               </div>
             </div>
+
+            {/* Target Apps */}
+            {formData.targetApps && formData.targetApps.length > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Target Apps</p>
+                <div className="flex flex-wrap gap-2">
+                  {formData.targetApps.map(appId => {
+                    const appLabels: Record<string, string> = {
+                      'nova-gfx': 'Nova GFX',
+                      'pulsar-vs': 'Pulsar VS',
+                      'fusion': 'Fusion',
+                      'pulsar-mcr': 'Pulsar MCR'
+                    };
+                    return (
+                      <Badge key={appId} variant="secondary">
+                        {appLabels[appId] || appId}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Data Type */}
             {formData.dataType && (

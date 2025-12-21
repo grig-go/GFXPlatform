@@ -115,6 +115,9 @@ serve(async (req) => {
       case "cleanup-nova-sources":
         return await cleanupNovaSources(supabase);
 
+      case "list-by-target-app":
+        return await listEndpointsByTargetApp(supabase, body);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 404);
     }
@@ -252,7 +255,8 @@ async function saveAgent(supabase: any, body: any, userId: string | null) {
     requiresAuth,
     authConfig,
     status,
-    dataSourceIds
+    dataSourceIds,
+    targetApps
   } = body;
 
   // Build schema_config
@@ -291,7 +295,8 @@ async function saveAgent(supabase: any, body: any, userId: string | null) {
       enabled: false,
       requests_per_minute: 60
     },
-    active: status === "ACTIVE"
+    active: status === "ACTIVE",
+    target_apps: targetApps || []
   };
 
   if (userId) {
@@ -575,6 +580,7 @@ async function duplicateAgent(supabase: any, body: { id: string }, userId: strin
     cache_config: original.cache_config,
     auth_config: original.auth_config,
     rate_limit_config: original.rate_limit_config,
+    target_apps: original.target_apps || [],
     active: false, // Start inactive
     user_id: userId
   };
@@ -684,6 +690,58 @@ async function cleanupNovaSources(supabase: any) {
   }
 
   return jsonResponse({ cleaned: unusedSources.length, message: `Cleaned up ${unusedSources.length} unused Nova data source(s)` });
+}
+
+// List endpoints by target app (for nova-gfx data binding)
+async function listEndpointsByTargetApp(supabase: any, body: { targetApp: string; organizationId?: string }) {
+  const { targetApp, organizationId } = body;
+
+  if (!targetApp) {
+    return jsonResponse({ error: "targetApp is required" }, 400);
+  }
+
+  // Query endpoints where target_apps array contains the specified app
+  let query = supabase
+    .from("api_endpoints")
+    .select(`
+      id,
+      name,
+      slug,
+      description,
+      output_format,
+      target_apps,
+      schema_config,
+      sample_data,
+      active,
+      created_at,
+      updated_at
+    `)
+    .contains("target_apps", [targetApp])
+    .eq("active", true)
+    .order("name");
+
+  if (organizationId) {
+    query = query.eq("organization_id", organizationId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[list-by-target-app] Error:", error);
+    return jsonResponse({ error: error.message }, 500);
+  }
+
+  // Transform data to include endpoint URL
+  const endpoints = (data || []).map((endpoint: any) => ({
+    ...endpoint,
+    endpoint_url: `/api/${endpoint.slug}`
+  }));
+
+  return jsonResponse({
+    data: endpoints,
+    count: endpoints.length,
+    targetApp
+  });
 }
 
 // Parse cache duration string to seconds

@@ -7,6 +7,7 @@ export type AgentFormat = 'RSS' | 'ATOM' | 'JSON';
 export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'ERROR';
 export type AgentCacheType = 'OFF' | '5M' | '15M' | '30M' | '1H';
 export type AgentDataType = 'Elections' | 'Finance' | 'Sports' | 'Weather' | 'News' | 'Nova Weather' | 'Nova Election' | 'Nova Finance' | 'Nova Sports';
+export type TargetApp = 'nova-gfx' | 'pulsar-vs' | 'fusion' | 'pulsar-mcr';
 
 // Database schema matching api_endpoints table
 export interface APIEndpoint {
@@ -33,6 +34,7 @@ export interface APIEndpoint {
   };
   active: boolean;
   user_id?: string;
+  target_apps?: string[];
   created_at: string;
   updated_at: string;
   // Optional relations
@@ -100,6 +102,8 @@ export interface Agent {
   apiKey?: string;
   requiresAuth?: boolean;
   authConfig?: Record<string, any>; // Authentication configuration (API keys, tokens, users)
+  // Target Apps - which apps this endpoint is built for
+  targetApps?: string[];
   // Runtime
   status: AgentStatus;
   cache: AgentCacheType;

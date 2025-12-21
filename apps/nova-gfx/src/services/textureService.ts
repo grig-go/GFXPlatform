@@ -1,4 +1,4 @@
-import { supabase, ensureFreshConnection, markSupabaseSuccess } from '@emergent-platform/supabase-client';
+import { supabase, ensureFreshConnection, markSupabaseSuccess, markSupabaseFailure, forceReconnect, directRestUpdate, directRestDelete, directRestSelect } from '@emergent-platform/supabase-client';
 
 // Storage bucket name for textures
 // Note: The bucket in Supabase is named "Texures" (without the second 't')
@@ -256,54 +256,93 @@ async function generateVideoThumbnail(file: File, maxSize: number = 400): Promis
 
 /**
  * Fetch textures for the current user's organization
+ * Includes automatic retry with reconnection on timeout
  */
 export async function fetchOrganizationTextures(
   organizationId: string,
   options: TextureListOptions = {}
 ): Promise<TextureListResult> {
   const { limit = 50, offset = 0, type, search, tags } = options;
+  const MAX_RETRIES = 2;
+  const TIMEOUT_MS = 15000; // 15 seconds
 
-  // Ensure connection is fresh before querying
-  await ensureFreshConnection();
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Ensure connection is fresh before querying
+      // Force health check on retry attempts
+      await ensureFreshConnection(attempt > 0);
 
-  let query = supabase
-    .from('organization_textures')
-    .select('*', { count: 'exact' })
-    .eq('organization_id', organizationId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+      let query = supabase
+        .from('organization_textures')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
-  if (type) {
-    query = query.eq('media_type', type);
+      if (type) {
+        query = query.eq('media_type', type);
+      }
+
+      if (search) {
+        query = query.ilike('name', `%${search}%`);
+      }
+
+      if (tags && tags.length > 0) {
+        query = query.contains('tags', tags);
+      }
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Query timeout after ${TIMEOUT_MS / 1000}s`)), TIMEOUT_MS);
+      });
+
+      const { data, error, count } = await Promise.race([query, timeoutPromise]);
+
+      if (error) {
+        console.error('Error fetching textures:', error);
+        throw new Error(`Failed to fetch textures: ${error.message}`);
+      }
+
+      markSupabaseSuccess();
+
+      return {
+        data: (data || []).map(mapRowToTexture),
+        count: count || 0,
+        hasMore: (count || 0) > offset + limit,
+      };
+    } catch (err) {
+      const isTimeout = err instanceof Error && err.message.includes('timeout');
+      const isLastAttempt = attempt === MAX_RETRIES;
+
+      console.error(`[TextureService] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed:`, err);
+
+      if (isLastAttempt) {
+        // Mark failure and throw
+        await markSupabaseFailure();
+        throw err;
+      }
+
+      // On timeout or error, force reconnect before retry
+      if (isTimeout) {
+        console.log('[TextureService] Timeout detected, forcing reconnection...');
+        const reconnected = await forceReconnect();
+        if (reconnected) {
+          console.log('[TextureService] Reconnected, retrying...');
+        } else {
+          console.warn('[TextureService] Reconnection failed, retrying anyway...');
+        }
+      } else {
+        // For other errors, mark failure which may trigger reconnect
+        const shouldRetry = await markSupabaseFailure();
+        if (!shouldRetry) {
+          throw err;
+        }
+      }
+    }
   }
 
-  if (search) {
-    query = query.ilike('name', `%${search}%`);
-  }
-
-  if (tags && tags.length > 0) {
-    query = query.contains('tags', tags);
-  }
-
-  // Add timeout to prevent hanging
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Query timeout after 10s')), 10000);
-  });
-
-  const { data, error, count } = await Promise.race([query, timeoutPromise]);
-
-  if (error) {
-    console.error('Error fetching textures:', error);
-    throw new Error(`Failed to fetch textures: ${error.message}`);
-  }
-
-  markSupabaseSuccess();
-
-  return {
-    data: (data || []).map(mapRowToTexture),
-    count: count || 0,
-    hasMore: (count || 0) > offset + limit,
-  };
+  // Should never reach here, but TypeScript needs it
+  throw new Error('Failed to fetch textures after retries');
 }
 
 /**
@@ -425,12 +464,15 @@ export async function uploadTexture(
 
 /**
  * Update texture metadata
+ * Uses direct REST API for better connection resilience
  */
 export async function updateTexture(
   textureId: string,
   updates: { name?: string; tags?: string[] }
 ): Promise<OrganizationTexture> {
-  const updateData: Record<string, unknown> = {};
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
 
   if (updates.name !== undefined) {
     updateData.name = updates.name;
@@ -440,34 +482,51 @@ export async function updateTexture(
     updateData.tags = updates.tags;
   }
 
-  const { data, error } = await supabase
-    .from('organization_textures')
-    .update(updateData)
-    .eq('id', textureId)
-    .select()
-    .single();
+  // Use direct REST API for reliable updates
+  const result = await directRestUpdate(
+    'organization_textures',
+    updateData,
+    { column: 'id', value: textureId },
+    10000
+  );
 
-  if (error) {
-    throw new Error(`Failed to update texture: ${error.message}`);
+  if (!result.success) {
+    throw new Error(`Failed to update texture: ${result.error}`);
   }
 
-  return mapRowToTexture(data);
+  // Fetch the updated record using direct REST
+  const selectResult = await directRestSelect<Record<string, unknown>>(
+    'organization_textures',
+    '*',
+    { column: 'id', value: textureId },
+    10000
+  );
+
+  if (selectResult.error || !selectResult.data?.[0]) {
+    throw new Error(`Failed to fetch updated texture: ${selectResult.error}`);
+  }
+
+  return mapRowToTexture(selectResult.data[0]);
 }
 
 /**
  * Delete a texture
+ * Uses direct REST API for better connection resilience
  */
 export async function deleteTexture(textureId: string): Promise<void> {
-  // First get the texture to get storage paths
-  const { data: texture, error: fetchError } = await supabase
-    .from('organization_textures')
-    .select('storage_path, thumbnail_url')
-    .eq('id', textureId)
-    .single();
+  // First get the texture to get storage paths using direct REST
+  const selectResult = await directRestSelect<{ storage_path: string; thumbnail_url: string | null }>(
+    'organization_textures',
+    'storage_path,thumbnail_url',
+    { column: 'id', value: textureId },
+    10000
+  );
 
-  if (fetchError) {
-    throw new Error(`Failed to find texture: ${fetchError.message}`);
+  if (selectResult.error || !selectResult.data?.[0]) {
+    throw new Error(`Failed to find texture: ${selectResult.error}`);
   }
+
+  const texture = selectResult.data[0];
 
   // Delete from storage
   const pathsToDelete = [texture.storage_path];
@@ -486,14 +545,15 @@ export async function deleteTexture(textureId: string): Promise<void> {
     console.warn('Failed to delete texture files:', storageError);
   }
 
-  // Delete database record
-  const { error: dbError } = await supabase
-    .from('organization_textures')
-    .delete()
-    .eq('id', textureId);
+  // Delete database record using direct REST API
+  const deleteResult = await directRestDelete(
+    'organization_textures',
+    { column: 'id', value: textureId },
+    10000
+  );
 
-  if (dbError) {
-    throw new Error(`Failed to delete texture record: ${dbError.message}`);
+  if (!deleteResult.success) {
+    throw new Error(`Failed to delete texture record: ${deleteResult.error}`);
   }
 }
 
@@ -615,6 +675,7 @@ export async function uploadAIGeneratedTexture(
 
 /**
  * Batch update tags for multiple textures
+ * Uses direct REST API for better connection resilience
  */
 export async function batchUpdateTextureTags(
   textureIds: string[],
@@ -624,29 +685,45 @@ export async function batchUpdateTextureTags(
   if (textureIds.length === 0) return;
 
   if (mode === 'set') {
-    // Set tags directly (replace all)
-    const { error } = await supabase
-      .from('organization_textures')
-      .update({ tags })
-      .in('id', textureIds);
+    // Set tags directly (replace all) - update each texture individually
+    const updatePromises = textureIds.map((id) =>
+      directRestUpdate(
+        'organization_textures',
+        { tags, updated_at: new Date().toISOString() },
+        { column: 'id', value: id },
+        10000
+      )
+    );
 
-    if (error) {
-      throw new Error(`Failed to update texture tags: ${error.message}`);
+    const results = await Promise.all(updatePromises);
+    const errors = results.filter((r) => !r.success);
+    if (errors.length > 0) {
+      throw new Error(`Failed to update ${errors.length} texture tags`);
     }
   } else {
     // For add/remove, we need to fetch current tags and update individually
-    const { data: textures, error: fetchError } = await supabase
-      .from('organization_textures')
-      .select('id, tags')
-      .in('id', textureIds);
+    // Fetch all textures first
+    const fetchPromises = textureIds.map((id) =>
+      directRestSelect<{ id: string; tags: string[] }>(
+        'organization_textures',
+        'id,tags',
+        { column: 'id', value: id },
+        10000
+      )
+    );
 
-    if (fetchError) {
-      throw new Error(`Failed to fetch textures: ${fetchError.message}`);
+    const fetchResults = await Promise.all(fetchPromises);
+    const textures: { id: string; tags: string[] }[] = [];
+
+    for (const result of fetchResults) {
+      if (result.data?.[0]) {
+        textures.push(result.data[0]);
+      }
     }
 
-    // Update each texture
-    const updates = (textures || []).map((texture) => {
-      const currentTags = (texture.tags as string[]) || [];
+    // Update each texture with new tags
+    const updatePromises = textures.map((texture) => {
+      const currentTags = texture.tags || [];
       let newTags: string[];
 
       if (mode === 'add') {
@@ -655,14 +732,16 @@ export async function batchUpdateTextureTags(
         newTags = currentTags.filter((t) => !tags.includes(t));
       }
 
-      return supabase
-        .from('organization_textures')
-        .update({ tags: newTags })
-        .eq('id', texture.id);
+      return directRestUpdate(
+        'organization_textures',
+        { tags: newTags, updated_at: new Date().toISOString() },
+        { column: 'id', value: texture.id },
+        10000
+      );
     });
 
-    const results = await Promise.all(updates);
-    const errors = results.filter((r) => r.error);
+    const results = await Promise.all(updatePromises);
+    const errors = results.filter((r) => !r.success);
     if (errors.length > 0) {
       throw new Error(`Failed to update ${errors.length} textures`);
     }
@@ -671,23 +750,33 @@ export async function batchUpdateTextureTags(
 
 /**
  * Batch delete multiple textures
+ * Uses direct REST API for better connection resilience
  */
 export async function batchDeleteTextures(textureIds: string[]): Promise<void> {
   if (textureIds.length === 0) return;
 
-  // First get all texture storage paths
-  const { data: textures, error: fetchError } = await supabase
-    .from('organization_textures')
-    .select('id, storage_path, thumbnail_url')
-    .in('id', textureIds);
+  // First get all texture storage paths using direct REST
+  const fetchPromises = textureIds.map((id) =>
+    directRestSelect<{ id: string; storage_path: string; thumbnail_url: string | null }>(
+      'organization_textures',
+      'id,storage_path,thumbnail_url',
+      { column: 'id', value: id },
+      10000
+    )
+  );
 
-  if (fetchError) {
-    throw new Error(`Failed to fetch textures: ${fetchError.message}`);
+  const fetchResults = await Promise.all(fetchPromises);
+  const textures: { id: string; storage_path: string; thumbnail_url: string | null }[] = [];
+
+  for (const result of fetchResults) {
+    if (result.data?.[0]) {
+      textures.push(result.data[0]);
+    }
   }
 
   // Collect all paths to delete
   const pathsToDelete: string[] = [];
-  for (const texture of textures || []) {
+  for (const texture of textures) {
     pathsToDelete.push(texture.storage_path);
     if (texture.thumbnail_url) {
       const thumbPath = texture.storage_path.replace(/([^/]+)$/, 'thumbnails/$1.jpg');
@@ -706,14 +795,19 @@ export async function batchDeleteTextures(textureIds: string[]): Promise<void> {
     }
   }
 
-  // Delete database records
-  const { error: dbError } = await supabase
-    .from('organization_textures')
-    .delete()
-    .in('id', textureIds);
+  // Delete database records using direct REST API
+  const deletePromises = textureIds.map((id) =>
+    directRestDelete(
+      'organization_textures',
+      { column: 'id', value: id },
+      10000
+    )
+  );
 
-  if (dbError) {
-    throw new Error(`Failed to delete texture records: ${dbError.message}`);
+  const results = await Promise.all(deletePromises);
+  const errors = results.filter((r) => !r.success);
+  if (errors.length > 0) {
+    throw new Error(`Failed to delete ${errors.length} texture records`);
   }
 }
 

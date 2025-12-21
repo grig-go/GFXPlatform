@@ -167,6 +167,7 @@ export async function saveAgent(
     authConfig?: any;
     status?: string;
     dataSourceIds?: string[];
+    targetApps?: string[];
   }
 ): Promise<{ data?: any; error?: string }> {
   const result = await apiCall<{ data: any; isEdit: boolean }>('save-agent', agent);
@@ -347,4 +348,23 @@ export async function cleanupNovaSources(): Promise<{ cleaned: number; message?:
   }
 
   return { cleaned: result.data?.cleaned ?? 0, message: result.data?.message };
+}
+
+/**
+ * List endpoints by target app (for nova-gfx data binding)
+ */
+export async function listEndpointsByTargetApp(
+  targetApp: string,
+  organizationId?: string
+): Promise<{ data: any[]; count: number; error?: string }> {
+  const result = await apiCall<{ data: any[]; count: number; targetApp: string }>('list-by-target-app', {
+    targetApp,
+    organizationId
+  });
+
+  if (result.error) {
+    return { data: [], count: 0, error: result.error };
+  }
+
+  return { data: result.data?.data ?? [], count: result.data?.count ?? 0 };
 }

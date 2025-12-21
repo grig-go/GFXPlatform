@@ -264,6 +264,67 @@ export async function directRestInsert<T = any>(
   }
 }
 
+/**
+ * Direct REST API delete that completely bypasses the Supabase client.
+ * Use this for deleting records when the Supabase client is unresponsive.
+ * @param accessToken - Optional user access token (JWT) for authenticated requests.
+ */
+export async function directRestDelete(
+  table: string,
+  filter: { column: string; value: string },
+  timeoutMs = 10000,
+  accessToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const authToken = accessToken || supabaseAnonKey;
+
+  try {
+    console.log(`[Supabase REST] DELETE ${table} where ${filter.column}=${filter.value}`);
+
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/${table}?${filter.column}=eq.${filter.value}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${authToken}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+        signal: controller.signal,
+        cache: 'no-store',
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Supabase REST] Delete error: ${response.status} ${errorText}`);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    console.log(`[Supabase REST] Delete success`);
+    markSupabaseSuccess();
+    return { success: true };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.error(`[Supabase REST] Delete timeout after ${timeoutMs}ms`);
+      return { success: false, error: `Timeout after ${timeoutMs}ms` };
+    }
+    console.error(`[Supabase REST] Delete error:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
 // Track last successful operation time
 let lastSuccessfulOperation = Date.now();
 let consecutiveFailures = 0;

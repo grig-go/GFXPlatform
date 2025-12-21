@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useDesignerStore } from '@/stores/designerStore';
 import { getAnimatedProperties } from '@/lib/animation';
@@ -384,6 +384,7 @@ export function Preview() {
     return templateIdParam || 'all';
   });
   const [showSelector, setShowSelector] = useState(false);
+  const [showDataPanelForTemplate, setShowDataPanelForTemplate] = useState<string | null>(null);
   const [showFps, setShowFps] = useState(false);
 
   // Per-template playback state: { templateId: { phase, position, isPlaying } }
@@ -593,33 +594,82 @@ export function Preview() {
             };
           }
         } else if (element.content?.type === 'shape') {
-          // Shape elements - override can be a color (fill) or a URL (texture)
+          // Shape elements - override can be:
+          // 1. A simple URL (texture)
+          // 2. A color string (fill)
+          // 3. A JSON object with fill/gradient/texture config (from FillEditor)
           const overrideStr = String(override);
-          const isUrl = overrideStr.startsWith('http') || overrideStr.startsWith('/') || overrideStr.startsWith('data:');
-          const isColor = overrideStr.startsWith('#') || overrideStr.startsWith('rgb') || overrideStr.startsWith('hsl');
 
-          if (isUrl) {
-            // Override texture URL
+          // Try to parse as JSON fill config first
+          let fillConfig: { fill?: string; gradient?: any; texture?: any } | null = null;
+          if (overrideStr.startsWith('{')) {
+            try {
+              fillConfig = JSON.parse(overrideStr);
+            } catch {
+              // Not valid JSON, continue with other checks
+            }
+          }
+
+          if (fillConfig) {
+            // JSON fill config from FillEditor - apply fill, gradient, and texture settings
             const existingTexture = (element.content as any).texture || {};
-            const isVideo = overrideStr.match(/\.(mp4|webm|mov)$/i);
+            const existingGradient = (element.content as any).gradient || {};
+
+            const contentUpdates: Record<string, any> = { ...updatedElement.content };
+
+            // Apply solid fill color
+            if (fillConfig.fill !== undefined) {
+              contentUpdates.fill = fillConfig.fill;
+            }
+
+            // Apply gradient config
+            if (fillConfig.gradient !== undefined) {
+              contentUpdates.gradient = {
+                ...existingGradient,
+                ...fillConfig.gradient,
+              };
+            }
+
+            // Apply texture config
+            if (fillConfig.texture !== undefined) {
+              contentUpdates.texture = {
+                ...existingTexture,
+                ...fillConfig.texture,
+              };
+            }
+
             updatedElement = {
               ...updatedElement,
-              content: {
-                ...updatedElement.content,
-                texture: {
-                  ...existingTexture,
-                  enabled: true,
-                  url: overrideStr,
-                  mediaType: isVideo ? 'video' : 'image',
+              content: contentUpdates,
+            };
+          } else {
+            // Legacy handling for simple strings
+            const isUrl = overrideStr.startsWith('http') || overrideStr.startsWith('/') || overrideStr.startsWith('data:');
+            const isColor = overrideStr.startsWith('#') || overrideStr.startsWith('rgb') || overrideStr.startsWith('hsl');
+
+            if (isUrl) {
+              // Override texture URL
+              const existingTexture = (element.content as any).texture || {};
+              const isVideo = overrideStr.match(/\.(mp4|webm|mov)$/i);
+              updatedElement = {
+                ...updatedElement,
+                content: {
+                  ...updatedElement.content,
+                  texture: {
+                    ...existingTexture,
+                    enabled: true,
+                    url: overrideStr,
+                    mediaType: isVideo ? 'video' : 'image',
+                  },
                 },
-              },
-            };
-          } else if (isColor) {
-            // Override fill color
-            updatedElement = {
-              ...updatedElement,
-              content: { ...updatedElement.content, fill: overrideStr },
-            };
+              };
+            } else if (isColor) {
+              // Override fill color
+              updatedElement = {
+                ...updatedElement,
+                content: { ...updatedElement.content, fill: overrideStr },
+              };
+            }
           }
         }
       }
@@ -823,13 +873,27 @@ export function Preview() {
 
     // Debug logging when we have a specific template selected
     if (selectedTemplateId !== 'all') {
-      console.log('[Preview] visibleElements:', {
-        selectedTemplateId,
-        visibleTemplateIds: Array.from(templateIds),
-        visibleTemplateNames: visibleTemplates.map(t => t.name),
-        elementCount: result.length,
-        elementTemplateIds: [...new Set(result.map(e => e.template_id))],
-      });
+      // More detailed debugging for empty elements case
+      if (result.length === 0) {
+        const allElementTemplateIds = [...new Set(elementsWithBindings.map(e => e.template_id))];
+        console.warn('[Preview] No visible elements for selected template!', {
+          selectedTemplateId,
+          visibleTemplateIds: Array.from(templateIds),
+          visibleTemplateNames: visibleTemplates.map(t => t.name),
+          allElementsCount: elementsWithBindings.length,
+          allElementTemplateIds,
+          templateIdMatch: allElementTemplateIds.includes(selectedTemplateId),
+          previewMode,
+        });
+      } else {
+        console.log('[Preview] visibleElements:', {
+          selectedTemplateId,
+          visibleTemplateIds: Array.from(templateIds),
+          visibleTemplateNames: visibleTemplates.map(t => t.name),
+          elementCount: result.length,
+          elementTemplateIds: [...new Set(result.map(e => e.template_id))],
+        });
+      }
     }
 
     return result;
@@ -1418,6 +1482,9 @@ export function Preview() {
     );
   }
 
+  // Check if template selected but no elements visible (potential ID mismatch)
+  const hasTemplateElementMismatch = selectedTemplateId !== 'all' && visibleElements.length === 0 && elements.length > 0;
+
   // Normal Preview Mode with controls - fullscreen stretched
   return (
     <div
@@ -1463,6 +1530,26 @@ export function Preview() {
               />
             );
           })}
+          {/* Show debug message when template is selected but has no visible elements */}
+          {hasTemplateElementMismatch && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center text-white/40 bg-black/50 p-6 rounded-lg max-w-md">
+                <p className="text-lg mb-2">No elements visible</p>
+                <p className="text-sm text-white/30 mb-2">
+                  Selected template may have a different ID than the elements.
+                </p>
+                <p className="text-xs text-white/20 font-mono break-all">
+                  Template: {String(selectedTemplateId).slice(0, 12)}...
+                </p>
+                <p className="text-xs text-white/20 mt-1">
+                  Elements: {elements.length} total
+                </p>
+                <p className="text-xs mt-3 text-violet-400">
+                  Check browser console (F12) for details
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1527,6 +1614,25 @@ export function Preview() {
                   Play Template
                 </div>
 
+                {/* All Templates option */}
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors ${
+                    selectedTemplateId === 'all' ? 'bg-violet-500/30 ring-1 ring-violet-500' : 'hover:bg-white/10'
+                  }`}
+                  onClick={() => {
+                    setSelectedTemplateId('all');
+                    setSelectedLayerId('all');
+                    setShowSelector(false);
+                  }}
+                >
+                  <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  <span className={`text-xs font-medium ${selectedTemplateId === 'all' ? 'text-violet-300' : 'text-white/70'}`}>
+                    All Templates
+                  </span>
+                </div>
+
                 <div className="h-px bg-white/10 my-2" />
 
                 {/* Layers and their templates */}
@@ -1547,10 +1653,12 @@ export function Preview() {
                         const templatePhase = playState?.phase || 'loop';
                         const isOnAir = isActive && (templatePhase === 'in' || templatePhase === 'loop');
                         const isSelected = selectedTemplateId === template.id;
+                        // Check if this template has any bindings
+                        const templateHasBindings = previewBindings.some(b => b.template_id === template.id);
 
                         return (
+                          <React.Fragment key={template.id}>
                           <div
-                            key={template.id}
                             className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
                               isSelected ? 'bg-violet-500/30 ring-1 ring-violet-500' : 'hover:bg-white/10'
                             }`}
@@ -1606,6 +1714,27 @@ export function Preview() {
                               {template.name}
                             </span>
 
+                            {/* Data binding button - only show for templates that have bindings AND when there's data */}
+                            {templateHasBindings && previewDataPayload.length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowDataPanelForTemplate(
+                                    showDataPanelForTemplate === template.id ? null : template.id
+                                  );
+                                }}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                                  showDataPanelForTemplate === template.id ? 'bg-cyan-500/40 text-cyan-300' : 'bg-white/10 hover:bg-white/20 text-white/50 hover:text-white'
+                                }`}
+                                title="Data Binding Options"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                </svg>
+                                <span>{currentRecordIndex + 1}/{previewDataPayload.length}</span>
+                              </button>
+                            )}
+
                             {/* Status indicator */}
                             {isActive && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded ${
@@ -1617,9 +1746,94 @@ export function Preview() {
                               </span>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
+
+                          {/* Data Panel - show inline when data button clicked for this template (only if template has bindings) */}
+                          {showDataPanelForTemplate === template.id && templateHasBindings && previewDataPayload.length > 0 && (
+                            <div className="mt-1 mb-2 ml-8 bg-white/5 rounded-lg p-2 border border-cyan-500/30">
+                              <div className="text-[10px] font-medium text-cyan-400/70 uppercase tracking-wider mb-2">
+                                Data Records
+                              </div>
+
+                              {/* Record Navigation */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentRecordIndex(Math.max(0, currentRecordIndex - 1));
+                                  }}
+                                  disabled={currentRecordIndex === 0}
+                                  className="p-1.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                  </svg>
+                                </button>
+                                <div className="flex-1 text-center">
+                                  <span className="text-sm font-bold text-white">{currentRecordIndex + 1}</span>
+                                  <span className="text-white/40 text-xs"> / {previewDataPayload.length}</span>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentRecordIndex(Math.min(previewDataPayload.length - 1, currentRecordIndex + 1));
+                                  }}
+                                  disabled={currentRecordIndex >= previewDataPayload.length - 1}
+                                  className="p-1.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              {/* Quick Select Buttons */}
+                              {previewDataPayload.length > 1 && previewDataPayload.length <= 10 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {previewDataPayload.map((_, idx) => (
+                                    <button
+                                      key={idx}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentRecordIndex(idx);
+                                      }}
+                                      className={`w-6 h-6 rounded text-[10px] font-medium transition-colors ${
+                                        idx === currentRecordIndex
+                                          ? 'bg-cyan-500 text-white'
+                                          : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+                                      }`}
+                                    >
+                                      {idx + 1}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Current Record Preview */}
+                              {currentDataRecord && (
+                                <div className="bg-black/20 rounded p-2 max-h-[100px] overflow-y-auto">
+                                  <div className="space-y-0.5">
+                                    {Object.entries(currentDataRecord).slice(0, 5).map(([key, value]) => (
+                                      <div key={key} className="flex items-start gap-1 text-[10px]">
+                                        <span className="text-cyan-400/70 font-mono shrink-0">{key}:</span>
+                                        <span className="text-white/60 truncate">
+                                          {typeof value === 'object' ? JSON.stringify(value).slice(0, 20) + '...' : String(value).slice(0, 25)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {Object.keys(currentDataRecord).length > 5 && (
+                                      <div className="text-[9px] text-white/30 italic">
+                                        +{Object.keys(currentDataRecord).length - 5} more...
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
                   </div>
                 ))}
               </div>
@@ -1793,28 +2007,28 @@ function PreviewElement({
     .filter((e) => e.parent_element_id === element.id && e.visible !== false)
     .sort((a, b) => (a.z_index || a.sort_order || 0) - (b.z_index || b.sort_order || 0));
 
-  // Handle animated properties
-  const animatedOpacity = animatedProps.opacity !== undefined 
-    ? Number(animatedProps.opacity) 
-    : element.opacity;
+  // Handle animated properties - fallback to 1 if element.opacity is undefined
+  const animatedOpacity = animatedProps.opacity !== undefined
+    ? Number(animatedProps.opacity)
+    : (element.opacity ?? 1);
   
-  const animatedX = animatedProps.position_x !== undefined 
-    ? Number(animatedProps.position_x) 
-    : element.position_x;
-  const animatedY = animatedProps.position_y !== undefined 
-    ? Number(animatedProps.position_y) 
-    : element.position_y;
+  const animatedX = animatedProps.position_x !== undefined
+    ? Number(animatedProps.position_x)
+    : (element.position_x ?? 0);
+  const animatedY = animatedProps.position_y !== undefined
+    ? Number(animatedProps.position_y)
+    : (element.position_y ?? 0);
   
-  const animatedRotation = animatedProps.rotation !== undefined 
-    ? Number(animatedProps.rotation) 
-    : element.rotation;
+  const animatedRotation = animatedProps.rotation !== undefined
+    ? Number(animatedProps.rotation)
+    : (element.rotation ?? 0);
   
-  const animatedScaleX = animatedProps.scale_x !== undefined 
-    ? Number(animatedProps.scale_x) 
-    : element.scale_x;
-  const animatedScaleY = animatedProps.scale_y !== undefined 
-    ? Number(animatedProps.scale_y) 
-    : element.scale_y;
+  const animatedScaleX = animatedProps.scale_x !== undefined
+    ? Number(animatedProps.scale_x)
+    : (element.scale_x ?? 1);
+  const animatedScaleY = animatedProps.scale_y !== undefined
+    ? Number(animatedProps.scale_y)
+    : (element.scale_y ?? 1);
   
   const animatedWidth = animatedProps.width !== undefined 
     ? Number(animatedProps.width) 
