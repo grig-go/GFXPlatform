@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  User,
-  Settings,
   LogOut,
-  Building2,
-  Shield,
+  User,
+  Sun,
+  Moon,
+  Monitor,
+  Ticket,
 } from 'lucide-react';
 import {
   Button,
@@ -14,12 +16,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from '@emergent-platform/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore, type Theme } from '@/stores/themeStore';
+import { SupportTicketsDialog } from '../dialogs/SupportTicketsDialog';
+import { AccountSettingsDialog } from '../dialogs/AccountSettingsDialog';
+
+const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
 
 export function UserMenu() {
   const navigate = useNavigate();
-  const { user, organization, signOut } = useAuthStore();
+  const { user, signOut } = useAuthStore();
+  const { theme, setTheme } = useThemeStore();
+  const [showSupportTickets, setShowSupportTickets] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+
+  // Check if user is from @emergent.new domain
+  const isEmergentUser = user?.email?.endsWith('@emergent.new') || false;
+
+  const handleThemeChange = (newTheme: Theme) => {
+    if (user?.id) {
+      setTheme(newTheme, user.id);
+    }
+  };
+
+  const currentThemeOption = themeOptions.find(t => t.value === theme) || themeOptions[1];
+  const CurrentThemeIcon = currentThemeOption.icon;
 
   if (!user) {
     return (
@@ -43,14 +73,15 @@ export function UserMenu() {
   };
 
   return (
+  <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className="px-1.5 h-7 sm:h-8"
+          size="icon"
+          className="h-7 w-7 sm:h-8 sm:w-8 rounded-full p-0"
         >
-          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-medium text-cyan-400">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-medium text-cyan-400">
             {initials}
           </div>
         </Button>
@@ -63,31 +94,46 @@ export function UserMenu() {
           </div>
         </DropdownMenuLabel>
 
-        {organization && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-3 h-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{organization.name}</span>
-              </div>
-            </DropdownMenuLabel>
-          </>
-        )}
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={() => navigate('/settings')}>
-          <Settings className="w-4 h-4 mr-2" />
-          Settings
+        <DropdownMenuItem onClick={() => setShowAccountSettings(true)}>
+          <User className="w-4 h-4 mr-2" />
+          Account Settings
         </DropdownMenuItem>
 
-        {user.isEmergentUser && (
-          <DropdownMenuItem onClick={() => navigate('/settings/admin')}>
-            <Shield className="w-4 h-4 mr-2" />
-            Admin Panel
+        {isEmergentUser && (
+          <DropdownMenuItem onClick={() => setShowSupportTickets(true)}>
+            <Ticket className="w-4 h-4 mr-2" />
+            Support Tickets
           </DropdownMenuItem>
         )}
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <CurrentThemeIcon className="w-4 h-4 mr-2" />
+            Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent>
+              {themeOptions.map((option) => {
+                const Icon = option.icon;
+                const isSelected = theme === option.value;
+                return (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onClick={() => handleThemeChange(option.value)}
+                    className={isSelected ? 'bg-accent' : ''}
+                  >
+                    <Icon className="w-4 h-4 mr-2" />
+                    {option.label}
+                    {isSelected && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
 
         <DropdownMenuSeparator />
 
@@ -97,5 +143,20 @@ export function UserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    {/* Account Settings Dialog */}
+    <AccountSettingsDialog
+      open={showAccountSettings}
+      onOpenChange={setShowAccountSettings}
+    />
+
+    {/* Support Tickets Dialog (for @emergent.new users) */}
+    {isEmergentUser && (
+      <SupportTicketsDialog
+        open={showSupportTickets}
+        onOpenChange={setShowSupportTickets}
+      />
+    )}
+  </>
   );
 }

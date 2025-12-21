@@ -121,8 +121,11 @@ export function PreviewPanel() {
 
     const projectIdToLoad = currentProject.id;
 
-    // Skip if already loaded for this project (using store state instead of ref)
-    if (loadedProjectId === projectIdToLoad) {
+    // Get fresh loadedProjectId from store to avoid stale closure
+    const currentLoadedId = usePreviewStore.getState().loadedProjectId;
+
+    // Skip if already loaded for this project (using fresh store state)
+    if (currentLoadedId === projectIdToLoad) {
       console.log('Preview data already loaded for project:', projectIdToLoad);
       return;
     }
@@ -133,7 +136,7 @@ export function PreviewPanel() {
       return;
     }
 
-    console.log('[PreviewPanel] Loading preview data for project:', projectIdToLoad, '(was:', loadedProjectId, ')');
+    console.log('[PreviewPanel] Loading preview data for project:', projectIdToLoad, '(was:', currentLoadedId, ')');
     loadingProjectIdRef.current = projectIdToLoad;
 
     setIsLoading(true);
@@ -258,7 +261,7 @@ export function PreviewPanel() {
       };
 
       // Save to localStorage for Nova preview to read on initial load
-      localStorage.setItem('nova-preview-data', JSON.stringify(previewData));
+      localStorage.setItem('pulsar-preview-data', JSON.stringify(previewData));
       console.log('[PreviewPanel] Preview data saved for project:', projectIdToLoad);
 
       // Mark this project as loaded in the store (so it persists across component state)
@@ -275,20 +278,23 @@ export function PreviewPanel() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.id, loadedProjectId, setLoadedProjectId]); // Only depend on project ID, not template
+  }, [currentProject?.id, setLoadedProjectId]); // Only depend on project ID, get loadedProjectId fresh from store
 
   // Load preview data when project changes
   useEffect(() => {
     if (!currentProject) return;
 
-    // Check if we need to reload based on store state
-    let needsReload = loadedProjectId !== currentProject.id;
+    // Get fresh loadedProjectId from store
+    const currentLoadedId = usePreviewStore.getState().loadedProjectId;
 
-    console.log('[PreviewPanel] Project change check - current:', currentProject.id, 'loaded:', loadedProjectId, 'needsReload:', needsReload);
+    // Check if we need to reload based on store state
+    let needsReload = currentLoadedId !== currentProject.id;
+
+    console.log('[PreviewPanel] Project change check - current:', currentProject.id, 'loaded:', currentLoadedId, 'needsReload:', needsReload);
 
     // Also check localStorage as a fallback
     if (!needsReload) {
-      const previewDataStr = localStorage.getItem('nova-preview-data');
+      const previewDataStr = localStorage.getItem('pulsar-preview-data');
       if (previewDataStr) {
         try {
           const previewData = JSON.parse(previewDataStr);
@@ -321,7 +327,7 @@ export function PreviewPanel() {
 
     // Send the full preview data via postMessage (cross-origin compatible)
     // localStorage is not shared between different ports/origins
-    const previewDataStr = localStorage.getItem('nova-preview-data');
+    const previewDataStr = localStorage.getItem('pulsar-preview-data');
     if (previewDataStr) {
       try {
         const previewData = JSON.parse(previewDataStr);
@@ -366,36 +372,70 @@ export function PreviewPanel() {
     sendToPreview('setDataRecordIndex', { recordIndex: dataRecordIndex });
   }, [dataRecordIndex, iframeLoaded, previewReady, sendToPreview]);
 
-  // Handle template change via postMessage (no iframe reload!)
-  // This handles both direct template selection AND page selection (which changes pageTemplate)
+  // Handle template/page change via postMessage (no iframe reload!)
+  // This handles both direct template selection AND page selection
   useEffect(() => {
-    if (!previewReady || !iframeLoaded) return;
-    if (mode !== 'isolated') return;
+    console.log('[PreviewPanel] Template/page effect triggered:', {
+      previewReady,
+      iframeLoaded,
+      mode,
+      selectedTemplateId,
+      selectedPageId,
+      pageTemplateId: pageTemplate?.id,
+      pageTemplateName: pageTemplate?.name,
+    });
+
+    if (!previewReady || !iframeLoaded) {
+      console.log('[PreviewPanel] Skipping - not ready. previewReady:', previewReady, 'iframeLoaded:', iframeLoaded);
+      return;
+    }
+    if (mode !== 'isolated') {
+      console.log('[PreviewPanel] Skipping - mode is not isolated:', mode);
+      return;
+    }
 
     // Get the effective template ID (either from direct selection or from page)
     const effectiveTemplateId = selectedTemplateId || pageTemplate?.id;
-    if (!effectiveTemplateId) return;
+    if (!effectiveTemplateId) {
+      console.log('[PreviewPanel] Skipping - no effective template ID');
+      return;
+    }
 
-    console.log('Template changed in isolated mode, switching via postMessage to:', effectiveTemplateId);
+    console.log('[PreviewPanel] Template/page changed in isolated mode:', {
+      templateId: effectiveTemplateId,
+      selectedPageId,
+      hasPayload: Object.keys(activePayload || {}).length > 0
+    });
+
     sendToPreview('setTemplate', {
       templateId: effectiveTemplateId,
       mode
     });
 
-    // Also send content updates if we have a page payload
-    if (activePayload && Object.keys(activePayload).length > 0) {
-      setTimeout(() => {
-        sendToPreview('updateContent', activePayload);
-      }, 50);
-    }
+    // Send current data record index for data binding (get fresh from store)
+    // This needs to happen BEFORE content updates so bindings can be resolved
+    setTimeout(() => {
+      const currentRecordIndex = usePreviewStore.getState().dataRecordIndex;
+      console.log('[PreviewPanel] Sending data record index:', currentRecordIndex);
+      sendToPreview('setDataRecordIndex', { recordIndex: currentRecordIndex });
+    }, 50);
 
-    // Reset and play IN animation
+    // Send content updates after a delay to allow ContentEditor to resolve bindings
+    // The binding resolution effect runs when selectedPageId changes, so we need to wait
+    setTimeout(() => {
+      // Get fresh activePayload from store - it may have been updated by ContentEditor
+      const freshPayload = usePreviewStore.getState().previewPayload;
+      console.log('[PreviewPanel] Sending content update with fresh payload:', Object.keys(freshPayload));
+      sendToPreview('updateContent', freshPayload);
+    }, 150);
+
+    // Reset and play IN animation after content is sent
     setTimeout(() => {
       sendToPreview('reset');
       sendToPreview('playIn');
-    }, 100);
+    }, 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplateId, pageTemplate?.id, previewReady, iframeLoaded, sendToPreview, mode]);
+  }, [selectedTemplateId, selectedPageId, pageTemplate?.id, previewReady, iframeLoaded, sendToPreview, mode]);
 
   // Handle mode change via postMessage
   useEffect(() => {
@@ -404,6 +444,13 @@ export function PreviewPanel() {
     // In isolated mode, if no template selected, don't send undefined - the preview will show 'all'
     // Only send a specific templateId if we have one selected
     const templateIdToSend = mode === 'isolated' ? displayTemplate?.id : null;
+
+    console.log('[PreviewPanel] Sending mode change:', {
+      mode,
+      templateIdToSend,
+      displayTemplateId: displayTemplate?.id,
+      displayTemplateName: displayTemplate?.name,
+    });
 
     sendToPreview('setMode', {
       mode,
@@ -414,6 +461,12 @@ export function PreviewPanel() {
   // Build preview URL - only called when project changes (not on template change)
   const buildPreviewUrl = useCallback((templateId?: string, previewMode?: 'isolated' | 'composite') => {
     const params = new URLSearchParams();
+
+    // CRITICAL: Include project ID so Nova preview knows which data to use
+    // This also helps bust cache when switching projects
+    if (currentProject?.id) {
+      params.set('project', currentProject.id);
+    }
 
     // Use transparent background if background media is set, otherwise use color
     params.set('bg', previewBgMedia ? 'transparent' : previewBgColor);
@@ -435,21 +488,46 @@ export function PreviewPanel() {
     }
 
     return `${NOVA_PREVIEW_URL}/preview?${params.toString()}`;
-  }, [previewBgColor, previewBgMedia, isLooping]);
+  }, [currentProject?.id, previewBgColor, previewBgMedia, isLooping]);
 
   // Track last rebuild trigger to detect new triggers
   const lastRebuildTriggerRef = useRef(0);
   // Track last project ID we built iframe for (local ref just for iframe rebuilds)
   const lastIframeProjectIdRef = useRef<string | null>(null);
 
+  // Reset iframe tracking when loadedProjectId is cleared (project switch)
+  // This ensures we rebuild the iframe when switching projects
+  useEffect(() => {
+    console.log('[PreviewPanel] loadedProjectId effect triggered:', loadedProjectId);
+    if (loadedProjectId === null) {
+      console.log('[PreviewPanel] loadedProjectId cleared, resetting iframe tracking and states');
+      lastIframeProjectIdRef.current = null;
+      setIframeLoaded(false);
+      setPreviewReady(false);
+      setIframeUrl(null); // Force iframe to unmount
+    }
+  }, [loadedProjectId]);
+
   // Set iframe URL only when project changes or rebuild is triggered
   // IMPORTANT: Do NOT include displayTemplate?.id or mode in dependencies
   // Template/mode changes are handled via postMessage, not iframe reload
   useEffect(() => {
-    if (!previewReady || !currentProject) return;
+    console.log('[PreviewPanel] Iframe URL effect triggered:', {
+      previewReady,
+      currentProjectId: currentProject?.id,
+      lastIframeProjectId: lastIframeProjectIdRef.current,
+      rebuildTrigger
+    });
+
+    if (!previewReady || !currentProject) {
+      console.log('[PreviewPanel] Iframe URL effect skipped - previewReady:', previewReady, 'hasProject:', !!currentProject);
+      return;
+    }
 
     const isNewProject = currentProject.id !== lastIframeProjectIdRef.current;
     const isNewRebuildTrigger = rebuildTrigger > lastRebuildTriggerRef.current;
+
+    console.log('[PreviewPanel] Iframe URL check:', { isNewProject, isNewRebuildTrigger });
 
     // Only create URL on first load, project change, or NEW rebuild trigger
     if (isNewProject || isNewRebuildTrigger) {
@@ -616,6 +694,7 @@ export function PreviewPanel() {
           </div>
         ) : previewReady && iframeUrl ? (
           <iframe
+            key={`preview-${currentProject?.id}-${rebuildTrigger}`}
             ref={iframeRef}
             src={iframeUrl}
             className="w-full h-full border-0 relative z-10"

@@ -78,6 +78,7 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
 
   selectTemplate: (templateId) => {
     set({
+      mode: 'isolated',  // Always switch to isolated mode when selecting a template
       selectedTemplateId: templateId,
       selectedPageId: null,
       previewPayload: {},
@@ -87,6 +88,8 @@ export const usePreviewStore = create<PreviewStore>((set, get) => ({
 
   selectPage: (pageId, payload = {}) => {
     set({
+      mode: 'isolated',  // Always switch to isolated mode when selecting a page
+      selectedTemplateId: null,  // Clear template selection so page's template is used
       selectedPageId: pageId,
       previewPayload: payload,
       animationPhase: 'idle',

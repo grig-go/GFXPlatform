@@ -71,6 +71,7 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const [hasRestoredProject, setHasRestoredProject] = useState(false);
 
   // Restore last project on initial load
+  // Always clear stale data and reload fresh to get latest bindings/templates
   useEffect(() => {
     const restoreLastProject = async () => {
       const storeState = useUIPreferencesStore.getState();
@@ -82,6 +83,11 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
       if (hasRestoredProject) return;
 
       setHasRestoredProject(true);
+
+      // Clear stale localStorage data to ensure fresh load
+      // This fixes issues where bindings configured in Nova GFX weren't showing
+      localStorage.removeItem('pulsar-preview-data');
+      clearPreview();
 
       if (actualLastProjectId) {
         const savedProject = projects.find(p => p.id === actualLastProjectId);
@@ -98,14 +104,14 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
     };
 
     restoreLastProject();
-  }, [projects, currentProject, lastProjectId, hasRestoredProject, selectProject, setLastProjectId, preferencesLoaded]);
+  }, [projects, currentProject, lastProjectId, hasRestoredProject, selectProject, setLastProjectId, preferencesLoaded, clearPreview]);
 
   const handleProjectChange = async (projectId: string) => {
     clearPages();
     clearPlaylists();
     clearPreview();
     clearLibrary();
-    localStorage.removeItem('nova-preview-data');
+    localStorage.removeItem('pulsar-preview-data');
     setLastProjectId(projectId);
     await selectProject(projectId);
   };
@@ -118,7 +124,7 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
       clearPlaylists();
       clearPreview();
       clearLibrary();
-      localStorage.removeItem('nova-preview-data');
+      localStorage.removeItem('pulsar-preview-data');
       await refreshProject();
     } finally {
       setIsRefreshing(false);
@@ -237,6 +243,11 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
             <DropdownMenuItem onClick={() => navigate('/tools/playout-log')}>
               <ScrollText className="mr-2 h-4 w-4" />
               Playout Logs
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleRefreshProject} disabled={!currentProject || isRefreshing}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh Project Data'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -775,9 +775,65 @@ function LayersTree() {
     deleteLayer,
     toggleTemplateVisibility,
     toggleTemplateLock,
+    reorderTemplate,
   } = useDesignerStore();
 
   const confirm = useConfirm();
+
+  // Drag state for reordering templates
+  const [draggedTemplateId, setDraggedTemplateId] = useState<string | null>(null);
+  const [dropTargetTemplateId, setDropTargetTemplateId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
+
+  // Handle drag start for templates
+  const handleTemplateDragStart = useCallback((templateId: string) => {
+    setDraggedTemplateId(templateId);
+  }, []);
+
+  // Handle drag over for templates
+  const handleTemplateDragOver = useCallback((targetId: string, position: 'before' | 'after') => {
+    if (draggedTemplateId && targetId !== draggedTemplateId) {
+      // Check if target is in same layer as dragged
+      const draggedTemplate = templates.find(t => t.id === draggedTemplateId);
+      const targetTemplate = templates.find(t => t.id === targetId);
+      if (draggedTemplate && targetTemplate && draggedTemplate.layer_id === targetTemplate.layer_id) {
+        setDropTargetTemplateId(targetId);
+        setDropPosition(position);
+      }
+    }
+  }, [draggedTemplateId, templates]);
+
+  // Handle drop for templates
+  const handleTemplateDrop = useCallback(() => {
+    if (draggedTemplateId && dropTargetTemplateId && dropPosition) {
+      const draggedTemplate = templates.find(t => t.id === draggedTemplateId);
+      const targetTemplate = templates.find(t => t.id === dropTargetTemplateId);
+
+      if (draggedTemplate && targetTemplate && draggedTemplate.layer_id === targetTemplate.layer_id) {
+        // Get siblings in the same layer (excluding dragged)
+        const siblings = templates
+          .filter(t => t.layer_id === draggedTemplate.layer_id && t.id !== draggedTemplateId)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+        // Find target's index among siblings
+        const targetIdx = siblings.findIndex(t => t.id === dropTargetTemplateId);
+        const targetIndex = dropPosition === 'before' ? targetIdx : targetIdx + 1;
+
+        reorderTemplate(draggedTemplateId, Math.max(0, targetIndex));
+      }
+    }
+
+    setDraggedTemplateId(null);
+    setDropTargetTemplateId(null);
+    setDropPosition(null);
+  }, [draggedTemplateId, dropTargetTemplateId, dropPosition, templates, reorderTemplate]);
+
+  // Handle drag end for templates
+  const handleTemplateDragEnd = useCallback(() => {
+    setDraggedTemplateId(null);
+    setDropTargetTemplateId(null);
+    setDropPosition(null);
+  }, []);
 
   // Handle deleting a layer with confirmation
   const handleDeleteLayer = useCallback(async (layerId: string, layerName: string) => {
@@ -900,7 +956,9 @@ function LayersTree() {
   return (
     <div className="p-1.5 space-y-0.5">
       {sortedLayers.map((layer) => {
-        const layerTemplates = templates.filter((t) => t.layer_id === layer.id);
+        const layerTemplates = templates
+          .filter((t) => t.layer_id === layer.id)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
         const isExpanded = expandedNodes.has(layer.id);
         const onAir = onAirTemplates[layer.id];
 
@@ -1133,6 +1191,13 @@ function LayersTree() {
                           selectTemplate(template.id);
                           window.dispatchEvent(new CustomEvent('open-add-data-modal'));
                         }}
+                        isDragging={draggedTemplateId === template.id}
+                        isDropTarget={dropTargetTemplateId === template.id}
+                        dropPosition={dropTargetTemplateId === template.id ? dropPosition : null}
+                        onDragStart={handleTemplateDragStart}
+                        onDragOver={handleTemplateDragOver}
+                        onDrop={handleTemplateDrop}
+                        onDragEnd={handleTemplateDragEnd}
                       />
                     </AddressContextMenu>
                   ))
@@ -1160,6 +1225,14 @@ interface TemplateItemProps {
   onToggleVisibility: () => void;
   onToggleLock: () => void;
   onAddData: () => void;
+  // Drag-and-drop props
+  isDragging?: boolean;
+  isDropTarget?: boolean;
+  dropPosition?: 'before' | 'after' | null;
+  onDragStart?: (id: string) => void;
+  onDragOver?: (id: string, position: 'before' | 'after') => void;
+  onDrop?: () => void;
+  onDragEnd?: () => void;
 }
 
 function TemplateItem({
@@ -1176,6 +1249,13 @@ function TemplateItem({
   onToggleVisibility,
   onToggleLock,
   onAddData,
+  isDragging,
+  isDropTarget,
+  dropPosition,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: TemplateItemProps) {
   const { updateTemplate } = useDesignerStore();
   const [isRenaming, setIsRenaming] = useState(false);
@@ -1218,20 +1298,62 @@ function TemplateItem({
     }
   };
 
+  // Calculate drop position based on mouse position
+  const handleDragOverElement = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onDragOver) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Top half = before, bottom half = after
+    const position = y < height / 2 ? 'before' : 'after';
+    onDragOver(template.id, position);
+  }, [template.id, onDragOver]);
+
   return (
     <div
       className={cn(
-        'flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer group',
+        'flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer group relative',
         isSelected && 'bg-violet-500/20 text-violet-300',
         // Highlight template when it contains a selected element (but not already selected)
         hasSelectedElement && !isSelected && 'bg-amber-500/20 border border-amber-500/40 text-amber-300',
         isOnAir && !isSelected && !hasSelectedElement && 'bg-emerald-500/10',
         !isSelected && !isOnAir && !hasSelectedElement && 'hover:bg-muted/50',
-        !template.enabled && 'opacity-50'
+        !template.enabled && 'opacity-50',
+        isDragging && 'opacity-50'
       )}
       onClick={onClick}
       onDoubleClick={handleDoubleClick}
+      draggable={!isRenaming && !!onDragStart}
+      onDragStart={(e) => {
+        if (onDragStart) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', template.id);
+          onDragStart(template.id);
+        }
+      }}
+      onDragOver={handleDragOverElement}
+      onDragLeave={(e) => {
+        e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onDrop?.();
+      }}
+      onDragEnd={onDragEnd}
     >
+      {/* Drop indicator - before */}
+      {isDropTarget && dropPosition === 'before' && (
+        <div className="absolute left-0 right-0 top-0 h-0.5 bg-violet-500 -translate-y-0.5" />
+      )}
+      {/* Drop indicator - after */}
+      {isDropTarget && dropPosition === 'after' && (
+        <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-violet-500 translate-y-0.5" />
+      )}
       <LayoutTemplate className={cn(
         "w-3 h-3",
         hasSelectedElement && !isSelected ? "text-amber-400" : isOnAir ? "text-emerald-400" : "text-muted-foreground"

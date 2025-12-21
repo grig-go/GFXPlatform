@@ -149,7 +149,7 @@ export function PlaylistPanel() {
     setPageOnAir,
   } = usePageStore();
   const { templates, currentProject, loadTemplateElements } = useProjectStore();
-  const { selectPage: selectPageForPreview } = usePreviewStore();
+  const { selectPage: selectPageForPreview, setMode: setPreviewMode } = usePreviewStore();
   const { channels, selectedChannel, loadChannels, playOnChannel, stopOnChannel } = useChannelStore();
 
   const [showSettings, setShowSettings] = useState(false);
@@ -394,7 +394,8 @@ export function PlaylistPanel() {
 
   const handleSelectPage = (page: Page) => {
     selectPage(page.id);
-    // Also update preview with the page payload
+    // Switch to isolated mode and update preview with the page payload
+    setPreviewMode('isolated');
     selectPageForPreview(page.id, page.payload);
   };
 
@@ -452,7 +453,7 @@ export function PlaylistPanel() {
   // Helper to get animations and keyframes from localStorage for a template
   const getAnimationDataForTemplate = (templateId: string) => {
     try {
-      const previewDataStr = localStorage.getItem('nova-preview-data');
+      const previewDataStr = localStorage.getItem('pulsar-preview-data');
       if (!previewDataStr) return { animations: [], keyframes: [] };
 
       const previewData = JSON.parse(previewDataStr);

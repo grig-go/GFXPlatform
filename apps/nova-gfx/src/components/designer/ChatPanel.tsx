@@ -880,10 +880,30 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
         : [];
       const isCurrentTemplateEmpty = currentTemplateElements.length === 0;
 
-      // For "replace" action with empty template, treat it like "create"
-      // This handles the case where AI generates a "replace" payload but there's nothing to replace
+      // For "replace" action, check if the AI's elements actually reference existing elements
+      // If none of the AI's element IDs match existing elements, treat as "create" (new template)
+      let replaceTargetsExistingElements = false;
+      if (expandedChanges.type === 'replace' && expandedChanges.elements && !isCurrentTemplateEmpty) {
+        const aiElementIds = expandedChanges.elements.map((el: any) => el.id).filter(Boolean);
+        const existingIds = currentTemplateElements.map(e => e.id);
+        // Check if ANY AI element ID matches an existing element (exact or prefix match)
+        replaceTargetsExistingElements = aiElementIds.some((aiId: string) =>
+          existingIds.some(existingId =>
+            existingId === aiId ||
+            existingId.startsWith(aiId) ||
+            aiId.startsWith(existingId.slice(0, 8))
+          )
+        );
+        if (!replaceTargetsExistingElements) {
+          console.log(`⚠️ AI used "replace" but no element IDs match existing elements - treating as "create"`);
+        }
+      }
+
+      // For "replace" action with empty template OR when AI's elements don't target existing ones, treat like "create"
+      // This ensures a new graphic is created instead of replacing elements in the current template
       const shouldCreateNewTemplate = expandedChanges.type === 'create' ||
-        (expandedChanges.type === 'replace' && isCurrentTemplateEmpty);
+        (expandedChanges.type === 'replace' && isCurrentTemplateEmpty) ||
+        (expandedChanges.type === 'replace' && !replaceTargetsExistingElements);
 
       // For CREATE actions (or REPLACE with empty template), create a NEW template in the appropriate layer
       if (shouldCreateNewTemplate) {
@@ -1063,6 +1083,8 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
       // Track validation hints
       const validationHints: Array<{ type: string; field: string; message: string; suggestion?: string }> =
         (expandedChanges as any).validationHints || [];
+      // Track if any bindings were created (for data source linking)
+      let bindingsCreated = false;
 
       if ((expandedChanges.type === 'create' || expandedChanges.type === 'update' || expandedChanges.type === 'replace') && expandedChanges.elements) {
         expandedChanges.elements.forEach((el: any, index: number) => {
@@ -1326,6 +1348,7 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
               }
 
               console.log(`🔗 Created binding: ${el.name} → ${bindingField} (${bindingType})`);
+              bindingsCreated = true;
             }
           }
           } catch (elementError) {
@@ -1334,6 +1357,24 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
             failedElements.push(`${el?.name || `Element ${index + 1}`}: ${elementError instanceof Error ? elementError.message : 'Unknown error'}`);
           }
         });
+      }
+
+      // If bindings were created and we're in data mode, ensure the data source is linked to the template
+      // This handles the case where bindings are added to an existing template (not just new templates)
+      if (bindingsCreated && isDataMode && selectedDataSource && templateId) {
+        const dataStore = useDesignerStore.getState();
+        const currentTemplate = dataStore.templates.find(t => t.id === templateId);
+
+        // Only set if template doesn't already have this data source linked
+        if (!currentTemplate?.data_source_id || currentTemplate.data_source_id !== selectedDataSource.id) {
+          await dataStore.setDataSource(
+            selectedDataSource.id,
+            selectedDataSource.name,
+            selectedDataSource.data,
+            selectedDataSource.displayField
+          );
+          console.log(`📊 Linked data source "${selectedDataSource.name}" to template after creating bindings`);
+        }
       }
 
       // Show validation hints and failed elements to user

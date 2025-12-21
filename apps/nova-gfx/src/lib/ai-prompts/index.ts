@@ -307,7 +307,10 @@ export function buildContextMessage(context: AIContext): string {
       }).join('\n');
 
       parts.push(`EXISTING ELEMENTS (${context.currentTemplate.elements.length}) - Use "action": "update" to modify these:\n${elementList}`);
-      parts.push(`⚠️ IMPORTANT: When user says "update", "modify", "change", "improve", or "add to" - use "action": "update" with the element IDs above. Do NOT create a new template!`);
+      parts.push(`⚠️ IMPORTANT:
+- When user says "update", "modify", "change", "improve" the CURRENT graphic → use "action": "update" with the element IDs above
+- When user asks to CREATE/MAKE/BUILD a NEW graphic → use "action": "create" (this creates a NEW template, leaving the existing one intact)
+- "update"/"modify" = change existing elements | "create"/"make"/"build" = new template`);
     } else {
       parts.push(`No elements yet - use "action": "create" to make new ones.`);
     }

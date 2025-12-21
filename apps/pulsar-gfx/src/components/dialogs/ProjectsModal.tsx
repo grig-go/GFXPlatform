@@ -65,15 +65,21 @@ export function ProjectsModal({ open, onOpenChange }: ProjectsModalProps) {
 
     setIsSelecting(true);
     try {
+      console.log('[ProjectsModal] Switching to project:', project.id);
+
       // Clear all related stores when switching projects
       clearPages();
       clearPlaylists();
       clearPreview();
-      localStorage.removeItem('nova-preview-data');
+      localStorage.removeItem('pulsar-preview-data');
+
+      console.log('[ProjectsModal] Cleared stores, loadedProjectId now:', usePreviewStore.getState().loadedProjectId);
 
       // Save the project preference
       setLastProjectId(project.id);
       await selectProject(project.id);
+
+      console.log('[ProjectsModal] Project selected, closing modal');
       onOpenChange(false);
     } finally {
       setIsSelecting(false);

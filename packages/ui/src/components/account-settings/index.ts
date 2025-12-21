@@ -2,8 +2,10 @@ export { AccountSettingsDialog } from './AccountSettingsDialog'
 export type {
   AccountSettingsDialogProps,
   AccountSettingsAuthProps,
-  AccountSettingsUser,
-  AccountSettingsOrganization,
+  AccountUser,
+  AccountOrganization,
+  OrgRole,
+  OrgMember,
+  Invitation,
   SupabaseClientLike,
-  CustomTab,
 } from './types'

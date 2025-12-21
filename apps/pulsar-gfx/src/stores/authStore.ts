@@ -122,7 +122,7 @@ async function fetchAndSetUserData(
     .select(`
       id,
       email,
-      name,
+      full_name,
       org_role,
       organization_id,
       u_organizations (
@@ -140,7 +140,7 @@ async function fetchAndSetUserData(
       user: {
         id: userData.id,
         email: userData.email,
-        name: userData.name,
+        name: userData.full_name,
         organizationId: userData.organization_id,
         organizationName: org?.name || null,
         role: userData.org_role,
@@ -281,7 +281,7 @@ export const useAuthStore = create<AuthState>()(
               .select(`
                 id,
                 email,
-                name,
+                full_name,
                 org_role,
                 organization_id,
                 u_organizations (
@@ -299,7 +299,7 @@ export const useAuthStore = create<AuthState>()(
                 user: {
                   id: userData.id,
                   email: userData.email,
-                  name: userData.name,
+                  name: userData.full_name,
                   organizationId: userData.organization_id,
                   organizationName: org?.name || null,
                   role: userData.org_role,
@@ -436,7 +436,7 @@ export const useAuthStore = create<AuthState>()(
               .insert({
                 auth_user_id: authData.user.id,
                 email,
-                name,
+                full_name: name,
                 organization_id: organizationId,
                 org_role: userRole,
               });
@@ -609,7 +609,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data, error } = await supabase
             .from('u_users')
-            .select('id, email, name, org_role')
+            .select('id, email, full_name, org_role')
             .eq('organization_id', organization.id)
             .order('created_at', { ascending: true });
 
@@ -621,7 +621,7 @@ export const useAuthStore = create<AuthState>()(
           return (data || []).map(u => ({
             id: u.id,
             email: u.email,
-            name: u.name,
+            name: u.full_name,
             organizationId: organization.id,
             organizationName: organization.name,
             role: u.org_role,

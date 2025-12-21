@@ -12,6 +12,7 @@ export interface Page {
   name: string;
   payload: Record<string, string | null>;
   dataBindings: DataBinding[];
+  dataRecordIndex?: number; // Index of the selected data record for templates with data binding
   duration?: number;
   sortOrder: number;
   tags: string[];
@@ -57,11 +58,12 @@ interface PageStore {
     templateId: string,
     name: string,
     payload?: Record<string, string | null>,
-    channelId?: string | null
+    channelId?: string | null,
+    dataRecordIndex?: number
   ) => Promise<Page>;
   updatePage: (pageId: string, updates: Partial<Page>) => Promise<void>;
   updatePayload: (pageId: string, fieldId: string, value: string | null) => Promise<void>;
-  updatePagePayload: (pageId: string, payload: Record<string, any>) => Promise<void>;
+  updatePagePayload: (pageId: string, payload: Record<string, any>, dataRecordIndex?: number) => Promise<void>;
   deletePage: (pageId: string) => Promise<void>;
   duplicatePage: (pageId: string) => Promise<Page>;
   reorderPages: (pageIds: string[]) => Promise<void>;
@@ -135,6 +137,7 @@ export const usePageStore = create<PageStore>((set, get) => ({
         name: p.name,
         payload: p.payload || {},
         dataBindings: p.data_bindings || [],
+        dataRecordIndex: p.data_record_index ?? 0,
         duration: p.duration,
         sortOrder: p.sort_order,
         tags: p.tags || [],
@@ -163,8 +166,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
     set({ pages: [], pageGroups: [], selectedPage: null, error: null });
   },
 
-  createPage: async (playlistId, templateId, name, payload = {}, channelId = null) => {
-    console.log('[pageStore] createPage called with channelId:', channelId);
+  createPage: async (playlistId, templateId, name, payload = {}, channelId = null, dataRecordIndex = 0) => {
+    console.log('[pageStore] createPage called with channelId:', channelId, 'dataRecordIndex:', dataRecordIndex);
     const pages = get().pages;
     const maxOrder = Math.max(...pages.map((p) => p.sortOrder), -1);
 
@@ -191,6 +194,7 @@ export const usePageStore = create<PageStore>((set, get) => ({
         payload,
         sort_order: maxOrder + 1,
         channel_id: channelId,
+        data_record_index: dataRecordIndex,
       })
       .select()
       .single();
@@ -207,6 +211,7 @@ export const usePageStore = create<PageStore>((set, get) => ({
       name: data.name,
       payload: data.payload || {},
       dataBindings: data.data_bindings || [],
+      dataRecordIndex: data.data_record_index ?? 0,
       duration: data.duration,
       sortOrder: data.sort_order,
       tags: data.tags || [],
@@ -272,16 +277,24 @@ export const usePageStore = create<PageStore>((set, get) => ({
     });
   },
 
-  updatePagePayload: async (pageId, payload) => {
+  updatePagePayload: async (pageId, payload, dataRecordIndex) => {
     console.log('[pageStore] updatePagePayload - pageId:', pageId);
     console.log('[pageStore] updatePagePayload - payload:', payload);
+    console.log('[pageStore] updatePagePayload - dataRecordIndex:', dataRecordIndex);
+
+    const updateData: Record<string, any> = {
+      payload,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Only update data_record_index if provided
+    if (dataRecordIndex !== undefined) {
+      updateData.data_record_index = dataRecordIndex;
+    }
 
     const { data, error } = await supabase
       .from('pulsar_pages')
-      .update({
-        payload,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', pageId)
       .select();
 
@@ -299,11 +312,11 @@ export const usePageStore = create<PageStore>((set, get) => ({
     set({
       pages: get().pages.map((p) =>
         p.id === pageId
-          ? { ...p, payload, updatedAt: new Date() }
+          ? { ...p, payload, dataRecordIndex: dataRecordIndex ?? p.dataRecordIndex, updatedAt: new Date() }
           : p
       ),
       selectedPage: get().selectedPage?.id === pageId
-        ? { ...get().selectedPage!, payload, updatedAt: new Date() }
+        ? { ...get().selectedPage!, payload, dataRecordIndex: dataRecordIndex ?? get().selectedPage!.dataRecordIndex, updatedAt: new Date() }
         : get().selectedPage,
     });
   },

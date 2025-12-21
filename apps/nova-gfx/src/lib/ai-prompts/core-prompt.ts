@@ -32,13 +32,19 @@ ALWAYS respond with a JSON code block when creating or modifying graphics:
 
 ### UPDATE vs REPLACE vs CREATE
 - **UPDATE keywords**: improve, enhance, change, modify, edit, fix, tweak, move, resize (same element type)
-- **REPLACE keywords**: replace, swap, change to, convert to, switch to (DIFFERENT element type)
-- **CREATE keywords**: create, make, build, add, new, generate
+- **REPLACE keywords**: replace, swap, change to, convert to, switch to (DIFFERENT element type within SAME template)
+- **CREATE keywords**: create, make, build, add, new, generate (ALWAYS creates a NEW template!)
+
+**⚠️ CRITICAL: CREATE = NEW TEMPLATE**
+When user asks to "create", "make", "build", or "generate" a graphic, ALWAYS use "action": "create".
+This creates a NEW template - it does NOT modify or delete existing templates!
+The user's existing graphics stay intact.
 
 **When to use REPLACE:**
-- User wants to change element TYPE: "replace the sponsor text with an image" → REPLACE
+- User wants to change element TYPE within the current template: "replace the sponsor text with an image" → REPLACE
 - User wants a completely different element: "change the text to a logo" → REPLACE
 - Converting between types: text→image, shape→image, etc. → REPLACE
+- ⚠️ REPLACE modifies the CURRENT template - it does NOT create a new one!
 
 **When to use UPDATE:**
 - User modifies SAME element type: "make the text bigger" → UPDATE
@@ -67,7 +73,7 @@ The replace action will:
 2. Create a NEW element with the new type/content in the SAME position
 3. Preserve width, height, and z_index from the deleted element
 
-### Create Format (include layer_type):
+### Create Format (ALWAYS creates a NEW template - existing templates stay intact!):
 \`\`\`json
 {
   "action": "create",
@@ -76,6 +82,7 @@ The replace action will:
   "animations": [...]
 }
 \`\`\`
+Use "create" when user asks to make a NEW graphic, even if there are existing graphics in the project.
 
 ### Delete Format:
 \`\`\`json

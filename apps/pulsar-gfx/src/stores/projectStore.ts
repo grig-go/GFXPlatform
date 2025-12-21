@@ -251,7 +251,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
     console.log('[projectStore] Refreshing project:', currentProject.id);
     // Clear localStorage to force fresh data load
-    localStorage.removeItem('nova-preview-data');
+    localStorage.removeItem('pulsar-preview-data');
     // Re-select the project to reload all data
     await get().selectProject(currentProject.id);
   },
@@ -267,8 +267,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // First, try to get elements from localStorage (already loaded by PreviewPanel)
       let elementsFromStorage: any[] = [];
       try {
-        const previewDataStr = localStorage.getItem('nova-preview-data');
-        console.log('[projectStore] localStorage nova-preview-data exists:', !!previewDataStr);
+        const previewDataStr = localStorage.getItem('pulsar-preview-data');
+        console.log('[projectStore] localStorage pulsar-preview-data exists:', !!previewDataStr);
         if (previewDataStr) {
           const previewData = JSON.parse(previewDataStr);
           console.log('[projectStore] previewData.elements count:', previewData.elements?.length || 0);

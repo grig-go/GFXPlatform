@@ -112,6 +112,10 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       keyframes: state.keyframes,
       currentTemplateId: state.currentTemplateId || currentTemplateId,
       project: state.project,
+      // Include data binding context for preview to resolve bindings
+      bindings: state.bindings,
+      dataPayload: state.dataPayload,
+      currentRecordIndex: state.currentRecordIndex,
     };
     
     // Store in localStorage for the preview window to access

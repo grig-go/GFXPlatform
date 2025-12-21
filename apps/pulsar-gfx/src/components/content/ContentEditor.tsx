@@ -92,7 +92,7 @@ const ICON_LIBRARIES = [
 // Helper to get elements from localStorage (PreviewPanel saves them there)
 function getElementsFromLocalStorage(templateId: string): any[] {
   try {
-    const previewDataStr = localStorage.getItem('nova-preview-data');
+    const previewDataStr = localStorage.getItem('pulsar-preview-data');
     if (previewDataStr) {
       const previewData = JSON.parse(previewDataStr);
       if (previewData.elements && Array.isArray(previewData.elements)) {
@@ -186,9 +186,24 @@ export function ContentEditor() {
   // Data source for template with bindings
   const dataSource = useMemo(() => {
     const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
-    if (!template?.dataSourceId) return null;
-    return getDataSourceById(template.dataSourceId);
-  }, [selectedTemplate, previewPage?.templateId, templates]);
+    console.log('[ContentEditor] Data source check:', {
+      selectedTemplateId,
+      selectedPageId,
+      previewPageTemplateId: previewPage?.templateId,
+      foundTemplateId: template?.id,
+      foundTemplateName: template?.name,
+      dataSourceId: template?.dataSourceId,
+      dataSourceConfig: template?.dataSourceConfig,
+      templatesCount: templates.length,
+    });
+    if (!template?.dataSourceId) {
+      console.log('[ContentEditor] No dataSourceId set on template');
+      return null;
+    }
+    const ds = getDataSourceById(template.dataSourceId);
+    console.log('[ContentEditor] Found data source:', ds?.name, 'with', ds?.data?.length, 'records');
+    return ds;
+  }, [selectedTemplate, previewPage?.templateId, templates, selectedTemplateId, selectedPageId]);
 
   // Data payload (array of records)
   const dataPayload = useMemo(() => {
@@ -215,12 +230,25 @@ export function ContentEditor() {
     return value ? String(value) : `Record ${currentRecordIndex + 1}`;
   }, [currentRecord, dataDisplayField, currentRecordIndex]);
 
-  // Reset record index when template changes
+  // Reset record index when template/page changes
+  // For pages: use the page's saved dataRecordIndex
+  // For templates: use the template's default from dataSourceConfig
   useEffect(() => {
     const template = selectedTemplate || (previewPage?.templateId ? templates.find(t => t.id === previewPage.templateId) : null);
+    if (!template) return;
+
+    // If we're viewing a page, use the page's saved dataRecordIndex
+    if (previewPage && previewPage.dataRecordIndex !== undefined) {
+      console.log('[ContentEditor] Setting record index from page:', previewPage.name, 'dataRecordIndex:', previewPage.dataRecordIndex);
+      setDataRecordIndex(previewPage.dataRecordIndex);
+      return;
+    }
+
+    // Otherwise use the template's default
     const defaultIndex = template?.dataSourceConfig?.defaultRecordIndex ?? 0;
+    console.log('[ContentEditor] Setting default record index for template:', template.name, 'defaultIndex:', defaultIndex);
     setDataRecordIndex(defaultIndex);
-  }, [selectedTemplate?.id, previewPage?.templateId, setDataRecordIndex]);
+  }, [selectedTemplate?.id, previewPage?.templateId, previewPage?.id, previewPage?.dataRecordIndex, templates, setDataRecordIndex]);
 
   // Navigation handlers
   const prevRecord = useCallback(() => {
@@ -238,19 +266,42 @@ export function ContentEditor() {
     if (!template) return [];
 
     try {
-      const previewDataStr = localStorage.getItem('nova-preview-data');
-      if (!previewDataStr) return [];
+      const previewDataStr = localStorage.getItem('pulsar-preview-data');
+      if (!previewDataStr) {
+        console.log('[ContentEditor] No pulsar-preview-data in localStorage');
+        return [];
+      }
       const previewData = JSON.parse(previewDataStr);
       const allBindings = previewData.bindings || [];
-      return allBindings.filter((b: Binding) => b.template_id === template.id);
-    } catch {
+      const filteredBindings = allBindings.filter((b: Binding) => b.template_id === template.id);
+      console.log('[ContentEditor] Bindings check:', {
+        templateId: template.id,
+        totalBindings: allBindings.length,
+        templateBindings: filteredBindings.length,
+        bindings: filteredBindings.map((b: Binding) => ({ elementId: b.element_id, key: b.binding_key })),
+      });
+      return filteredBindings;
+    } catch (err) {
+      console.error('[ContentEditor] Error loading bindings:', err);
       return [];
     }
   }, [selectedTemplate, previewPage?.templateId, templates]);
 
   // Resolve bindings and update preview when record changes
   useEffect(() => {
-    if (!currentRecord || templateBindings.length === 0) return;
+    console.log('[ContentEditor] Binding resolution effect triggered:', {
+      hasCurrentRecord: !!currentRecord,
+      templateBindingsCount: templateBindings.length,
+      currentRecordIndex,
+      selectedTemplateId,
+      selectedPageId,
+      previewPageTemplateId: previewPage?.templateId,
+    });
+
+    if (!currentRecord || templateBindings.length === 0) {
+      console.log('[ContentEditor] Skipping binding resolution - no record or no bindings');
+      return;
+    }
 
     // Resolve bindings using the current record's data
     const resolvedValues = resolvePayloadBindings({}, templateBindings, currentRecord);
@@ -838,9 +889,11 @@ export function ContentEditor() {
     if (previewPage && hasChanges) {
       console.log('[ContentEditor] handleSave - saving page:', previewPage.id);
       console.log('[ContentEditor] handleSave - payload:', localPayload);
+      console.log('[ContentEditor] handleSave - dataRecordIndex:', currentRecordIndex);
       setIsSaving(true);
       try {
-        await updatePagePayload(previewPage.id, localPayload);
+        // Save both payload and dataRecordIndex
+        await updatePagePayload(previewPage.id, localPayload, currentRecordIndex);
         console.log('[ContentEditor] handleSave - save successful');
         setHasChanges(false);
       } catch (error) {
@@ -876,22 +929,23 @@ export function ContentEditor() {
       });
       const pageName = `${templateName || 'Page'} ${timestamp}`;
 
-      console.log('[ContentEditor] Creating page with channel:', selectedChannel?.id, selectedChannel?.channelCode);
+      console.log('[ContentEditor] Creating page with channel:', selectedChannel?.id, 'dataRecordIndex:', currentRecordIndex);
       await createPage(
         currentPlaylist.id,
         templateId,
         pageName,
         localPayload,
-        selectedChannel?.id || null  // use selected channel as default
+        selectedChannel?.id || null,  // use selected channel as default
+        currentRecordIndex  // save the current data record index
       );
       setHasChanges(false);
-      console.log('Page saved successfully to playlist:', currentPlaylist.id, 'with channel:', selectedChannel?.id);
+      console.log('Page saved successfully to playlist:', currentPlaylist.id, 'with channel:', selectedChannel?.id, 'dataRecordIndex:', currentRecordIndex);
     } catch (error) {
       console.error('Failed to save page:', error);
     } finally {
       setIsSaving(false);
     }
-  }, [selectedTemplate, previewPage, currentPlaylist, localPayload, createPage, templates, selectedChannel]);
+  }, [selectedTemplate, previewPage, currentPlaylist, localPayload, createPage, templates, selectedChannel, currentRecordIndex]);
 
   const handleReset = () => {
     if (previewPage) {

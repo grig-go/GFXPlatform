@@ -445,6 +445,7 @@ interface DesignerActions {
 
   // Template visibility/lock
   updateTemplate: (id: string, updates: Partial<Template>) => void;
+  reorderTemplate: (templateId: string, targetIndex: number) => void;
   toggleTemplateVisibility: (id: string) => void;
   toggleTemplateLock: (id: string) => void;
   showAllTemplates: () => void;
@@ -2326,24 +2327,39 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
           const originalKeyframes = state.keyframes.filter((k) =>
             originalAnimations.some((a) => a.id === k.animation_id)
           );
-          
+
           const newKeyframes: Keyframe[] = originalKeyframes.map((kf) => ({
             ...kf,
             id: crypto.randomUUID(),
             animation_id: animationIdMap.get(kf.animation_id) || kf.animation_id,
           }));
-          
+
+          // Copy bindings (critical for data-driven templates)
+          const originalBindings = state.bindings.filter((b) =>
+            originalElements.some((e) => e.id === b.element_id)
+          );
+
+          const newBindings: Binding[] = originalBindings.map((binding) => ({
+            ...binding,
+            id: crypto.randomUUID(),
+            template_id: id,
+            element_id: elementIdMap.get(binding.element_id) || binding.element_id,
+          }));
+
+          console.log(`📋 Duplicating template: copying ${newBindings.length} bindings`);
+
           set((state) => {
             state.templates.push(newTemplate);
             state.elements.push(...newElements);
             state.animations.push(...newAnimations);
             state.keyframes.push(...newKeyframes);
+            state.bindings.push(...newBindings);
             state.isDirty = true;
           });
-          
+
           // Auto-select the duplicated template
           get().selectTemplate(id);
-          
+
           return id;
         },
 
@@ -2401,6 +2417,16 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             // Delete keyframes for those animations
             draft.keyframes = draft.keyframes.filter((k) => !animationIds.includes(k.animation_id));
+
+            // Delete bindings for those elements
+            const bindingIds = draft.bindings
+              .filter((b) => elementIds.includes(b.element_id))
+              .map((b) => b.id);
+            draft.bindings = draft.bindings.filter((b) => !elementIds.includes(b.element_id));
+            if (bindingIds.length > 0) {
+              console.log(`[deleteTemplate] Removed ${bindingIds.length} bindings`);
+              draft.pendingDeletions.bindings.push(...bindingIds);
+            }
 
             // Clear selection if deleted template was selected
             if (draft.currentTemplateId === templateId) {
@@ -2587,8 +2613,20 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             sort_order: state.elements.length,
           };
 
+          // Copy any bindings for this element
+          const originalBindings = state.bindings.filter((b) => b.element_id === id);
+          const newBindings: Binding[] = originalBindings.map((binding) => ({
+            ...binding,
+            id: crypto.randomUUID(),
+            element_id: newId,
+          }));
+
           set((state) => {
             state.elements.push(duplicatedElement);
+            if (newBindings.length > 0) {
+              state.bindings.push(...newBindings);
+              console.log(`📋 Duplicated element: copying ${newBindings.length} binding(s)`);
+            }
             state.selectedElementIds = [newId];
             state.selectedKeyframeIds = []; // Clear keyframe selection when duplicating element
             state.isDirty = true;
@@ -2610,15 +2648,22 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               .filter((k) => animationIdsToDelete.includes(k.animation_id))
               .map((k) => k.id);
 
+            // Track binding IDs that will be deleted (for DB sync on save)
+            const bindingIdsToDelete = state.bindings
+              .filter((b) => ids.includes(b.element_id))
+              .map((b) => b.id);
+
             // Add to pending deletions (for DB sync on save)
             state.pendingDeletions.elements.push(...ids);
             state.pendingDeletions.animations.push(...animationIdsToDelete);
             state.pendingDeletions.keyframes.push(...keyframeIdsToDelete);
+            state.pendingDeletions.bindings.push(...bindingIdsToDelete);
 
             // Remove from local state
             state.elements = state.elements.filter((e) => !ids.includes(e.id));
             state.animations = state.animations.filter((a) => !ids.includes(a.element_id));
             state.keyframes = state.keyframes.filter((k) => !animationIdsToDelete.includes(k.animation_id));
+            state.bindings = state.bindings.filter((b) => !ids.includes(b.element_id));
             state.selectedElementIds = state.selectedElementIds.filter((id) => !ids.includes(id));
             state.isDirty = true;
           });
@@ -2904,26 +2949,33 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               draft.elements[elIdx].parent_element_id = targetParentId;
             }
 
-            // Assign new sort_order values
+            // Assign new sort_order AND z_index values
             // Insert at targetIndex, shift others
+            // z_index determines visual stacking, sort_order determines list order
             let sortOrder = 0;
+            let zIndexBase = 10; // Start z_index at 10, increment by 10 for spacing
             for (let i = 0; i < siblings.length; i++) {
               if (i === targetIndex) {
                 // This is where the moved element goes
                 draft.elements[elIdx].sort_order = sortOrder;
+                draft.elements[elIdx].z_index = zIndexBase;
                 sortOrder++;
+                zIndexBase += 10;
               }
-              // Update sibling sort_order
+              // Update sibling sort_order and z_index
               const sibIdx = draft.elements.findIndex(e => e.id === siblings[i].id);
               if (sibIdx !== -1) {
                 draft.elements[sibIdx].sort_order = sortOrder;
+                draft.elements[sibIdx].z_index = zIndexBase;
                 sortOrder++;
+                zIndexBase += 10;
               }
             }
 
             // If targetIndex is at or beyond the end, place element last
             if (targetIndex >= siblings.length) {
               draft.elements[elIdx].sort_order = sortOrder;
+              draft.elements[elIdx].z_index = zIndexBase;
             }
 
             draft.isDirty = true;
@@ -3707,6 +3759,46 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
               Object.assign(template, updates);
               state.isDirty = true;
             }
+          });
+        },
+
+        reorderTemplate: (templateId, targetIndex) => {
+          set((state) => {
+            const template = state.templates.find((t) => t.id === templateId);
+            if (!template) return;
+
+            // Get sibling templates in the same layer
+            const layerId = template.layer_id;
+            const siblings = state.templates
+              .filter((t) => t.layer_id === layerId && t.id !== templateId)
+              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+            // Calculate new sort_order and z_index for all templates in the layer
+            let sortOrder = 0;
+            let zIndexBase = 10;
+
+            for (let i = 0; i < siblings.length; i++) {
+              if (i === targetIndex) {
+                // Insert the moved template here
+                template.sort_order = sortOrder;
+                template.z_index = zIndexBase;
+                sortOrder++;
+                zIndexBase += 10;
+              }
+              // Update sibling
+              siblings[i].sort_order = sortOrder;
+              siblings[i].z_index = zIndexBase;
+              sortOrder++;
+              zIndexBase += 10;
+            }
+
+            // If targetIndex is at or beyond the end, place template last
+            if (targetIndex >= siblings.length) {
+              template.sort_order = sortOrder;
+              template.z_index = zIndexBase;
+            }
+
+            state.isDirty = true;
           });
         },
 

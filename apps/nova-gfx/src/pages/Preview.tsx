@@ -16,9 +16,11 @@ import { CountdownElement } from '@/components/canvas/CountdownElement';
 import { TextElement } from '@/components/canvas/TextElement';
 import { ImageElement } from '@/components/canvas/ImageElement';
 import { InteractiveElement } from '@/components/canvas/InteractiveElement';
+import { FpsCounter } from '@/components/canvas/FpsCounter';
 import { useInteractiveStore, createInteractionEvent } from '@/lib/interactive';
-import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer } from '@emergent-platform/types';
+import type { Element, Animation, Keyframe, Template, Project, AnimationPhase, Layer, Binding } from '@emergent-platform/types';
 import type { Node, Edge } from '@xyflow/react';
+import { resolveElementBindings, shouldHideElement } from '@/lib/bindingResolver';
 
 // Helper to convert color to rgba with opacity
 function colorToRgba(color: string, opacity: number): string {
@@ -83,6 +85,10 @@ interface PreviewData {
   currentTemplateId: string | null;
   project: Project | null;
   phaseDurations?: Record<AnimationPhase, number>;
+  // Data binding context for resolving {{...}} placeholders
+  bindings?: Binding[];
+  dataPayload?: Record<string, unknown>[];
+  currentRecordIndex?: number;
 }
 
 // Preview renders templates with animations
@@ -102,6 +108,10 @@ export function Preview() {
   const initialPhase = (searchParams.get('phase') as 'in' | 'loop' | 'out') || (obsMode ? 'loop' : 'in');
   // Loop control - default to true for OBS mode, but can be disabled with loop=0
   const shouldLoop = searchParams.get('loop') !== '0' && obsMode;
+
+  // Check if embedded by Pulsar GFX (has project param) - if so, wait for postMessage data
+  const embeddedProjectId = searchParams.get('project');
+  const isEmbeddedByPulsar = !!embeddedProjectId;
   
   // Try to get data from store first
   const storeData = useDesignerStore((state) => ({
@@ -133,9 +143,15 @@ export function Preview() {
   const templatesRef = useRef<Template[]>([]);
 
   useEffect(() => {
+    // If embedded by Pulsar GFX, skip localStorage loading - wait for postMessage data
+    if (isEmbeddedByPulsar) {
+      console.log('[Preview] Embedded by Pulsar GFX, waiting for postMessage data for project:', embeddedProjectId);
+      return;
+    }
+
     // Check if store has data
     if (storeData.templates.length === 0) {
-      // Try to load from localStorage
+      // Try to load from localStorage (only for standalone Nova GFX preview)
       const savedData = localStorage.getItem('nova-preview-data');
       if (savedData) {
         try {
@@ -161,22 +177,34 @@ export function Preview() {
         }
       }
     }
-  }, [storeData.templates.length, setDesignerTemplates, setDesignerElements, setDesignerLayers]);
+  }, [storeData.templates.length, setDesignerTemplates, setDesignerElements, setDesignerLayers, isEmbeddedByPulsar, embeddedProjectId]);
 
   // Use store data if available, otherwise use localStorage data
-  const layers = storeData.layers.length > 0 ? storeData.layers : (localData?.layers || []);
-  const templates = storeData.templates.length > 0 ? storeData.templates : (localData?.templates || []);
-  const elements = storeData.elements.length > 0 ? storeData.elements : (localData?.elements || []);
-  const animations = storeData.animations.length > 0 ? storeData.animations : (localData?.animations || []);
-  const keyframes = storeData.keyframes.length > 0 ? storeData.keyframes : (localData?.keyframes || []);
-  const currentProject = storeData.currentProject || localData?.project || null;
+  // IMPORTANT: When embedded by Pulsar, ONLY use data from postMessage (localData), never from Nova's store
+  const layers = isEmbeddedByPulsar
+    ? (localData?.layers || [])
+    : (storeData.layers.length > 0 ? storeData.layers : (localData?.layers || []));
+  const templates = isEmbeddedByPulsar
+    ? (localData?.templates || [])
+    : (storeData.templates.length > 0 ? storeData.templates : (localData?.templates || []));
+  const elements = isEmbeddedByPulsar
+    ? (localData?.elements || [])
+    : (storeData.elements.length > 0 ? storeData.elements : (localData?.elements || []));
+  const animations = isEmbeddedByPulsar
+    ? (localData?.animations || [])
+    : (storeData.animations.length > 0 ? storeData.animations : (localData?.animations || []));
+  const keyframes = isEmbeddedByPulsar
+    ? (localData?.keyframes || [])
+    : (storeData.keyframes.length > 0 ? storeData.keyframes : (localData?.keyframes || []));
+  const currentProject = isEmbeddedByPulsar
+    ? (localData?.project || null)
+    : (storeData.currentProject || localData?.project || null);
 
   // Get phase durations from store, localStorage, or project settings (with defaults)
   const defaultPhaseDurations: Record<AnimationPhase, number> = { in: 1500, loop: 3000, out: 1500 };
-  const phaseDurations = storeData.phaseDurations
-    || localData?.phaseDurations
-    || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined)
-    || defaultPhaseDurations;
+  const phaseDurations = isEmbeddedByPulsar
+    ? (localData?.phaseDurations || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined) || defaultPhaseDurations)
+    : (storeData.phaseDurations || localData?.phaseDurations || (currentProject?.settings?.phaseDurations as Record<AnimationPhase, number> | undefined) || defaultPhaseDurations);
 
   // Resolve template ID - finds the correct template ID that has elements
   // This handles cases where Animation node stored a stale template ID
@@ -273,8 +301,9 @@ export function Preview() {
 
   // Subscribe to designer store's onAirTemplates changes (for visual node runtime playback)
   // When visual node scripts call designerStore.playIn(), we trigger the animation
+  // IMPORTANT: Skip when embedded by Pulsar - Pulsar controls playback via postMessage, not shared store
   useEffect(() => {
-    if (!isInteractiveMode) return;
+    if (!isInteractiveMode || isEmbeddedByPulsar) return;
 
     // Subscribe to onAirTemplates changes in designer store
     const unsubscribe = useDesignerStore.subscribe(
@@ -315,7 +344,7 @@ export function Preview() {
     );
 
     return unsubscribe;
-  }, [isInteractiveMode, resolveTemplateId]);
+  }, [isInteractiveMode, isEmbeddedByPulsar, resolveTemplateId]);
 
   // Handle element clicks in interactive mode - dispatches to visual node runtime
   const handleElementClick = useCallback((elementId: string, elementName?: string) => {
@@ -355,14 +384,147 @@ export function Preview() {
     return templateIdParam || 'all';
   });
   const [showSelector, setShowSelector] = useState(false);
+  const [showFps, setShowFps] = useState(false);
 
-  // Playback state - use URL params for initial values
+  // Per-template playback state: { templateId: { phase, position, isPlaying } }
+  const [templatePlaybackState, setTemplatePlaybackState] = useState<Record<string, {
+    phase: AnimationPhase;
+    position: number;
+    isPlaying: boolean;
+  }>>({});
+
+  // Global playback controls (for the control bar)
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [currentPhase, setCurrentPhase] = useState<AnimationPhase>(initialPhase);
   const [playheadPosition, setPlayheadPosition] = useState(0);
   const [isLooping, setIsLooping] = useState(shouldLoop); // Loop control via URL param
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+
+  // Data binding state - for external control of data record selection (via postMessage from Pulsar GFX)
+  const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
+
+  // Play a specific template (trigger its IN animation)
+  // Auto-triggers OUT for any other template in the same layer that's currently on-air
+  const playTemplate = useCallback((templateId: string) => {
+    console.log('[Preview] Playing template:', templateId);
+
+    // Find the layer for this template
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const layerId = template.layer_id;
+
+    // Find other templates in the same layer that are currently on-air (in 'in' or 'loop' phase)
+    const otherTemplatesInLayer = templates.filter(t =>
+      t.id !== templateId &&
+      t.layer_id === layerId
+    );
+
+    setTemplatePlaybackState(prev => {
+      const updates: typeof prev = { ...prev };
+
+      // Trigger OUT for any other template in this layer that's on-air
+      for (const otherTemplate of otherTemplatesInLayer) {
+        const otherState = prev[otherTemplate.id];
+        if (otherState?.isPlaying && (otherState.phase === 'in' || otherState.phase === 'loop')) {
+          console.log(`[Preview] Auto-triggering OUT for ${otherTemplate.name} (same layer: ${layerId})`);
+          updates[otherTemplate.id] = {
+            phase: 'out',
+            position: 0,
+            isPlaying: true,
+          };
+        }
+      }
+
+      // Play the new template
+      updates[templateId] = {
+        phase: 'in',
+        position: 0,
+        isPlaying: true,
+      };
+
+      return updates;
+    });
+  }, [templates]);
+
+  // Stop a specific template (trigger its OUT animation)
+  const stopTemplate = useCallback((templateId: string) => {
+    console.log('[Preview] Stopping template:', templateId);
+    setTemplatePlaybackState(prev => ({
+      ...prev,
+      [templateId]: {
+        phase: 'out',
+        position: 0,
+        isPlaying: true,
+      }
+    }));
+  }, []);
+
+  // Get playback state for a template (fallback to global state if not tracked)
+  const getTemplatePlaybackState = useCallback((templateId: string) => {
+    return templatePlaybackState[templateId] || {
+      phase: currentPhase,
+      position: playheadPosition,
+      isPlaying: isPlaying,
+    };
+  }, [templatePlaybackState, currentPhase, playheadPosition, isPlaying]);
+
+  // Per-template animation loop - updates position for each playing template
+  useEffect(() => {
+    const playingTemplates = Object.entries(templatePlaybackState).filter(([, state]) => state.isPlaying);
+    if (playingTemplates.length === 0) return;
+
+    let lastFrameTime = 0;
+    let animFrameId: number;
+
+    const animate = (timestamp: number) => {
+      if (!lastFrameTime) lastFrameTime = timestamp;
+      const delta = timestamp - lastFrameTime;
+      lastFrameTime = timestamp;
+
+      setTemplatePlaybackState(prev => {
+        const updates: typeof prev = { ...prev };
+        let hasChanges = false;
+
+        for (const [templateId, state] of Object.entries(prev)) {
+          if (!state.isPlaying) continue;
+
+          const phaseDuration = phaseDurations[state.phase] || 1500;
+          const newPosition = state.position + delta;
+
+          if (newPosition >= phaseDuration) {
+            hasChanges = true;
+            if (state.phase === 'in') {
+              // Transition from IN to LOOP
+              updates[templateId] = { ...state, phase: 'loop', position: 0 };
+            } else if (state.phase === 'loop') {
+              // Loop phase complete - restart loop (template stays on air)
+              updates[templateId] = { ...state, position: 0 };
+            } else if (state.phase === 'out') {
+              // OUT complete - stop playing
+              updates[templateId] = { ...state, isPlaying: false, position: phaseDuration };
+            }
+          } else {
+            if (newPosition !== state.position) {
+              hasChanges = true;
+              updates[templateId] = { ...state, position: newPosition };
+            }
+          }
+        }
+
+        return hasChanges ? updates : prev;
+      });
+
+      animFrameId = requestAnimationFrame(animate);
+    };
+
+    animFrameId = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animFrameId);
+    };
+  }, [templatePlaybackState, phaseDurations]);
 
   // Get enabled layers (sorted by z-index)
   const enabledLayers = useMemo(() => {
@@ -371,30 +533,17 @@ export function Preview() {
       .sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
   }, [layers]);
 
-  // Get templates to show based on selection
+  // Get templates to show - in isolated mode, show only selected template; in composite, show all
   const visibleTemplates = useMemo(() => {
-    let filtered = templates.filter(t => t.enabled !== false);
+    // Show all enabled templates from enabled layers
+    const enabledLayerIds = new Set(enabledLayers.map(l => l.id));
+    let filtered = templates
+      .filter(t => t.enabled !== false && enabledLayerIds.has(t.layer_id));
 
-    // Filter by layer if a specific layer is selected
-    if (selectedLayerId !== 'all') {
-      filtered = filtered.filter(t => t.layer_id === selectedLayerId);
-    } else {
-      // Only show templates from enabled layers
-      const enabledLayerIds = new Set(enabledLayers.map(l => l.id));
-      filtered = filtered.filter(t => enabledLayerIds.has(t.layer_id));
-    }
-
-    // Filter by specific template if selected
-    if (selectedTemplateId !== 'all') {
-      const beforeFilter = filtered.length;
+    // In isolated mode with a specific template selected, only show that template
+    if (previewMode === 'isolated' && selectedTemplateId !== 'all') {
       filtered = filtered.filter(t => t.id === selectedTemplateId);
-      console.log(`[Preview] visibleTemplates: filtering for template ${selectedTemplateId}`, {
-        beforeFilter,
-        afterFilter: filtered.length,
-        matchedTemplate: filtered[0]?.name || 'none',
-        selectedLayerId,
-        enabledLayerIds: enabledLayers.map(l => l.id),
-      });
+      console.log('[Preview] Isolated mode - filtering to template:', selectedTemplateId, 'found:', filtered.length > 0);
     }
 
     // Sort by layer z-index
@@ -403,7 +552,7 @@ export function Preview() {
       const layerB = layers.find(l => l.id === b.layer_id);
       return (layerA?.z_index || 0) - (layerB?.z_index || 0);
     });
-  }, [templates, selectedLayerId, selectedTemplateId, enabledLayers, layers]);
+  }, [templates, enabledLayers, layers, previewMode, selectedTemplateId]);
 
   // Apply content overrides to elements
   const elementsWithOverrides = useMemo(() => {
@@ -591,12 +740,86 @@ export function Preview() {
     });
   }, [elements, contentOverrides]);
 
-  // Get all visible elements (from all visible templates, sorted by z-index)
+  // Get bindings and data from localStorage (or store)
+  const previewBindings = localData?.bindings || [];
+  const previewDataPayload = localData?.dataPayload || [];
+
+  // Debug: Log binding data state
+  console.log('[Preview] Data binding state:', {
+    bindingsCount: previewBindings.length,
+    dataPayloadCount: previewDataPayload.length,
+    currentRecordIndex,
+    hasLocalData: !!localData,
+    localDataKeys: localData ? Object.keys(localData) : [],
+  });
+
+  // Get the current data record for binding resolution
+  // Use currentRecordIndex from state (controlled via postMessage) for external control
+  const currentDataRecord = useMemo(() => {
+    if (previewDataPayload.length === 0) {
+      console.log('[Preview] currentDataRecord: no data payload');
+      return null;
+    }
+    const record = previewDataPayload[currentRecordIndex] || previewDataPayload[0] || null;
+    console.log('[Preview] currentDataRecord:', { index: currentRecordIndex, record });
+    return record;
+  }, [previewDataPayload, currentRecordIndex]);
+
+  // Resolve bindings for all elements (replace {{...}} placeholders with actual data)
+  const elementsWithBindings = useMemo(() => {
+    if (!currentDataRecord || previewBindings.length === 0) {
+      return elementsWithOverrides;
+    }
+
+    return elementsWithOverrides.map(element => {
+      // Get bindings for this element
+      const elementBindings = previewBindings.filter(b => b.element_id === element.id);
+      if (elementBindings.length === 0) {
+        return element;
+      }
+
+      // Resolve bindings using the binding resolver
+      return resolveElementBindings(element, elementBindings, currentDataRecord);
+    });
+  }, [elementsWithOverrides, previewBindings, currentDataRecord]);
+
+  // Get all visible elements (from all visible templates, sorted by layer z-index then element z-index)
+  // Also filters out elements hidden due to binding options (hideOnZero, hideOnNull)
   const visibleElements = useMemo(() => {
     const templateIds = new Set(visibleTemplates.map(t => t.id));
-    const result = elementsWithOverrides
-      .filter(e => templateIds.has(e.template_id) && e.visible !== false && !e.parent_element_id)
-      .sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
+
+    // Build template-to-layer mapping for z-index sorting
+    const templateToLayer = new Map(templates.map(t => [t.id, t.layer_id]));
+    const layerZIndex = new Map(layers.map(l => [l.id, l.z_index ?? 0]));
+
+    const result = elementsWithBindings
+      .filter(e => {
+        // Basic visibility checks
+        if (!templateIds.has(e.template_id)) return false;
+        if (e.visible === false) return false;
+        if (e.parent_element_id) return false;
+
+        // Check binding hide options (hideOnZero, hideOnNull)
+        if (shouldHideElement(e.id, previewBindings, currentDataRecord)) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        // First sort by layer z_index (like Stage.tsx does)
+        const aLayerId = templateToLayer.get(a.template_id);
+        const bLayerId = templateToLayer.get(b.template_id);
+        const aLayerZ = aLayerId ? (layerZIndex.get(aLayerId) ?? 0) : 0;
+        const bLayerZ = bLayerId ? (layerZIndex.get(bLayerId) ?? 0) : 0;
+
+        if (aLayerZ !== bLayerZ) {
+          return aLayerZ - bLayerZ;
+        }
+
+        // Then sort by element z_index within the same layer
+        return (a.z_index || 0) - (b.z_index || 0);
+      });
 
     // Debug logging when we have a specific template selected
     if (selectedTemplateId !== 'all') {
@@ -610,7 +833,7 @@ export function Preview() {
     }
 
     return result;
-  }, [elementsWithOverrides, visibleTemplates, selectedTemplateId]);
+  }, [elementsWithBindings, visibleTemplates, selectedTemplateId, previewBindings, currentDataRecord, templates, layers]);
 
   // Load fonts for all elements when they change
   // This ensures fonts are available in preview mode (especially for OBS/external windows)
@@ -670,7 +893,7 @@ export function Preview() {
   const currentAnimations = useMemo(() => {
     const visibleElementIds = new Set(visibleElements.map(e => e.id));
     // Also include child elements
-    const allRelatedElements = elementsWithOverrides.filter(e =>
+    const allRelatedElements = elementsWithBindings.filter(e =>
       visibleElementIds.has(e.id) ||
       (e.parent_element_id && visibleElementIds.has(e.parent_element_id))
     );
@@ -679,7 +902,7 @@ export function Preview() {
     return animations.filter(
       (a) => currentPhase === a.phase && allIds.has(a.element_id)
     );
-  }, [animations, currentPhase, visibleElements, elementsWithOverrides]);
+  }, [animations, currentPhase, visibleElements, elementsWithBindings]);
 
   // Calculate max duration - use phase duration from settings, or fall back to animation/keyframe times
   const maxDuration = useMemo(() => {
@@ -817,9 +1040,6 @@ export function Preview() {
   const [isConnected, setIsConnected] = useState(false);
   const lastMessageTimeRef = useRef<number>(Date.now());
 
-  // Data binding state - for external control of data record selection
-  const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
-
   // PostMessage handler for external control (from Pulsar GFX)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -869,6 +1089,10 @@ export function Preview() {
         case 'updateContent':
           // Update content overrides for real-time preview
           if (payload && typeof payload === 'object') {
+            console.log('[Preview] updateContent received:', {
+              payloadKeys: Object.keys(payload),
+              payloadSample: JSON.stringify(payload).slice(0, 200),
+            });
             setContentOverrides(payload);
           }
           break;
@@ -941,14 +1165,23 @@ export function Preview() {
 
         case 'setMode':
           // Handle mode change
+          console.log('[Preview] setMode received:', {
+            mode: payload?.mode,
+            templateId: payload?.templateId,
+            currentPreviewMode: previewMode,
+            currentSelectedTemplateId: selectedTemplateId,
+          });
           if (payload?.mode) {
             setPreviewMode(payload.mode);
             if (payload.mode === 'composite') {
+              console.log('[Preview] Setting to composite mode - showing all templates');
               setSelectedTemplateId('all');
             } else if (payload.templateId) {
+              console.log('[Preview] Setting to isolated mode with template:', payload.templateId);
               setSelectedTemplateId(payload.templateId);
             } else {
               // In isolated mode with no specific template, show all templates
+              console.log('[Preview] Setting to isolated mode with no template - showing all');
               setSelectedTemplateId('all');
             }
           }
@@ -967,6 +1200,11 @@ export function Preview() {
 
         case 'refresh':
           // Force refresh data from localStorage
+          // IMPORTANT: Skip when embedded by Pulsar - Pulsar sends data via setPreviewData, not localStorage
+          if (isEmbeddedByPulsar) {
+            console.log('[Preview] Ignoring refresh message when embedded by Pulsar');
+            break;
+          }
           const savedData = localStorage.getItem('nova-preview-data');
           if (savedData) {
             try {
@@ -993,6 +1231,7 @@ export function Preview() {
         case 'setDataRecordIndex':
           // Set data record index from external control (Pulsar GFX)
           if (payload?.recordIndex !== undefined) {
+            console.log('[Preview] setDataRecordIndex received:', payload.recordIndex, 'current:', currentRecordIndex);
             setCurrentRecordIndex(payload.recordIndex);
             console.log('[Preview] Data record index set to:', payload.recordIndex);
           }
@@ -1020,8 +1259,29 @@ export function Preview() {
   }, [isConnected]);
 
   // Periodic localStorage sync and visibility change handler
+  // IMPORTANT: Skip when embedded by Pulsar - Pulsar sends data via postMessage, not localStorage
   useEffect(() => {
+    // If embedded by Pulsar, only re-send ready signal on visibility change (skip localStorage reads)
+    if (isEmbeddedByPulsar) {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          // Re-send ready signal in case parent lost reference
+          if (window.opener || window.parent !== window) {
+            const target = window.opener || window.parent;
+            target.postMessage({
+              source: 'nova-preview',
+              type: 'ready',
+              timestamp: Date.now(),
+            }, '*');
+          }
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+
     // Refresh data when window becomes visible (user switches back to preview tab)
+    // Only for standalone Nova GFX preview, NOT when embedded by Pulsar
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log('[Preview] Window became visible, checking for data updates...');
@@ -1059,6 +1319,7 @@ export function Preview() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Also check localStorage periodically (every 5 seconds) in case we missed an update
+    // Only for standalone Nova GFX preview, NOT when embedded by Pulsar
     const intervalId = setInterval(() => {
       const savedData = localStorage.getItem('nova-preview-data');
       if (savedData && templatesRef.current.length === 0) {
@@ -1079,7 +1340,7 @@ export function Preview() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(intervalId);
     };
-  }, []);
+  }, [isEmbeddedByPulsar]);
 
   const canvasWidth = currentProject?.canvas_width || 1920;
   const canvasHeight = currentProject?.canvas_height || 1080;
@@ -1133,21 +1394,25 @@ export function Preview() {
           }}
         >
           {/* Render all visible elements */}
-          {visibleElements.map((element) => (
-            <PreviewElement
-              key={element.id}
-              element={element}
-              allElements={elementsWithOverrides}
-              animations={animations}
-              keyframes={keyframes}
-              playheadPosition={playheadPosition}
-              currentPhase={currentPhase}
-              isPlaying={isPlaying}
-              phaseDuration={phaseDurations[currentPhase]}
-              isInteractiveMode={isInteractiveMode}
-              onElementClick={handleElementClick}
-            />
-          ))}
+          {visibleElements.map((element) => {
+            // Get per-template playback state or fall back to global
+            const templateState = getTemplatePlaybackState(element.template_id);
+            return (
+              <PreviewElement
+                key={element.id}
+                element={element}
+                allElements={elementsWithBindings}
+                animations={animations}
+                keyframes={keyframes}
+                playheadPosition={templateState.position}
+                currentPhase={templateState.phase}
+                isPlaying={templateState.isPlaying}
+                phaseDuration={phaseDurations[templateState.phase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
+              />
+            );
+          })}
         </div>
       </div>
     );
@@ -1155,7 +1420,7 @@ export function Preview() {
 
   // Normal Preview Mode with controls - fullscreen stretched
   return (
-    <div 
+    <div
       className="w-screen h-screen overflow-hidden"
       style={{ backgroundColor: bgColor === 'transparent' ? '#000' : bgColor }}
     >
@@ -1179,109 +1444,42 @@ export function Preview() {
           }}
         >
           {/* Render all visible elements */}
-          {visibleElements.map((element) => (
-            <PreviewElement
-              key={element.id}
-              element={element}
-              allElements={elementsWithOverrides}
-              animations={animations}
-              keyframes={keyframes}
-              playheadPosition={playheadPosition}
-              currentPhase={currentPhase}
-              isPlaying={isPlaying}
-              phaseDuration={phaseDurations[currentPhase]}
-              isInteractiveMode={isInteractiveMode}
-              onElementClick={handleElementClick}
-            />
-          ))}
+          {visibleElements.map((element) => {
+            // Get per-template playback state or fall back to global
+            const templateState = getTemplatePlaybackState(element.template_id);
+            return (
+              <PreviewElement
+                key={element.id}
+                element={element}
+                allElements={elementsWithBindings}
+                animations={animations}
+                keyframes={keyframes}
+                playheadPosition={templateState.position}
+                currentPhase={templateState.phase}
+                isPlaying={templateState.isPlaying}
+                phaseDuration={phaseDurations[templateState.phase]}
+                isInteractiveMode={isInteractiveMode}
+                onElementClick={handleElementClick}
+              />
+            );
+          })}
         </div>
       </div>
 
-      {/* Layer/Template Selector Dropdown */}
-      {showSelector && (
-        <div 
-          className="fixed top-4 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-lg rounded-xl border border-white/10 shadow-2xl z-50 min-w-[300px] max-h-[70vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="p-3 border-b border-white/10">
-            <h3 className="text-white font-medium text-sm">Select Layer / Template</h3>
-          </div>
-          <div className="p-2">
-            {/* All option */}
-            <button
-              onClick={() => {
-                setSelectedLayerId('all');
-                setSelectedTemplateId('all');
-                setShowSelector(false);
-              }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                selectedLayerId === 'all' && selectedTemplateId === 'all'
-                  ? 'bg-violet-500 text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              ✓ All Layers & Templates
-            </button>
-            
-            <div className="h-px bg-white/10 my-2" />
-            
-            {/* Layers and their templates */}
-            {templatesByLayer.map(({ layer, templates: layerTemplates }) => (
-              <div key={layer.id} className="mb-2">
-                <button
-                  onClick={() => {
-                    setSelectedLayerId(layer.id);
-                    setSelectedTemplateId('all');
-                    setShowSelector(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                    selectedLayerId === layer.id && selectedTemplateId === 'all'
-                      ? 'bg-violet-500/80 text-white'
-                      : 'text-white/80 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-violet-400" />
-                  {layer.name}
-                  <span className="text-white/40 text-xs ml-auto">{layerTemplates.length}</span>
-                </button>
-                
-                {/* Templates in this layer */}
-                <div className="ml-4 mt-1 space-y-1">
-                  {layerTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      onClick={() => {
-                        setSelectedLayerId(layer.id);
-                        setSelectedTemplateId(template.id);
-                        setShowSelector(false);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors ${
-                        selectedTemplateId === template.id
-                          ? 'bg-violet-500 text-white'
-                          : 'text-white/60 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      {template.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* FPS Counter */}
+      {showFps && <FpsCounter />}
 
       {/* Click overlay to close selector */}
       {showSelector && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowSelector(false)} 
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowSelector(false)}
         />
       )}
 
       {/* Controls Bar - hidden for interactive projects */}
       {!isInteractiveProject && (
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-lg rounded-xl px-4 py-2 flex items-center gap-4 text-white border border-white/10 z-30">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-lg rounded-xl px-4 py-2 flex items-center gap-4 text-white border border-white/10 z-50">
         {/* Back to Designer */}
         <button
           onClick={() => navigate('/')}
@@ -1295,26 +1493,139 @@ export function Preview() {
 
         <div className="w-px h-6 bg-white/20" />
 
-        {/* Layer/Template Selector */}
-        <button
-          onClick={() => setShowSelector(!showSelector)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-          </svg>
-          <span className="max-w-[150px] truncate">
-            {selectedLayerId === 'all' && selectedTemplateId === 'all'
-              ? 'All'
-              : selectedTemplateId !== 'all'
-                ? templates.find(t => t.id === selectedTemplateId)?.name || 'Template'
-                : layers.find(l => l.id === selectedLayerId)?.name || 'Layer'
-            }
-          </span>
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        {/* Layer/Template Selector - with inline dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSelector(!showSelector)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+            <span className="max-w-[150px] truncate">
+              {selectedLayerId === 'all' && selectedTemplateId === 'all'
+                ? 'All'
+                : selectedTemplateId !== 'all'
+                  ? templates.find(t => t.id === selectedTemplateId)?.name || 'Template'
+                  : layers.find(l => l.id === selectedLayerId)?.name || 'Layer'
+              }
+            </span>
+            <svg className={`w-3 h-3 transition-transform ${showSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+
+          {/* Dropdown Menu - positioned above the button */}
+          {showSelector && (
+            <div
+              className="absolute bottom-full left-0 mb-2 bg-black/95 backdrop-blur-lg rounded-xl border border-white/10 shadow-2xl z-[60] min-w-[280px] max-h-[60vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-2">
+                {/* Header */}
+                <div className="px-3 py-1 text-[10px] font-medium text-white/40 uppercase tracking-wider">
+                  Play Template
+                </div>
+
+                <div className="h-px bg-white/10 my-2" />
+
+                {/* Layers and their templates */}
+                {templatesByLayer.map(({ layer, templates: layerTemplates }) => (
+                  <div key={layer.id} className="mb-2">
+                    {/* Layer header */}
+                    <div className="px-3 py-1 flex items-center gap-2 text-white/60">
+                      <span className="w-2 h-2 rounded-full bg-violet-400" />
+                      <span className="text-xs font-medium">{layer.name}</span>
+                      <span className="text-white/30 text-[10px] ml-auto">{layerTemplates.length}</span>
+                    </div>
+
+                    {/* Templates in this layer - clickable to select, with play/stop buttons */}
+                    <div className="ml-4 mt-1 space-y-1">
+                      {layerTemplates.map((template) => {
+                        const playState = templatePlaybackState[template.id];
+                        const isActive = playState?.isPlaying;
+                        const templatePhase = playState?.phase || 'loop';
+                        const isOnAir = isActive && (templatePhase === 'in' || templatePhase === 'loop');
+                        const isSelected = selectedTemplateId === template.id;
+
+                        return (
+                          <div
+                            key={template.id}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                              isSelected ? 'bg-violet-500/30 ring-1 ring-violet-500' : 'hover:bg-white/10'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Click on row selects the template for the dropdown
+                              setSelectedTemplateId(template.id);
+                              setSelectedLayerId(layer.id);
+                              console.log('[Preview] Selected template:', template.name);
+                            }}
+                          >
+                            {/* Play button - show when not on air */}
+                            {!isOnAir && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  console.log('[Preview] Play template:', template.id, template.name);
+                                  playTemplate(template.id);
+                                }}
+                                className="w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center transition-colors shrink-0"
+                                title="Play IN animation"
+                              >
+                                <svg className="w-3 h-3 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Stop button - show when on air (in or loop phase) */}
+                            {isOnAir && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  console.log('[Preview] Stop template:', template.id, template.name);
+                                  stopTemplate(template.id);
+                                }}
+                                className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center transition-colors shrink-0"
+                                title="Play OUT animation"
+                              >
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Template name - clickable area */}
+                            <span className={`text-xs flex-1 truncate ${
+                              isSelected ? 'text-violet-300 font-medium' :
+                              isOnAir ? 'text-white font-medium' : 'text-white/70'
+                            }`}>
+                              {template.name}
+                            </span>
+
+                            {/* Status indicator */}
+                            {isActive && (
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                templatePhase === 'in' ? 'bg-emerald-500/30 text-emerald-400' :
+                                templatePhase === 'loop' ? 'bg-violet-500/30 text-violet-400' :
+                                'bg-amber-500/30 text-amber-400'
+                              }`}>
+                                {templatePhase.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-6 bg-white/20" />
 
@@ -1375,6 +1686,19 @@ export function Preview() {
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+
+        {/* FPS Toggle */}
+        <button
+          onClick={() => setShowFps(!showFps)}
+          className={`p-2 rounded-lg transition-colors ${
+            showFps ? 'bg-violet-500/30 text-violet-400' : 'text-white/60 hover:text-white'
+          }`}
+          title="Show FPS"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </button>
 
