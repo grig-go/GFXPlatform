@@ -37,6 +37,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
   const [playImmediately, setPlayImmediately] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  // const [fixedSize, setFixedSize] = useState(false); // Commented out - OBS users set transform manually
   const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [liveChannelIds, setLiveChannelIds] = useState<Set<string>>(new Set());
@@ -704,7 +705,8 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
   // Get player URL for a channel
   const getPlayerUrl = (channelId: string) => {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/player/${channelId}`;
+    const debugParam = debugMode ? '?debug=1' : '';
+    return `${baseUrl}/player/${channelId}${debugParam}`;
   };
 
   const hasLiveChannels = liveChannelIds.size > 0;
@@ -821,6 +823,20 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
                     Debug mode (show status overlay)
                   </span>
                 </label>
+                {/* Fixed size option commented out - OBS users set transform manually
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fixedSize}
+                    onChange={(e) => setFixedSize(e.target.checked)}
+                    disabled={isPublishing}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  <span className="text-sm">
+                    Fixed size (for OBS browser source)
+                  </span>
+                </label>
+                */}
               </div>
 
               {/* Project Selection */}

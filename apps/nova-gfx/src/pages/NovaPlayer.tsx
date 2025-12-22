@@ -166,6 +166,8 @@ export function NovaPlayer() {
   // URL params
   const isDebug = searchParams.get('debug') === '1';
   const bgColor = searchParams.get('bg') || 'transparent';
+  // Fixed mode for OBS: renders at exact 1920x1080 without scaling
+  // const isFixedSize = searchParams.get('fixed') === '1'; // Commented out - OBS users set transform manually
 
   // Connection state
   const [isReady, setIsReady] = useState(false);
@@ -1827,10 +1829,15 @@ export function NovaPlayer() {
       let updatedElement = element;
 
       // First, try to resolve bindings if we have binding data
-      if (bindingData?.bindings && bindingData.currentRecord) {
+      if (bindingData?.bindings) {
         const binding = bindingData.bindings.find(b => b.element_id === element.id);
         if (binding) {
-          const boundValue = getBoundValue(binding, bindingData.currentRecord);
+          // If we have a current record, get the bound value
+          // If no record, use default_value or empty string to hide raw {{}} syntax
+          const boundValue = bindingData.currentRecord
+            ? getBoundValue(binding, bindingData.currentRecord)
+            : (binding.default_value ?? '');
+
           if (boundValue !== undefined && boundValue !== null) {
             const valueStr = String(boundValue);
             if (element.content?.type === 'text') {
@@ -1855,12 +1862,17 @@ export function NovaPlayer() {
       }
 
       // Also resolve any {{field.path}} placeholders in text content
-      if (updatedElement.content?.type === 'text' && bindingData?.currentRecord) {
+      // If we have data, resolve to actual values. If no data, replace with empty string to hide raw syntax.
+      if (updatedElement.content?.type === 'text') {
         const text = updatedElement.content.text;
         if (text && typeof text === 'string' && text.includes('{{')) {
-          const resolvedText = text.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-            const value = getNestedValue(bindingData.currentRecord!, path.trim());
-            return value !== undefined && value !== null ? String(value) : match;
+          const resolvedText = text.replace(/\{\{([^}]+)\}\}/g, (_match, path) => {
+            if (bindingData?.currentRecord) {
+              const value = getNestedValue(bindingData.currentRecord, path.trim());
+              return value !== undefined && value !== null ? String(value) : '';
+            }
+            // No data available - show empty string instead of raw {{}} syntax
+            return '';
           });
           if (resolvedText !== text) {
             updatedElement = {
@@ -1872,12 +1884,17 @@ export function NovaPlayer() {
       }
 
       // Also resolve any {{field.path}} placeholders in icon content (iconName)
-      if (updatedElement.content?.type === 'icon' && bindingData?.currentRecord) {
+      // If we have data, resolve to actual values. If no data, replace with empty string.
+      if (updatedElement.content?.type === 'icon') {
         const iconName = updatedElement.content.iconName;
         if (iconName && typeof iconName === 'string' && iconName.includes('{{')) {
-          const resolvedIconName = iconName.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-            const value = getNestedValue(bindingData.currentRecord!, path.trim());
-            return value !== undefined && value !== null ? String(value) : match;
+          const resolvedIconName = iconName.replace(/\{\{([^}]+)\}\}/g, (_match, path) => {
+            if (bindingData?.currentRecord) {
+              const value = getNestedValue(bindingData.currentRecord, path.trim());
+              return value !== undefined && value !== null ? String(value) : '';
+            }
+            // No data available - show empty string instead of raw {{}} syntax
+            return '';
           });
           if (resolvedIconName !== iconName) {
             updatedElement = {
@@ -1903,6 +1920,84 @@ export function NovaPlayer() {
               ...updatedElement,
               content: { ...updatedElement.content, src: override ?? undefined, url: override ?? undefined },
             } as unknown as Element;
+          } else if (element.content?.type === 'shape') {
+            // Shape elements - override can be:
+            // 1. A simple URL (texture)
+            // 2. A color string (fill)
+            // 3. A JSON object with fill/gradient/texture config (from FillEditor)
+            const overrideStr = String(override);
+
+            // Try to parse as JSON fill config first
+            let fillConfig: { fill?: string; gradient?: unknown; texture?: unknown } | null = null;
+            if (overrideStr.startsWith('{')) {
+              try {
+                fillConfig = JSON.parse(overrideStr);
+              } catch {
+                // Not valid JSON, continue with other checks
+              }
+            }
+
+            if (fillConfig) {
+              // JSON fill config from FillEditor - apply fill, gradient, and texture settings
+              const existingTexture = (element.content as Record<string, unknown>).texture || {};
+              const existingGradient = (element.content as Record<string, unknown>).gradient || {};
+
+              const contentUpdates: Record<string, unknown> = { ...updatedElement.content };
+
+              // Apply solid fill color
+              if (fillConfig.fill !== undefined) {
+                contentUpdates.fill = fillConfig.fill;
+              }
+
+              // Apply gradient config
+              if (fillConfig.gradient !== undefined) {
+                contentUpdates.gradient = {
+                  ...(existingGradient as Record<string, unknown>),
+                  ...(fillConfig.gradient as Record<string, unknown>),
+                };
+              }
+
+              // Apply texture config
+              if (fillConfig.texture !== undefined) {
+                contentUpdates.texture = {
+                  ...(existingTexture as Record<string, unknown>),
+                  ...(fillConfig.texture as Record<string, unknown>),
+                };
+              }
+
+              updatedElement = {
+                ...updatedElement,
+                content: contentUpdates,
+              } as Element;
+            } else {
+              // Legacy handling for simple strings
+              const isUrl = overrideStr.startsWith('http') || overrideStr.startsWith('/') || overrideStr.startsWith('data:');
+              const isColor = overrideStr.startsWith('#') || overrideStr.startsWith('rgb') || overrideStr.startsWith('hsl');
+
+              if (isUrl) {
+                // Override texture URL
+                const existingTexture = (element.content as Record<string, unknown>).texture || {};
+                const isVideo = overrideStr.match(/\.(mp4|webm|mov)$/i);
+                updatedElement = {
+                  ...updatedElement,
+                  content: {
+                    ...updatedElement.content,
+                    texture: {
+                      ...(existingTexture as Record<string, unknown>),
+                      enabled: true,
+                      url: overrideStr,
+                      mediaType: isVideo ? 'video' : 'image',
+                    },
+                  },
+                } as Element;
+              } else if (isColor) {
+                // Override fill color
+                updatedElement = {
+                  ...updatedElement,
+                  content: { ...updatedElement.content, fill: overrideStr },
+                } as Element;
+              }
+            }
           }
         }
 
@@ -1940,6 +2035,74 @@ export function NovaPlayer() {
                 ...updatedElement,
                 content: { ...updatedElement.content, src: value ?? undefined, url: value ?? undefined },
               } as unknown as Element;
+            } else if (updatedElement.content?.type === 'shape') {
+              // Shape elements - handle fill/texture overrides by name
+              const overrideStr = String(value);
+
+              // Try to parse as JSON fill config first
+              let fillConfig: { fill?: string; gradient?: unknown; texture?: unknown } | null = null;
+              if (overrideStr.startsWith('{')) {
+                try {
+                  fillConfig = JSON.parse(overrideStr);
+                } catch {
+                  // Not valid JSON, continue with other checks
+                }
+              }
+
+              if (fillConfig) {
+                // JSON fill config from FillEditor
+                const existingTexture = (updatedElement.content as Record<string, unknown>).texture || {};
+                const existingGradient = (updatedElement.content as Record<string, unknown>).gradient || {};
+
+                const contentUpdates: Record<string, unknown> = { ...updatedElement.content };
+
+                if (fillConfig.fill !== undefined) {
+                  contentUpdates.fill = fillConfig.fill;
+                }
+                if (fillConfig.gradient !== undefined) {
+                  contentUpdates.gradient = {
+                    ...(existingGradient as Record<string, unknown>),
+                    ...(fillConfig.gradient as Record<string, unknown>),
+                  };
+                }
+                if (fillConfig.texture !== undefined) {
+                  contentUpdates.texture = {
+                    ...(existingTexture as Record<string, unknown>),
+                    ...(fillConfig.texture as Record<string, unknown>),
+                  };
+                }
+
+                updatedElement = {
+                  ...updatedElement,
+                  content: contentUpdates,
+                } as Element;
+              } else {
+                // Legacy handling for simple strings
+                const isUrl = overrideStr.startsWith('http') || overrideStr.startsWith('/') || overrideStr.startsWith('data:');
+                const isColor = overrideStr.startsWith('#') || overrideStr.startsWith('rgb') || overrideStr.startsWith('hsl');
+
+                if (isUrl) {
+                  const existingTexture = (updatedElement.content as Record<string, unknown>).texture || {};
+                  const isVideo = overrideStr.match(/\.(mp4|webm|mov)$/i);
+                  updatedElement = {
+                    ...updatedElement,
+                    content: {
+                      ...updatedElement.content,
+                      texture: {
+                        ...(existingTexture as Record<string, unknown>),
+                        enabled: true,
+                        url: overrideStr,
+                        mediaType: isVideo ? 'video' : 'image',
+                      },
+                    },
+                  } as Element;
+                } else if (isColor) {
+                  updatedElement = {
+                    ...updatedElement,
+                    content: { ...updatedElement.content, fill: overrideStr },
+                  } as Element;
+                }
+              }
             }
           }
         }
@@ -2269,7 +2432,9 @@ export function NovaPlayer() {
   return (
     <div
       className="w-screen h-screen overflow-hidden"
-      style={{ backgroundColor: bgColor }}
+      style={{
+        backgroundColor: bgColor,
+      }}
     >
       {/* Debug overlay */}
       {isDebug && (

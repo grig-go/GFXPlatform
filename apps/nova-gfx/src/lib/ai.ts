@@ -30,13 +30,39 @@ export function markChatActivity(): void {
 }
 
 /**
+ * Fire-and-forget warmup for AI endpoints
+ * Runs in background without blocking - just establishes TLS connections
+ */
+function warmupAIEndpoints(): void {
+  const warmupTimeout = 3000;
+
+  // Warm up in parallel, fire-and-forget (don't await)
+  const warmup = async (url: string, name: string, headers?: Record<string, string>) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), warmupTimeout);
+      await fetch(url, { method: 'HEAD', signal: controller.signal, headers });
+      clearTimeout(timeout);
+      console.log(`[AI] ${name} warmup complete`);
+    } catch {
+      // Ignore - warmup only
+    }
+  };
+
+  // Fire off warmups without awaiting
+  warmup(AI_EDGE_FUNCTION_URL, 'Edge function', { 'apikey': SUPABASE_ANON_KEY });
+  warmup('https://generativelanguage.googleapis.com/v1beta/models', 'Gemini API');
+  warmup('https://api.anthropic.com/v1/models', 'Claude API');
+}
+
+/**
  * Check if browser has been idle and refresh connection if needed
- * Also tests AI endpoint connectivity to ensure requests will succeed
+ * Keeps latency low by running warmups in background
  */
 async function ensureFreshConnectionIfIdle(): Promise<void> {
   const idleTime = Date.now() - lastActivityTime;
   if (idleTime > IDLE_THRESHOLD_MS) {
-    console.log(`[AI] Browser was idle for ${Math.round(idleTime / 1000)}s, ensuring fresh connection...`);
+    console.log(`[AI] Browser was idle for ${Math.round(idleTime / 1000)}s, refreshing connections...`);
     try {
       // Refresh the Supabase session to ensure token is valid
       if (supabase) {
@@ -49,28 +75,12 @@ async function ensureFreshConnectionIfIdle(): Promise<void> {
           console.log('[AI] Session refreshed successfully');
         }
       }
-      // Also ensure Supabase connection is healthy
+      // Ensure Supabase connection is healthy
       await ensureFreshConnection(true);
 
-      // Warm up the AI edge function endpoint
-      // This helps prevent cold start delays after idle periods
-      try {
-        const warmupController = new AbortController();
-        const warmupTimeout = setTimeout(() => warmupController.abort(), 5000);
-        await fetch(AI_EDGE_FUNCTION_URL, {
-          method: 'OPTIONS',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-          },
-          signal: warmupController.signal,
-        }).catch(() => {
-          // Ignore errors - this is just a warmup
-        });
-        clearTimeout(warmupTimeout);
-        console.log('[AI] Edge function warmup complete');
-      } catch {
-        // Ignore warmup errors
-      }
+      // Fire off AI endpoint warmups in background (non-blocking)
+      // These run in parallel with the actual request to reduce perceived latency
+      warmupAIEndpoints();
     } catch (err) {
       console.warn('[AI] Connection refresh failed, continuing anyway:', err);
     }
@@ -2358,11 +2368,13 @@ async function sendGeminiMessage(
     let response;
 
     if (useProxy) {
-      // Use backend proxy for API call
-      response = await fetch('/.netlify/functions/ai-chat', {
+      // Use Supabase edge function for API call (more reliable than Netlify)
+      response = await fetch(AI_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           provider: 'gemini',
@@ -2532,11 +2544,13 @@ async function sendClaudeMessage(
     let response;
 
     if (useProxy) {
-      // Use backend proxy for API call
-      response = await fetch('/.netlify/functions/ai-chat', {
+      // Use Supabase edge function for API call (more reliable than Netlify)
+      response = await fetch(AI_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           provider: 'claude',
@@ -4306,9 +4320,13 @@ export async function sendDocsChatMessage(
 
       let response;
       if (useProxy) {
-        response = await fetch('/.netlify/functions/ai-chat', {
+        response = await fetch(AI_EDGE_FUNCTION_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
           body: JSON.stringify({
             provider: 'gemini',
             model: apiModel,
@@ -4353,9 +4371,13 @@ export async function sendDocsChatMessage(
 
       let response;
       if (useProxy) {
-        response = await fetch('/.netlify/functions/ai-chat', {
+        response = await fetch(AI_EDGE_FUNCTION_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
           body: JSON.stringify({
             provider: 'claude',
             model: apiModel,
