@@ -132,6 +132,7 @@ export function Preview() {
     setAnimations: setDesignerAnimations,
     setKeyframes: setDesignerKeyframes,
     setProject: setDesignerProject,
+    setCurrentRecordIndex: setStoreRecordIndex,
   } = useDesignerStore();
 
   // Load from localStorage if store is empty (new window case)
@@ -152,7 +153,6 @@ export function Preview() {
   useEffect(() => {
     // If embedded by Pulsar GFX, skip localStorage loading - wait for postMessage data
     if (isEmbeddedByPulsar) {
-      console.log('[Preview] Embedded by Pulsar GFX, waiting for postMessage data for project:', embeddedProjectId);
       return;
     }
 
@@ -164,33 +164,26 @@ export function Preview() {
         try {
           const parsed = JSON.parse(savedData);
           setLocalData(parsed);
-          console.log('Preview loaded from localStorage:', parsed);
 
           // Sync to designer store for visual node runtime / scripts access
           if (parsed.templates?.length > 0) {
             setDesignerTemplates(parsed.templates);
-            console.log('[Preview] Synced templates to designer store:', parsed.templates.length);
           }
           if (parsed.elements?.length > 0) {
             setDesignerElements(parsed.elements);
-            console.log('[Preview] Synced elements to designer store:', parsed.elements.length);
           }
           if (parsed.layers?.length > 0) {
             setDesignerLayers(parsed.layers);
-            console.log('[Preview] Synced layers to designer store:', parsed.layers.length);
           }
           if (parsed.animations?.length > 0) {
             setDesignerAnimations(parsed.animations);
-            console.log('[Preview] Synced animations to designer store:', parsed.animations.length);
           }
           if (parsed.keyframes?.length > 0) {
             setDesignerKeyframes(parsed.keyframes);
-            console.log('[Preview] Synced keyframes to designer store:', parsed.keyframes.length);
           }
           // Sync project to designer store (needed for interactive mode scripts to access project settings)
           if (parsed.project) {
             setDesignerProject(parsed.project);
-            console.log('[Preview] Synced project to designer store:', parsed.project.id);
           }
         } catch (e) {
           console.error('Failed to parse preview data:', e);
@@ -243,7 +236,6 @@ export function Preview() {
       for (const existingId of templateIdsInElements) {
         const existingTemplate = templates.find(t => t.id === existingId);
         if (existingTemplate && existingTemplate.name === template.name) {
-          console.log(`[Preview] Resolved template ID by name: "${template.name}" - ${requestedId} -> ${existingId}`);
           return existingId;
         }
       }
@@ -252,12 +244,10 @@ export function Preview() {
     // If only one template has elements, use that as fallback
     const templateIdsInElements = [...new Set(elements.map(e => e.template_id))];
     if (templateIdsInElements.length === 1) {
-      console.log(`[Preview] Using only available template ID: ${templateIdsInElements[0]} (requested: ${requestedId})`);
       return templateIdsInElements[0];
     }
 
     // Return original if no resolution found
-    console.warn(`[Preview] Could not resolve template ID: ${requestedId}, elements exist for: ${templateIdsInElements.join(', ')}`);
     return requestedId;
   }, [elements, templates]);
 
@@ -276,15 +266,7 @@ export function Preview() {
 
   // Enable/disable interactive mode based on project type
   useEffect(() => {
-    console.log('[Preview] Interactive mode check:', {
-      isInteractiveProject,
-      interactive_enabled: currentProject?.interactive_enabled,
-      hasConfig: !!currentProject?.interactive_config,
-      projectId: currentProject?.id
-    });
-
     if (isInteractiveProject) {
-      console.log('[Preview] Enabling interactive mode for interactive project');
       enableInteractiveMode();
 
       // Load visual nodes and code script from project's interactive_config
@@ -295,26 +277,16 @@ export function Preview() {
         visualEdges?: Edge[];
       } | null;
 
-      console.log('[Preview] Interactive config:', interactiveConfig);
-
       // Load code script if present
       if (interactiveConfig?.script && interactiveConfig.script.trim()) {
-        console.log('[Preview] Setting code script:', interactiveConfig.script.length, 'chars');
         setCodeScript(interactiveConfig.script);
       }
 
       // Load visual nodes if present
       if (interactiveConfig?.visualNodes && interactiveConfig?.visualEdges) {
-        console.log('[Preview] Setting visual nodes:', interactiveConfig.visualNodes.length, 'nodes,', interactiveConfig.visualEdges.length, 'edges');
-        // Log the event nodes specifically
-        const eventNodes = interactiveConfig.visualNodes.filter(n => n.type === 'event');
-        console.log('[Preview] Event nodes:', eventNodes.map(n => ({ id: n.id, eventType: (n.data as any)?.eventType })));
         setVisualNodes(interactiveConfig.visualNodes, interactiveConfig.visualEdges);
-      } else {
-        console.log('[Preview] No visual nodes/edges found in config');
       }
     } else {
-      console.log('[Preview] Not an interactive project, disabling interactive mode');
       disableInteractiveMode();
     }
 
@@ -323,11 +295,6 @@ export function Preview() {
       disableInteractiveMode();
     };
   }, [isInteractiveProject, currentProject?.interactive_config, enableInteractiveMode, disableInteractiveMode, setVisualNodes, setCodeScript]);
-
-  // Log interactive mode state changes
-  useEffect(() => {
-    console.log('[Preview] isInteractiveMode state changed:', isInteractiveMode);
-  }, [isInteractiveMode]);
 
   // Subscribe to designer store's playback state changes (for script actions.play(), stop(), restart())
   // When scripts call actions.restart(), it updates the designer store's isPlaying/currentPhase
@@ -345,16 +312,13 @@ export function Preview() {
       (newState, prevState) => {
         // Check what changed
         if (newState.isPlaying !== prevState?.isPlaying) {
-          console.log('[Preview] Designer store isPlaying changed:', newState.isPlaying);
           setIsPlaying(newState.isPlaying);
         }
         if (newState.currentPhase !== prevState?.currentPhase) {
-          console.log('[Preview] Designer store currentPhase changed:', newState.currentPhase);
           setCurrentPhase(newState.currentPhase);
         }
         // Sync playhead position when it resets to 0 (e.g., restart)
         if (newState.playheadPosition === 0 && prevState?.playheadPosition !== 0) {
-          console.log('[Preview] Designer store playhead reset to 0');
           setPlayheadPosition(0);
           lastTimeRef.current = 0;
         }
@@ -375,16 +339,12 @@ export function Preview() {
     const unsubscribe = useDesignerStore.subscribe(
       (state) => state.onAirTemplates,
       (onAirTemplates, prevOnAirTemplates) => {
-        console.log('[Preview] onAirTemplates changed:', onAirTemplates);
-
         // Find new or changed entries
         for (const [layerId, onAirState] of Object.entries(onAirTemplates)) {
           const prevState = prevOnAirTemplates?.[layerId];
 
           // If this is a new entry or state changed
           if (!prevState || prevState.state !== onAirState.state || prevState.templateId !== onAirState.templateId) {
-            console.log('[Preview] Processing onAirTemplates change for layer:', layerId, onAirState);
-
             if (onAirState.state === 'in') {
               // Resolve template ID in case it was stored with a stale ID
               const resolvedId = resolveTemplateId(onAirState.templateId);
@@ -394,14 +354,12 @@ export function Preview() {
               setPlayheadPosition(0);
               lastTimeRef.current = 0;
               setIsPlaying(true);
-              console.log('[Preview] Started IN animation for template:', onAirState.templateId, '(resolved:', resolvedId, ')');
             } else if (onAirState.state === 'out') {
               // Start OUT animation
               setCurrentPhase('out');
               setPlayheadPosition(0);
               lastTimeRef.current = 0;
               setIsPlaying(true);
-              console.log('[Preview] Started OUT animation for layer:', layerId);
             }
           }
         }
@@ -413,21 +371,13 @@ export function Preview() {
   }, [isInteractiveMode, isEmbeddedByPulsar, resolveTemplateId]);
 
   // Handle element clicks in interactive mode - dispatches to visual node runtime
-  const handleElementClick = useCallback((elementId: string, elementName?: string) => {
+  const handleElementClick = useCallback((elementId: string, _elementName?: string) => {
     if (!isInteractiveMode) {
-      console.log('[Preview] Click ignored - not in interactive mode');
       return;
     }
 
-    console.log('[Preview] handleElementClick - dispatching click event:', {
-      elementId,
-      elementName,
-      isInteractiveMode
-    });
-
     // Create and dispatch a click event
     const event = createInteractionEvent('click', elementId, undefined);
-    console.log('[Preview] Created interaction event:', event);
 
     // The dispatchEvent will route this to the visual node runtime
     dispatchEvent(event, []);
@@ -469,13 +419,17 @@ export function Preview() {
   const lastTimeRef = useRef<number>(0);
 
   // Data binding state - for external control of data record selection (via postMessage from Pulsar GFX)
-  const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
+  const [currentRecordIndex, setCurrentRecordIndexLocal] = useState(0);
+
+  // Wrapper to sync record index to both local state and designer store (for PublishModal)
+  const setCurrentRecordIndex = useCallback((index: number) => {
+    setCurrentRecordIndexLocal(index);
+    setStoreRecordIndex(index);
+  }, [setStoreRecordIndex]);
 
   // Play a specific template (trigger its IN animation)
   // Auto-triggers OUT for any other template in the same layer that's currently on-air
   const playTemplate = useCallback((templateId: string) => {
-    console.log('[Preview] Playing template:', templateId);
-
     // Find the layer for this template
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
@@ -495,7 +449,6 @@ export function Preview() {
       for (const otherTemplate of otherTemplatesInLayer) {
         const otherState = prev[otherTemplate.id];
         if (otherState?.isPlaying && (otherState.phase === 'in' || otherState.phase === 'loop')) {
-          console.log(`[Preview] Auto-triggering OUT for ${otherTemplate.name} (same layer: ${layerId})`);
           updates[otherTemplate.id] = {
             phase: 'out',
             position: 0,
@@ -517,7 +470,6 @@ export function Preview() {
 
   // Stop a specific template (trigger its OUT animation)
   const stopTemplate = useCallback((templateId: string) => {
-    console.log('[Preview] Stopping template:', templateId);
     setTemplatePlaybackState(prev => ({
       ...prev,
       [templateId]: {
@@ -610,7 +562,6 @@ export function Preview() {
     // In isolated mode with a specific template selected, only show that template
     if (previewMode === 'isolated' && selectedTemplateId !== 'all') {
       filtered = filtered.filter(t => t.id === selectedTemplateId);
-      console.log('[Preview] Isolated mode - filtering to template:', selectedTemplateId, 'found:', filtered.length > 0);
     }
 
     // Sort by layer z-index
@@ -923,32 +874,13 @@ export function Preview() {
 
         // Then sort by element z_index within the same layer
         return (a.z_index || 0) - (b.z_index || 0);
+      })
+      // Add effective z_index to each element (layer z_index + element z_index)
+      .map(e => {
+        const layerId = templateToLayer.get(e.template_id);
+        const layerZ = layerId ? (layerZIndex.get(layerId) ?? 0) : 0;
+        return { ...e, effectiveZIndex: layerZ + (e.z_index ?? 0) };
       });
-
-    // Debug logging when we have a specific template selected
-    if (selectedTemplateId !== 'all') {
-      // More detailed debugging for empty elements case
-      if (result.length === 0) {
-        const allElementTemplateIds = [...new Set(elementsWithBindings.map(e => e.template_id))];
-        console.warn('[Preview] No visible elements for selected template!', {
-          selectedTemplateId,
-          visibleTemplateIds: Array.from(templateIds),
-          visibleTemplateNames: visibleTemplates.map(t => t.name),
-          allElementsCount: elementsWithBindings.length,
-          allElementTemplateIds,
-          templateIdMatch: allElementTemplateIds.includes(selectedTemplateId),
-          previewMode,
-        });
-      } else {
-        console.log('[Preview] visibleElements:', {
-          selectedTemplateId,
-          visibleTemplateIds: Array.from(templateIds),
-          visibleTemplateNames: visibleTemplates.map(t => t.name),
-          elementCount: result.length,
-          elementTemplateIds: [...new Set(result.map(e => e.template_id))],
-        });
-      }
-    }
 
     return result;
   }, [elementsWithBindings, visibleTemplates, selectedTemplateId, previewBindings, currentDataRecord, templates, layers]);
@@ -1002,7 +934,6 @@ export function Preview() {
 
     if (fontFamilies.size > 0) {
       const fontsToLoad = Array.from(fontFamilies);
-      console.log('[Preview] Loading fonts:', fontsToLoad);
       loadFonts(fontsToLoad);
     }
   }, [elements]);
@@ -1169,33 +1100,15 @@ export function Preview() {
       lastMessageTimeRef.current = Date.now();
       if (!isConnected) {
         setIsConnected(true);
-        console.log('[Preview] Connected to Pulsar GFX');
       }
 
       const { type, payload } = event.data;
-      console.log('Preview received message:', type, payload);
 
       switch (type) {
         case 'loadData':
           // Load full preview data from Pulsar (cross-origin compatible)
           if (payload && typeof payload === 'object') {
             const previewData = payload as PreviewData;
-            console.log('Preview received loadData:', previewData);
-            // Debug: Log element types
-            const elements = previewData.elements || [];
-            console.log('Preview elements received:', elements.map((e: Element) => ({
-              id: e.id,
-              name: e.name,
-              element_type: e.element_type,
-              content_type: e.content?.type,
-              content: e.content
-            })));
-            // Also log templates for debugging
-            console.log('[Preview] Templates received:', previewData.templates?.map(t => ({
-              id: t.id,
-              name: t.name,
-              layer_id: t.layer_id,
-            })));
             setLocalData(previewData);
             // Update templatesRef immediately for use in subsequent messages
             if (previewData.templates) {
@@ -1207,10 +1120,6 @@ export function Preview() {
         case 'updateContent':
           // Update content overrides for real-time preview
           if (payload && typeof payload === 'object') {
-            console.log('[Preview] updateContent received:', {
-              payloadKeys: Object.keys(payload),
-              payloadSample: JSON.stringify(payload).slice(0, 200),
-            });
             setContentOverrides(payload);
           }
           break;
@@ -1256,50 +1165,28 @@ export function Preview() {
             setSelectedTemplateId('all');
             setSelectedLayerId('all');
           } else if (payload?.templateId) {
-            // Get current templates to verify the template exists (use templatesRef for current rendered templates)
-            const currentTemplates = templatesRef.current;
-            const templateExists = currentTemplates.some(t => t.id === payload.templateId);
-            const matchedTemplate = currentTemplates.find(t => t.id === payload.templateId);
-            console.log('[Preview] Setting template to:', payload.templateId,
-              'exists:', templateExists,
-              'matched:', matchedTemplate?.name,
-              'layer_id:', matchedTemplate?.layer_id,
-              'totalTemplates:', currentTemplates.length,
-              'available templates:', currentTemplates.map(t => ({ id: t.id, name: t.name, layer_id: t.layer_id })));
-
             // First reset layer to 'all' to ensure template won't be filtered
             setSelectedLayerId('all');
             // Then set the template ID
             setSelectedTemplateId(payload.templateId);
-            console.log('[Preview] State updates queued: selectedLayerId=all, selectedTemplateId=', payload.templateId);
           } else {
             // No specific template provided, show all
             setSelectedLayerId('all');
             setSelectedTemplateId('all');
-            console.log('[Preview] No template specified, showing all');
           }
           break;
         }
 
         case 'setMode':
           // Handle mode change
-          console.log('[Preview] setMode received:', {
-            mode: payload?.mode,
-            templateId: payload?.templateId,
-            currentPreviewMode: previewMode,
-            currentSelectedTemplateId: selectedTemplateId,
-          });
           if (payload?.mode) {
             setPreviewMode(payload.mode);
             if (payload.mode === 'composite') {
-              console.log('[Preview] Setting to composite mode - showing all templates');
               setSelectedTemplateId('all');
             } else if (payload.templateId) {
-              console.log('[Preview] Setting to isolated mode with template:', payload.templateId);
               setSelectedTemplateId(payload.templateId);
             } else {
               // In isolated mode with no specific template, show all templates
-              console.log('[Preview] Setting to isolated mode with no template - showing all');
               setSelectedTemplateId('all');
             }
           }
@@ -1320,7 +1207,6 @@ export function Preview() {
           // Force refresh data from localStorage
           // IMPORTANT: Skip when embedded by Pulsar - Pulsar sends data via setPreviewData, not localStorage
           if (isEmbeddedByPulsar) {
-            console.log('[Preview] Ignoring refresh message when embedded by Pulsar');
             break;
           }
           const savedData = localStorage.getItem('nova-preview-data');
@@ -1331,7 +1217,6 @@ export function Preview() {
               if (parsed.templates) {
                 templatesRef.current = parsed.templates;
               }
-              console.log('[Preview] Data refreshed from localStorage');
             } catch (e) {
               console.error('[Preview] Failed to refresh data:', e);
             }
@@ -1342,16 +1227,13 @@ export function Preview() {
           // Toggle loop mode from external control
           if (payload?.loop !== undefined) {
             setIsLooping(payload.loop);
-            console.log('[Preview] Loop mode set to:', payload.loop);
           }
           break;
 
         case 'setDataRecordIndex':
           // Set data record index from external control (Pulsar GFX)
           if (payload?.recordIndex !== undefined) {
-            console.log('[Preview] setDataRecordIndex received:', payload.recordIndex, 'current:', currentRecordIndex);
             setCurrentRecordIndex(payload.recordIndex);
-            console.log('[Preview] Data record index set to:', payload.recordIndex);
           }
           break;
 
@@ -1359,7 +1241,6 @@ export function Preview() {
           // Set data payload from external control (Pulsar GFX)
           // This updates the data used for binding resolution
           if (payload?.data && Array.isArray(payload.data)) {
-            console.log('[Preview] setDataPayload received:', payload.data.length, 'records');
             setLocalData((prev: PreviewData | null) => ({
               ...(prev || {}),
               layers: prev?.layers || [],
@@ -1378,9 +1259,6 @@ export function Preview() {
             }
           }
           break;
-
-        default:
-          console.log('Unknown message type:', type);
       }
     };
 
@@ -1394,7 +1272,6 @@ export function Preview() {
         type: 'ready',
         timestamp: Date.now(),
       }, '*');
-      console.log('[Preview] Sent ready signal to parent');
     }
 
     return () => window.removeEventListener('message', handleMessage);
@@ -1426,7 +1303,6 @@ export function Preview() {
     // Only for standalone Nova GFX preview, NOT when embedded by Pulsar
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('[Preview] Window became visible, checking for data updates...');
         const savedData = localStorage.getItem('nova-preview-data');
         if (savedData) {
           try {
@@ -1439,7 +1315,6 @@ export function Preview() {
               if (parsed.templates) {
                 templatesRef.current = parsed.templates;
               }
-              console.log('[Preview] Data refreshed after visibility change');
             }
           } catch (e) {
             console.error('[Preview] Failed to refresh data on visibility change:', e);
@@ -1470,9 +1345,8 @@ export function Preview() {
           if (parsed.templates?.length > 0) {
             setLocalData(parsed);
             templatesRef.current = parsed.templates;
-            console.log('[Preview] Data loaded from periodic localStorage check');
           }
-        } catch (e) {
+        } catch {
           // Ignore parse errors in periodic check
         }
       }
@@ -1745,7 +1619,6 @@ export function Preview() {
                               // Click on row selects the template for the dropdown
                               setSelectedTemplateId(template.id);
                               setSelectedLayerId(layer.id);
-                              console.log('[Preview] Selected template:', template.name);
                             }}
                           >
                             {/* Play button - show when not on air */}
@@ -1754,7 +1627,6 @@ export function Preview() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   e.preventDefault();
-                                  console.log('[Preview] Play template:', template.id, template.name);
                                   playTemplate(template.id);
                                 }}
                                 className="w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center transition-colors shrink-0"
@@ -1772,7 +1644,6 @@ export function Preview() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   e.preventDefault();
-                                  console.log('[Preview] Stop template:', template.id, template.name);
                                   stopTemplate(template.id);
                                 }}
                                 className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center transition-colors shrink-0"
@@ -2060,8 +1931,7 @@ interface PreviewElementProps {
   isPlaying: boolean;
   phaseDuration: number;
   isInteractiveMode?: boolean;
-  onElementClick?: (elementId: string, elementName?: string) => void;
-}
+  onElementClick?: (elementId: string, elementName?: string) => void;n}
 
 function PreviewElement({
   element,
@@ -2129,7 +1999,7 @@ function PreviewElement({
     transform: animatedTransform,
     transformOrigin: `${element.anchor_x * 100}% ${element.anchor_y * 100}%`,
     opacity: animatedOpacity,
-    zIndex: element.z_index || 0,
+    zIndex: element.effectiveZIndex ?? element.z_index ?? 0,
     ...element.styles,
     ...Object.fromEntries(
       Object.entries(animatedProps).filter(([key]) => 
@@ -2715,14 +2585,6 @@ function PreviewElement({
         );
 
       case 'interactive':
-        console.log('[Preview] Rendering InteractiveElement:', {
-          elementId: element.id,
-          isInteractiveMode,
-          isPreview: !isInteractiveMode,
-          hasHandlers: !!element.interactions?.handlers,
-          handlers: element.interactions?.handlers,
-          inputType: element.content?.type
-        });
         return (
           <InteractiveElement
             config={element.content}

@@ -68,28 +68,10 @@ export function resolveElementBindings(
   if (element.content?.type === 'icon' &&
       (targetProperty === 'content.text' || targetProperty === 'content.src')) {
     targetProperty = 'content.iconName';
-    console.log('[bindingResolver] Auto-correcting icon binding target_property from',
-      binding.target_property, 'to', targetProperty);
   }
 
   // Apply to target property
   const updatedElement = applyToProperty(element, targetProperty, formattedValue);
-
-  // Debug logging for icon bindings
-  if (element.content?.type === 'icon') {
-    console.log('[bindingResolver] Icon binding resolution:', {
-      elementName: element.name,
-      elementId: element.id,
-      bindingKey: binding.binding_key,
-      targetProperty,
-      rawValue,
-      rawValueType: typeof rawValue,
-      formattedValue,
-      originalIconName: element.content.iconName,
-      resolvedIconName: updatedElement.content?.iconName,
-      contentChanged: element.content.iconName !== updatedElement.content?.iconName,
-    });
-  }
 
   return updatedElement;
 }

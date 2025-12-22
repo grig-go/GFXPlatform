@@ -29,11 +29,9 @@ export function StatusBar() {
   // Subscribe to realtime channel status updates + polling fallback
   useEffect(() => {
     if (!supabase) {
-      console.log('[StatusBar] Supabase not available, skipping subscription');
       return;
     }
 
-    console.log('[StatusBar] Setting up realtime subscription for pulsar_channels...');
     let realtimeWorking = false;
 
     const subscription = supabase
@@ -45,43 +43,33 @@ export function StatusBar() {
           schema: 'public',
           table: 'pulsar_channels',
         },
-        (payload) => {
-          console.log('[StatusBar] Received channel update via realtime:', payload);
+        () => {
           realtimeWorking = true;
           // Reload channels when status changes
           loadChannels();
         }
       )
       .subscribe((status, err) => {
-        console.log('[StatusBar] Subscription status:', status, err ? `Error: ${err.message}` : '');
-        if (status === 'SUBSCRIBED') {
-          console.log('[StatusBar] ✓ Successfully subscribed to channel updates');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('[StatusBar] ⚠ Subscription timed out - Realtime may not be enabled');
+        if (status === 'TIMED_OUT') {
+          console.warn('[StatusBar] Subscription timed out - Realtime may not be enabled');
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('[StatusBar] ✗ Subscription error');
+          console.error('[StatusBar] Subscription error:', err?.message);
         }
       });
 
     // Polling fallback - refresh channels every 5 seconds to ensure status is accurate
     // This handles cases where Realtime is not enabled or unreliable
     const pollInterval = setInterval(() => {
-      if (!realtimeWorking) {
-        // Only log occasionally to avoid spam
-        console.log('[StatusBar] Polling channel status (realtime not working)...');
-      }
       loadChannels();
     }, 5000);
 
     // Also do an immediate refresh after a short delay
     // This catches the initial state when Nova Player connects
     setTimeout(() => {
-      console.log('[StatusBar] Initial channel status refresh...');
       loadChannels();
     }, 2000);
 
     return () => {
-      console.log('[StatusBar] Unsubscribing from channel updates');
       subscription.unsubscribe();
       clearInterval(pollInterval);
     };
@@ -95,7 +83,6 @@ export function StatusBar() {
   // Open player window for a channel (always opens/refreshes the window)
   const openPlayerWindow = (channelId: string) => {
     const playerUrl = `${NOVA_GFX_URL}/player/${channelId}`;
-    console.log('[StatusBar] Opening Nova Player window:', playerUrl);
     window.open(playerUrl, `nova-player-${channelId}`, 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
   };
 
@@ -118,8 +105,6 @@ export function StatusBar() {
     }, 8000);
 
     try {
-      console.log('[StatusBar] Publishing project to channel:', channelId, 'Project:', currentProject.id);
-
       // Generate unique command ID for reliable delivery tracking
       const commandId = crypto.randomUUID();
       const command = {
@@ -156,7 +141,6 @@ export function StatusBar() {
 
       const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
       const newSequence = currentSequence + 1;
-      console.log('[StatusBar] Sending command id:', commandId.slice(0, 8), 'seq:', newSequence);
 
       // Step 3: Send command (direct REST - 5s timeout)
       const cmdResult = await directRestUpdate(
@@ -176,18 +160,13 @@ export function StatusBar() {
         throw new Error(cmdResult.error || 'Command send failed');
       }
 
-      console.log('[StatusBar] Command sent successfully');
-
       // Reload channels (fire and forget)
       loadChannels().catch(() => {});
 
       // Open Nova Player window if needed
       if (!isPlayerConnected || forceOpen) {
-        console.log('[StatusBar] Opening Nova Player window');
         openPlayerWindow(channelId);
       }
-
-      console.log('[StatusBar] Publish successful');
     } catch (err) {
       console.error('[StatusBar] Publish failed:', err);
     } finally {
@@ -200,7 +179,6 @@ export function StatusBar() {
   // Uses direct REST API to bypass unreliable Supabase client
   const handleStopChannel = async (channelId: string) => {
     setIsPublishing(true);
-    console.log('[StatusBar] Stopping channel:', channelId);
 
     // Safety timeout - NEVER lock UI for more than 8 seconds
     const safetyTimeout = setTimeout(() => {
@@ -239,8 +217,6 @@ export function StatusBar() {
         timestamp: new Date().toISOString(),
       };
 
-      console.log('[StatusBar] Sending stop command id:', commandId.slice(0, 8));
-
       // Step 3: Send command (direct REST)
       const cmdResult = await directRestUpdate(
         'pulsar_channel_state',
@@ -261,8 +237,6 @@ export function StatusBar() {
 
       // Reload channels (fire and forget)
       loadChannels().catch(() => {});
-
-      console.log('[StatusBar] Stop successful');
     } catch (err) {
       console.error('[StatusBar] Stop failed:', err);
     } finally {

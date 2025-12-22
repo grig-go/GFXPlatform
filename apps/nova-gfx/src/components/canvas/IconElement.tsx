@@ -234,12 +234,6 @@ export function IconElement({
   // Supports both direct icon names (e.g., "animated-clear-day") and
   // API icon strings (e.g., "sunny", "partly cloudy") via mapping
   const weatherIcon = useMemo(() => {
-    // Debug log for icon rendering
-    console.log('[IconElement] Rendering with:', {
-      library: content.library,
-      iconName: content.iconName,
-    });
-
     if (content.library === 'weather') {
       // First try direct lookup
       let icon = getWeatherIcon(content.iconName);
@@ -247,11 +241,9 @@ export function IconElement({
       // If not found directly, try mapping the API icon string
       if (!icon && content.iconName) {
         const mappedIconName = mapWeatherApiIcon(content.iconName);
-        console.log('[IconElement] Mapped icon name:', content.iconName, '->', mappedIconName);
         icon = getWeatherIcon(mappedIconName);
       }
 
-      console.log('[IconElement] Weather icon result:', icon ? 'found' : 'not found');
       return icon;
     }
     return null;

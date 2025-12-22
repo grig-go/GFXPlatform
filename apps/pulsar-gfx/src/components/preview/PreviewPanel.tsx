@@ -123,7 +123,6 @@ export function PreviewPanel() {
         { source: 'pulsar-gfx', type, payload },
         '*'
       );
-      console.log('Sent to preview:', type, payload);
     }
   }, []);
 
@@ -141,18 +140,11 @@ export function PreviewPanel() {
     const currentLoadedId = usePreviewStore.getState().loadedProjectId;
 
     // Skip if already loaded for this project (using fresh store state)
-    if (currentLoadedId === projectIdToLoad) {
-      console.log('Preview data already loaded for project:', projectIdToLoad);
-      return;
-    }
+    if (currentLoadedId === projectIdToLoad) return;
 
     // Skip if we're already loading this project (prevent duplicate loads)
-    if (loadingProjectIdRef.current === projectIdToLoad) {
-      console.log('[PreviewPanel] Already loading project:', projectIdToLoad);
-      return;
-    }
+    if (loadingProjectIdRef.current === projectIdToLoad) return;
 
-    console.log('[PreviewPanel] Loading preview data for project:', projectIdToLoad, '(was:', currentLoadedId, ')');
     loadingProjectIdRef.current = projectIdToLoad;
 
     setIsLoading(true);
@@ -233,10 +225,7 @@ export function PreviewPanel() {
       }
 
       // Check if project changed during loading (race condition protection)
-      if (loadingProjectIdRef.current !== projectIdToLoad) {
-        console.log('[PreviewPanel] Project changed during load, discarding stale data for:', projectIdToLoad);
-        return;
-      }
+      if (loadingProjectIdRef.current !== projectIdToLoad) return;
 
       // Map layers to include enabled status
       const layers = (layersData || []).map((layer: Record<string, unknown>) => ({
@@ -260,10 +249,7 @@ export function PreviewPanel() {
       if (projectError) throw projectError;
 
       // Final check before saving (race condition protection)
-      if (loadingProjectIdRef.current !== projectIdToLoad) {
-        console.log('[PreviewPanel] Project changed during load, discarding stale data for:', projectIdToLoad);
-        return;
-      }
+      if (loadingProjectIdRef.current !== projectIdToLoad) return;
 
       const previewData: PreviewData = {
         layers,
@@ -278,7 +264,6 @@ export function PreviewPanel() {
 
       // Save to localStorage for Nova preview to read on initial load
       localStorage.setItem('pulsar-preview-data', JSON.stringify(previewData));
-      console.log('[PreviewPanel] Preview data saved for project:', projectIdToLoad);
 
       // Mark this project as loaded in the store (so it persists across component state)
       setLoadedProjectId(projectIdToLoad);
@@ -306,8 +291,6 @@ export function PreviewPanel() {
     // Check if we need to reload based on store state
     let needsReload = currentLoadedId !== currentProject.id;
 
-    console.log('[PreviewPanel] Project change check - current:', currentProject.id, 'loaded:', currentLoadedId, 'needsReload:', needsReload);
-
     // Also check localStorage as a fallback
     if (!needsReload) {
       const previewDataStr = localStorage.getItem('pulsar-preview-data');
@@ -315,7 +298,6 @@ export function PreviewPanel() {
         try {
           const previewData = JSON.parse(previewDataStr);
           if (previewData.project?.id !== currentProject.id) {
-            console.log('[PreviewPanel] localStorage project mismatch, forcing reload');
             needsReload = true;
           }
         } catch {
@@ -328,7 +310,6 @@ export function PreviewPanel() {
 
     if (needsReload) {
       // Reset states when switching projects
-      console.log('[PreviewPanel] Reloading preview data for project:', currentProject.id);
       setPreviewReady(false);
       // Clear any existing loading ref so loadPreviewData can start fresh
       loadingProjectIdRef.current = null;
@@ -338,7 +319,6 @@ export function PreviewPanel() {
 
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
-    console.log('Iframe loaded');
     setIframeLoaded(true);
 
     // Send the full preview data via postMessage (cross-origin compatible)
@@ -347,13 +327,12 @@ export function PreviewPanel() {
     if (previewDataStr) {
       try {
         const previewData = JSON.parse(previewDataStr);
-        console.log('Sending preview data to Nova iframe via postMessage');
         // Small delay to ensure Nova preview is ready to receive messages
         setTimeout(() => {
           sendToPreview('loadData', previewData);
         }, 50);
-      } catch (e) {
-        console.error('Failed to parse preview data for iframe:', e);
+      } catch {
+        // Ignore parse errors
       }
     }
 
@@ -438,45 +417,18 @@ export function PreviewPanel() {
   // Send data payload to Nova GFX when it changes
   useEffect(() => {
     if (!iframeLoaded || !previewReady || !dataPayload) return;
-
-    console.log('[PreviewPanel] Sending data payload to Nova GFX:', dataPayload.length, 'records');
     sendToPreview('setDataPayload', { data: dataPayload, recordIndex: dataRecordIndex });
   }, [dataPayload, dataRecordIndex, iframeLoaded, previewReady, sendToPreview]);
 
   // Handle template/page change via postMessage (no iframe reload!)
   // This handles both direct template selection AND page selection
   useEffect(() => {
-    console.log('[PreviewPanel] Template/page effect triggered:', {
-      previewReady,
-      iframeLoaded,
-      mode,
-      selectedTemplateId,
-      selectedPageId,
-      pageTemplateId: pageTemplate?.id,
-      pageTemplateName: pageTemplate?.name,
-    });
-
-    if (!previewReady || !iframeLoaded) {
-      console.log('[PreviewPanel] Skipping - not ready. previewReady:', previewReady, 'iframeLoaded:', iframeLoaded);
-      return;
-    }
-    if (mode !== 'isolated') {
-      console.log('[PreviewPanel] Skipping - mode is not isolated:', mode);
-      return;
-    }
+    if (!previewReady || !iframeLoaded) return;
+    if (mode !== 'isolated') return;
 
     // Get the effective template ID (either from direct selection or from page)
     const effectiveTemplateId = selectedTemplateId || pageTemplate?.id;
-    if (!effectiveTemplateId) {
-      console.log('[PreviewPanel] Skipping - no effective template ID');
-      return;
-    }
-
-    console.log('[PreviewPanel] Template/page changed in isolated mode:', {
-      templateId: effectiveTemplateId,
-      selectedPageId,
-      hasPayload: Object.keys(activePayload || {}).length > 0
-    });
+    if (!effectiveTemplateId) return;
 
     sendToPreview('setTemplate', {
       templateId: effectiveTemplateId,
@@ -487,7 +439,6 @@ export function PreviewPanel() {
     // This needs to happen BEFORE content updates so bindings can be resolved
     setTimeout(() => {
       const currentRecordIndex = usePreviewStore.getState().dataRecordIndex;
-      console.log('[PreviewPanel] Sending data record index:', currentRecordIndex);
       sendToPreview('setDataRecordIndex', { recordIndex: currentRecordIndex });
     }, 50);
 
@@ -496,7 +447,6 @@ export function PreviewPanel() {
     setTimeout(() => {
       // Get fresh activePayload from store - it may have been updated by ContentEditor
       const freshPayload = usePreviewStore.getState().previewPayload;
-      console.log('[PreviewPanel] Sending content update with fresh payload:', Object.keys(freshPayload));
       sendToPreview('updateContent', freshPayload);
     }, 150);
 
@@ -515,13 +465,6 @@ export function PreviewPanel() {
     // In isolated mode, if no template selected, don't send undefined - the preview will show 'all'
     // Only send a specific templateId if we have one selected
     const templateIdToSend = mode === 'isolated' ? displayTemplate?.id : null;
-
-    console.log('[PreviewPanel] Sending mode change:', {
-      mode,
-      templateIdToSend,
-      displayTemplateId: displayTemplate?.id,
-      displayTemplateName: displayTemplate?.name,
-    });
 
     sendToPreview('setMode', {
       mode,
@@ -569,9 +512,7 @@ export function PreviewPanel() {
   // Reset iframe tracking when loadedProjectId is cleared (project switch)
   // This ensures we rebuild the iframe when switching projects
   useEffect(() => {
-    console.log('[PreviewPanel] loadedProjectId effect triggered:', loadedProjectId);
     if (loadedProjectId === null) {
-      console.log('[PreviewPanel] loadedProjectId cleared, resetting iframe tracking and states');
       lastIframeProjectIdRef.current = null;
       setIframeLoaded(false);
       setPreviewReady(false);
@@ -583,22 +524,10 @@ export function PreviewPanel() {
   // IMPORTANT: Do NOT include displayTemplate?.id or mode in dependencies
   // Template/mode changes are handled via postMessage, not iframe reload
   useEffect(() => {
-    console.log('[PreviewPanel] Iframe URL effect triggered:', {
-      previewReady,
-      currentProjectId: currentProject?.id,
-      lastIframeProjectId: lastIframeProjectIdRef.current,
-      rebuildTrigger
-    });
-
-    if (!previewReady || !currentProject) {
-      console.log('[PreviewPanel] Iframe URL effect skipped - previewReady:', previewReady, 'hasProject:', !!currentProject);
-      return;
-    }
+    if (!previewReady || !currentProject) return;
 
     const isNewProject = currentProject.id !== lastIframeProjectIdRef.current;
     const isNewRebuildTrigger = rebuildTrigger > lastRebuildTriggerRef.current;
-
-    console.log('[PreviewPanel] Iframe URL check:', { isNewProject, isNewRebuildTrigger });
 
     // Only create URL on first load, project change, or NEW rebuild trigger
     if (isNewProject || isNewRebuildTrigger) {
@@ -609,7 +538,6 @@ export function PreviewPanel() {
       const url = buildPreviewUrl(displayTemplate?.id, mode);
       setIframeUrl(url);
       setIframeLoaded(false);
-      console.log('[PreviewPanel] Building iframe URL:', url, 'reason:', isNewProject ? 'new project' : 'rebuild');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewReady, currentProject?.id, rebuildTrigger]);
@@ -983,17 +911,13 @@ export function PreviewPanel() {
             </Button>
             <Button
               onClick={() => {
-                console.log('Saving preview settings, bgColor:', previewBgColor, 'bgMedia:', previewBgMedia);
                 localStorage.setItem('pulsar-preview-bg', previewBgColor);
                 if (previewBgMedia) {
                   localStorage.setItem('pulsar-preview-bg-media', previewBgMedia);
                   localStorage.setItem('pulsar-preview-bg-media-type', previewBgMediaType);
                 }
                 // Force iframe URL rebuild with new settings
-                setRebuildTrigger(prev => {
-                  console.log('Incrementing rebuildTrigger from', prev, 'to', prev + 1);
-                  return prev + 1;
-                });
+                setRebuildTrigger(prev => prev + 1);
                 setShowSettings(false);
               }}
             >

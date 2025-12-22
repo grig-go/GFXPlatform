@@ -968,11 +968,12 @@ app.get("/weather-data", async (c)=>{
 
   try {
     // ============================================================================
-    // SUPPORT FOR provider_id FROM SCHEDULER
+    // SUPPORT FOR provider_id OR dataProvider FROM SCHEDULER/AGENTS
     // ============================================================================
     const url = new URL(c.req.url);
-    const providerId = url.searchParams.get("provider_id");
-    if (providerId) {
+    // Support both provider_id (scheduler) and dataProvider (agent wizard)
+    const providerId = url.searchParams.get("provider_id") || url.searchParams.get("dataProvider");
+    if (providerId && providerId !== "all") {
       console.log(`[/weather-data] 🎯 Ingest triggered for specific provider: ${providerId}`);
     } else {
       console.log(`[/weather-data] 🌍 Ingest triggered for ALL active providers`);
@@ -981,7 +982,7 @@ app.get("/weather-data", async (c)=>{
     // 📡 Fetch provider(s)
     // ============================================================================
     let providers = [];
-    if (providerId) {
+    if (providerId && providerId !== "all") {
       console.log(`🎯 Fetching data only for provider: ${providerId}`);
       const { data: singleProvider, error: provError } = await supabase.from("data_providers").select("*").eq("id", providerId).eq("is_active", true).maybeSingle();
       if (provError || !singleProvider) {

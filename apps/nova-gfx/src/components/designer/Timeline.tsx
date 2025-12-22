@@ -1659,15 +1659,18 @@ export function Timeline() {
                   className={cn(
                     'h-8 w-8',
                     currentTemplate && 'text-violet-400 hover:text-violet-300 hover:bg-violet-500/10',
-                    isPlaying && isPlayingFullPreview && 'bg-violet-500/20'
+                    isPlayingFullPreview && 'bg-violet-500/20'
                   )}
                   disabled={!currentTemplate}
                   onClick={() => {
                     if (isPlaying && isPlayingFullPreview) {
-                      // Currently playing - pause it
+                      // Currently playing - pause it (but stay isolated)
                       pause();
+                    } else if (isPlayingFullPreview) {
+                      // Animation ended but still isolated - exit isolated mode
+                      useDesignerStore.getState().setIsPlayingFullPreview(false);
                     } else {
-                      // Not playing (either never started or animation ended) - start/restart
+                      // Not in preview mode - start preview
                       playFullPreview();
                     }
                   }}
@@ -1676,7 +1679,7 @@ export function Timeline() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isPlaying && isPlayingFullPreview ? 'Stop Preview' : 'Play Template Preview'}
+                {isPlayingFullPreview ? (isPlaying ? 'Pause Preview' : 'Exit Isolated Mode') : 'Play Template Preview'}
               </TooltipContent>
             </Tooltip>
 

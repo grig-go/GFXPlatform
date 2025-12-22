@@ -173,13 +173,8 @@ export function ContentEditor() {
   // Use previewStore as source of truth for what we're editing
   // This ensures ContentEditor stays in sync with PreviewPanel
   const previewPage = useMemo(() => {
-    if (!selectedPageId) {
-      console.log('[ContentEditor] previewPage: no selectedPageId');
-      return null;
-    }
-    const found = pages.find(p => p.id === selectedPageId) || null;
-    console.log('[ContentEditor] previewPage:', found ? `found (${found.id})` : 'NOT FOUND', 'selectedPageId:', selectedPageId, 'pages.length:', pages.length);
-    return found;
+    if (!selectedPageId) return null;
+    return pages.find(p => p.id === selectedPageId) || null;
   }, [selectedPageId, pages]);
 
   // Only use template if no page is being previewed
@@ -191,9 +186,7 @@ export function ContentEditor() {
   // Get elements directly from localStorage (PreviewPanel already loaded them)
   const templateElements = useMemo(() => {
     if (!selectedTemplateId || selectedPageId) return [];
-    const elements = getElementsFromLocalStorage(selectedTemplateId);
-    console.log('[ContentEditor] Got', elements.length, 'elements from localStorage for template:', selectedTemplateId);
-    return elements;
+    return getElementsFromLocalStorage(selectedTemplateId);
   }, [selectedTemplateId, selectedPageId]);
 
   const [localPayload, setLocalPayload] = useState<Record<string, any>>({});
@@ -286,14 +279,12 @@ export function ContentEditor() {
 
     // If we're viewing a page, use the page's saved dataRecordIndex
     if (previewPage && previewPage.dataRecordIndex !== undefined) {
-      console.log('[ContentEditor] Setting record index from page:', previewPage.name, 'dataRecordIndex:', previewPage.dataRecordIndex);
       setDataRecordIndex(previewPage.dataRecordIndex);
       return;
     }
 
     // Otherwise use the template's default
     const defaultIndex = template?.dataSourceConfig?.defaultRecordIndex ?? 0;
-    console.log('[ContentEditor] Setting default record index for template:', template.name, 'defaultIndex:', defaultIndex);
     setDataRecordIndex(defaultIndex);
   }, [selectedTemplate?.id, previewPage?.templateId, previewPage?.id, previewPage?.dataRecordIndex, templates, setDataRecordIndex]);
 
@@ -331,41 +322,18 @@ export function ContentEditor() {
 
     try {
       const previewDataStr = localStorage.getItem('pulsar-preview-data');
-      if (!previewDataStr) {
-        console.log('[ContentEditor] No pulsar-preview-data in localStorage');
-        return [];
-      }
+      if (!previewDataStr) return [];
       const previewData = JSON.parse(previewDataStr);
       const allBindings = previewData.bindings || [];
-      const filteredBindings = allBindings.filter((b: Binding) => b.template_id === template.id);
-      console.log('[ContentEditor] Bindings check:', {
-        templateId: template.id,
-        totalBindings: allBindings.length,
-        templateBindings: filteredBindings.length,
-        bindings: filteredBindings.map((b: Binding) => ({ elementId: b.element_id, key: b.binding_key })),
-      });
-      return filteredBindings;
-    } catch (err) {
-      console.error('[ContentEditor] Error loading bindings:', err);
+      return allBindings.filter((b: Binding) => b.template_id === template.id);
+    } catch {
       return [];
     }
   }, [selectedTemplate, previewPage?.templateId, templates]);
 
   // Resolve bindings and update preview when record changes
   useEffect(() => {
-    console.log('[ContentEditor] Binding resolution effect triggered:', {
-      hasCurrentRecord: !!currentRecord,
-      templateBindingsCount: templateBindings.length,
-      currentRecordIndex,
-      selectedTemplateId,
-      selectedPageId,
-      previewPageTemplateId: previewPage?.templateId,
-    });
-
-    if (!currentRecord || templateBindings.length === 0) {
-      console.log('[ContentEditor] Skipping binding resolution - no record or no bindings');
-      return;
-    }
+    if (!currentRecord || templateBindings.length === 0) return;
 
     // Resolve bindings using the current record's data
     const resolvedValues = resolvePayloadBindings({}, templateBindings, currentRecord);
@@ -373,7 +341,6 @@ export function ContentEditor() {
     // Send resolved binding values to preview
     // These will be merged with the localPayload as content overrides
     if (Object.keys(resolvedValues).length > 0) {
-      console.log('[ContentEditor] Resolved bindings for record:', currentRecordIndex, resolvedValues);
       // Update the preview with resolved binding values
       Object.entries(resolvedValues).forEach(([elementId, value]) => {
         if (value !== null) {
@@ -525,7 +492,6 @@ export function ContentEditor() {
 
   // Sync local state when selected page or template changes
   useEffect(() => {
-    console.log('[ContentEditor] useEffect triggered - previewPage?.id:', previewPage?.id, 'selectedTemplateId:', selectedTemplateId);
     if (previewPage) {
       // For pages, also include keyframes and texture URLs from template elements
       const payload = { ...(previewPage.payload || {}) };
@@ -838,8 +804,6 @@ export function ContentEditor() {
       // Get editable elements from template
       const fields: FieldConfig[] = [];
 
-      console.log('[ContentEditor] getFieldConfigs - processing', templateElements.length, 'elements from localStorage');
-
       templateElements.forEach((el: any) => {
         // Check elementType, element_type (snake_case from DB), and content.type for flexibility
         const elType = el.elementType || el.element_type;
@@ -848,8 +812,6 @@ export function ContentEditor() {
         const isShape = elType === 'shape' || el.content?.type === 'shape';
         const isMap = elType === 'map' || el.content?.type === 'map';
         const isTicker = elType === 'ticker' || el.content?.type === 'ticker';
-
-        console.log('[ContentEditor] Element:', el.name, 'type:', elType, 'content.type:', el.content?.type, 'isText:', isText, 'isImage:', isImage, 'isShape:', isShape, 'isMap:', isMap, 'isTicker:', isTicker);
 
         if (isTicker) {
           // Ticker element - add ticker items editor
@@ -1004,22 +966,16 @@ export function ContentEditor() {
 
   const handleSave = async () => {
     if (previewPage && hasChanges) {
-      console.log('[ContentEditor] handleSave - saving page:', previewPage.id);
-      console.log('[ContentEditor] handleSave - payload:', localPayload);
-      console.log('[ContentEditor] handleSave - dataRecordIndex:', currentRecordIndex);
       setIsSaving(true);
       try {
         // Save both payload and dataRecordIndex
         await updatePagePayload(previewPage.id, localPayload, currentRecordIndex);
-        console.log('[ContentEditor] handleSave - save successful');
         setHasChanges(false);
-      } catch (error) {
-        console.error('[ContentEditor] handleSave - Failed to save page:', error);
+      } catch {
+        // Save failed
       } finally {
         setIsSaving(false);
       }
-    } else {
-      console.log('[ContentEditor] handleSave - skipped:', { hasPage: !!previewPage, hasChanges });
     }
     // For templates, no save needed - preview is live
   };
@@ -1046,7 +1002,6 @@ export function ContentEditor() {
       });
       const pageName = `${templateName || 'Page'} ${timestamp}`;
 
-      console.log('[ContentEditor] Creating page with channel:', selectedChannel?.id, 'dataRecordIndex:', currentRecordIndex);
       await createPage(
         currentPlaylist.id,
         templateId,
@@ -1056,7 +1011,6 @@ export function ContentEditor() {
         currentRecordIndex  // save the current data record index
       );
       setHasChanges(false);
-      console.log('Page saved successfully to playlist:', currentPlaylist.id, 'with channel:', selectedChannel?.id, 'dataRecordIndex:', currentRecordIndex);
     } catch (error) {
       console.error('Failed to save page:', error);
     } finally {

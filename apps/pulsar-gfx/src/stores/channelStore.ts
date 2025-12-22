@@ -256,13 +256,11 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         if (savedChannelId) {
           const savedChannel = channels.find(c => c.id === savedChannelId);
           if (savedChannel) {
-            console.log('[channelStore] Restoring saved channel:', savedChannel.channelCode);
             set({ selectedChannel: savedChannel });
             return;
           }
         }
         // Otherwise auto-select first channel
-        console.log('[channelStore] Auto-selecting first channel:', channels[0].channelCode);
         set({ selectedChannel: channels[0] });
         prefs.setSelectedChannelId(channels[0].id);
       }
@@ -342,8 +340,6 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       channelId: command.channelId || channel.id,
     };
 
-    console.log('[channelStore] sendCommand:', fullCommand.type, 'id:', fullCommand.id.slice(0, 8));
-
     // Use direct REST API for reliable command delivery
     // Step 1: Get current sequence
     const stateResult = await directRestSelect<{ command_sequence: number }>(
@@ -376,11 +372,8 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     );
 
     if (!updateResult.success) {
-      console.error('[channelStore] Failed to send command:', updateResult.error);
       throw new Error(updateResult.error || 'Command send failed');
     }
-
-    console.log('[channelStore] Command sent successfully, id:', fullCommand.id.slice(0, 8), 'seq:', newSequence);
 
     // Log command (fire and forget - don't block on this)
     supabase.from('pulsar_command_log').insert({
@@ -391,9 +384,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       page_id: command.pageId,
       payload: command.payload,
       trigger_source: 'manual',
-    }).then(({ error }) => {
-      if (error) console.warn('Failed to log command:', error);
-    });
+    }).then(() => {});
   },
 
   play: async (pageId, layerIndex) => {
@@ -452,8 +443,6 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       ...command,
     };
 
-    console.log('[channelStore] Sending command to channel:', channelId, fullCommand.type, 'id:', fullCommand.id.slice(0, 8));
-
     // Use direct REST API for reliable command delivery
     // Step 1: Get current sequence
     const stateResult = await directRestSelect<{ command_sequence: number }>(
@@ -470,7 +459,6 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
 
     const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
     const newSequence = currentSequence + 1;
-    console.log('[channelStore] Current sequence:', currentSequence, 'New sequence:', newSequence);
 
     // Step 2: Send command via direct REST
     const updateResult = await directRestUpdate(
@@ -487,11 +475,8 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     );
 
     if (!updateResult.success) {
-      console.error('[channelStore] Failed to send command:', updateResult.error);
       throw new Error(updateResult.error || 'Command send failed');
     }
-
-    console.log('[channelStore] Command sent successfully, id:', fullCommand.id.slice(0, 8), 'seq:', newSequence);
 
     // Log command (fire and forget - don't block on this)
     supabase.from('pulsar_command_log').insert({
@@ -502,26 +487,22 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       page_id: command.pageId,
       payload: command.payload,
       trigger_source: 'manual',
-    }).then(({ error }) => {
-      if (error) console.warn('Failed to log command:', error);
-    });
+    }).then(() => {});
   },
 
   playOnChannel: async (channelId, pageId, layerIndex, template, payload, pageName?: string, projectName?: string, bindings?, currentRecord?) => {
     const channel = get().channels.find((c) => c.id === channelId);
-    console.log('[channelStore] playOnChannel called:', { channelId, pageId, layerIndex, pageName, projectName, channel: !!channel, hasBindings: !!bindings?.length, hasRecord: !!currentRecord });
 
     // Fire-and-forget: Log events async without blocking command execution
     // This ensures logging doesn't affect graphics performance or FPS
     if (channel) {
-      console.log('[channelStore] Logging playout event for channel:', channel.name);
 
       // End any active playout on this layer (mark as 'replaced')
       usePlayoutLogStore.getState().logStop({
         channelId,
         layerIndex,
         endReason: 'replaced',
-      }).catch((err) => console.warn('Failed to log stop:', err));
+      }).catch(() => {});
 
       // Log the new play event
       const layerConfig = channel.layerConfig?.find((l) => l.index === layerIndex);
@@ -541,9 +522,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         payload: payload,
         operatorId: DEV_USER_ID,
         triggerSource: 'manual',
-      }).catch((err) => console.warn('Failed to log play:', err));
-    } else {
-      console.warn('[channelStore] Channel not found, skipping playout log');
+      }).catch(() => {});
     }
 
     await get().sendCommandToChannel(channelId, {
@@ -574,7 +553,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       channelId,
       layerIndex,
       endReason: 'manual',
-    }).catch((err) => console.warn('Failed to log stop:', err));
+    }).catch(() => {});
 
     await get().sendCommandToChannel(channelId, {
       type: 'stop',
@@ -624,8 +603,6 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   subscribeToChannelStatus: () => {
-    console.log('[channelStore] Setting up channel status subscription...');
-
     // Subscribe to all channel status changes (player_status updates)
     const subscription = supabase
       .channel('channel-status-updates')
@@ -637,21 +614,11 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
           table: 'pulsar_channels',
         },
         (payload: any) => {
-          console.log('[channelStore] Received channel update event:', payload);
           const newData = payload.new as any;
           const oldData = payload.old as any;
 
-          console.log('[channelStore] Channel status change:', {
-            channelId: newData.id,
-            channelCode: newData.channel_code,
-            oldStatus: oldData?.player_status,
-            newStatus: newData.player_status,
-            loadedProjectId: newData.loaded_project_id,
-          });
-
           // Check if player_status changed to 'disconnected'
           if (newData.player_status === 'disconnected' && oldData?.player_status !== 'disconnected') {
-            console.log('[channelStore] Channel went offline:', newData.id, newData.channel_code);
 
             // Reset on-air state for all pages assigned to this channel
             usePageStore.getState().resetPagesOnAirForChannel(newData.id);
@@ -660,9 +627,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
             supabase.rpc('end_all_channel_playout', {
               p_channel_id: newData.id,
               p_end_reason: 'channel_offline',
-            }).then(({ error }) => {
-              if (error) console.warn('Failed to end playout logs:', error);
-            });
+            }).then(() => {});
           }
 
           // Update the channel in our local state
@@ -699,19 +664,9 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
           });
         }
       )
-      .subscribe((status, err) => {
-        console.log('[channelStore] Subscription status:', status, err ? `Error: ${err.message}` : '');
-        if (status === 'SUBSCRIBED') {
-          console.log('[channelStore] ✓ Successfully subscribed to channel status updates');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('[channelStore] ⚠ Subscription timed out - Realtime may not be enabled for pulsar_channels table');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[channelStore] ✗ Subscription error - check if Realtime is enabled in Supabase dashboard');
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log('[channelStore] Unsubscribing from channel status updates');
       subscription.unsubscribe();
     };
   },

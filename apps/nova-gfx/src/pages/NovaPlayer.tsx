@@ -360,15 +360,12 @@ export function NovaPlayer() {
     const unsubscribe = useDesignerStore.subscribe(
       (state) => state.onAirTemplates,
       (onAirTemplates, prevOnAirTemplates) => {
-        console.log('[Nova Player] onAirTemplates changed:', onAirTemplates);
-
         // Find new or changed entries
         for (const [layerId, onAirState] of Object.entries(onAirTemplates)) {
           const prevState = prevOnAirTemplates?.[layerId];
 
           // If this is a new entry or state changed
           if (!prevState || prevState.state !== onAirState.state || prevState.templateId !== onAirState.templateId) {
-            console.log('[Nova Player] Processing onAirTemplates change for layer:', layerId, onAirState);
 
             if (onAirState.state === 'in') {
               // Play IN animation via local layerTemplates state
@@ -394,7 +391,6 @@ export function NovaPlayer() {
                   next.set(layerId, [newState]);
                 }
 
-                console.log('[Nova Player] Set layerTemplates for interactive playIn:', next);
                 return next;
               });
             } else if (onAirState.state === 'out') {
@@ -406,7 +402,6 @@ export function NovaPlayer() {
                 if (existing && existing.length > 0) {
                   const updated = existing.map(s => ({ ...s, phase: 'out' as const, playheadPosition: 0, lastTime: performance.now(), isOutgoing: true }));
                   next.set(layerId, updated);
-                  console.log('[Nova Player] Set layerTemplates for interactive playOut:', next);
                 }
 
                 return next;
@@ -565,9 +560,7 @@ export function NovaPlayer() {
           { column: 'animation_id', value: anim.id },
           5000
         );
-        const animKeyframes = keyframesResult.data || [];
-        console.log(`[Nova Player] Animation ${anim.id} (${anim.phase}) has ${animKeyframes.length} keyframes`);
-        return animKeyframes;
+        return keyframesResult.data || [];
       });
 
       const keyframeResults = await Promise.all(keyframeFetches);
@@ -575,7 +568,6 @@ export function NovaPlayer() {
         allKeyframes.push(...kfs);
       }
 
-      console.log(`[Nova Player] Loaded ${allAnimations.length} animations, ${allKeyframes.length} keyframes total`);
       setElements(allElements);
       setAnimations(allAnimations);
       setKeyframes(allKeyframes);
@@ -584,7 +576,6 @@ export function NovaPlayer() {
       setDesignerElements(allElements);
       setDesignerAnimations(allAnimations);
       setDesignerKeyframes(allKeyframes);
-      console.log('[Nova Player] Synced to designer store:', allElements.length, 'elements,', allAnimations.length, 'animations,', allKeyframes.length, 'keyframes');
 
       // Load bindings for all templates
       const allBindings: Binding[] = [];
@@ -1395,33 +1386,26 @@ export function NovaPlayer() {
           filter: `channel_id=eq.${channelId}`,
         },
         (realtimePayload: { new: ChannelState }) => {
-          console.log(`[Nova Player] Realtime event received:`, realtimePayload);
           const state = realtimePayload.new;
           if (state?.pending_command) {
             const cmdId = (state.pending_command as PlayerCommand & { id?: string }).id;
             // Skip if we already processed this command
             if (cmdId && cmdId === lastProcessedCommandId) {
-              console.log(`[Nova Player] Realtime: skipping already processed command ${cmdId}`);
               return;
             }
-            console.log(`[Nova Player] Received command via realtime:`, state.pending_command.type, state.pending_command);
             if (cmdId) lastProcessedCommandId = cmdId;
             // Use ref to always call the latest handleCommand (avoids stale closure)
             handleCommandRef.current(state.pending_command);
-          } else {
-            console.log(`[Nova Player] Received update but no pending_command in payload`);
           }
         }
       )
-      .subscribe(async (status: string, err?: Error) => {
-        console.log(`[Nova Player] Subscription status:`, status, err ? `Error: ${err.message}` : '');
+      .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           setIsReady(true);
           markSupabaseSuccess(); // Mark successful realtime connection
 
           // Update player_status in pulsar_channels to 'connected'
-          console.log(`[Nova Player] Updating channel status to connected`);
           await directRestUpdate(
             'pulsar_channels',
             {
@@ -1464,23 +1448,14 @@ export function NovaPlayer() {
         );
 
         if (stateResult.error || !stateResult.data?.[0]) {
-          if (pollCount % 20 === 0) {
-            console.log(`[Nova Player] Poll #${pollCount}: no data or error`);
-          }
           return;
         }
 
         const state = stateResult.data[0];
         const cmd = state.pending_command;
 
-        // Log every 20th poll to show we're checking
-        if (pollCount % 20 === 0) {
-          console.log(`[Nova Player] Poll #${pollCount}: hasCmd=${!!cmd}, cmdId=${cmd?.id?.slice(0, 8) || 'none'}, lastId=${lastProcessedCommandId?.slice(0, 8) || 'none'}`);
-        }
-
         // Process if there's a command with a different ID than what we last processed
         if (cmd && cmd.id && cmd.id !== lastProcessedCommandId) {
-          console.log(`[Nova Player] Command received via polling (id: ${cmd.id.slice(0, 8)}):`, cmd.type);
           lastProcessedCommandId = cmd.id;
           handleCommandRef.current(cmd);
         }
@@ -1831,6 +1806,12 @@ export function NovaPlayer() {
                 ...updatedElement,
                 content: { ...updatedElement.content, src: valueStr, url: valueStr },
               } as unknown as Element;
+            } else if (element.content?.type === 'icon') {
+              // For icon elements, update the iconName with the bound value
+              updatedElement = {
+                ...updatedElement,
+                content: { ...updatedElement.content, iconName: valueStr },
+              } as Element;
             }
           }
         }
@@ -1848,6 +1829,23 @@ export function NovaPlayer() {
             updatedElement = {
               ...updatedElement,
               content: { ...updatedElement.content, text: resolvedText },
+            } as Element;
+          }
+        }
+      }
+
+      // Also resolve any {{field.path}} placeholders in icon content (iconName)
+      if (updatedElement.content?.type === 'icon' && bindingData?.currentRecord) {
+        const iconName = updatedElement.content.iconName;
+        if (iconName && typeof iconName === 'string' && iconName.includes('{{')) {
+          const resolvedIconName = iconName.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+            const value = getNestedValue(bindingData.currentRecord!, path.trim());
+            return value !== undefined && value !== null ? String(value) : match;
+          });
+          if (resolvedIconName !== iconName) {
+            updatedElement = {
+              ...updatedElement,
+              content: { ...updatedElement.content, iconName: resolvedIconName },
             } as Element;
           }
         }

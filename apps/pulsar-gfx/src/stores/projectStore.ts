@@ -154,7 +154,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   selectProject: async (projectId: string) => {
-    console.log('[projectStore] selectProject called with:', projectId);
     // Clear templates immediately to force UI update
     set({ isLoading: true, error: null, templates: [] });
     try {
@@ -165,12 +164,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         .eq('id', projectId)
         .single();
 
-      if (projectError) {
-        console.error('[projectStore] Error loading project:', projectError);
-        throw projectError;
-      }
-
-      console.log('[projectStore] Loaded project:', project.name);
+      if (projectError) throw projectError;
 
       // Load layers for this project to get layer types
       const { data: layerData, error: layerError } = await supabase
@@ -195,9 +189,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         .order('updated_at', { ascending: false });
 
       if (templateError) throw templateError;
-
-      console.log('[projectStore] Raw template data from DB:', templateData?.length, 'templates');
-      console.log('[projectStore] Template names:', templateData?.map((t: any) => t.name));
 
       const currentProject: Project = {
         id: project.id,
@@ -240,7 +231,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return template;
       });
 
-      console.log('[projectStore] Setting currentProject:', currentProject.name, 'with', templates.length, 'templates');
       set({ currentProject, templates, isLoading: false });
 
       // Find first template with a data source and load its data immediately
@@ -271,12 +261,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
 
       // Clear and reload playlists for the new project
-      console.log('[projectStore] Clearing and reloading playlists for project:', projectId);
       usePlaylistStore.getState().clearPlaylists();
       usePageStore.getState().clearPages();
       await usePlaylistStore.getState().loadPlaylists(projectId);
-
-      console.log('[projectStore] selectProject complete');
     } catch (error) {
       console.error('[projectStore] Failed to select project:', error);
       set({ error: 'Failed to load project', isLoading: false });
@@ -285,11 +272,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   refreshProject: async () => {
     const currentProject = get().currentProject;
-    if (!currentProject) {
-      console.log('[projectStore] No current project to refresh');
-      return;
-    }
-    console.log('[projectStore] Refreshing project:', currentProject.id);
+    if (!currentProject) return;
     // Clear localStorage to force fresh data load
     localStorage.removeItem('pulsar-preview-data');
     // Re-select the project to reload all data
@@ -302,29 +285,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   loadTemplateElements: async (templateId: string) => {
     try {
-      console.log('[projectStore v2] Loading elements for template:', templateId);
-
       // First, try to get elements from localStorage (already loaded by PreviewPanel)
       let elementsFromStorage: any[] = [];
       try {
         const previewDataStr = localStorage.getItem('pulsar-preview-data');
-        console.log('[projectStore] localStorage pulsar-preview-data exists:', !!previewDataStr);
         if (previewDataStr) {
           const previewData = JSON.parse(previewDataStr);
-          console.log('[projectStore] previewData.elements count:', previewData.elements?.length || 0);
-          if (previewData.elements && previewData.elements.length > 0) {
-            console.log('[projectStore] First few elements template_ids:', previewData.elements.slice(0, 5).map((e: any) => e.template_id));
-            console.log('[projectStore] Looking for template_id:', templateId);
-          }
           if (previewData.elements && Array.isArray(previewData.elements)) {
             elementsFromStorage = previewData.elements.filter(
               (e: any) => e.template_id === templateId
             );
-            console.log('[projectStore] Found', elementsFromStorage.length, 'elements in localStorage for template:', templateId);
           }
         }
-      } catch (e) {
-        console.warn('[projectStore] Failed to read from localStorage:', e);
+      } catch {
+        // Ignore localStorage read errors
       }
 
       // If we found elements in localStorage, use those
@@ -355,13 +329,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           locked: e.locked ?? false,
         }));
 
-        console.log('[projectStore] Using localStorage elements:', elements);
-
         // Update the template with elements
         const template = get().templates.find(t => t.id === templateId);
         if (template) {
           const updatedTemplate = { ...template, elements };
-          console.log('[projectStore] Updating template with', elements.length, 'elements from localStorage');
           set({
             templates: get().templates.map(t => t.id === templateId ? updatedTemplate : t),
             selectedTemplate: updatedTemplate,
@@ -378,12 +349,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         .eq('template_id', templateId)
         .order('sort_order');
 
-      if (error) {
-        console.error('[projectStore] Error loading elements:', error);
-        throw error;
-      }
-
-      console.log('[projectStore] Raw elements data from DB:', data);
+      if (error) throw error;
 
       const elements: TemplateElement[] = (data || []).map((e: any) => ({
         id: e.id,
@@ -411,24 +377,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         locked: e.locked ?? false,
       }));
 
-      console.log('[projectStore] Mapped elements from DB:', elements);
-
       // Update the template with elements
       const template = get().templates.find(t => t.id === templateId);
       if (template) {
         const updatedTemplate = { ...template, elements };
-        console.log('[projectStore] Updating template with', elements.length, 'elements from DB');
         set({
           templates: get().templates.map(t => t.id === templateId ? updatedTemplate : t),
           selectedTemplate: updatedTemplate,
         });
-      } else {
-        console.warn('[projectStore] Template not found in store:', templateId);
       }
 
       return elements;
-    } catch (error) {
-      console.error('Failed to load template elements:', error);
+    } catch {
       return [];
     }
   },

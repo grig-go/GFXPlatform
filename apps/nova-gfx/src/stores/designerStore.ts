@@ -482,6 +482,7 @@ interface DesignerActions {
   stop: () => void;
   playFullPreview: () => void; // Play through all phases (IN → LOOP → OUT)
   endPreviewPlayback: () => void; // End preview but keep template isolated
+  setIsPlayingFullPreview: (value: boolean) => void; // Set isolated preview mode
   isPlayingFullPreview: boolean; // Whether playing through all phases
   setShowEasingEditor: (show: boolean) => void; // Toggle the bezier curve easing editor
 
@@ -731,28 +732,10 @@ function getDefaultStyles(type: ElementType): Record<string, string | number> {
   }
 }
 
-// Debounced autosave timer for binding updates
-let bindingAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
-const BINDING_AUTOSAVE_DELAY = 1500; // 1.5 seconds after last change
-
+// Binding autosave disabled - only save on explicit Ctrl+S or Save button
 function triggerBindingAutosave() {
-  // Clear existing timer
-  if (bindingAutosaveTimer) {
-    clearTimeout(bindingAutosaveTimer);
-  }
-
-  // Set new timer
-  bindingAutosaveTimer = setTimeout(() => {
-    const store = useDesignerStore.getState();
-    if (store.isDirty && !store.isSaving) {
-      console.log('🔧 Auto-saving binding changes...');
-      store.saveProject().then(() => {
-        console.log('🔧 Binding auto-save complete');
-      }).catch((err) => {
-        console.error('🔧 Binding auto-save failed:', err);
-      });
-    }
-  }, BINDING_AUTOSAVE_DELAY);
+  // No-op: Auto-save disabled for bindings
+  // Changes will be saved when user explicitly saves the project
 }
 
 export const useDesignerStore = create<DesignerState & DesignerActions>()(
@@ -2482,7 +2465,7 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
             currentTemplateId: id,
             selectedElementIds: [],
             currentPhase: 'in',
-            playheadPosition: 0,
+            // Don't reset playheadPosition - keep it at current position when switching templates
             // Hydrate data source state - but don't overwrite dataPayload if async fetch is in progress
             dataSourceId,
             dataSourceName,
@@ -4396,9 +4379,14 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
         },
 
         endPreviewPlayback: () => {
-          // End playback and reset isolation state
+          // End playback but KEEP template isolated
           // This is called when the animation naturally finishes
-          set({ isPlaying: false, isPlayingFullPreview: false });
+          // User can click the button again to exit isolated mode
+          set({ isPlaying: false });
+        },
+
+        setIsPlayingFullPreview: (value: boolean) => {
+          set({ isPlayingFullPreview: value });
         },
 
         // On-Air controls

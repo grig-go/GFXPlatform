@@ -438,7 +438,6 @@ export function PlaylistPanel() {
       });
       // Reload the library to show the new page
       await loadPageLibrary(currentProject.id);
-      console.log('[PlaylistPanel] Page added to library:', page.name);
     } catch (error) {
       console.error('[PlaylistPanel] Failed to add page to library:', error);
     }
@@ -446,9 +445,7 @@ export function PlaylistPanel() {
 
   const handleChannelChange = async (pageId: string, channelId: string | null) => {
     try {
-      console.log('[PlaylistPanel] Changing channel for page:', pageId, 'to:', channelId);
       await updatePageChannel(pageId, channelId);
-      console.log('[PlaylistPanel] Channel updated successfully');
     } catch (error) {
       console.error('[PlaylistPanel] Failed to update page channel:', error);
     }
@@ -483,11 +480,6 @@ export function PlaylistPanel() {
         templateAnimationIds.has(k.animation_id)
       );
 
-      console.log(`[PlaylistPanel] Animation data for template ${templateId}:`, {
-        animations: templateAnimations.length,
-        keyframes: templateKeyframes.length,
-      });
-
       return { animations: templateAnimations, keyframes: templateKeyframes };
     } catch (e) {
       console.warn('[PlaylistPanel] Failed to get animation data from localStorage:', e);
@@ -497,7 +489,6 @@ export function PlaylistPanel() {
 
   const handlePlayIn = async (page: Page, e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('[PlaylistPanel] handlePlayIn called for page:', page.name, 'channelId:', page.channelId);
     if (!page.channelId) {
       alert('Please assign a channel to this page first');
       return;
@@ -622,15 +613,6 @@ export function PlaylistPanel() {
       // Get animation data from localStorage
       const { animations: animationsForCommand, keyframes: keyframesForCommand } =
         getAnimationDataForTemplate(template.id);
-
-      console.log('[PlaylistPanel] Calling playOnChannel with:', {
-        channelId: page.channelId,
-        pageId: page.id,
-        layerIndex,
-        templateId: template.id,
-        pageName: page.name,
-        projectName: currentProject.name,
-      });
 
       await playOnChannel(
         page.channelId,
@@ -1155,11 +1137,9 @@ export function PlaylistPanel() {
     if (activeIdStr.startsWith('group:') && overIdStr.startsWith('group-drop:')) {
       const sourceGroupId = activeIdStr.replace('group:', '');
       const targetGroupId = overIdStr.replace('group-drop:', '');
-      console.log('[PlaylistPanel] Nesting group:', { sourceGroupId, targetGroupId });
       if (sourceGroupId !== targetGroupId) {
         const { moveGroupToGroup } = usePageStore.getState();
         moveGroupToGroup(sourceGroupId, targetGroupId)
-          .then(() => console.log('[PlaylistPanel] Group nested successfully'))
           .catch(err => console.error('[PlaylistPanel] Failed to nest group:', err));
       }
       return;
@@ -1248,8 +1228,6 @@ export function PlaylistPanel() {
         pageData.payload || {},
         null // no channel assignment when dragging from library
       );
-
-      console.log('[PlaylistPanel] Page added from library:', pageData.pageName);
     } catch (error) {
       console.error('[PlaylistPanel] Failed to add page from drag:', error);
     }
@@ -2319,7 +2297,6 @@ function SortablePageRow({
           key={`channel-select-${page.id}-${page.channelId || 'none'}`}
           value={page.channelId || '__none__'}
           onValueChange={(value) => {
-            console.log('[PageRow] Channel select changed:', value);
             onChannelChange(value === '__none__' ? null : value);
           }}
         >
