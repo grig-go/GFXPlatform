@@ -453,6 +453,9 @@ importers:
 
   apps/nova:
     dependencies:
+      '@emergent-platform/supabase-client':
+        specifier: workspace:*
+        version: link:../../packages/supabase-client
       '@radix-ui/react-accordion':
         specifier: ^1.2.3
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1017,6 +1020,9 @@ importers:
       '@blueprintjs/icons':
         specifier: ^5.17.1
         version: 5.23.0(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@emergent-platform/supabase-client':
+        specifier: workspace:*
+        version: link:../../packages/supabase-client
       '@emotion/react':
         specifier: ^11.11.1
         version: 11.14.0(@types/react@18.3.27)(react@18.3.1)

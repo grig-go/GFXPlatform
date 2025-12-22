@@ -1,4 +1,4 @@
-import { supabase } from './client';
+import { supabase } from '../../lib/supabase';
 import { DataSource, NewDataSource } from '../../hooks/useDataSources';
 
 /**

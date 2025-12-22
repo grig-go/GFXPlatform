@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 
 // Get the current user's ID
 const getCurrentUserId = async () => {
@@ -132,6 +132,9 @@ export const useTemplates = () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
 
       // First check if we have a session
       const { data: { session } } = await supabase.auth.getSession();

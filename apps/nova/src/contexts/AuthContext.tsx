@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, sessionReady, startConnectionMonitor, stopConnectionMonitor, withAutoRecovery } from '../utils/supabase';
-import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '../lib/cookieStorage';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY, receiveAuthTokenFromUrl } from '@emergent-platform/supabase-client';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import type {
   AuthState,
@@ -314,6 +314,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.log('[Auth] Starting initialization...');
       initializingRef.current = true;
       try {
+        // Check for auth token in URL (from cross-app SSO)
+        // This must happen BEFORE sessionReady to store the token first
+        const receivedToken = receiveAuthTokenFromUrl();
+        if (receivedToken) {
+          console.log('[Auth] Received auth token from URL (cross-app SSO)');
+        }
+
         // Wait for session to be restored from cookie storage before proceeding
         console.log('[Auth] Waiting for session restoration from cookie storage...');
         await sessionReady;

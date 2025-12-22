@@ -1,4 +1,4 @@
-import { supabase } from './client';
+import { supabase } from '../../lib/supabase';
 
 export interface SchoolClosing {
   id: string;

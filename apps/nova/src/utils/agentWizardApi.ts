@@ -6,7 +6,7 @@
  */
 
 import { getEdgeFunctionUrl, getSupabaseAnonKey } from './supabase/config';
-import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '../lib/cookieStorage';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY } from '@emergent-platform/supabase-client';
 
 const TIMEOUT_MS = 30000; // 30 second timeout
 

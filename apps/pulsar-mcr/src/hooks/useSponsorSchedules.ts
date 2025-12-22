@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 import {
   SponsorSchedule,
   SponsorScheduleFormData,
@@ -220,6 +220,9 @@ export const useSponsorSchedules = (): UseSponsorSchedulesReturn => {
     try {
       setLoading(true);
       setError(null);
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {

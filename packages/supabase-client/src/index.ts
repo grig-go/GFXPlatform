@@ -16,6 +16,10 @@ export {
   ensureFreshConnection,
   forceReconnect,
   getTimeSinceLastSuccess,
+  // Connection health monitoring
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
   // Fresh client for critical operations
   createFreshClient,
   // Direct REST API (bypasses Supabase client entirely)
@@ -29,6 +33,26 @@ export {
   cookieStorage,
   SHARED_AUTH_STORAGE_KEY,
   migrateLocalStorageToCookie,
+  // Cross-app SSO helpers
+  getUrlWithAuthToken,
+  receiveAuthTokenFromUrl,
+  navigateWithAuth,
+  AUTH_TOKEN_PARAM,
+  // URL and config helpers
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  getProjectId,
+  getEdgeFunctionUrl,
+  getRestUrl,
+  getSupabaseHeaders,
+  // Timeout and auto-recovery helpers
+  withTimeout,
+  withAutoRecovery,
+  // Session management
+  sessionReady,
+  refreshSessionIfNeeded,
+  checkAuthStatus,
+  ensureAuth,
 } from './client';
 
 export type { User, Session } from './client';

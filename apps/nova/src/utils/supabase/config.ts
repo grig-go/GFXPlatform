@@ -1,36 +1,36 @@
-const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+/**
+ * Supabase configuration helpers for Nova
+ * Re-exports from the shared @emergent-platform/supabase-client package
+ * with backward-compatible function signatures
+ */
+
+import {
+  getSupabaseUrl as _getSupabaseUrl,
+  getSupabaseAnonKey as _getSupabaseAnonKey,
+  getProjectId as _getProjectId,
+  getEdgeFunctionUrl as _getEdgeFunctionUrl,
+  getSupabaseHeaders as _getSupabaseHeaders,
+} from '@emergent-platform/supabase-client';
 
 /**
  * Get Supabase URL from environment variables
  */
 export function getSupabaseUrl(): string {
-  return supabaseUrl;
+  return _getSupabaseUrl();
 }
 
 /**
  * Get Supabase Anon Key from environment variables
  */
 export function getSupabaseAnonKey(): string {
-  return publicAnonKey;
+  return _getSupabaseAnonKey();
 }
 
 /**
  * Get the project ID (extracted from URL)
  */
 export function getProjectId(): string {
-  // If it's a local URL, return the host:port
-  if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1') || supabaseUrl.match(/192\.168\./)) {
-    return supabaseUrl.replace('https://', '').replace('http://', '');
-  }
-
-  // Extract project ID from URL: https://project-id.supabase.co
-  const match = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/);
-  if (match && match[1]) {
-    return match[1];
-  }
-
-  return supabaseUrl.replace('https://', '').replace('http://', '');
+  return _getProjectId();
 }
 
 /**
@@ -40,7 +40,7 @@ export function getProjectId(): string {
  */
 export function getEdgeFunctionUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${supabaseUrl}/functions/v1/${cleanPath}`;
+  return _getEdgeFunctionUrl(cleanPath);
 }
 
 /**
@@ -50,7 +50,7 @@ export function getEdgeFunctionUrl(path: string): string {
  */
 export function getRestUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${supabaseUrl}/rest/v1/${cleanPath}`;
+  return `${_getSupabaseUrl()}/rest/v1/${cleanPath}`;
 }
 
 /**
@@ -59,9 +59,7 @@ export function getRestUrl(path: string): string {
  */
 export function getSupabaseHeaders(additionalHeaders?: Record<string, string>): Record<string, string> {
   return {
-    'Authorization': `Bearer ${publicAnonKey}`,
-    'apikey': publicAnonKey,
-    'Content-Type': 'application/json',
+    ..._getSupabaseHeaders(),
     ...additionalHeaders,
   };
 }

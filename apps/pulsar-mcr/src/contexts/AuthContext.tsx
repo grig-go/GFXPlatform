@@ -7,7 +7,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase, sessionReady } from '../lib/supabase';
+import { supabase, sessionReady, receiveAuthTokenFromUrl } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import type {
   AuthState,
@@ -284,6 +284,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let mounted = true;
 
     const initialize = async () => {
+      // Check for auth token in URL (from cross-app SSO)
+      // This must happen BEFORE sessionReady to store the token first
+      receiveAuthTokenFromUrl();
+
       // Wait for session to be properly initialized from cookie storage
       await sessionReady;
 
@@ -428,7 +432,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setChannelAccess([]);
 
     // Clear the shared auth cookie
-    const { cookieStorage, SHARED_AUTH_STORAGE_KEY } = await import('../lib/cookieStorage');
+    const { cookieStorage, SHARED_AUTH_STORAGE_KEY } = await import('../lib/supabase');
     cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
 
     // Also clear any legacy localStorage keys

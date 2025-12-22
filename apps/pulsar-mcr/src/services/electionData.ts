@@ -2,7 +2,7 @@
  * Service for fetching election data from Supabase
  */
 
-import { supabase } from './supabase/client';
+import { supabase } from '../lib/supabase';
 
 export interface Election {
   id: string;

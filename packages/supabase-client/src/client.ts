@@ -1,16 +1,84 @@
 import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
-import { cookieStorage, SHARED_AUTH_STORAGE_KEY, migrateLocalStorageToCookie } from './cookieStorage';
+import {
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  migrateLocalStorageToCookie,
+  getUrlWithAuthToken,
+  receiveAuthTokenFromUrl,
+  navigateWithAuth,
+  AUTH_TOKEN_PARAM,
+} from './cookieStorage';
 
-// Re-export cookie storage for apps that need it
-export { cookieStorage, SHARED_AUTH_STORAGE_KEY, migrateLocalStorageToCookie };
+// Re-export cookie storage and SSO helpers for apps that need it
+export {
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  migrateLocalStorageToCookie,
+  // Cross-app SSO helpers
+  getUrlWithAuthToken,
+  receiveAuthTokenFromUrl,
+  navigateWithAuth,
+  AUTH_TOKEN_PARAM,
+};
 
 // Read Supabase credentials from environment variables
 let supabaseUrl = '';
 let supabaseAnonKey = '';
 
 if (typeof import.meta !== 'undefined' && import.meta.env) {
-  supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  // Support app-specific env vars with generic fallback
+  supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL ||
+                import.meta.env.VITE_PULSAR_MCR_SUPABASE_URL ||
+                import.meta.env.VITE_SUPABASE_URL || '';
+  supabaseAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY ||
+                    import.meta.env.VITE_PULSAR_MCR_SUPABASE_ANON_KEY ||
+                    import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+}
+
+/**
+ * Get the Supabase URL
+ */
+export function getSupabaseUrl(): string {
+  return supabaseUrl;
+}
+
+/**
+ * Get the Supabase anon key
+ */
+export function getSupabaseAnonKey(): string {
+  return supabaseAnonKey;
+}
+
+/**
+ * Get the project ID from URL
+ */
+export function getProjectId(): string {
+  return supabaseUrl.split('//')[1]?.split('.')[0] || '';
+}
+
+/**
+ * Get the Edge Function URL for a given function name
+ */
+export function getEdgeFunctionUrl(functionName: string): string {
+  return `${supabaseUrl}/functions/v1/${functionName}`;
+}
+
+/**
+ * Get the REST API URL
+ */
+export function getRestUrl(): string {
+  return `${supabaseUrl}/rest/v1`;
+}
+
+/**
+ * Get standard Supabase headers for REST API calls
+ */
+export function getSupabaseHeaders(accessToken?: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': supabaseAnonKey,
+    'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+  };
 }
 
 // Dev user credentials from env (these are fine to read from env)
@@ -760,3 +828,328 @@ export async function signOut(): Promise<void> {
 
 // Re-export types for convenience
 export type { User, Session };
+
+// ============================================================================
+// Timeout and Auto-Recovery Helpers
+// ============================================================================
+
+/**
+ * Helper to wrap a promise with a timeout
+ * Useful for detecting hung database queries
+ */
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[Supabase] ${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+}
+
+/**
+ * Execute a Supabase operation with automatic recovery on timeout
+ * If the operation times out, resets the client and retries once
+ *
+ * @param operationFn Function that takes a supabase client and returns a promise
+ * @param timeoutMs Timeout in milliseconds (default: 10000)
+ * @param operationName Name for logging
+ */
+export async function withAutoRecovery<T>(
+  operationFn: (client: SupabaseClient) => Promise<T>,
+  timeoutMs: number = 10000,
+  operationName: string = 'operation'
+): Promise<T> {
+  const startTime = Date.now();
+
+  try {
+    // First attempt with current client
+    const result = await withTimeout(operationFn(supabase), timeoutMs, operationName);
+    markSupabaseSuccess();
+    return result;
+  } catch (error: any) {
+    // Check if this was a timeout error
+    if (error.message?.includes('timed out')) {
+      console.warn(`[Supabase] ${operationName} timed out after ${Date.now() - startTime}ms, resetting client and retrying...`);
+
+      // Reset the stuck client
+      await reconnectSupabase();
+
+      // Retry with fresh client
+      const retryStart = Date.now();
+
+      try {
+        const result = await withTimeout(operationFn(supabase), timeoutMs, `${operationName} (retry)`);
+        console.log(`[Supabase] ${operationName} succeeded on retry in ${Date.now() - retryStart}ms`);
+        markSupabaseSuccess();
+        return result;
+      } catch (retryError: any) {
+        console.error(`[Supabase] ${operationName} failed on retry:`, retryError.message);
+        throw retryError;
+      }
+    }
+
+    // Not a timeout, just rethrow
+    throw error;
+  }
+}
+
+// ============================================================================
+// Connection Health Monitoring
+// ============================================================================
+
+let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+let connectionHealthy = true;
+
+// Connection health configuration
+const HEALTH_CHECK_INTERVAL = 30000; // Check every 30 seconds
+const CONNECTION_STALE_THRESHOLD = 60000; // Consider stale after 60 seconds of no activity
+const HEALTH_CHECK_TIMEOUT = 5000; // 5 second timeout for health checks
+
+/**
+ * Check if the connection is currently healthy
+ */
+export function isConnectionHealthy(): boolean {
+  return connectionHealthy;
+}
+
+/**
+ * Perform a lightweight health check to detect stuck connections
+ */
+async function performHealthCheck(): Promise<boolean> {
+  if (!_supabase) return true;
+
+  const timeSinceLastSuccess = Date.now() - lastSuccessfulOperation;
+  if (timeSinceLastSuccess < CONNECTION_STALE_THRESHOLD) {
+    return true;
+  }
+
+  console.log(`[Supabase] Health check - ${timeSinceLastSuccess}ms since last success`);
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/?limit=0`, {
+      method: 'HEAD',
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok || response.status === 404) {
+      markSupabaseSuccess();
+      return true;
+    }
+
+    console.warn('[Supabase] Health check failed with status:', response.status);
+    return false;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn('[Supabase] Health check timed out - connection may be stuck');
+    } else {
+      console.warn('[Supabase] Health check error:', error.message);
+    }
+    return false;
+  }
+}
+
+/**
+ * Start the connection health monitor
+ * Periodically checks connection health and auto-recovers if stuck
+ */
+export function startConnectionMonitor(): void {
+  if (healthCheckInterval) {
+    return; // Already running
+  }
+
+  console.log('[Supabase] Starting connection health monitor');
+
+  healthCheckInterval = setInterval(async () => {
+    const healthy = await performHealthCheck();
+
+    if (!healthy && connectionHealthy) {
+      console.warn('[Supabase] Connection appears stuck, attempting recovery...');
+      connectionHealthy = false;
+
+      await reconnectSupabase();
+
+      setTimeout(async () => {
+        const recoveredHealthy = await performHealthCheck();
+        if (recoveredHealthy) {
+          console.log('[Supabase] Connection recovered after reset');
+          connectionHealthy = true;
+        } else {
+          console.error('[Supabase] Connection still unhealthy after reset');
+        }
+      }, 1000);
+    }
+  }, HEALTH_CHECK_INTERVAL);
+}
+
+/**
+ * Stop the connection health monitor
+ */
+export function stopConnectionMonitor(): void {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+    console.log('[Supabase] Stopped connection health monitor');
+  }
+}
+
+// ============================================================================
+// Session Initialization
+// ============================================================================
+
+/**
+ * Ensure session is properly initialized from storage
+ * This fixes issues where Supabase reads storage but doesn't set the auth headers
+ */
+const ensureSessionInitialized = async (): Promise<void> => {
+  if (!_supabase) return;
+
+  console.log('[Supabase] ensureSessionInitialized starting...');
+
+  try {
+    // First check if Supabase already has a session
+    const { data: { session: existingSession }, error } = await Promise.race([
+      _supabase.auth.getSession(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Session init timeout')), 5000)
+      )
+    ]);
+
+    console.log('[Supabase] getSession result:', { hasSession: !!existingSession, error: error?.message });
+
+    if (existingSession) {
+      console.log('[Supabase] Session already initialized, user:', existingSession.user?.email);
+      return;
+    }
+  } catch (error) {
+    console.warn('[Supabase] getSession() timed out, checking storage:', error);
+  }
+
+  // If no session from Supabase, check storage
+  const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+  console.log('[Supabase] Storage check:', { hasStored: !!storedSession, length: storedSession?.length });
+
+  if (storedSession) {
+    try {
+      const sessionData = JSON.parse(storedSession);
+      console.log('[Supabase] Found stored session data, keys:', Object.keys(sessionData));
+
+      const accessToken = sessionData.access_token;
+      const refreshToken = sessionData.refresh_token;
+
+      if (accessToken && refreshToken) {
+        console.log('[Supabase] Restoring session from storage');
+        try {
+          await Promise.race([
+            _supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('setSession timeout')), 5000)
+            )
+          ]);
+          console.log('[Supabase] Session restored successfully');
+        } catch (e) {
+          console.warn('[Supabase] setSession timed out or failed:', e);
+          cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        }
+      } else {
+        console.warn('[Supabase] Storage exists but missing tokens');
+        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.error('[Supabase] Error parsing session from storage:', e);
+      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+    }
+  } else {
+    console.log('[Supabase] No stored session found');
+  }
+};
+
+/**
+ * Promise that resolves when session is ready
+ * Components can await this before making queries
+ */
+export const sessionReady: Promise<void> = _supabase ? ensureSessionInitialized() : Promise.resolve();
+
+/**
+ * Refresh session if needed (when token is about to expire)
+ */
+export async function refreshSessionIfNeeded(): Promise<Session | null> {
+  if (!_supabase) return null;
+
+  const { data: { session }, error } = await _supabase.auth.getSession();
+
+  if (error) {
+    console.error('Session error:', error);
+    return null;
+  }
+
+  if (!session) {
+    console.warn('No active session found');
+    return null;
+  }
+
+  // Check if session is expired or about to expire (within 5 minutes)
+  const now = new Date();
+  const expiresAt = session.expires_at ? new Date(session.expires_at * 1000) : new Date(0);
+  const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+
+  if (timeUntilExpiry < 5 * 60 * 1000) {
+    console.log('Session expiring soon, refreshing...');
+    const { data: { session: refreshedSession }, error: refreshError } = await _supabase.auth.refreshSession();
+
+    if (refreshError) {
+      console.error('Failed to refresh session:', refreshError);
+      return null;
+    }
+
+    return refreshedSession;
+  }
+
+  return session;
+}
+
+/**
+ * Check current auth status
+ */
+export async function checkAuthStatus(): Promise<{
+  isAuthenticated: boolean;
+  user: User | null;
+  expiresAt: Date | null;
+}> {
+  if (!_supabase) {
+    return { isAuthenticated: false, user: null, expiresAt: null };
+  }
+
+  const { data: { session } } = await _supabase.auth.getSession();
+  return {
+    isAuthenticated: !!session,
+    user: session?.user || null,
+    expiresAt: session?.expires_at ? new Date(session.expires_at * 1000) : null
+  };
+}
+
+/**
+ * Ensure auth before operation (throws if not authenticated)
+ */
+export async function ensureAuth(): Promise<Session> {
+  if (!_supabase) {
+    throw new Error('Supabase not configured');
+  }
+
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (!session) {
+    throw new Error('Authentication required');
+  }
+  return session;
+}

@@ -22,7 +22,7 @@ import BuildIcon from '@mui/icons-material/Build';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseIcon from '@mui/icons-material/Close';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 import { parseWidgetConfig, type ContentItem, type UE5WidgetConfig } from '../types/widget';
 import { loadAIImageGenSettings, callGoogleAPIViaProxy } from '../types/aiImageGen';
 
@@ -82,6 +82,9 @@ const ProductionWidgetPageComponent: React.ForwardRefRenderFunction<ProductionWi
     setError(null);
 
     try {
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('No active session. Please log in again.');

@@ -24,7 +24,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 import AgCheckbox from '../components/AgCheckbox';
 import { parseWidgetConfig, type ContentItem, type UE5WidgetConfig } from '../types/widget';
 
@@ -73,6 +73,9 @@ const WidgetWindowPageComponent: React.ForwardRefRenderFunction<WidgetWindowPage
     try {
       setLoading(true);
       setError(null);
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
 
       // First, try to refresh the session if needed
       const { data: { session } } = await supabase.auth.getSession();

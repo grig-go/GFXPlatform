@@ -336,6 +336,9 @@ const GridStatePersistence: React.FC<{ userId: string }> = ({ userId }) => {
 
     const loadStates = async () => {
       try {
+        // Wait for session to be restored from cookies before querying
+        await sessionReady;
+
         const { data } = await supabase
           .from('user_layouts')
           .select('layout_data')
@@ -378,6 +381,9 @@ const GridStatePersistence: React.FC<{ userId: string }> = ({ userId }) => {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        // Wait for session to be restored from cookies before querying
+        await sessionReady;
+
         // First get the current layout data
         const { data: currentData } = await supabase
           .from('user_layouts')
@@ -1049,7 +1055,7 @@ const App: React.FC = () => {
     <ProtectedRoute>
     <StylesProvider injectFirst>
       <GridStateProvider>
-        {user && <GridStatePersistence userId={user.id} />}
+        {user?.auth_user_id && <GridStatePersistence userId={user.auth_user_id} />}
         <TemplatesProvider>
           <CrossGridDragProvider>
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

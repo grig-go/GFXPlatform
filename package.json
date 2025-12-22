@@ -37,7 +37,8 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:functions": "cd supabase && supabase functions serve &",
-    "db:functions-stop": "pkill -f 'supabase functions serve' || true"
+    "db:functions-stop": "pkill -f 'supabase functions serve' || true",
+    "create-superuser": "npx dotenv-cli -e .env -- npx tsx apps/nova/scripts/create-superuser.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

@@ -29,7 +29,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 import { ImageStorageFactory, DEFAULT_IMAGE_CONFIG, ImageStorageProvider, LocalImageStorage } from '../utils/imageStorage';
 import { parseWidgetConfig, type ContentItem, type UE5WidgetConfig } from '../types/widget';
 import { loadAIImageGenSettings, callGoogleAPIViaProxy } from '../types/aiImageGen';
@@ -101,6 +101,9 @@ const WidgetBuilderPageComponent: React.ForwardRefRenderFunction<WidgetBuilderPa
     setLoading(true);
 
     try {
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
+
       // Check session before making the query
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {

@@ -15,6 +15,7 @@
     "prod:stop": "./scripts/prod-stop.sh"
   },
   "dependencies": {
+    "@emergent-platform/supabase-client": "workspace:*",
     "@blueprintjs/core": "^5.16.4",
     "@blueprintjs/icons": "^5.17.1",
     "@emotion/react": "^11.11.1",

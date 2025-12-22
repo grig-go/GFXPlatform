@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 
 // Get the current user's ID
 const getCurrentUserId = async () => {
@@ -69,7 +69,10 @@ export const useContent = () => {
     try {
       setLoading(true);
       setError(null);
-  
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
+
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -112,7 +115,8 @@ export const useContent = () => {
 
   const refreshContentIfNeeded = async (expectedTree?: Content[]) => {
     try {
-      // Check session first
+      // Wait for session to be restored, then check
+      await sessionReady;
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         console.log('No session for refresh');
