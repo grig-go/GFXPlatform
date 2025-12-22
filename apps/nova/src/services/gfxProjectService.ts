@@ -1,9 +1,50 @@
 /**
  * GFX Project Service
  * Handles all CRUD operations for gfx_projects stored in the GFX Supabase instance.
+ * Uses edge function for reliable project loading (no stale connections).
  */
 
-import { gfxRestSelect, gfxRestInsert, gfxRestUpdate } from '../utils/supabase/gfxConfig';
+import { gfxRestSelect, gfxRestInsert } from '../utils/supabase/gfxConfig';
+
+// Edge function helper for reliable project operations (no stale connections)
+const GFX_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const GFX_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function callGfxProjectsEdgeFunction<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string = '',
+  body?: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const url = new URL(`${GFX_SUPABASE_URL}/functions/v1/gfx-projects${path}`);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.set(key, value);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GFX_SUPABASE_ANON_KEY}`,
+        'apikey': GFX_SUPABASE_ANON_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[gfxProjectService] Edge function error:', result);
+      return { data: null, error: result.error || 'Edge function request failed' };
+    }
+    return { data: result.data as T, error: null };
+  } catch (err) {
+    console.error('[gfxProjectService] Network error:', err);
+    return { data: null, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
 
 // Types from @emergent-platform/types
 export interface Project {
@@ -76,37 +117,37 @@ export interface Template {
 // ============================================
 
 export async function fetchProjects(organizationId?: string): Promise<Project[]> {
-  const result = await gfxRestSelect<Project>(
-    'gfx_projects',
-    '*',
-    organizationId ? { column: 'organization_id', value: organizationId } : undefined,
-    10000
+  // Use edge function for reliable project loading (no stale connections!)
+  console.log('[gfxProjectService] Fetching projects via edge function...');
+  const { data, error } = await callGfxProjectsEdgeFunction<Project[]>(
+    'GET',
+    '',
+    undefined,
+    organizationId ? { organization_id: organizationId } : undefined
   );
 
-  if (result.error) {
-    console.error('Error fetching projects:', result.error);
+  if (error) {
+    console.error('Error fetching projects:', error);
     return [];
   }
 
-  // Filter out archived and sort by updated_at (descending)
-  return (result.data || [])
-    .filter((p) => !p.archived)
-    .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+  console.log('[gfxProjectService] Loaded', data?.length || 0, 'projects');
+  // Already filtered and sorted by edge function
+  return data || [];
 }
 
 export async function fetchProject(projectId: string): Promise<Project | null> {
-  const result = await gfxRestSelect<Project>(
-    'gfx_projects',
-    '*',
-    { column: 'id', value: projectId },
-    10000
+  // Use edge function for reliable project loading (no stale connections!)
+  const { data, error } = await callGfxProjectsEdgeFunction<Project>(
+    'GET',
+    `/${projectId}`
   );
 
-  if (result.error || !result.data?.[0]) {
-    console.error('Error fetching project:', result.error);
+  if (error || !data) {
+    console.error('Error fetching project:', error);
     return null;
   }
-  return result.data[0];
+  return data;
 }
 
 export async function createProject(
@@ -270,32 +311,35 @@ export async function createProject(
 }
 
 export async function updateProject(projectId: string, updates: Partial<Project>): Promise<boolean> {
-  const result = await gfxRestUpdate(
-    'gfx_projects',
-    { ...updates, updated_at: new Date().toISOString() },
-    { column: 'id', value: projectId }
+  // Use edge function for reliable updates (no stale connections!)
+  const { error } = await callGfxProjectsEdgeFunction<Project>(
+    'PATCH',
+    `/${projectId}`,
+    updates as Record<string, unknown>
   );
 
-  if (result.error) {
-    console.error('Error updating project:', result.error);
+  if (error) {
+    console.error('Error updating project:', error);
     return false;
   }
   return true;
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {
-  console.log('[deleteProject] Archiving project:', projectId);
+  console.log('[deleteProject] Archiving project via edge function:', projectId);
 
-  const result = await gfxRestUpdate(
-    'gfx_projects',
-    { archived: true, updated_at: new Date().toISOString() },
-    { column: 'id', value: projectId }
+  // Use edge function for reliable deletion (no stale connections!)
+  const { error } = await callGfxProjectsEdgeFunction<{ success: boolean }>(
+    'DELETE',
+    `/${projectId}`
   );
 
-  if (result.error) {
-    console.error('[deleteProject] Error:', result.error);
+  if (error) {
+    console.error('[deleteProject] Error:', error);
     return false;
   }
+
+  console.log('[deleteProject] Project archived via edge function');
 
   // Also delete from localStorage if it exists
   try {

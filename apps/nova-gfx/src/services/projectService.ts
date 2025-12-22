@@ -5,44 +5,90 @@ import type {
 } from '@emergent-platform/types';
 
 // ============================================
+// EDGE FUNCTION HELPER
+// ============================================
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+/**
+ * Call the gfx-projects edge function
+ * This eliminates stale connection issues by using fresh HTTP connections
+ */
+async function callGfxProjectsEdgeFunction<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string = '',
+  body?: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/gfx-projects${path}`);
+
+    // Add query params
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.set(key, value);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('[gfx-projects] Edge function error:', result);
+      return { data: null, error: result.error || 'Edge function request failed' };
+    }
+
+    return { data: result.data as T, error: null };
+  } catch (err) {
+    console.error('[gfx-projects] Network error:', err);
+    return { data: null, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+// ============================================
 // PROJECTS
 // ============================================
 
 export async function fetchProject(projectId: string): Promise<Project | null> {
-  // Use direct REST API for reliable project loading
-  const result = await directRestSelect<Project>(
-    'gfx_projects',
-    '*',
-    { column: 'id', value: projectId },
-    10000
+  // Use edge function for reliable project loading (no stale connections)
+  const { data, error } = await callGfxProjectsEdgeFunction<Project>(
+    'GET',
+    `/${projectId}`
   );
 
-  if (result.error || !result.data?.[0]) {
-    console.error('Error fetching project:', result.error);
+  if (error || !data) {
+    console.error('Error fetching project:', error);
     return null;
   }
-  return result.data[0];
+  return data;
 }
 
 export async function fetchProjects(organizationId?: string): Promise<Project[]> {
-  // Use direct REST API for reliable project listing
-  // Note: directRestSelect doesn't support multiple filters, so we filter archived in JS
-  const result = await directRestSelect<Project>(
-    'gfx_projects',
-    '*',
-    organizationId ? { column: 'organization_id', value: organizationId } : undefined,
-    10000
+  // Use edge function for reliable project listing (no stale connections)
+  const { data, error } = await callGfxProjectsEdgeFunction<Project[]>(
+    'GET',
+    '',
+    undefined,
+    organizationId ? { organization_id: organizationId } : undefined
   );
 
-  if (result.error) {
-    console.error('Error fetching projects:', result.error);
+  if (error) {
+    console.error('Error fetching projects:', error);
     return [];
   }
 
-  // Filter out archived and sort by updated_at (descending)
-  return (result.data || [])
-    .filter((p) => !p.archived)
-    .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+  // Already filtered and sorted by edge function
+  return data || [];
 }
 
 export async function createProject(
@@ -211,16 +257,15 @@ export async function createProject(
 }
 
 export async function updateProject(projectId: string, updates: Partial<Project>): Promise<boolean> {
-  // Use direct REST API for reliable updates (avoids stale connection issues)
-  const result = await directRestUpdate(
-    'gfx_projects',
-    { ...updates, updated_at: new Date().toISOString() },
-    { column: 'id', value: projectId },
-    10000
+  // Use edge function for reliable updates (no stale connections)
+  const { error } = await callGfxProjectsEdgeFunction<Project>(
+    'PATCH',
+    `/${projectId}`,
+    updates as Record<string, unknown>
   );
 
-  if (!result.success) {
-    console.error('Error updating project:', result.error);
+  if (error) {
+    console.error('Error updating project:', error);
     return false;
   }
   return true;
@@ -229,38 +274,18 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 export async function deleteProject(projectId: string): Promise<boolean> {
   console.log('[deleteProject] Starting deletion:', projectId);
 
-  // Use Supabase client directly for better reliability
-  const { data, error } = await supabase
-    .from('gfx_projects')
-    .update({ archived: true, updated_at: new Date().toISOString() })
-    .eq('id', projectId)
-    .select()
-    .single();
+  // Use edge function for reliable deletion (no stale connections)
+  const { error } = await callGfxProjectsEdgeFunction<{ success: boolean }>(
+    'DELETE',
+    `/${projectId}`
+  );
 
   if (error) {
-    console.error('[deleteProject] Supabase error:', error.message, error.code);
-
-    // Fallback to direct REST API if Supabase client fails
-    console.log('[deleteProject] Trying direct REST API fallback...');
-    const { useAuthStore } = await import('@/stores/authStore');
-    const accessToken = useAuthStore.getState().accessToken;
-
-    const result = await directRestUpdate(
-      'gfx_projects',
-      { archived: true, updated_at: new Date().toISOString() },
-      { column: 'id', value: projectId },
-      10000,
-      accessToken || undefined
-    );
-
-    if (!result.success) {
-      console.error('[deleteProject] REST API also failed:', result.error);
-      return false;
-    }
-    console.log('[deleteProject] ✅ Project archived via REST API fallback');
-  } else {
-    console.log('[deleteProject] ✅ Project archived in database:', data?.name, 'archived:', data?.archived);
+    console.error('[deleteProject] Edge function error:', error);
+    return false;
   }
+
+  console.log('[deleteProject] ✅ Project archived via edge function');
 
   // Also delete from localStorage if it exists
   try {

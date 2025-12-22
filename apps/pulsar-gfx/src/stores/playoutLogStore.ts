@@ -234,35 +234,46 @@ export const usePlayoutLogStore = create<PlayoutLogStore>((set, get) => ({
 
   logPlay: async (params) => {
     try {
+      // Build insert object, omitting undefined operator fields to avoid FK issues
+      const insertData: Record<string, unknown> = {
+        organization_id: params.organizationId,
+        channel_id: params.channelId,
+        channel_code: params.channelCode,
+        channel_name: params.channelName,
+        layer_index: params.layerIndex,
+        layer_name: params.layerName,
+        page_id: params.pageId,
+        page_name: params.pageName,
+        template_id: params.templateId,
+        template_name: params.templateName,
+        project_id: params.projectId,
+        project_name: params.projectName,
+        payload_snapshot: params.payload || {},
+        trigger_source: params.triggerSource || 'manual',
+      };
+
+      // Only include operator fields if provided (avoids FK constraint issues with fake IDs)
+      if (params.operatorId) {
+        insertData.operator_id = params.operatorId;
+      }
+      if (params.operatorName) {
+        insertData.operator_name = params.operatorName;
+      }
+
       const { error } = await supabase
         .from('pulsar_playout_log')
-        .insert({
-          organization_id: params.organizationId,
-          channel_id: params.channelId,
-          channel_code: params.channelCode,
-          channel_name: params.channelName,
-          layer_index: params.layerIndex,
-          layer_name: params.layerName,
-          page_id: params.pageId,
-          page_name: params.pageName,
-          template_id: params.templateId,
-          template_name: params.templateName,
-          project_id: params.projectId,
-          project_name: params.projectName,
-          payload_snapshot: params.payload || {},
-          operator_id: params.operatorId,
-          operator_name: params.operatorName,
-          trigger_source: params.triggerSource || 'manual',
-        });
+        .insert(insertData);
 
       if (error) {
         // Silently fail - logging should not block graphics
+        console.warn('[playoutLog] Insert failed:', error.message);
         return null;
       }
 
       return null; // We don't need the ID for fire-and-forget logging
-    } catch {
+    } catch (err) {
       // Silently fail - logging should not block graphics
+      console.warn('[playoutLog] Insert error:', err);
       return null;
     }
   },

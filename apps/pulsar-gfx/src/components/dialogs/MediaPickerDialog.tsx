@@ -29,6 +29,10 @@ interface MediaPickerDialogProps {
   title?: string;
 }
 
+// Default dev organization for development (no auth)
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000001';
+const DEV_USER_ID = '00000000-0000-0000-0000-000000000002';
+
 export function MediaPickerDialog({
   open,
   onOpenChange,
@@ -37,6 +41,10 @@ export function MediaPickerDialog({
   title = 'Select Media',
 }: MediaPickerDialogProps) {
   const { user, organization } = useAuthStore();
+
+  // Use dev IDs as fallback when not authenticated
+  const orgId = organization?.id || DEV_ORG_ID;
+  const userId = user?.id || DEV_USER_ID;
 
   // Create services object for the shared component
   const services: MediaPickerServices = {
@@ -89,8 +97,8 @@ export function MediaPickerDialog({
       mediaType={mediaType}
       title={title}
       services={services}
-      organizationId={organization?.id}
-      userId={user?.id}
+      organizationId={orgId}
+      userId={userId}
       enableTextures={true}
       enableSports={true}
       enableBackgroundRemoval={true}

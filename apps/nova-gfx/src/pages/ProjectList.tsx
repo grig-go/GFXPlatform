@@ -66,11 +66,11 @@ import { AIModelSettingsDialog } from '@/components/dialogs/AIModelSettingsDialo
 import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { SystemTemplatesDialog } from '@/components/dialogs/SystemTemplatesDialog';
 import { TopBar } from '@/components/layout/TopBar';
-import { directRestSelect, supabase, ensureFreshConnection } from '@emergent-platform/supabase-client';
 import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   fetchProject,
+  fetchProjects,
   fetchLayers,
   fetchTemplates,
   fetchElements,
@@ -123,18 +123,11 @@ export function ProjectList() {
   }, [orgId]);
 
   const loadProjects = async () => {
-    console.log('[ProjectList] Loading projects...');
+    console.log('[ProjectList] Loading projects via edge function...');
     setIsLoading(true);
 
-    // Force fresh connection before loading projects to prevent stale connections
     try {
-      await ensureFreshConnection(true);
-    } catch (err) {
-      console.warn('[ProjectList] Failed to ensure fresh connection:', err);
-    }
-
-    try {
-      // First, load localStorage projects
+      // Load localStorage projects for merging
       const localProjects: Project[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -151,70 +144,24 @@ export function ProjectList() {
       }
       console.log('[ProjectList] Found', localProjects.length, 'localStorage projects');
 
-      // Try Supabase client with joins first (for user info)
-      let supabaseProjects: Project[] = [];
-      let loadError: string | null = null;
-
-      if (supabase) {
-        try {
-          // Load projects without user joins - PostgREST schema cache may not have FK relationships
-          let query = supabase
-            .from('gfx_projects')
-            .select('*')
-            .eq('archived', false)
-            .order('updated_at', { ascending: false });
-
-          if (orgId) {
-            query = query.eq('organization_id', orgId);
-          }
-
-          const { data, error } = await query;
-
-          if (error) {
-            console.error('[ProjectList] Supabase query error:', error.message);
-            loadError = error.message;
-          } else {
-            // Double-check filter in case DB query didn't work
-            supabaseProjects = (data || []).filter((p: any) => p.archived !== true) as Project[];
-            console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects from Supabase');
-            console.log('[ProjectList] Project names:', supabaseProjects.map(p => p.name));
-          }
-        } catch (err: any) {
-          console.error('[ProjectList] Supabase client error:', err);
-          loadError = err.message;
-        }
-      }
-
-      // Fallback to direct REST API if Supabase client failed
-      if (loadError && supabaseProjects.length === 0) {
-        console.log('[ProjectList] Falling back to direct REST API...');
-        const result = await directRestSelect<Project>(
-          'gfx_projects',
-          '*',
-          orgId ? { column: 'organization_id', value: orgId } : undefined,
-          10000
-        );
-
-        if (!result.error) {
-          supabaseProjects = (result.data || []).filter(p => !p.archived);
-          console.log('[ProjectList] Loaded', supabaseProjects.length, 'projects via REST (no user info)');
-        }
-      }
+      // Fetch projects via edge function (no stale connection issues!)
+      const cloudProjects = await fetchProjects(orgId || undefined);
+      console.log('[ProjectList] Loaded', cloudProjects.length, 'projects via edge function');
 
       // Create a map with project ID as key to ensure uniqueness
       const projectMap = new Map<string, Project>();
 
-      // First, add all Supabase projects
-      supabaseProjects.forEach(p => {
+      // First, add all cloud projects
+      cloudProjects.forEach(p => {
         projectMap.set(p.id, p);
       });
 
-      // Then, overlay localStorage projects ONLY if they exist in Supabase
+      // Then, overlay localStorage projects ONLY if they exist in cloud
       // This prevents showing deleted/archived projects that are still in localStorage
       localProjects.forEach(localProject => {
         const existingProject = projectMap.get(localProject.id);
         if (existingProject) {
-          // Merge: keep localStorage data but preserve Supabase-only fields
+          // Merge: keep localStorage data but preserve cloud-only fields
           projectMap.set(localProject.id, {
             ...localProject,
             thumbnail_url: existingProject.thumbnail_url || localProject.thumbnail_url,
@@ -225,10 +172,8 @@ export function ProjectList() {
         // Don't add localStorage-only projects - they may have been deleted from DB
       });
 
-      // Convert map to array and sort by updated_at
-      const mergedProjects = Array.from(projectMap.values()).sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
+      // Convert map to array (already sorted by edge function)
+      const mergedProjects = Array.from(projectMap.values());
       console.log('[ProjectList] Total merged projects:', mergedProjects.length, '(deduplicated by ID)');
       setProjects(mergedProjects);
     } catch (err) {

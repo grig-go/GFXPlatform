@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -9,8 +9,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuCheckboxItem,
-  Input,
-  cn,
 } from '@emergent-platform/ui';
 import {
   Settings,
@@ -23,13 +21,9 @@ import {
   Wrench,
   Eye,
   FileText,
-  Play,
   ChevronDown,
   ListOrdered,
   ScrollText,
-  Check,
-  ChevronsUpDown,
-  Search,
 } from 'lucide-react';
 import { UserMenu } from '@/components/auth';
 import { useProjectStore } from '@/stores/projectStore';
@@ -54,10 +48,8 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const { currentProject, projects, selectProject, refreshProject, isLoading: projectLoading } = useProjectStore();
   const { channels, initializeChannel } = useChannelStore();
   const {
-    showPlayoutControls,
     showPreview,
     showContentEditor,
-    togglePlayoutControls,
     togglePreview,
     toggleContentEditor,
   } = useUIStore();
@@ -74,15 +66,6 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const [showPlaylistsModal, setShowPlaylistsModal] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [hasRestoredProject, setHasRestoredProject] = useState(false);
-  const [projectSearch, setProjectSearch] = useState('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Filter projects based on search
-  const filteredProjects = useMemo(() => {
-    if (!projectSearch.trim()) return projects;
-    const searchLower = projectSearch.toLowerCase();
-    return projects.filter(p => p.name.toLowerCase().includes(searchLower));
-  }, [projects, projectSearch]);
 
   // Restore last project on initial load
   // Always clear stale data and reload fresh to get latest bindings/templates
@@ -204,71 +187,6 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
         </span>
       </div>
 
-      {/* Project Selector with Search */}
-      <DropdownMenu onOpenChange={(open) => {
-        if (!open) setProjectSearch('');
-        // Focus the search input when dropdown opens
-        if (open) setTimeout(() => searchInputRef.current?.focus(), 0);
-      }}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            className="h-7 sm:h-8 w-[140px] sm:w-[200px] justify-between text-xs sm:text-sm px-2 sm:px-3"
-            disabled={projectLoading}
-          >
-            <div className="flex items-center gap-1.5 truncate">
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 opacity-50" />
-              <span className="truncate">
-                {currentProject?.name || 'Select project...'}
-              </span>
-            </div>
-            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-[200px] sm:w-[250px]" align="start">
-          {/* Search Input */}
-          <div className="px-2 py-1.5 border-b border-border">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                ref={searchInputRef}
-                placeholder="Search projects..."
-                value={projectSearch}
-                onChange={(e) => setProjectSearch(e.target.value)}
-                className="h-7 pl-7 text-xs"
-                onKeyDown={(e) => e.stopPropagation()}
-              />
-            </div>
-          </div>
-          <div className="max-h-[200px] overflow-y-auto">
-            {filteredProjects.length === 0 ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">
-                No projects found
-              </div>
-            ) : (
-              filteredProjects.map((project) => (
-                <DropdownMenuItem
-                  key={project.id}
-                  onClick={() => {
-                    handleProjectChange(project.id);
-                    setProjectSearch('');
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Check
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      currentProject?.id === project.id ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <span className="truncate">{project.name}</span>
-                </DropdownMenuItem>
-              ))
-            )}
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       {/* Spacer */}
       <div className="flex-1" />
 
@@ -284,13 +202,6 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Panels</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem
-              checked={showPlayoutControls}
-              onCheckedChange={togglePlayoutControls}
-            >
-              <Play className="mr-2 h-4 w-4" />
-              Playout Controls
-            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={showPreview}
               onCheckedChange={togglePreview}

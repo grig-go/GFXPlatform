@@ -27,19 +27,9 @@ export function shouldHideElement(
   // Get raw value from data
   const rawValue = currentRecord ? getNestedValue(currentRecord, binding.binding_key) : undefined;
 
-  console.log('[shouldHideElement]', {
-    elementId,
-    bindingKey: binding.binding_key,
-    rawValue,
-    rawValueType: typeof rawValue,
-    hideOnNull: options.hideOnNull,
-    hideOnZero: options.hideOnZero,
-  });
-
   // Check hideOnNull - hides when value is null, undefined, or empty string
   if (options.hideOnNull) {
     if (rawValue === null || rawValue === undefined || rawValue === '') {
-      console.log('[shouldHideElement] Hiding due to hideOnNull:', rawValue);
       return true;
     }
   }
@@ -47,7 +37,6 @@ export function shouldHideElement(
   // Check hideOnZero - hides when value is exactly 0
   if (options.hideOnZero) {
     if (rawValue === 0) {
-      console.log('[shouldHideElement] Hiding due to hideOnZero');
       return true;
     }
   }
