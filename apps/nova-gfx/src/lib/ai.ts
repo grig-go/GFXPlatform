@@ -13,6 +13,11 @@ import {
   revealProviderApiKey,
 } from '@/services/aiProviderService';
 
+// Supabase edge function URL for AI chat (more reliable than Netlify functions)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const AI_EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
+
 // Track last activity time for connection health checks
 let lastActivityTime = Date.now();
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -26,6 +31,7 @@ export function markChatActivity(): void {
 
 /**
  * Check if browser has been idle and refresh connection if needed
+ * Also tests AI endpoint connectivity to ensure requests will succeed
  */
 async function ensureFreshConnectionIfIdle(): Promise<void> {
   const idleTime = Date.now() - lastActivityTime;
@@ -45,6 +51,26 @@ async function ensureFreshConnectionIfIdle(): Promise<void> {
       }
       // Also ensure Supabase connection is healthy
       await ensureFreshConnection(true);
+
+      // Warm up the AI edge function endpoint
+      // This helps prevent cold start delays after idle periods
+      try {
+        const warmupController = new AbortController();
+        const warmupTimeout = setTimeout(() => warmupController.abort(), 5000);
+        await fetch(AI_EDGE_FUNCTION_URL, {
+          method: 'OPTIONS',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+          },
+          signal: warmupController.signal,
+        }).catch(() => {
+          // Ignore errors - this is just a warmup
+        });
+        clearTimeout(warmupTimeout);
+        console.log('[AI] Edge function warmup complete');
+      } catch {
+        // Ignore warmup errors
+      }
     } catch (err) {
       console.warn('[AI] Connection refresh failed, continuing anyway:', err);
     }
