@@ -1,16 +1,10 @@
-import { useState } from 'react';
-import { FolderKanban, FileText, LayoutTemplate } from 'lucide-react';
+import { FolderKanban } from 'lucide-react';
 import {
-  cn,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
 } from '@emergent-platform/ui';
 import { useProjectStore } from '@/stores/projectStore';
 import { useUIPreferencesStore } from '@/stores/uiPreferencesStore';
@@ -26,7 +20,6 @@ interface LeftSidebarProps {
 export function LeftSidebar({ defaultTab = 'pages' }: LeftSidebarProps) {
   const { projects, currentProject, selectProject } = useProjectStore();
   const { setLastProjectId } = useUIPreferencesStore();
-  const [activeTab, setActiveTab] = useState<SidebarTab>(defaultTab);
 
   const handleProjectChange = async (projectId: string) => {
     setLastProjectId(projectId);
@@ -34,7 +27,7 @@ export function LeftSidebar({ defaultTab = 'pages' }: LeftSidebarProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="h-full flex flex-col bg-card overflow-hidden">
       {/* Project Dropdown Header */}
       <div className="p-2 border-b border-border shrink-0">
         <Select
@@ -62,39 +55,10 @@ export function LeftSidebar({ defaultTab = 'pages' }: LeftSidebarProps) {
         </Select>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SidebarTab)} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="w-full justify-start rounded-none border-b border-border h-9 bg-transparent px-2 shrink-0">
-          <TabsTrigger
-            value="pages"
-            className={cn(
-              'text-xs data-[state=active]:bg-transparent data-[state=active]:shadow-none',
-              'data-[state=active]:border-b-2 data-[state=active]:border-cyan-500 rounded-none'
-            )}
-          >
-            <FileText className="w-3.5 h-3.5 mr-1.5" />
-            Pages
-          </TabsTrigger>
-          <TabsTrigger
-            value="templates"
-            className={cn(
-              'text-xs data-[state=active]:bg-transparent data-[state=active]:shadow-none',
-              'data-[state=active]:border-b-2 data-[state=active]:border-cyan-500 rounded-none'
-            )}
-          >
-            <LayoutTemplate className="w-3.5 h-3.5 mr-1.5" />
-            Templates
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pages" className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
-          <PageList />
-        </TabsContent>
-
-        <TabsContent value="templates" className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
-          <TemplateList />
-        </TabsContent>
-      </Tabs>
+      {/* Content - Pages or Templates based on defaultTab */}
+      <div className="flex-1 overflow-hidden">
+        {defaultTab === 'pages' ? <PageList /> : <TemplateList />}
+      </div>
     </div>
   );
 }

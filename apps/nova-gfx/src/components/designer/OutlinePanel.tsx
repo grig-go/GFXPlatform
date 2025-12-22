@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, Plus, Layers, LayoutTemplate, Folder,
   Eye, EyeOff, Lock, Unlock, MoreHorizontal, Trash2, Copy,
   Group, Ungroup, ArrowRightLeft, LogIn, LogOut, Settings, FolderOpen,
-  PenLine, FilePlus, Save, SaveAll, Pin, GripHorizontal, ExternalLink, Spline,
+  PenLine, FilePlus, Save, SaveAll, Pin, GripHorizontal, GripVertical, ExternalLink, Spline,
   Search, X, Database,
 } from 'lucide-react';
 import {
@@ -773,6 +773,7 @@ function LayersTree() {
     toggleLayerLock,
     updateLayer,
     deleteLayer,
+    reorderLayer,
     toggleTemplateVisibility,
     toggleTemplateLock,
     reorderTemplate,
@@ -833,6 +834,73 @@ function LayersTree() {
     setDraggedTemplateId(null);
     setDropTargetTemplateId(null);
     setDropPosition(null);
+  }, []);
+
+  // Drag state for reordering layers
+  const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
+  const [layerDropPosition, setLayerDropPosition] = useState<'before' | 'after' | null>(null);
+
+  // Handle drag start for layers
+  const handleLayerDragStart = useCallback((e: React.DragEvent, layerId: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', layerId);
+    setDraggedLayerId(layerId);
+  }, []);
+
+  // Handle drag over for layers
+  const handleLayerDragOver = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedLayerId && targetId !== draggedLayerId) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const position = y < rect.height / 2 ? 'before' : 'after';
+      setDropTargetLayerId(targetId);
+      setLayerDropPosition(position);
+    }
+  }, [draggedLayerId]);
+
+  // Handle drop for layers
+  const handleLayerDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedLayerId && dropTargetLayerId && layerDropPosition) {
+      // Get sorted layers by z_index
+      const sortedLayers = [...layers].sort((a, b) => (a.z_index ?? 0) - (b.z_index ?? 0));
+      const draggedIndex = sortedLayers.findIndex(l => l.id === draggedLayerId);
+      const targetIndex = sortedLayers.findIndex(l => l.id === dropTargetLayerId);
+
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        // Calculate how many positions to move
+        let finalTargetIndex = layerDropPosition === 'before' ? targetIndex : targetIndex + 1;
+        if (draggedIndex < finalTargetIndex) finalTargetIndex--;
+
+        // Determine direction based on position difference
+        if (finalTargetIndex > draggedIndex) {
+          // Move up (increase z-index)
+          for (let i = draggedIndex; i < finalTargetIndex; i++) {
+            reorderLayer(draggedLayerId, 'up');
+          }
+        } else if (finalTargetIndex < draggedIndex) {
+          // Move down (decrease z-index)
+          for (let i = draggedIndex; i > finalTargetIndex; i--) {
+            reorderLayer(draggedLayerId, 'down');
+          }
+        }
+      }
+    }
+
+    setDraggedLayerId(null);
+    setDropTargetLayerId(null);
+    setLayerDropPosition(null);
+  }, [draggedLayerId, dropTargetLayerId, layerDropPosition, layers, reorderLayer]);
+
+  // Handle drag end for layers
+  const handleLayerDragEnd = useCallback(() => {
+    setDraggedLayerId(null);
+    setDropTargetLayerId(null);
+    setLayerDropPosition(null);
   }, []);
 
   // Handle deleting a layer with confirmation
@@ -971,12 +1039,28 @@ function LayersTree() {
             >
               <div
                 className={cn(
-                  'flex items-center gap-1 px-1.5 py-1 rounded-md group hover:bg-muted/50 cursor-pointer',
+                  'flex items-center gap-1 px-1.5 py-1 rounded-md group hover:bg-muted/50 cursor-pointer relative',
                   isExpanded && 'bg-muted/30',
-                  onAir && 'border-l-2 border-emerald-500'
+                  onAir && 'border-l-2 border-emerald-500',
+                  draggedLayerId === layer.id && 'opacity-50',
+                  dropTargetLayerId === layer.id && layerDropPosition === 'before' && 'border-t-2 border-primary',
+                  dropTargetLayerId === layer.id && layerDropPosition === 'after' && 'border-b-2 border-primary'
                 )}
+                draggable
+                onDragStart={(e) => handleLayerDragStart(e, layer.id)}
+                onDragOver={(e) => handleLayerDragOver(e, layer.id)}
+                onDragLeave={() => {
+                  if (dropTargetLayerId === layer.id) {
+                    setDropTargetLayerId(null);
+                    setLayerDropPosition(null);
+                  }
+                }}
+                onDrop={handleLayerDrop}
+                onDragEnd={handleLayerDragEnd}
                 onClick={() => toggleNode(layer.id)}
               >
+              {/* Drag Handle */}
+              <GripVertical className="w-3 h-3 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
               <Button
                 variant="ghost"
                 size="icon"

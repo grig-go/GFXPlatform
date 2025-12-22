@@ -233,43 +233,36 @@ export const usePlayoutLogStore = create<PlayoutLogStore>((set, get) => ({
   },
 
   logPlay: async (params) => {
-    console.log('[PlayoutLog] logPlay called with:', params);
     try {
-      const insertData = {
-        organization_id: params.organizationId,
-        channel_id: params.channelId,
-        channel_code: params.channelCode,
-        channel_name: params.channelName,
-        layer_index: params.layerIndex,
-        layer_name: params.layerName,
-        page_id: params.pageId,
-        page_name: params.pageName,
-        template_id: params.templateId,
-        template_name: params.templateName,
-        project_id: params.projectId,
-        project_name: params.projectName,
-        payload_snapshot: params.payload || {},
-        operator_id: params.operatorId,
-        operator_name: params.operatorName,
-        trigger_source: params.triggerSource || 'manual',
-      };
-      console.log('[PlayoutLog] Inserting:', insertData);
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('pulsar_playout_log')
-        .insert(insertData)
-        .select('id')
-        .single();
+        .insert({
+          organization_id: params.organizationId,
+          channel_id: params.channelId,
+          channel_code: params.channelCode,
+          channel_name: params.channelName,
+          layer_index: params.layerIndex,
+          layer_name: params.layerName,
+          page_id: params.pageId,
+          page_name: params.pageName,
+          template_id: params.templateId,
+          template_name: params.templateName,
+          project_id: params.projectId,
+          project_name: params.projectName,
+          payload_snapshot: params.payload || {},
+          operator_id: params.operatorId,
+          operator_name: params.operatorName,
+          trigger_source: params.triggerSource || 'manual',
+        });
 
       if (error) {
-        console.error('[PlayoutLog] Failed to log play event:', error);
+        // Silently fail - logging should not block graphics
         return null;
       }
 
-      console.log('[PlayoutLog] Successfully logged play event:', data?.id);
-      return data?.id || null;
-    } catch (error) {
-      console.error('[PlayoutLog] Failed to log play event:', error);
+      return null; // We don't need the ID for fire-and-forget logging
+    } catch {
+      // Silently fail - logging should not block graphics
       return null;
     }
   },
@@ -277,17 +270,14 @@ export const usePlayoutLogStore = create<PlayoutLogStore>((set, get) => ({
   logStop: async (params) => {
     try {
       // Use RPC to end active playout entries for this layer
-      const { error } = await supabase.rpc('end_active_playout', {
+      await supabase.rpc('end_active_playout', {
         p_channel_id: params.channelId,
         p_layer_index: params.layerIndex,
         p_end_reason: params.endReason || 'manual',
       });
-
-      if (error) {
-        console.error('Failed to log stop event:', error);
-      }
-    } catch (error) {
-      console.error('Failed to log stop event:', error);
+      // Silently ignore errors - logging should not block graphics
+    } catch {
+      // Silently fail - logging should not block graphics
     }
   },
 

@@ -1,12 +1,10 @@
-import { useState } from 'react';
-import { Plus, Trash2, Link2, Type, Image, Hash, Palette, ToggleLeft } from 'lucide-react';
+import { Trash2, Link2, Type, Image, Hash, Palette, ToggleLeft } from 'lucide-react';
 import { Button, Input, ScrollArea, Separator, cn } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import type { Binding, BindingType } from '@emergent-platform/types';
 
 export function BindingsPanel() {
-  const { bindings, elements, currentTemplateId } = useDesignerStore();
-  const [newBindingKey, setNewBindingKey] = useState('');
+  const { bindings, currentTemplateId } = useDesignerStore();
 
   // Group bindings by element
   const bindingsByElement = new Map<string, Binding[]>();

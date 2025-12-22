@@ -36,7 +36,6 @@ export function TableElement({
   content,
   width,
   height,
-  isSelected = false,
 }: TableElementProps) {
   const elementWidth = width || 600;
   const elementHeight = height || 300;

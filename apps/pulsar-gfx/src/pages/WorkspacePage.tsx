@@ -15,6 +15,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
 } from '@emergent-platform/ui';
 import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { PlaylistPanel } from '@/components/playlist/PlaylistPanel';
@@ -105,13 +108,20 @@ export function WorkspacePage() {
 
   return (
     <div className="h-full flex overflow-hidden">
-      {/* Left Panel - Pages/Templates Sidebar */}
-      <div className="w-80 border-r border-border flex flex-col overflow-hidden">
-        <LeftSidebar defaultTab="pages" />
-      </div>
+      <ResizablePanelGroup direction="horizontal" className="h-full">
+        {/* Left Panel - Pages/Templates Sidebar */}
+        <ResizablePanel defaultSize={30} minSize={15} maxSize={50}>
+          <div className="h-full flex flex-col overflow-hidden">
+            <LeftSidebar defaultTab="pages" />
+          </div>
+        </ResizablePanel>
 
-      {/* Right Panel - Playlist Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Draggable Handle */}
+        <ResizableHandle withHandle />
+
+        {/* Right Panel - Playlist Area */}
+        <ResizablePanel defaultSize={70} minSize={40}>
+          <div className="h-full flex flex-col overflow-hidden">
         {/* Playlist Tabs */}
         <div className="h-10 flex items-center border-b border-border bg-card/50 px-2 shrink-0">
           <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-none">
@@ -208,7 +218,9 @@ export function WorkspacePage() {
             </div>
           )}
         </div>
-      </div>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* New Playlist Modal */}
       <Dialog open={showNewPlaylistModal} onOpenChange={setShowNewPlaylistModal}>

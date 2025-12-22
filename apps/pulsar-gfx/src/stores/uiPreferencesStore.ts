@@ -85,13 +85,6 @@ let loadingPromise: Promise<void> | null = null;
 
 // Save preferences to Supabase (debounced)
 const savePreferencesToDB = async (preferences: UIPreferences, changedField?: keyof UIPreferences) => {
-  console.log('[uiPreferencesStore] savePreferencesToDB called with:', {
-    lastProjectId: preferences.lastProjectId,
-    openPlaylistIds: preferences.openPlaylistIds,
-    activePlaylistId: preferences.activePlaylistId,
-    changedField,
-  });
-
   // Track which field changed so we only update that field
   if (changedField) {
     pendingUpdates[changedField] = preferences[changedField] as any;
@@ -103,12 +96,9 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
 
   saveTimeout = setTimeout(async () => {
     try {
-      console.log('[uiPreferencesStore] Debounce timer fired, saving to DB...');
-
       // Wait for auth to be initialized AND have an access token before saving
       const authState = useAuthStore.getState();
       if (!authState.isInitialized || !authState.accessToken) {
-        console.log('[uiPreferencesStore] Auth not ready yet, waiting...');
         // Wait up to 5 seconds for auth to initialize with a valid session
         let waited = 0;
         while (waited < 5000) {
@@ -125,13 +115,11 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
       const accessToken = currentAuthState.accessToken;
 
       if (!authUser || !accessToken) {
-        console.warn('[uiPreferencesStore] No authenticated session, cannot save preferences');
         pendingUpdates = {};
         return;
       }
 
       const userId = authUser.id;
-      console.log('[uiPreferencesStore] User found:', userId, authUser.email, 'hasToken:', !!accessToken);
 
       // Map store fields to DB column names
       const fieldMapping: Record<keyof UIPreferences, string> = {
@@ -148,10 +136,7 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
       const updatesToApply = { ...pendingUpdates };
       pendingUpdates = {};
 
-      console.log('[uiPreferencesStore] Updates to apply:', updatesToApply);
-
       if (Object.keys(updatesToApply).length === 0) {
-        console.log('[uiPreferencesStore] No updates to apply, skipping save');
         return;
       }
 
@@ -163,7 +148,6 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
         .maybeSingle();
 
       if (checkError) {
-        console.error('[uiPreferencesStore] Error checking for existing row:', checkError);
         return;
       }
 
@@ -177,19 +161,11 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
           }
         }
 
-        console.log('[uiPreferencesStore] Updating existing row:', updateData);
-
-        const { error, data } = await supabase
+        await supabase
           .from('pulsar_user_preferences')
           .update(updateData)
           .eq('user_id', userId)
           .select();
-
-        if (error) {
-          console.error('[uiPreferencesStore] Failed to update preferences:', error);
-        } else {
-          console.log('[uiPreferencesStore] Preferences updated successfully:', data);
-        }
       } else {
         // INSERT new row with defaults + changed fields
         const insertData: Record<string, any> = {
@@ -209,21 +185,12 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
           }
         }
 
-        console.log('[uiPreferencesStore] Inserting new row:', insertData);
-
-        const { error, data } = await supabase
+        await supabase
           .from('pulsar_user_preferences')
           .insert(insertData)
           .select();
-
-        if (error) {
-          console.error('[uiPreferencesStore] Failed to insert preferences:', error);
-        } else {
-          console.log('[uiPreferencesStore] Preferences inserted successfully:', data);
-        }
       }
-    } catch (err) {
-      console.error('[uiPreferencesStore] Error saving preferences:', err);
+    } catch {
       pendingUpdates = {};
     }
   }, SAVE_DEBOUNCE_MS);
@@ -238,18 +205,14 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
   loadPreferences: async () => {
     // If already loaded, return immediately
     if (get().isLoaded) {
-      console.log('[uiPreferencesStore] Already loaded, returning');
       return;
     }
 
     // If already loading, wait for the existing promise
     // CRITICAL: This check must happen BEFORE we create a new promise
     if (loadingPromise) {
-      console.log('[uiPreferencesStore] Already loading, waiting for existing promise...');
       return loadingPromise;
     }
-
-    console.log('[uiPreferencesStore] Starting loadPreferences...');
 
     // Set loading state
     set({ isLoading: true, error: null });
@@ -261,7 +224,6 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
         // Wait for auth to be initialized AND have an access token before loading preferences
         const authState = useAuthStore.getState();
         if (!authState.isInitialized || !authState.accessToken) {
-          console.log('[uiPreferencesStore] Auth not ready yet, waiting...');
           // Wait up to 5 seconds for auth to initialize with a valid session
           let waited = 0;
           while (waited < 5000) {
@@ -278,12 +240,9 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
         const accessToken = currentAuthState.accessToken;
 
         if (!authUser || !accessToken) {
-          console.log('[uiPreferencesStore] No authenticated session, using defaults');
           set({ isLoading: false, isLoaded: true });
           return;
         }
-
-        console.log('[uiPreferencesStore] Loading preferences for user:', authUser.email, 'hasToken:', !!accessToken);
 
         const { data, error } = await supabase
           .from('pulsar_user_preferences')
@@ -294,7 +253,6 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
         if (error) {
           if (error.code === 'PGRST116') {
             // No preferences found, use defaults
-            console.log('[uiPreferencesStore] No saved preferences found, using defaults');
             set({ isLoading: false, isLoaded: true });
             return;
           }
@@ -302,13 +260,6 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
         }
 
         if (data) {
-          console.log('[uiPreferencesStore] Loaded preferences from database:', {
-            lastProjectId: data.last_project_id,
-            openPlaylistIds: data.open_playlist_ids,
-            activePlaylistId: data.active_playlist_id,
-            selectedChannelId: data.selected_channel_id,
-          });
-
           set({
             lastProjectId: data.last_project_id,
             openPlaylistIds: data.open_playlist_ids || [],
@@ -320,12 +271,10 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
             isLoading: false,
             isLoaded: true,
           });
-          console.log('[uiPreferencesStore] Preferences loaded and state updated');
         } else {
           set({ isLoading: false, isLoaded: true });
         }
-      } catch (err) {
-        console.error('[uiPreferencesStore] Failed to load preferences:', err);
+      } catch {
         set({ error: 'Failed to load preferences', isLoading: false, isLoaded: true });
       } finally {
         // Clear the loading promise so future calls can reload if needed

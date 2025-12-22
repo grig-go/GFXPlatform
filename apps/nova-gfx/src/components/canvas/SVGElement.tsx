@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { AlertCircle, Upload } from 'lucide-react';
-import { Button, Input } from '@emergent-platform/ui';
+import { Button } from '@emergent-platform/ui';
 import { useDesignerStore } from '@/stores/designerStore';
 import { SVGPickerDialog } from '@/components/dialogs/SVGPickerDialog';
 

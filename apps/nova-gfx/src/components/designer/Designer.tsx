@@ -417,7 +417,8 @@ export function Designer() {
 
   
   // Handle save - check if project came from system template
-  const handleSave = useCallback(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _handleSave = useCallback(() => {
     if (!project) return;
     
     // Check if project was created from a system template

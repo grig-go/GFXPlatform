@@ -42,7 +42,6 @@ export function sendBeaconUpdate(
   filter: { column: string; value: string }
 ): boolean {
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[Supabase Beacon] Cannot send - not configured');
     return false;
   }
 
@@ -69,10 +68,8 @@ export function sendBeaconUpdate(
       // Ignore errors - we're closing anyway
     });
 
-    console.log(`[Supabase Beacon] Queued update for ${table}`);
     return true;
-  } catch (err) {
-    console.warn('[Supabase Beacon] Failed to queue:', err);
+  } catch {
     return false;
   }
 }
@@ -101,8 +98,6 @@ export async function directRestUpdate(
   const authToken = accessToken || supabaseAnonKey;
 
   try {
-    console.log(`[Supabase REST] PATCH ${table} where ${filter.column}=${filter.value}`);
-
     const response = await fetch(
       `${supabaseUrl}/rest/v1/${table}?${filter.column}=eq.${filter.value}`,
       {
@@ -125,20 +120,16 @@ export async function directRestUpdate(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Supabase REST] Error: ${response.status} ${errorText}`);
       return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
-    console.log(`[Supabase REST] Success`);
     markSupabaseSuccess();
     return { success: true };
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.error(`[Supabase REST] Timeout after ${timeoutMs}ms`);
       return { success: false, error: `Timeout after ${timeoutMs}ms` };
     }
-    console.error(`[Supabase REST] Error:`, err);
     return { success: false, error: err.message };
   }
 }
@@ -182,7 +173,6 @@ export async function directRestSelect<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Supabase REST] Error: ${response.status} ${errorText}`);
       return { data: null, error: `HTTP ${response.status}: ${errorText}` };
     }
 
@@ -192,10 +182,8 @@ export async function directRestSelect<T = any>(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.error(`[Supabase REST] Timeout after ${timeoutMs}ms`);
       return { data: null, error: `Timeout after ${timeoutMs}ms` };
     }
-    console.error(`[Supabase REST] Error:`, err);
     return { data: null, error: err.message };
   }
 }
@@ -224,8 +212,6 @@ export async function directRestInsert<T = any>(
   const authToken = accessToken || supabaseAnonKey;
 
   try {
-    console.log(`[Supabase REST] POST ${table} (insert, auth: ${accessToken ? 'user' : 'anon'})`);
-
     const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
       method: 'POST',
       headers: {
@@ -245,21 +231,17 @@ export async function directRestInsert<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Supabase REST] Insert error: ${response.status} ${errorText}`);
       return { data: null, error: `HTTP ${response.status}: ${errorText}` };
     }
 
     const result = await response.json();
-    console.log(`[Supabase REST] Insert success`);
     markSupabaseSuccess();
     return { data: Array.isArray(result) ? result : [result] };
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.error(`[Supabase REST] Insert timeout after ${timeoutMs}ms`);
       return { data: null, error: `Timeout after ${timeoutMs}ms` };
     }
-    console.error(`[Supabase REST] Insert error:`, err);
     return { data: null, error: err.message };
   }
 }
@@ -287,8 +269,6 @@ export async function directRestDelete(
   try {
     // Support both array of IDs and single filter object
     let queryString: string;
-    let logMessage: string;
-
     if (Array.isArray(filter)) {
       // Array of IDs - use in() filter
       if (filter.length === 0) {
@@ -296,14 +276,10 @@ export async function directRestDelete(
       }
       const idsParam = filter.map(id => `"${id}"`).join(',');
       queryString = `id=in.(${idsParam})`;
-      logMessage = `[Supabase REST] DELETE ${table} where id in (${filter.length} items)`;
     } else {
       // Single filter object
       queryString = `${filter.column}=eq.${filter.value}`;
-      logMessage = `[Supabase REST] DELETE ${table} where ${filter.column}=${filter.value}`;
     }
-
-    console.log(logMessage);
 
     const response = await fetch(
       `${supabaseUrl}/rest/v1/${table}?${queryString}`,
@@ -325,20 +301,16 @@ export async function directRestDelete(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Supabase REST] Delete error: ${response.status} ${errorText}`);
       return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
-    console.log(`[Supabase REST] Delete success`);
     markSupabaseSuccess();
     return { success: true };
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.error(`[Supabase REST] Delete timeout after ${timeoutMs}ms`);
       return { success: false, error: `Timeout after ${timeoutMs}ms` };
     }
-    console.error(`[Supabase REST] Delete error:`, err);
     return { success: false, error: err.message };
   }
 }

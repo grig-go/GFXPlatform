@@ -81,7 +81,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
   activeTabId: null,
 
   loadPlaylists: async (projectId: string) => {
-    console.log('[playlistStore] loadPlaylists called for project:', projectId);
     set({ isLoading: true, error: null });
     try {
       const { data, error } = await supabase
@@ -91,8 +90,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
         .order('created_at');
 
       if (error) throw error;
-
-      console.log('[playlistStore] Loaded', data?.length || 0, 'playlists from database');
 
       const playlists: Playlist[] = (data || []).map((p: any) => ({
         id: p.id,
@@ -115,11 +112,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
 
       // Try to restore saved playlist tabs from preferences
       const prefs = useUIPreferencesStore.getState();
-      console.log('[playlistStore] Preferences state:', {
-        isLoaded: prefs.isLoaded,
-        openPlaylistIds: prefs.openPlaylistIds,
-        activePlaylistId: prefs.activePlaylistId,
-      });
       const savedOpenIds = prefs.openPlaylistIds;
       const savedActiveId = prefs.activePlaylistId;
 
@@ -133,7 +125,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
 
       if (validSavedTabs.length > 0) {
         // Restore saved tabs
-        console.log('[playlistStore] Restoring', validSavedTabs.length, 'saved playlist tabs');
         const activePlaylist = savedActiveId
           ? playlists.find(p => p.id === savedActiveId)
           : playlists.find(p => p.id === validSavedTabs[0].id);
@@ -146,7 +137,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
       } else if (playlists.length > 0 && openTabs.length === 0) {
         // No saved tabs, auto-select first playlist
         const first = playlists[0];
-        console.log('[playlistStore] No saved tabs, auto-opening first playlist:', first.name);
         set({
           openTabs: [{ id: first.id, name: first.name }],
           activeTabId: first.id,
@@ -162,8 +152,7 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
           set({ currentPlaylist: playlist });
         }
       }
-    } catch (error) {
-      console.error('Failed to load playlists:', error);
+    } catch {
       set({ error: 'Failed to load playlists', isLoading: false });
     }
   },
@@ -195,8 +184,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
   },
 
   createPlaylist: async (name, projectId, mode = 'manual') => {
-    console.log('[playlistStore] createPlaylist called:', { name, projectId, mode });
-
     // Get the organization_id from the project
     const { data: projectData, error: projectError } = await supabase
       .from('gfx_projects')
@@ -204,20 +191,15 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
       .eq('id', projectId)
       .single();
 
-    console.log('[playlistStore] Project query result:', { projectData, projectError });
-
     if (projectError) {
-      console.error('[playlistStore] Error fetching project:', projectError);
       throw projectError;
     }
 
     let organizationId = projectData?.organization_id;
-    console.log('[playlistStore] Project organization_id:', organizationId);
 
     // If project doesn't have an organization_id, try to get one from user's memberships
     if (!organizationId) {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[playlistStore] Current user:', user?.id);
 
       if (user) {
         // Try to get user's organization membership
@@ -227,8 +209,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
           .eq('user_id', user.id)
           .limit(1)
           .single();
-
-        console.log('[playlistStore] User membership:', membershipData);
 
         if (membershipData) {
           organizationId = membershipData.organization_id;
@@ -244,7 +224,6 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
 
     // If still no organization_id, use dev organization as fallback (for anon/dev mode)
     if (!organizationId) {
-      console.log('[playlistStore] No organization found, using dev organization');
       organizationId = DEV_ORG_ID;
 
       // Also update the project to have this organization_id

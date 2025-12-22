@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useLayoutEffect, useState } from 'react';
 import { animate } from 'motion';
-import Splitting from 'splitting';
+// Splitting CSS for character animation styles
 import 'splitting/dist/splitting.css';
 import 'splitting/dist/splitting-cells.css';
 

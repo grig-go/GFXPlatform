@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import Marquee from 'react-fast-marquee';
 import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
 import * as LucideIcons from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { findIconDefinition } from '@fortawesome/fontawesome-svg-core';
-import type { TickerItem, TickerConfig, TickerMode } from '@emergent-platform/types';
+import type { TickerItem, TickerConfig } from '@emergent-platform/types';
 import { DEFAULT_TICKER_CONFIG } from '@emergent-platform/types';
 import { cn } from '@emergent-platform/ui';
 

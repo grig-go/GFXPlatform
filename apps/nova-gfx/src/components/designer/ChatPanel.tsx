@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Image as ImageIcon, Wand2, Sparkles, Loader2, Bot, User,
   AlertCircle, CheckCircle2, Code, ChevronDown, ChevronUp, Camera, X, FileText, Trash2, Mic, MicOff, Square, GripHorizontal, BookOpen, Zap, Database
 } from 'lucide-react';
 import { Button, Textarea, ScrollArea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@emergent-platform/ui';
-import { sendChatMessage, sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, getAIModel, checkAIAvailability, getCurrentModelDisplayInfo, type ChatMessage as AIChatMessage, type AIModelDisplayInfo } from '@/lib/ai';
+import { sendChatMessageStreaming, sendDocsChatMessage, QUICK_PROMPTS, isDrasticChange, checkAIAvailability, getCurrentModelDisplayInfo, type ChatMessage as AIChatMessage, type AIModelDisplayInfo } from '@/lib/ai';
 import { resolveGeneratePlaceholders, hasGeneratePlaceholders, replaceGenerateWithPlaceholder } from '@/lib/ai-prompts/tools/ai-image-generator';
 import { useAuthStore, getOrganizationId } from '@/stores/authStore';
 import { useDesignerStore } from '@/stores/designerStore';
@@ -491,7 +491,7 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState('');
+  const [, setInterimTranscript] = useState('');
   const [isDocsMode, setIsDocsMode] = useState(false);
   const [isDataMode, setIsDataMode] = useState(false);
   const [selectedDataSource, setSelectedDataSource] = useState<ChatDataSource | null>(null);
@@ -549,7 +549,6 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
     isChatLoading,
     loadChatMessages,
     addChatMessage,
-    updateChatMessageContent,
     markChangesApplied,
     clearChat,
   } = useDesignerStore();
@@ -2313,7 +2312,7 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
 
   // Check if AI is available - async check from backend providers
   const [aiAvailability, setAiAvailability] = useState<{ available: boolean; reason?: string }>({ available: true }); // Optimistic default
-  const [isCheckingAI, setIsCheckingAI] = useState(true);
+  const [, setIsCheckingAI] = useState(true);
 
   useEffect(() => {
     let mounted = true;

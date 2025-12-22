@@ -1369,11 +1369,45 @@ export function NovaPlayer() {
     // Using command ID instead of sequence because sequence comparison fails on initial load
     let lastProcessedCommandId: string | null = null;
 
+    // IMMEDIATELY update player_status to 'connected' using direct REST API
+    // Don't wait for realtime subscription - it may never complete
+    // This ensures the status bar shows the player as connected right away
+    directRestUpdate(
+      'pulsar_channels',
+      {
+        player_status: 'connected',
+        last_heartbeat: new Date().toISOString(),
+      },
+      { column: 'id', value: channelId },
+      5000
+    ).then(result => {
+      if (result.success) {
+        setConnectionStatus('connected');
+        setIsReady(true);
+      }
+    }).catch(() => {
+      // Ignore initial status update errors
+    });
+
+    // Heartbeat - update player_status every 10 seconds to confirm player is still alive
+    // This is critical because status bar polls every 5 seconds and needs up-to-date status
+    const heartbeatInterval = setInterval(() => {
+      directRestUpdate(
+        'pulsar_channels',
+        {
+          player_status: 'connected',
+          last_heartbeat: new Date().toISOString(),
+        },
+        { column: 'id', value: channelId },
+        5000
+      ).catch(() => {
+        // Ignore heartbeat errors
+      });
+    }, 10000);
+
     // Note: We no longer call ensureFreshConnection() here since it was causing issues.
     // The realtime subscription will establish its own WebSocket connection.
     // Initial data loading uses direct REST API which bypasses the Supabase client.
-
-    console.log(`[Nova Player] Creating realtime subscription for table: pulsar_channel_state, filter: channel_id=eq.${channelId}`);
 
     const channel = supabase
       .channel(`nova-player:${channelId}`)
@@ -1539,6 +1573,9 @@ export function NovaPlayer() {
 
       // Clear polling interval
       clearInterval(pollInterval);
+
+      // Clear heartbeat interval
+      clearInterval(heartbeatInterval);
 
       // Unsubscribe from realtime channel
       supabase.removeChannel(channel);
@@ -1982,20 +2019,20 @@ export function NovaPlayer() {
         )
       : [];
 
-    // Combine and sort by z_index
-    return [...alwaysOnElements, ...layerTemplateElements, ...legacyTriggeredElements]
-      .sort((a, b) => {
-        // Get layer z_index for each element's template
-        const templateA = templates.find(t => t.id === a.template_id);
-        const templateB = templates.find(t => t.id === b.template_id);
-        const layerA = layers.find(l => l.id === templateA?.layer_id);
-        const layerB = layers.find(l => l.id === templateB?.layer_id);
-        const layerZA = layerA?.z_index || 0;
-        const layerZB = layerB?.z_index || 0;
+    // Build lookup maps for efficient z_index calculation
+    const templateToLayer = new Map(templates.map(t => [t.id, t.layer_id]));
+    const layerZIndex = new Map(layers.map(l => [l.id, l.z_index ?? 0]));
 
-        // First sort by layer z_index, then by element z_index
-        if (layerZA !== layerZB) return layerZA - layerZB;
-        return (a.z_index || 0) - (b.z_index || 0);
+    // Combine, add effectiveZIndex, and sort
+    return [...alwaysOnElements, ...layerTemplateElements, ...legacyTriggeredElements]
+      .map(e => {
+        const layerId = templateToLayer.get(e.template_id);
+        const layerZ = layerId ? (layerZIndex.get(layerId) ?? 0) : 0;
+        return { ...e, effectiveZIndex: layerZ + (e.z_index ?? 0) };
+      })
+      .sort((a, b) => {
+        // Sort by effectiveZIndex (layer z_index + element z_index)
+        return (a.effectiveZIndex ?? 0) - (b.effectiveZIndex ?? 0);
       });
   }, [elementsWithOverrides, alwaysOnTemplateIds, activeLayerTemplateIds, currentTemplateId, isOnAir, templates, layers]);
 
@@ -2216,6 +2253,19 @@ export function NovaPlayer() {
   const canvasWidth = project?.canvas_width || 1920;
   const canvasHeight = project?.canvas_height || 1080;
 
+  // Helper to compute effectiveZIndex for an element based on its layer
+  const getEffectiveZIndex = useCallback((element: Element): number => {
+    const template = templates.find(t => t.id === element.template_id);
+    const layer = template ? layers.find(l => l.id === template.layer_id) : null;
+    const layerZ = layer?.z_index ?? 0;
+    return layerZ + (element.z_index ?? 0);
+  }, [templates, layers]);
+
+  // Helper to add effectiveZIndex to an element
+  const withEffectiveZIndex = useCallback((element: Element): Element & { effectiveZIndex: number } => {
+    return { ...element, effectiveZIndex: getEffectiveZIndex(element) };
+  }, [getEffectiveZIndex]);
+
   return (
     <div
       className="w-screen h-screen overflow-hidden"
@@ -2304,7 +2354,8 @@ export function NovaPlayer() {
         {/* Render always-on elements (static, no animation switching) */}
         {elementsWithOverrides
           .filter(e => alwaysOnTemplateIds.has(e.template_id) && e.visible !== false && !e.parent_element_id)
-          .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
+          .map(withEffectiveZIndex)
+          .sort((a, b) => (a.effectiveZIndex || 0) - (b.effectiveZIndex || 0))
           .map((element) => (
             <PlayerElement
               key={`always-on-${element.id}`}
@@ -2369,7 +2420,8 @@ export function NovaPlayer() {
           );
 
           return instanceElements
-            .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
+            .map(withEffectiveZIndex)
+            .sort((a, b) => (a.effectiveZIndex || 0) - (b.effectiveZIndex || 0))
             .map((element) => (
               <PlayerElement
                 key={`${instance.instanceId}-${element.id}`}
@@ -2392,7 +2444,8 @@ export function NovaPlayer() {
         {activeInstances.length === 0 && isOnAir && currentTemplateId && !alwaysOnTemplateIds.has(currentTemplateId) && (
           elementsWithOverrides
             .filter(e => e.template_id === currentTemplateId && e.visible !== false && !e.parent_element_id)
-            .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
+            .map(withEffectiveZIndex)
+            .sort((a, b) => (a.effectiveZIndex || 0) - (b.effectiveZIndex || 0))
             .map((element) => (
               <PlayerElement
                 key={`legacy-${element.id}`}
@@ -2518,7 +2571,7 @@ function PlayerElement({
     transform: animatedTransform,
     transformOrigin: `${element.anchor_x * 100}% ${element.anchor_y * 100}%`,
     opacity: animatedOpacity,
-    zIndex: element.z_index || 0,
+    zIndex: (element as any).effectiveZIndex ?? element.z_index ?? 0,
     ...element.styles,
     ...Object.fromEntries(
       Object.entries(animatedProps).filter(([key]) =>

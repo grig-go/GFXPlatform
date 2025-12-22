@@ -28,8 +28,9 @@ import {
   Filter,
   X,
 } from 'lucide-react';
-import { usePageLibraryStore, type LibraryPage } from '@/stores/pageRepositoryStore';
+import { usePageStore, type Page } from '@/stores/pageStore';
 import { useProjectStore, type Template } from '@/stores/projectStore';
+import { usePlaylistStore } from '@/stores/playlistStore';
 import { useConfirm } from '@/hooks/useConfirm';
 
 // Data transfer type for dragging pages to playlist
@@ -59,51 +60,62 @@ function formatLayerType(type: string): string {
 }
 
 export function PageList() {
-  // Use library store for standalone pages at project level
-  const { pages, loadPageLibrary, removeFromLibrary, isLoading } = usePageLibraryStore();
+  // Use page store for all project pages across all playlists
+  const { projectPages, projectPagesLoading, loadProjectPages, deletePage } = usePageStore();
   const { currentProject, templates } = useProjectStore();
+  const { playlists } = usePlaylistStore();
   const confirm = useConfirm();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLayerType, setSelectedLayerType] = useState<string>('all');
 
-  // Load page library when project changes
+  // Load all project pages when project changes
   useEffect(() => {
     if (currentProject?.id) {
-      loadPageLibrary(currentProject.id);
+      loadProjectPages(currentProject.id);
     }
-  }, [currentProject?.id, loadPageLibrary]);
+  }, [currentProject?.id, loadProjectPages]);
 
   // Get unique layer types from pages via templates
   const layerTypes = useMemo(() => {
     const types = new Set<string>();
-    pages.forEach((page) => {
+    projectPages.forEach((page) => {
       const template = templates.find((t) => t.id === page.templateId);
       if (template) {
         types.add(template.layerType);
       }
     });
     return ['all', ...Array.from(types)];
-  }, [pages, templates]);
+  }, [projectPages, templates]);
+
+  // Get playlist name by ID
+  const getPlaylistName = (playlistId: string) => {
+    const playlist = playlists.find((p) => p.id === playlistId);
+    return playlist?.name || 'Unknown';
+  };
 
   // Filter pages by search and layer type
-  const filteredPages = pages.filter((page) => {
+  const filteredPages = projectPages.filter((page) => {
     const matchesSearch = page.name.toLowerCase().includes(searchQuery.toLowerCase());
     const template = templates.find((t) => t.id === page.templateId);
     const matchesLayerType = selectedLayerType === 'all' || template?.layerType === selectedLayerType;
     return matchesSearch && matchesLayerType;
   });
 
-  // Handle delete page from library
+  // Handle delete page
   const handleDeletePage = async (pageId: string) => {
     const confirmed = await confirm({
-      title: 'Remove Page',
-      description: 'Remove this page from the library? This will also remove it from all playlists.',
-      confirmText: 'Remove',
+      title: 'Delete Page',
+      description: 'Are you sure you want to delete this page? This action cannot be undone.',
+      confirmText: 'Delete',
       variant: 'destructive',
     });
     if (confirmed) {
-      await removeFromLibrary(pageId);
+      await deletePage(pageId);
+      // Reload project pages after deletion
+      if (currentProject?.id) {
+        loadProjectPages(currentProject.id);
+      }
     }
   };
 
@@ -179,17 +191,17 @@ export function PageList() {
 
         <div className="flex items-center justify-between px-0.5">
           <span className="text-[10px] text-muted-foreground">
-            Drag to playlist
+            All project pages
           </span>
           <span className="text-[10px] text-muted-foreground">
-            {filteredPages.length} of {pages.length} pages
+            {filteredPages.length} of {projectPages.length} pages
           </span>
         </div>
       </div>
 
       {/* Page List */}
       <ScrollArea className="flex-1">
-        {isLoading ? (
+        {projectPagesLoading ? (
           <div className="py-8 text-center text-muted-foreground text-sm">
             Loading pages...
           </div>
@@ -200,6 +212,7 @@ export function PageList() {
                 key={page.id}
                 page={page}
                 template={templates.find((t) => t.id === page.templateId)}
+                playlistName={getPlaylistName(page.playlistId)}
                 onDelete={() => handleDeletePage(page.id)}
               />
             ))}
@@ -219,12 +232,13 @@ export function PageList() {
 }
 
 interface PageListItemProps {
-  page: LibraryPage;
+  page: Page;
   template?: Template;
+  playlistName: string;
   onDelete: () => void;
 }
 
-function PageListItem({ page, template, onDelete }: PageListItemProps) {
+function PageListItem({ page, template, playlistName, onDelete }: PageListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const isMissingTemplate = !template && page.templateId;
@@ -234,16 +248,16 @@ function PageListItem({ page, template, onDelete }: PageListItemProps) {
     ? (LAYER_TYPE_ICONS[template.layerType] || Grid3X3)
     : FileText;
 
-  // Handle drag start - set page data for transfer
+  // Handle drag start - set page data for transfer (for potential future use)
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
-    // Set the data transfer with page info including payload
     e.dataTransfer.setData(PAGE_DRAG_TYPE, JSON.stringify({
-      libraryPageId: page.id,
+      pageId: page.id,
       pageName: page.name,
       templateId: page.templateId,
       payload: page.payload,
       duration: page.duration,
+      playlistId: page.playlistId,
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -292,19 +306,12 @@ function PageListItem({ page, template, onDelete }: PageListItemProps) {
           <div className="text-[10px] text-red-400 truncate">
             Template deleted
           </div>
-        ) : template ? (
+        ) : (
           <div className="text-[10px] text-muted-foreground truncate">
-            {template.name}
+            {template?.name || 'No template'} • {playlistName}
           </div>
-        ) : null}
+        )}
       </div>
-
-      {/* Usage count badge */}
-      {page.usageCount > 0 && (
-        <span className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-          {page.usageCount} use{page.usageCount !== 1 ? 's' : ''}
-        </span>
-      )}
 
       {/* Layer Badge */}
       {template && (

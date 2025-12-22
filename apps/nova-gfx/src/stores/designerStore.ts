@@ -443,6 +443,7 @@ interface DesignerActions {
   addLayer: (type: string, name: string) => Promise<Layer>;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   deleteLayer: (id: string) => void;
+  reorderLayer: (layerId: string, direction: 'up' | 'down') => void;
   toggleLayerVisibility: (id: string) => void;
   toggleLayerLock: (id: string) => void;
   showAllLayers: () => void;
@@ -4088,18 +4089,54 @@ export const useDesignerStore = create<DesignerState & DesignerActions>()(
 
             // Remove layer from array
             state.layers = state.layers.filter((l) => l.id !== id);
-            
+
             // Remove from expanded nodes if present
             state.expandedNodes.delete(id);
-            
+
             // Clear on-air state if this layer was on-air
             if (state.onAirTemplates[id]) {
               delete state.onAirTemplates[id];
             }
-            
+
             state.isDirty = true;
             get().pushHistory('Delete layer');
           });
+        },
+
+        reorderLayer: (layerId, direction) => {
+          const layers = get().layers;
+          // Sort layers by current z_index
+          const sortedLayers = [...layers].sort((a, b) => (a.z_index ?? 0) - (b.z_index ?? 0));
+          const currentIndex = sortedLayers.findIndex(l => l.id === layerId);
+
+          if (currentIndex === -1) return;
+
+          // Calculate new index
+          const newIndex = direction === 'up'
+            ? currentIndex + 1  // Moving "up" means higher z_index (rendered on top)
+            : currentIndex - 1; // Moving "down" means lower z_index (rendered below)
+
+          // Check bounds
+          if (newIndex < 0 || newIndex >= sortedLayers.length) return;
+
+          const currentLayerId = sortedLayers[currentIndex].id;
+          const targetLayerId = sortedLayers[newIndex].id;
+          const currentZ = sortedLayers[currentIndex].z_index ?? currentIndex;
+          const targetZ = sortedLayers[newIndex].z_index ?? newIndex;
+
+          // Swap z_index values with adjacent layer
+          set((state) => {
+            const currentLayer = state.layers.find(l => l.id === currentLayerId);
+            const targetLayer = state.layers.find(l => l.id === targetLayerId);
+
+            if (currentLayer && targetLayer) {
+              currentLayer.z_index = targetZ;
+              targetLayer.z_index = currentZ;
+              state.isDirty = true;
+            }
+          });
+
+          get().pushHistory('Reorder layer');
         },
 
         showAllLayers: () => {

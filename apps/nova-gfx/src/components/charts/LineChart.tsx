@@ -18,7 +18,7 @@ export function LineChart({ config, width, height, className }: LineChartProps) 
     backgroundColor = 'transparent',
     animate = true,
     animationDuration = 1000,
-    showLabels = true,
+    showLabels: _showLabels = true,
     showValues = false,
     labelColor = '#FFFFFF',
     labelSize = 12,
@@ -118,7 +118,7 @@ export function LineChart({ config, width, height, className }: LineChartProps) 
         .attr('stop-opacity', 0);
 
       if (animate) {
-        const areaLength = areaPath.node()?.getTotalLength() || 0;
+        // Animation uses opacity transition, not path drawing
         areaPath
           .attr('d', area)
           .attr('opacity', 0)

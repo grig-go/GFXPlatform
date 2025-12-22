@@ -49,8 +49,13 @@ interface PageStore {
   isLoading: boolean;
   error: string | null;
 
+  // Project-level pages (all pages across all playlists)
+  projectPages: Page[];
+  projectPagesLoading: boolean;
+
   // Actions
   loadPages: (playlistId: string) => Promise<void>;
+  loadProjectPages: (projectId: string) => Promise<void>;
   selectPage: (pageId: string | null) => void;
   clearPages: () => void;
   createPage: (
@@ -95,6 +100,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
   selectedPage: null,
   isLoading: false,
   error: null,
+  projectPages: [],
+  projectPagesLoading: false,
 
   loadPages: async (playlistId: string) => {
     set({ isLoading: true, error: null });
@@ -153,6 +160,47 @@ export const usePageStore = create<PageStore>((set, get) => ({
     }
   },
 
+  loadProjectPages: async (projectId: string) => {
+    set({ projectPagesLoading: true });
+    try {
+      // Load all pages for the project by joining through playlists
+      const { data: pageData, error: pageError } = await supabase
+        .from('pulsar_pages')
+        .select(`
+          *,
+          playlist:pulsar_playlists!inner(project_id)
+        `)
+        .eq('playlist.project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (pageError) throw pageError;
+
+      const projectPages: Page[] = (pageData || []).map((p: any) => ({
+        id: p.id,
+        organizationId: p.organization_id,
+        playlistId: p.playlist_id,
+        templateId: p.template_id,
+        pageGroupId: p.page_group_id,
+        channelId: p.channel_id,
+        name: p.name,
+        payload: p.payload || {},
+        dataBindings: p.data_bindings || [],
+        dataRecordIndex: p.data_record_index ?? 0,
+        duration: p.duration,
+        sortOrder: p.sort_order,
+        tags: p.tags || [],
+        isOnAir: p.is_on_air || false,
+        createdAt: new Date(p.created_at),
+        updatedAt: new Date(p.updated_at),
+      }));
+
+      set({ projectPages, projectPagesLoading: false });
+    } catch (error) {
+      console.error('Failed to load project pages:', error);
+      set({ projectPagesLoading: false });
+    }
+  },
+
   selectPage: (pageId: string | null) => {
     if (!pageId) {
       set({ selectedPage: null });
@@ -163,11 +211,10 @@ export const usePageStore = create<PageStore>((set, get) => ({
   },
 
   clearPages: () => {
-    set({ pages: [], pageGroups: [], selectedPage: null, error: null });
+    set({ pages: [], pageGroups: [], selectedPage: null, error: null, projectPages: [] });
   },
 
   createPage: async (playlistId, templateId, name, payload = {}, channelId = null, dataRecordIndex = 0) => {
-    console.log('[pageStore] createPage called with channelId:', channelId, 'dataRecordIndex:', dataRecordIndex);
     const pages = get().pages;
     const maxOrder = Math.max(...pages.map((p) => p.sortOrder), -1);
 
@@ -278,10 +325,6 @@ export const usePageStore = create<PageStore>((set, get) => ({
   },
 
   updatePagePayload: async (pageId, payload, dataRecordIndex) => {
-    console.log('[pageStore] updatePagePayload - pageId:', pageId);
-    console.log('[pageStore] updatePagePayload - payload:', payload);
-    console.log('[pageStore] updatePagePayload - dataRecordIndex:', dataRecordIndex);
-
     const updateData: Record<string, any> = {
       payload,
       updated_at: new Date().toISOString(),
@@ -292,21 +335,14 @@ export const usePageStore = create<PageStore>((set, get) => ({
       updateData.data_record_index = dataRecordIndex;
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('pulsar_pages')
       .update(updateData)
       .eq('id', pageId)
       .select();
 
-    console.log('[pageStore] updatePagePayload - result:', { data, error });
-
     if (error) {
-      console.error('[pageStore] updatePagePayload - Supabase error:', error);
       throw error;
-    }
-
-    if (!data || data.length === 0) {
-      console.warn('[pageStore] updatePagePayload - No rows updated! Check RLS policies or pageId:', pageId);
     }
 
     set({
@@ -322,18 +358,15 @@ export const usePageStore = create<PageStore>((set, get) => ({
   },
 
   deletePage: async (pageId) => {
-    console.log('[pageStore] Deleting page:', pageId);
-    const { error, count } = await supabase
+    const { error } = await supabase
       .from('pulsar_pages')
       .delete()
       .eq('id', pageId);
 
     if (error) {
-      console.error('[pageStore] Delete error:', error);
       throw error;
     }
 
-    console.log('[pageStore] Delete successful, count:', count);
     set({
       pages: get().pages.filter((p) => p.id !== pageId),
       selectedPage:
@@ -375,9 +408,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
             .eq('id', id)
         );
         await Promise.all(updates);
-      } catch (error) {
-        console.error('[pageStore] Failed to save page order:', error);
-        // Could implement retry logic or show error notification
+      } catch {
+        // Silently fail - order changes are best-effort
       }
     };
 
@@ -445,7 +477,7 @@ export const usePageStore = create<PageStore>((set, get) => ({
       let currentParent: string | undefined = parentGroupId;
       while (currentParent) {
         if (currentParent === groupId) {
-          console.error('[pageStore] Cannot nest group inside its own descendant');
+          // Cannot nest group inside its own descendant
           return;
         }
         const parentGroup = allGroups.find(g => g.id === currentParent);
@@ -580,8 +612,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
       .from('pulsar_page_groups')
       .update({ is_collapsed: newIsCollapsed })
       .eq('id', groupId)
-      .then(({ error }: { error: Error | null }) => {
-        if (error) console.error('[pageStore] Failed to save group collapsed state:', error);
+      .then(() => {
+        // Silently handle result
       });
   },
 
@@ -606,8 +638,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
             .eq('id', id)
         );
         await Promise.all(updates);
-      } catch (error) {
-        console.error('[pageStore] Failed to save group order:', error);
+      } catch {
+        // Silently fail - order changes are best-effort
       }
     };
 
@@ -669,8 +701,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
         );
 
         await Promise.all([...groupDbUpdates, ...pageDbUpdates]);
-      } catch (error) {
-        console.error('[pageStore] Failed to save mixed item order:', error);
+      } catch {
+        // Silently fail - order changes are best-effort
       }
     };
 
@@ -714,7 +746,6 @@ export const usePageStore = create<PageStore>((set, get) => ({
       .eq('id', pageId);
 
     if (error) {
-      console.error('[pageStore] Failed to update on-air state:', error);
       // Revert on error
       set({
         pages: get().pages.map((p) =>
@@ -732,11 +763,8 @@ export const usePageStore = create<PageStore>((set, get) => ({
     );
 
     if (pagesToReset.length === 0) {
-      console.log('[pageStore] No on-air pages to reset for channel:', channelId);
       return;
     }
-
-    console.log('[pageStore] Resetting on-air state for', pagesToReset.length, 'pages on channel:', channelId);
 
     // Optimistically update UI first
     set({
@@ -753,7 +781,6 @@ export const usePageStore = create<PageStore>((set, get) => ({
       .in('id', pageIds);
 
     if (error) {
-      console.error('[pageStore] Failed to reset on-air state for channel:', error);
       // Revert on error
       set({
         pages: get().pages.map((p) =>

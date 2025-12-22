@@ -1,6 +1,6 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import type { ChartConfig, ChartDataPoint } from './types';
+import type { ChartConfig } from './types';
 
 interface BarChartProps {
   config: ChartConfig;
@@ -26,8 +26,8 @@ export function BarChart({ config, width, height, className }: BarChartProps) {
     valueFormat = 'number',
     valuePrefix = '',
     valueSuffix = '',
-    showXAxis = false,
-    showYAxis = false,
+    showXAxis: _showXAxis = false,
+    showYAxis: _showYAxis = false,
     showGrid = false,
     gridColor = 'rgba(255,255,255,0.1)',
     padding = 20,

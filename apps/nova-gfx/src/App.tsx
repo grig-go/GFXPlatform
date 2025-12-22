@@ -11,7 +11,8 @@ import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { PrivateRoute } from '@/components/auth';
 import { useAuthStore } from '@/stores/authStore';
-import { useThemeStore, applyTheme } from '@/stores/themeStore';
+// Theme store imported for side-effects (initial theme application)
+import '@/stores/themeStore';
 import { ConfirmProvider } from '@/hooks/useConfirm';
 import { initializeMapboxKey } from '@/stores/mapboxStore';
 
