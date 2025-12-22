@@ -328,7 +328,9 @@ interface KeyframeInspectorProps {
   animation: Animation;
   elementName: string;
   phaseDuration: number;
+  element?: CanvasElement | null; // Element for getting video duration, etc.
   onUpdate: (id: string, updates: Partial<Keyframe>) => void;
+  onUpdateAnimation: (id: string, updates: Partial<Animation>) => void;
   onDelete: (id: string) => void;
   onRemoveProperty: (keyframeId: string, propertyKey: string) => void;
   onDeselect: () => void;
@@ -339,15 +341,49 @@ function KeyframeInspector({
   animation,
   elementName,
   phaseDuration,
+  element,
   onUpdate,
+  onUpdateAnimation,
   onDelete,
   onRemoveProperty,
   onDeselect,
 }: KeyframeInspectorProps) {
   const [isEditingPosition, setIsEditingPosition] = useState(false);
   const [editPositionValue, setEditPositionValue] = useState('');
+  const [isEditingOffset, setIsEditingOffset] = useState(false);
+  const [editOffsetValue, setEditOffsetValue] = useState('');
   const [showEasingDropdown, setShowEasingDropdown] = useState(false);
   const [expandedProperties, setExpandedProperties] = useState(true);
+  const [videoDuration, setVideoDuration] = useState<number>(300); // Default 300 seconds
+
+  // Get video duration from DOM if this is a video element
+  useEffect(() => {
+    if (element?.element_type !== 'video') return;
+
+    const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+
+    const getVideoDuration = () => {
+      if (videoEl && videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
+        setVideoDuration(videoEl.duration);
+      } else {
+        // Retry after a delay if video not ready
+        setTimeout(getVideoDuration, 500);
+      }
+    };
+
+    getVideoDuration();
+
+    // Listen for loadedmetadata event
+    if (videoEl) {
+      const handleMetadata = () => {
+        if (videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
+          setVideoDuration(videoEl.duration);
+        }
+      };
+      videoEl.addEventListener('loadedmetadata', handleMetadata);
+      return () => videoEl.removeEventListener('loadedmetadata', handleMetadata);
+    }
+  }, [element?.id, element?.element_type]);
 
   // Keyframe position is stored as milliseconds relative to animation start
   const relativeTimeMs = keyframe.position;
@@ -396,6 +432,35 @@ function KeyframeInspector({
       onUpdate(keyframe.id, { position: Math.round(newPosition) });
     }
     setIsEditingPosition(false);
+  };
+
+  // Parse offset time input (no upper bound since offset can be any value)
+  const parseOffsetInput = (input: string): number | null => {
+    const trimmed = input.trim().toLowerCase();
+
+    // Handle milliseconds: "500ms"
+    if (trimmed.endsWith('ms')) {
+      const ms = parseFloat(trimmed.slice(0, -2));
+      if (isNaN(ms)) return null;
+      return Math.max(0, ms);
+    }
+
+    // Handle seconds: "1.5s" or just "1.5"
+    if (trimmed.endsWith('s') || /^\d+\.?\d*$/.test(trimmed)) {
+      const seconds = parseFloat(trimmed.replace('s', ''));
+      if (isNaN(seconds)) return null;
+      return Math.max(0, seconds * 1000);
+    }
+
+    return null;
+  };
+
+  const handleOffsetSubmit = () => {
+    const newOffset = parseOffsetInput(editOffsetValue);
+    if (newOffset !== null) {
+      onUpdateAnimation(animation.id, { delay: Math.round(newOffset) });
+    }
+    setIsEditingOffset(false);
   };
 
   const handleEasingChange = (easing: string) => {
@@ -508,13 +573,44 @@ function KeyframeInspector({
             <span className="text-muted-foreground">on timeline</span>
           </button>
         )}
-        {/* Show delay/offset info if animation has a delay */}
-        {animation.delay > 0 && (
-          <div className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-500/10 rounded border border-slate-500/20">
-            <span className="text-slate-400">Offset (delay)</span>
-            <span className="font-mono text-slate-300">{formatTimeDisplay(animation.delay)}</span>
-          </div>
-        )}
+        {/* Animation offset/delay - editable */}
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+            Animation Offset
+          </label>
+          {isEditingOffset ? (
+            <Input
+              autoFocus
+              value={editOffsetValue}
+              onChange={(e) => setEditOffsetValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleOffsetSubmit();
+                if (e.key === 'Escape') setIsEditingOffset(false);
+              }}
+              onBlur={handleOffsetSubmit}
+              className="h-6 text-[10px] px-2"
+              placeholder="e.g. 0.5s, 500ms"
+            />
+          ) : (
+            <button
+              onClick={() => {
+                setEditOffsetValue(formatTimeDisplay(animation.delay));
+                setIsEditingOffset(true);
+              }}
+              className={cn(
+                "w-full h-6 px-2 text-[10px] font-mono border border-input rounded-md flex items-center justify-between transition-colors",
+                animation.delay > 0
+                  ? "bg-slate-500/10 hover:bg-slate-500/20 border-slate-500/30"
+                  : "bg-muted hover:bg-muted/80"
+              )}
+            >
+              <span className={animation.delay > 0 ? "text-blue-400" : "text-muted-foreground"}>
+                {formatTimeDisplay(animation.delay)}
+              </span>
+              <span className="text-muted-foreground text-[9px]">click to edit</span>
+            </button>
+          )}
+        </div>
         <div className="flex items-center justify-between text-[10px] px-2 text-muted-foreground">
           <span>Position in animation</span>
           <span className="font-mono">{formatTimeDisplay(relativeTimeMs)}</span>
@@ -574,9 +670,60 @@ function KeyframeInspector({
           </button>
 
           {expandedProperties && (
-            <div className="space-y-1.5 pl-1">
+            <div className="space-y-2 pl-1">
               {propertyKeys.map((key) => {
                 const value = keyframe.properties[key];
+                const isMediaTime = key === 'media_time';
+
+                // Special slider UI for media_time
+                if (isMediaTime) {
+                  const timeValue = Number(value) || 0;
+                  // videoDuration is already loaded from DOM via useEffect
+                  const maxDisplay = `${Math.floor(videoDuration / 60)}:${(videoDuration % 60).toFixed(1).padStart(4, '0')}`;
+                  return (
+                    <div key={key} className="space-y-1 group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground" title={formatPropertyName(key)}>
+                          {formatPropertyName(key)}
+                        </span>
+                        <button
+                          onClick={() => onRemoveProperty(keyframe.id, key)}
+                          className="opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                          title={`Remove ${formatPropertyName(key)}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max={videoDuration}
+                          step="0.1"
+                          value={timeValue}
+                          onChange={(e) => handlePropertyValueChange(key, e.target.value)}
+                          className="flex-1 custom-slider"
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          max={videoDuration}
+                          step="0.1"
+                          value={timeValue.toFixed(1)}
+                          onChange={(e) => handlePropertyValueChange(key, e.target.value)}
+                          className="w-16 h-5 text-[10px] px-1.5 font-mono text-center"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                        <span>0:00.0</span>
+                        <span className="text-center text-emerald-400/70">{Math.floor(timeValue / 60)}:{(timeValue % 60).toFixed(1).padStart(4, '0')}</span>
+                        <span>{maxDisplay}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Default input for other properties
                 return (
                   <div key={key} className="flex items-center gap-1.5 group">
                     <span className="w-20 text-[10px] text-muted-foreground truncate" title={formatPropertyName(key)}>
@@ -628,6 +775,7 @@ export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }
     currentTemplateId,
     selectKeyframes,
     updateKeyframe,
+    updateAnimation,
     deleteKeyframe,
     removeKeyframeProperty,
     phaseDurations,
@@ -778,7 +926,9 @@ export function PropertiesPanel({ searchFilter = '' }: { searchFilter?: string }
               animation={keyframeAnimation}
               elementName={selectedElement?.name || 'element'}
               phaseDuration={phaseDurations[keyframeAnimation.phase]}
+              element={selectedElement}
               onUpdate={updateKeyframe}
+              onUpdateAnimation={updateAnimation}
               onDelete={deleteKeyframe}
               onRemoveProperty={removeKeyframeProperty}
               onDeselect={() => selectKeyframes([])}
@@ -8677,14 +8827,20 @@ function VideoTimelineControls({
 }) {
   const [videoDuration, setVideoDuration] = useState<number>(30); // Default 30 seconds
   const [isLoadingDuration, setIsLoadingDuration] = useState(true);
+  const [localVideoTime, setLocalVideoTime] = useState<number>(0); // Track slider position locally
 
-  // Try to get video duration from DOM
+  // Try to get video duration and current time from DOM
   useEffect(() => {
+    const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+
     const getVideoDuration = () => {
-      const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
       if (videoEl && videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
         setVideoDuration(videoEl.duration);
         setIsLoadingDuration(false);
+        // Also sync local time with video's current time
+        if (!isNaN(videoEl.currentTime)) {
+          setLocalVideoTime(videoEl.currentTime);
+        }
       } else {
         // Retry after a delay if video not ready
         setTimeout(getVideoDuration, 500);
@@ -8693,8 +8849,7 @@ function VideoTimelineControls({
 
     getVideoDuration();
 
-    // Also listen for loadedmetadata event
-    const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+    // Listen for loadedmetadata event
     if (videoEl) {
       const handleMetadata = () => {
         if (videoEl.duration && !isNaN(videoEl.duration) && isFinite(videoEl.duration)) {
@@ -8714,6 +8869,18 @@ function VideoTimelineControls({
     return `${mins}:${secs.padStart(4, '0')}`;
   };
 
+  // Seek video element directly for live preview and update local state
+  const seekVideo = useCallback((time: number) => {
+    const videoEl = document.querySelector(`[data-element-id="${element.id}"] video`) as HTMLVideoElement;
+    if (videoEl && !isNaN(time) && isFinite(time)) {
+      const clampedTime = Math.max(0, Math.min(time, videoEl.duration || time));
+      videoEl.currentTime = clampedTime;
+      setLocalVideoTime(clampedTime);
+    } else {
+      setLocalVideoTime(time);
+    }
+  }, [element.id]);
+
   return (
     <PropertySection title="Timeline Control">
       <div className="space-y-3">
@@ -8730,8 +8897,8 @@ function VideoTimelineControls({
           elementName={element.name}
           selectedKeyframe={selectedKeyframe}
           currentAnimation={currentAnimation}
-          currentValue={0}
-          onChange={() => {}}
+          currentValue={localVideoTime}
+          onChange={(val) => seekVideo(Number(val) || 0)}
         >
           {(displayValue, onChange) => {
             const currentTime = Number(displayValue) || 0;
@@ -8745,7 +8912,7 @@ function VideoTimelineControls({
                     step="0.1"
                     value={currentTime}
                     onChange={(e) => onChange(parseFloat(e.target.value))}
-                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+                    className="flex-1 custom-slider"
                   />
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground">
@@ -8786,7 +8953,7 @@ function VideoTimelineControls({
                 step="0.01"
                 value={Number(displayValue) ?? 1}
                 onChange={(e) => onChange(parseFloat(e.target.value))}
-                className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+                className="flex-1 custom-slider"
               />
               <span className="text-xs text-muted-foreground w-10 text-right">
                 {Math.round((Number(displayValue) ?? 1) * 100)}%
@@ -8815,7 +8982,7 @@ function VideoTimelineControls({
                 step="0.25"
                 value={Number(displayValue) ?? 1}
                 onChange={(e) => onChange(parseFloat(e.target.value))}
-                className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-violet-500"
+                className="flex-1 custom-slider"
               />
               <span className="text-xs text-muted-foreground w-10 text-right">
                 {(Number(displayValue) ?? 1).toFixed(2)}x

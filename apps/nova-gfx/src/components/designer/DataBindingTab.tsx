@@ -543,7 +543,7 @@ export function DataBindingTab() {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="p-2 pb-8 space-y-1">
           {/* Fields with Element Dropdowns */}
           <h4 className="text-[10px] font-medium text-muted-foreground mb-2">
             FIELDS → ELEMENTS

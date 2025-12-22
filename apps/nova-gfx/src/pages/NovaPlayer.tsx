@@ -2985,15 +2985,54 @@ function PlayerElement({
         );
       }
 
-      case 'video':
+      case 'video': {
+        // Extract animated media properties from animatedProps
+        const animatedMediaProps = {
+          media_time: animatedProps.media_time as number | undefined,
+          media_playing: animatedProps.media_playing as number | undefined,
+          media_volume: animatedProps.media_volume as number | undefined,
+          media_muted: animatedProps.media_muted as number | undefined,
+          media_speed: animatedProps.media_speed as number | undefined,
+        };
+
+        // Calculate video playback speed from keyframes
+        let calculatedVideoSpeed = 1;
+        const videoAnimation = animations.find(a => a.element_id === element.id && a.phase === currentPhase);
+        if (videoAnimation) {
+          const videoKeyframes = keyframes
+            .filter(kf => kf.animation_id === videoAnimation.id && kf.properties.media_time !== undefined)
+            .sort((a, b) => a.position - b.position);
+
+          if (videoKeyframes.length >= 2) {
+            const firstKf = videoKeyframes[0];
+            const lastKf = videoKeyframes[videoKeyframes.length - 1];
+            const startMediaTime = firstKf.properties.media_time as number;
+            const endMediaTime = lastKf.properties.media_time as number;
+            const timelineDurationMs = lastKf.position - firstKf.position;
+
+            if (timelineDurationMs > 0) {
+              const videoDuration = endMediaTime - startMediaTime;
+              const timelineDurationSec = timelineDurationMs / 1000;
+              calculatedVideoSpeed = videoDuration / timelineDurationSec;
+              // Clamp to valid range (HTML5 video supports up to 16x in most browsers)
+              calculatedVideoSpeed = Math.max(0.25, Math.min(16, calculatedVideoSpeed));
+            }
+          }
+        }
+
         return (
           <VideoElement
             content={element.content}
             width={animatedWidth}
             height={animatedHeight}
+            elementId={element.id}
             isPreview={true}
+            animatedMediaProps={animatedMediaProps}
+            isPlaying={isPlaying}
+            calculatedSpeed={calculatedVideoSpeed}
           />
         );
+      }
 
       case 'svg':
         return (

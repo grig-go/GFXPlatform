@@ -18,8 +18,14 @@ import {
   TabsList,
   TabsTrigger,
 } from '@emergent-platform/ui';
-import { Settings, Type, Hash, Calendar } from 'lucide-react';
+import { Settings, Type, Hash, Calendar, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@emergent-platform/ui';
+
+// Text replacement rule (e.g., true -> "Winner", false -> "")
+export interface TextReplacement {
+  match: string;    // Value to match (case-insensitive)
+  replace: string;  // Replacement text
+}
 
 export interface FormatterOptions {
   // Common
@@ -30,6 +36,7 @@ export interface FormatterOptions {
 
   // Text formatting
   textCase?: 'none' | 'uppercase' | 'lowercase' | 'capitalize' | 'titlecase';
+  replacements?: TextReplacement[]; // Text replacement rules
 
   // Trim characters (works for both text and numbers converted to string)
   trimStart?: number; // Number of characters to remove from start
@@ -88,6 +95,11 @@ export function BindingSettingsModal({
     if (options.hideOnNull) cleanOptions.hideOnNull = options.hideOnNull;
 
     if (options.textCase && options.textCase !== 'none') cleanOptions.textCase = options.textCase;
+    if (options.replacements && options.replacements.length > 0) {
+      // Filter out empty replacements
+      const validReplacements = options.replacements.filter(r => r.match.trim() !== '');
+      if (validReplacements.length > 0) cleanOptions.replacements = validReplacements;
+    }
     if (options.trimStart && options.trimStart > 0) cleanOptions.trimStart = options.trimStart;
     if (options.trimEnd && options.trimEnd > 0) cleanOptions.trimEnd = options.trimEnd;
 
@@ -116,6 +128,7 @@ export function BindingSettingsModal({
   const isChanged = useMemo(() => ({
     // Text tab
     textCase: !!(options.textCase && options.textCase !== 'none'),
+    replacements: !!(options.replacements && options.replacements.some(r => r.match.trim() !== '')),
     trimStart: !!(options.trimStart && options.trimStart > 0),
     trimEnd: !!(options.trimEnd && options.trimEnd > 0),
     // Number tab
@@ -137,7 +150,7 @@ export function BindingSettingsModal({
   }), [options]);
 
   // Check if any option in a tab is changed
-  const hasTextChanges = isChanged.textCase || isChanged.trimStart || isChanged.trimEnd;
+  const hasTextChanges = isChanged.textCase || isChanged.replacements || isChanged.trimStart || isChanged.trimEnd;
   const hasNumberChanges = isChanged.numberFormat || isChanged.decimals || isChanged.decimalSeparator ||
                            isChanged.roundTo || isChanged.padZeros || isChanged.showSign;
   const hasDateChanges = isChanged.dateFormat || isChanged.timeFormat || isChanged.showSeconds;
@@ -195,6 +208,70 @@ export function BindingSettingsModal({
                   <SelectItem value="titlecase">Title Case</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Text Replacements */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className={cn("text-xs font-medium", isChanged.replacements && changedLabelClass)}>
+                  Text Replacements
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setOptions({
+                    ...options,
+                    replacements: [...(options.replacements || []), { match: '', replace: '' }]
+                  })}
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Rule
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Replace specific values with custom text (e.g., true → Winner)
+              </p>
+              {(options.replacements || []).length > 0 && (
+                <div className="space-y-2 mt-2">
+                  {(options.replacements || []).map((replacement, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        className={cn("h-7 text-xs flex-1", replacement.match && changedTriggerClass)}
+                        placeholder="Match (e.g., true)"
+                        value={replacement.match}
+                        onChange={(e) => {
+                          const newReplacements = [...(options.replacements || [])];
+                          newReplacements[index] = { ...newReplacements[index], match: e.target.value };
+                          setOptions({ ...options, replacements: newReplacements });
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <Input
+                        className={cn("h-7 text-xs flex-1", replacement.match && changedTriggerClass)}
+                        placeholder="Replace with (e.g., Winner)"
+                        value={replacement.replace}
+                        onChange={(e) => {
+                          const newReplacements = [...(options.replacements || [])];
+                          newReplacements[index] = { ...newReplacements[index], replace: e.target.value };
+                          setOptions({ ...options, replacements: newReplacements });
+                        }}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        onClick={() => {
+                          const newReplacements = (options.replacements || []).filter((_, i) => i !== index);
+                          setOptions({ ...options, replacements: newReplacements });
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

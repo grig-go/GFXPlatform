@@ -40,11 +40,11 @@ import {
 } from "./ui/select";
 import { Checkbox } from "./ui/checkbox";
 import { ScrollArea } from "./ui/scroll-area";
-import { 
-  Database, 
-  Cloud, 
-  TrendingUp, 
-  Newspaper, 
+import {
+  Database,
+  Cloud,
+  TrendingUp,
+  Newspaper,
   CloudSun,
   RefreshCw,
   CheckCircle,
@@ -61,7 +61,8 @@ import {
   Trophy,
   Plus,
   Trash2,
-  Search
+  Search,
+  Map
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
@@ -70,7 +71,7 @@ import { copyToClipboard as copyTextToClipboard } from "../utils/clipboard";
 import { DashboardNavigation, type DashboardView } from "./DashboardNavigation";
 
 // Categories for display
-type ProviderCategory = "weather" | "sports" | "news" | "finance" | "school_closings";
+type ProviderCategory = "weather" | "sports" | "news" | "finance" | "school_closings" | "maps";
 
 // RPC response interface (from list_providers_with_status_all/category)
 interface DataProvider {
@@ -799,6 +800,8 @@ export function FeedsDashboardWithSupabase({
         return <TrendingUp className="w-5 h-5" />;
       case "school_closings":
         return <School className="w-5 h-5" />;
+      case "maps":
+        return <Map className="w-5 h-5" />;
       default:
         return <Database className="w-5 h-5" />;
     }
@@ -816,6 +819,8 @@ export function FeedsDashboardWithSupabase({
         return "text-green-600 dark:text-green-400";
       case "school_closings":
         return "text-red-600 dark:text-red-400";
+      case "maps":
+        return "text-teal-600 dark:text-teal-400";
       default:
         return "text-gray-600 dark:text-gray-400";
     }
@@ -935,6 +940,12 @@ export function FeedsDashboardWithSupabase({
               <div className="flex items-center gap-2">
                 <School className="w-4 h-4" />
                 School Closings
+              </div>
+            </SelectItem>
+            <SelectItem value="maps">
+              <div className="flex items-center gap-2">
+                <Map className="w-4 h-4" />
+                Maps
               </div>
             </SelectItem>
           </SelectContent>
@@ -1992,6 +2003,7 @@ export function FeedsDashboardWithSupabase({
                     <SelectItem value="news">News</SelectItem>
                     <SelectItem value="finance">Finance</SelectItem>
                     <SelectItem value="school_closings">School Closings</SelectItem>
+                    <SelectItem value="maps">Maps</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

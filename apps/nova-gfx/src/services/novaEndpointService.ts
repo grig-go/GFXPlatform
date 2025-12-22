@@ -6,7 +6,7 @@
  * that can be bound to template elements.
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, ensureFreshConnection } from '@/lib/supabase';
 import type { NovaEndpoint, NovaEndpointListResponse, FetchedDataSource } from '@/types/dataEndpoint';
 
 // Cache for endpoints list
@@ -36,6 +36,10 @@ export async function listNovaEndpoints(forceRefresh = false): Promise<NovaEndpo
   try {
     console.log('[novaEndpointService] Fetching endpoints for nova-gfx...');
 
+    // Ensure fresh connection before making request
+    await ensureFreshConnection();
+    console.log('[novaEndpointService] Connection refreshed, invoking function...');
+
     const { data, error } = await supabase.functions.invoke<NovaEndpointListResponse>(
       'agent-wizard/list-by-target-app',
       {
@@ -44,13 +48,15 @@ export async function listNovaEndpoints(forceRefresh = false): Promise<NovaEndpo
       }
     );
 
+    console.log('[novaEndpointService] Response:', { data, error });
+
     if (error) {
       console.error('[novaEndpointService] Error fetching endpoints:', error);
       throw error;
     }
 
     if (!data?.data) {
-      console.warn('[novaEndpointService] No endpoints returned');
+      console.warn('[novaEndpointService] No endpoints returned, data:', data);
       return [];
     }
 
@@ -81,6 +87,9 @@ export async function listNovaEndpoints(forceRefresh = false): Promise<NovaEndpo
 export async function fetchEndpointData(slug: string): Promise<Record<string, unknown>[]> {
   try {
     console.log(`[novaEndpointService] Fetching data from endpoint: ${slug}`);
+
+    // Ensure fresh connection before making request
+    await ensureFreshConnection();
 
     const { data, error } = await supabase.functions.invoke<Record<string, unknown>[]>(
       `api-endpoints/${slug}`,
