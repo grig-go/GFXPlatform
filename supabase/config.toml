@@ -344,6 +344,12 @@ verify_jwt = false
 [functions.banner-schedule]
 verify_jwt = false
 
+[functions.nova-weather]
+verify_jwt = false
+
+[functions.weather_dashboard]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
