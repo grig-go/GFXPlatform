@@ -2621,14 +2621,8 @@ function PreviewElement({
     // Stop propagation so parent elements don't also trigger
     e.stopPropagation();
 
-    console.log('[Preview] Element clicked:', {
-      elementId: element.id,
-      elementName: element.name,
-      contentType: element.content?.type
-    });
-
     onElementClick(element.id, element.name);
-  }, [isInteractiveMode, onElementClick, element.id, element.name, element.content?.type]);
+  }, [isInteractiveMode, onElementClick, element.id, element.name]);
 
   return (
     <div
