@@ -3,6 +3,7 @@ import { supabase } from '@emergent-platform/supabase-client';
 import { usePlaylistStore } from './playlistStore';
 import { usePageStore } from './pageStore';
 import { useAuthStore } from './authStore';
+import { useUIPreferencesStore } from './uiPreferencesStore';
 import { fetchEndpointData } from '@/services/novaEndpointService';
 import { usePreviewStore } from './previewStore';
 
@@ -123,7 +124,7 @@ interface ProjectStore {
 
   // Actions
   loadProjects: () => Promise<void>;
-  selectProject: (projectId: string) => Promise<void>;
+  selectProject: (projectId: string, skipSavePreference?: boolean) => Promise<void>;
   refreshProject: () => Promise<void>;
   getTemplate: (templateId: string) => Template | undefined;
   loadTemplateElements: (templateId: string) => Promise<TemplateElement[]>;
@@ -168,7 +169,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  selectProject: async (projectId: string) => {
+  selectProject: async (projectId: string, skipSavePreference = false) => {
     // Clear templates immediately to force UI update
     set({ isLoading: true, error: null, templates: [] });
     try {
@@ -247,6 +248,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       });
 
       set({ currentProject, templates, isLoading: false });
+
+      // Save last opened project to user preferences (persists to Supabase)
+      // Skip saving during initial app load to avoid auth race conditions
+      if (!skipSavePreference) {
+        useUIPreferencesStore.getState().setLastProjectId(projectId);
+      }
 
       // Find first template with a data source and load its data immediately
       const templateWithDataSource = templates.find(t => {

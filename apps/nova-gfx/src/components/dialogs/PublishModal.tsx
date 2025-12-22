@@ -245,16 +245,11 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       };
 
       try {
-        // Skip auth check entirely - it's not needed since RLS policies allow access
-        // This removes a potential timeout point
-        console.log('[PublishModal] Skipping auth check, loading channels directly...');
-
         const data = await loadChannelsWithRetry(3);
 
         if (isCancelled) return;
 
-        console.log('[PublishModal] Channels loaded:', data.length, 'channels');
-        markSupabaseSuccess(); // Mark successful operation
+        markSupabaseSuccess();
 
         if (data) {
           setChannels(data);
@@ -287,8 +282,6 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       if (!supabaseUrl || !supabaseKey) return;
 
       try {
-        console.log('[PublishModal] Loading projects via REST API...');
-
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -334,17 +327,6 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
   // Get bindings for current template
   const templateBindings = bindings.filter(b => b.template_id === currentTemplateId);
-
-  // Debug: Log binding filtering
-  console.log('[PublishModal] Binding debug:', {
-    totalBindings: bindings.length,
-    currentTemplateId,
-    templateBindings: templateBindings.length,
-    allBindingTemplateIds: [...new Set(bindings.map(b => b.template_id))],
-    hasDataPayload: dataPayload?.length || 0,
-    currentRecordIndex,
-    hasCurrentRecord: !!currentRecord,
-  });
 
   // Build payload from current template elements, resolving bindings with current data
   const buildPayload = useCallback(() => {
@@ -420,8 +402,6 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
 
       if (isCurrentProject && currentTemplate) {
         // Publishing current project - include full template data for real-time playback
-        console.log('[PublishModal] Publishing current project with embedded data...');
-
         // Backup to localStorage (instant and reliable)
         try {
           const localBackup = {
@@ -491,17 +471,9 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
           timestamp: new Date().toISOString(),
         };
 
-        // Debug: Log what we're sending
-        console.log('[PublishModal] Command data:', {
-          bindingsCount: templateBindings.length,
-          hasCurrentRecord: !!currentRecord,
-          currentRecord: currentRecord,
-          payloadKeys: Object.keys(command.payload || {}),
-        });
       } else {
         // Publishing different project - send initialize command with project ID
         // NovaPlayer will load the project data from DB (including interactive_config)
-        console.log(`[PublishModal] Publishing project ${selectedProjectId} (initialize mode)...`);
         // For initialize mode, the player will fetch interactive_enabled and interactive_config from DB
         command = {
           type: 'initialize',
@@ -511,10 +483,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
       }
 
       // Send command to all selected channels using DIRECT REST API
-      // This completely bypasses the Supabase client which may have stale connections
       const channelIds = Array.from(selectedChannelIds);
-
-      console.log('[PublishModal] Publishing to channels via direct REST API:', channelIds);
 
       // Publish to each channel using direct REST (no Supabase client)
       const publishResults = await Promise.all(
@@ -581,8 +550,6 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         }
       });
 
-      console.log('[PublishModal] Publish successful');
-
       // Close the modal after successful publish
       onOpenChange(false);
     } catch (err) {
@@ -616,9 +583,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         timestamp: new Date().toISOString(),
       };
 
-      // Use direct REST API for reliability (bypasses Supabase client)
       const channelIds = Array.from(liveChannelIds);
-      console.log('[PublishModal] Sending stop command via direct REST API to channels:', channelIds);
 
       const stopResults = await Promise.all(
         channelIds.map(channelId =>
@@ -667,9 +632,7 @@ export function PublishModal({ open, onOpenChange }: PublishModalProps) {
         timestamp: new Date().toISOString(),
       };
 
-      // Use direct REST API for reliability (bypasses Supabase client)
       const channelIds = Array.from(liveChannelIds);
-      console.log('[PublishModal] Sending clear command via direct REST API to channels:', channelIds);
 
       const clearResults = await Promise.all(
         channelIds.map(channelId =>

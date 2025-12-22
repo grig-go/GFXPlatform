@@ -65,13 +65,10 @@ import { ProjectManagementModal } from "./ProjectManagementModal";
 import {
   loadAIImageGenSettings,
   saveAIImageGenSettings,
-  callGoogleAPIViaProxy,
-  generateWithGemini,
-  generateImageWithImagen,
-  editImageWithImagen,
   fetchPulsarVSProviders,
   generateTextViaBackend,
   generateImageViaBackend,
+  editImageViaBackend,
   GEMINI_MODELS,
   IMAGEN_MODELS,
   ASPECT_RATIOS,
@@ -1094,9 +1091,11 @@ export default function VirtualSetPage({
     addDebugLog(`Generating environment for prompt: "${environmentPrompt}" (Type: ${currentProjectType})`);
 
     try {
-      // Use backend provider if available (preferred - API key stored securely in database)
-      const textProviderId = aiProviders.text?.id || 'gemini';
-      const hasBackendProvider = aiProviders.text?.apiKeyConfigured;
+      // Always use backend provider (API key stored securely in database)
+      const textProviderId = aiProviders.text?.id;
+      if (!textProviderId) {
+        throw new Error("No AI text provider configured. Please configure a provider in the admin settings.");
+      }
 
       let systemPrompt: string;
       let userPrompt: string;
@@ -1113,56 +1112,17 @@ export default function VirtualSetPage({
       }
 
       const fullPrompt = systemPrompt + "\n\n" + userPrompt;
-      let responseText = "";
 
-      if (hasBackendProvider) {
-        // Use backend API (API key stored in ai_providers table)
-        addDebugLog(`Sending request to backend AI provider: ${textProviderId}...`);
-        const backendResponse = await generateTextViaBackend(
-          textProviderId,
-          fullPrompt,
-          undefined,
-          'pulsar-vs-text'
-        );
-        responseText = backendResponse.response;
-        addDebugLog(`Backend AI responded using model: ${backendResponse.model}`);
-      } else {
-        // Fallback to local settings (legacy - will fail if no local key)
-        addDebugLog(`No backend provider configured, falling back to local settings...`);
-        const aiSettings = await loadAIImageGenSettings();
-        const hasLocalKey =
-          aiSettings.gemini.apiKey &&
-          aiSettings.gemini.apiKey !== "YOUR_GOOGLE_STUDIO_API_KEY" &&
-          aiSettings.gemini.apiKey !== "";
-
-        if (!hasLocalKey) {
-          throw new Error("No AI API key configured. Please configure a Gemini API key in the ai_providers table or in Settings.");
-        }
-
-        const textModel = aiSettings.virtualSet?.selectedGeminiModel ||
-          DEFAULT_AI_SETTINGS.gemini.textModel;
-
-        addDebugLog(`Sending request to AI using model: ${textModel}...`);
-
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${aiSettings.gemini.apiKey}`;
-        const requestBody = {
-          contents: [{ parts: [{ text: systemPrompt }, { text: userPrompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
-        };
-
-        const response = await callGoogleAPIViaProxy(
-          apiUrl,
-          "POST",
-          { "Content-Type": "application/json" },
-          requestBody
-        );
-
-        if (response.candidates?.[0]?.content?.parts) {
-          responseText = response.candidates[0].content.parts[0].text;
-        } else {
-          throw new Error("Invalid response format from Gemini API");
-        }
-      }
+      // Use backend API (API key stored in ai_providers table)
+      addDebugLog(`Sending request to backend AI provider: ${textProviderId}...`);
+      const backendResponse = await generateTextViaBackend(
+        textProviderId,
+        fullPrompt,
+        undefined,
+        'pulsar-vs-text'
+      );
+      const responseText = backendResponse.response;
+      addDebugLog(`Backend AI responded using model: ${backendResponse.model}`);
 
       // Parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -2021,10 +1981,10 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     addDebugLog(`Generating background image for prompt: "${backgroundPrompt}"`);
 
     try {
-      const aiSettings = await loadAIImageGenSettings();
-
-      if (!aiSettings.imagen.apiKey || aiSettings.imagen.apiKey === "YOUR_GOOGLE_STUDIO_API_KEY") {
-        throw new Error("Please configure your AI API key in Settings");
+      // Always use backend provider (API key stored securely in database)
+      const imageGenProviderId = aiProviders.imageGen?.id;
+      if (!imageGenProviderId) {
+        throw new Error("No AI image generation provider configured. Please configure a provider in the admin settings.");
       }
 
       // Check if we have an existing backdrop AND mask annotations for editing mode
@@ -2038,83 +1998,81 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         isEditMode ? "Editing your image..." : "Generating your backdrop..."
       ]);
 
-      const selectedRatio = aiSettings.virtualSet.defaultAspectRatio || '16:9';
-      // Use backend provider model if available, otherwise fall back to settings
-      const selectedModel = aiProviders.imageGen?.model ||
-        aiSettings.virtualSet?.selectedImagenModel ||
-        aiSettings.imagen.model ||
-        DEFAULT_AI_SETTINGS.imagen.model;
+      const aiSettings = await loadAIImageGenSettings();
+      const selectedRatio = aiSettings.virtualSet?.defaultAspectRatio || '16:9';
+      const selectedModel = aiProviders.imageGen?.model || 'imagen-3.0-generate-001';
 
       addDebugLog(`Using model: ${selectedModel}, ratio: ${selectedRatio}`);
       addDebugLog(`Mode: ${isEditMode ? 'EDIT (with mask)' : 'GENERATE (new image)'}`);
 
-      // Use backend provider model for image editing if available
-      const imageEditModel = aiProviders.imageEdit?.model ||
-        aiSettings.virtualSet?.selectedImageEditModel ||
-        aiSettings.imageEdit?.model ||
-        DEFAULT_AI_SETTINGS.imageEdit.model;
-
       let result: { imageUrl?: string; base64?: string; error?: string };
 
       if (isEditMode) {
-        // EDIT MODE: Use existing backdrop with mask for inpainting
-        addDebugLog(`Calling Imagen Edit API with mask using model: ${imageEditModel}...`);
+        // EDIT MODE: Use existing backdrop with mask for inpainting via backend
+        const imageEditProviderId = aiProviders.imageEdit?.id;
+        if (!imageEditProviderId) {
+          throw new Error("No AI image edit provider configured. Please configure a provider in the admin settings.");
+        }
 
-        // Merge backend provider model into settings
-        const editSettings = {
-          ...aiSettings,
-          virtualSet: {
-            ...aiSettings.virtualSet,
-            selectedImageEditModel: imageEditModel
-          }
-        };
+        addDebugLog(`Calling backend image edit provider: ${imageEditProviderId}...`);
 
-        result = await editImageWithImagen(
+        const backendEditResult = await editImageViaBackend(
+          imageEditProviderId,
           selectedBackdrop!,  // Source image
-          maskDataUri!,       // Mask (white = edit areas)
-          backgroundPrompt,   // What to generate in masked areas
-          editSettings
+          backgroundPrompt    // What to generate/edit
         );
+
+        if (backendEditResult.error) {
+          result = { error: backendEditResult.error };
+        } else {
+          result = { base64: backendEditResult.base64 };
+        }
 
         // Clear the canvas after editing
         clearDrawing();
       } else {
-        // GENERATE MODE: Create new image from scratch
+        // GENERATE MODE: Create new image from scratch via backend
         const enhancedPrompt = `Professional virtual set backdrop: ${backgroundPrompt}. High quality, cinematic lighting, broadcast quality, 4K resolution.`;
 
-        addDebugLog("Calling Imagen Generate API...");
+        addDebugLog(`Calling backend image generation provider: ${imageGenProviderId}...`);
 
-        // Merge backend provider model into settings
-        const genSettings = {
-          ...aiSettings,
-          imagen: {
-            ...aiSettings.imagen,
-            model: selectedModel
-          }
-        };
-
-        result = await generateImageWithImagen(
+        const backendResult = await generateImageViaBackend(
+          imageGenProviderId,
           enhancedPrompt,
-          genSettings,
-          backgroundPrompt.length > 50 ? backgroundPrompt.substring(0, 47) + "..." : backgroundPrompt,
-          backgroundPrompt,
-          true  // usePromptInjectors
+          { aspectRatio: selectedRatio }
         );
+
+        if (backendResult.error) {
+          result = { error: backendResult.error };
+        } else {
+          result = { base64: backendResult.base64 };
+        }
       }
 
       if (result.imageUrl || result.base64) {
         const generatedImageUrl = result.imageUrl || `data:image/png;base64,${result.base64}`;
         addDebugLog(`Image ${isEditMode ? 'edited' : 'generated'} successfully: ${generatedImageUrl.substring(0, 100)}...`);
 
-        // Save to media library (only for new generations, edits are saved by editImageWithImagen)
+        // Save to media library (only for new generations, optional - works without auth)
         if (!isEditMode) {
           try {
+            // Try to get user session for authenticated save
+            let authToken = publicAnonKey;
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.access_token) {
+                authToken = session.access_token;
+              }
+            } catch {
+              // Use anon key if session fetch fails
+            }
+
             const response = await fetch(
               `${supabaseUrl}/functions/v1/media-library`,
               {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${publicAnonKey}`,
+                  Authorization: `Bearer ${authToken}`,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
@@ -2133,9 +2091,13 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
             if (response.ok) {
               addDebugLog("Saved to media library");
+            } else {
+              // Don't fail the whole operation if media library save fails
+              console.warn("Media library save skipped (no auth or error)");
             }
           } catch (saveError) {
-            console.warn("Failed to save to media library:", saveError);
+            // Silently ignore - image generation still succeeded
+            console.warn("Media library save skipped:", saveError);
           }
         }
 
@@ -2684,12 +2646,12 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                                       const optionId = typeof option === 'string' ? option : option.id;
                                       return optionId && optionId !== "" && optionId !== "__none__";
                                     })
-                                    .map((option: string | AirportOptionItem) => {
+                                    .map((option: string | AirportOptionItem, idx: number) => {
                                       // Handle both string (VirtualSet) and object (Airport) options
                                       const optionId = typeof option === 'string' ? option : option.id;
                                       const optionName = typeof option === 'string' ? option : option.name;
                                       return (
-                                        <SelectItem key={optionId} value={optionId}>{optionName}</SelectItem>
+                                        <SelectItem key={`${optionId}-${idx}`} value={optionId}>{optionName}</SelectItem>
                                       );
                                     })}
                                 </SelectContent>

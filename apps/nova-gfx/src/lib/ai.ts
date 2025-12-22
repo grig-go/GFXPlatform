@@ -37,13 +37,12 @@ function warmupAIEndpoints(): void {
   const warmupTimeout = 3000;
 
   // Warm up in parallel, fire-and-forget (don't await)
-  const warmup = async (url: string, name: string, headers?: Record<string, string>) => {
+  const warmup = async (url: string, _name: string, headers?: Record<string, string>) => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), warmupTimeout);
       await fetch(url, { method: 'HEAD', signal: controller.signal, headers });
       clearTimeout(timeout);
-      console.log(`[AI] ${name} warmup complete`);
     } catch {
       // Ignore - warmup only
     }
@@ -62,17 +61,13 @@ function warmupAIEndpoints(): void {
 async function ensureFreshConnectionIfIdle(): Promise<void> {
   const idleTime = Date.now() - lastActivityTime;
   if (idleTime > IDLE_THRESHOLD_MS) {
-    console.log(`[AI] Browser was idle for ${Math.round(idleTime / 1000)}s, refreshing connections...`);
     try {
       // Refresh the Supabase session to ensure token is valid
       if (supabase) {
         const { data, error } = await supabase.auth.refreshSession();
-        if (error) {
-          console.warn('[AI] Session refresh warning:', error.message);
-        } else if (data?.session) {
+        if (!error && data?.session) {
           // Update the auth store with refreshed token
           useAuthStore.getState().accessToken && useAuthStore.setState({ accessToken: data.session.access_token });
-          console.log('[AI] Session refreshed successfully');
         }
       }
       // Ensure Supabase connection is healthy
@@ -114,16 +109,12 @@ async function resolveImagePlaceholders(
   // Then resolve AI-generated images (async)
   const hasGenerate = hasGeneratePlaceholders(resolved);
   if (hasGenerate) {
-    console.log('🖼️ Found GENERATE placeholders in text');
     const authState = useAuthStore.getState();
     const organizationId = getOrganizationId(authState.user);
     const userId = authState.user?.id;
-    const accessToken = authState.accessToken; // Get from store, not supabase.auth.getSession()
-    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8), hasToken: !!accessToken });
+    const accessToken = authState.accessToken;
 
     if (organizationId && userId && accessToken) {
-      console.log('🖼️ Resolving GENERATE placeholders...');
-
       // Extract placeholders to get count and show progress
       const placeholders = extractGeneratePlaceholders(resolved);
       const total = placeholders.length;
@@ -4642,6 +4633,14 @@ async function sendGeminiMessageStreaming(
     let fullText = '';
 
     while (true) {
+      // Check if user cancelled before each read
+      if (signal?.aborted) {
+        reader.cancel();
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -4798,6 +4797,14 @@ async function sendClaudeMessageStreaming(
     let fullText = '';
 
     while (true) {
+      // Check if user cancelled before each read
+      if (signal?.aborted) {
+        reader.cancel();
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+
       const { done, value } = await reader.read();
       if (done) break;
 
