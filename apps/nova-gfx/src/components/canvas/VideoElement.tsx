@@ -86,6 +86,7 @@ interface VideoElementProps {
     autoplay?: boolean;
     poster?: string;
     videoType?: 'file' | 'youtube' | 'vimeo' | 'stream';
+    controls?: boolean;  // Show controls overlay in designer
   };
   width: number | null;
   height: number | null;
@@ -94,6 +95,7 @@ interface VideoElementProps {
   isPreview?: boolean;
   animatedMediaProps?: AnimatedMediaProps;  // Keyframe-controlled media properties
   isPlaying?: boolean;  // Timeline playing state
+  calculatedSpeed?: number;  // Calculated playback speed from keyframes (video duration / timeline duration)
 }
 
 export function VideoElement({
@@ -105,6 +107,7 @@ export function VideoElement({
   isPreview = true, // Default to true (hide overlay) unless explicitly in designer
   animatedMediaProps,
   isPlaying: timelinePlaying = false,
+  calculatedSpeed = 1,
 }: VideoElementProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [localIsPlaying, setLocalIsPlaying] = useState(content.autoplay ?? true);
@@ -113,17 +116,36 @@ export function VideoElement({
   const [urlInput, setUrlInput] = useState(content.src || DEFAULT_VIDEO_URL);
   const [error, setError] = useState<string | null>(null);
   const lastTimeRef = useRef<number | null>(null);
+  const wasPlayingRef = useRef<boolean>(false); // Track previous timeline playing state
 
   const updateElement = useDesignerStore((state) => state.updateElement);
 
+  // Check if we have media_time keyframes - this overrides autoplay/loop
+  const hasMediaTimeKeyframes = animatedMediaProps?.media_time !== undefined;
+
+  // If autoplay AND loop are both enabled AND there are no media_time keyframes, let video play naturally
+  // If there are media_time keyframes, keyframe control takes precedence
+  const isAutoplayLoopMode = (content.autoplay ?? true) && (content.loop ?? true) && !hasMediaTimeKeyframes;
+
   // Determine if we're using keyframe control
-  const hasKeyframeControl = animatedMediaProps && (
+  // Keyframe control is enabled when there are animated media props AND we're not in autoplay+loop mode
+  const hasKeyframeControl = !isAutoplayLoopMode && animatedMediaProps && (
     animatedMediaProps.media_time !== undefined ||
     animatedMediaProps.media_playing !== undefined ||
     animatedMediaProps.media_volume !== undefined ||
     animatedMediaProps.media_muted !== undefined ||
     animatedMediaProps.media_speed !== undefined
   );
+
+  // Debug logging
+  console.log('[Video] Control mode:', {
+    hasMediaTimeKeyframes,
+    isAutoplayLoopMode,
+    hasKeyframeControl,
+    autoplay: content.autoplay ?? true,
+    loop: content.loop ?? true,
+    calculatedSpeed
+  });
 
   // Use animated values when keyframe-controlled, otherwise use local state
   const isPlaying = hasKeyframeControl && animatedMediaProps?.media_playing !== undefined
@@ -203,33 +225,66 @@ export function VideoElement({
     }
   }, [isMuted, videoType]);
 
-  // Apply animated media properties from keyframes
+  // Store the media_time at the moment playback starts
+  const startMediaTimeRef = useRef<number | null>(null);
+
+  // Handle timeline play/pause transitions
+  // When timeline starts playing: seek to current position and play at calculated speed
+  // When timeline stops: pause the video
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || videoType !== 'file' || !hasKeyframeControl || !timelinePlaying) return;
+    console.log('[Video] Playback effect:', {
+      hasVideo: !!video,
+      videoType,
+      hasKeyframeControl,
+      timelinePlaying,
+      wasPlaying: wasPlayingRef.current,
+      calculatedSpeed
+    });
+    if (!video || videoType !== 'file' || !hasKeyframeControl) return;
 
-    // Apply media_time - sync video playback position with timeline
-    if (animatedMediaProps?.media_time !== undefined) {
+    if (timelinePlaying && !wasPlayingRef.current) {
+      // Timeline just started playing - capture the current media_time and seek there
+      const startTime = animatedMediaProps?.media_time ?? 0;
+      startMediaTimeRef.current = startTime;
+      video.currentTime = startTime;
+      // Use calculated speed from keyframes (video duration / timeline duration)
+      video.playbackRate = calculatedSpeed;
+      console.log('[Video] Started playback at', startTime, 'with speed', calculatedSpeed);
+      video.play().catch(() => {});
+    } else if (!timelinePlaying && wasPlayingRef.current) {
+      // Timeline just stopped - pause video and clear start time
+      video.pause();
+      startMediaTimeRef.current = null;
+    }
+
+    wasPlayingRef.current = timelinePlaying;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timelinePlaying, hasKeyframeControl, videoType, calculatedSpeed]);
+  // Note: intentionally NOT including animatedMediaProps.media_time in deps
+  // We only want to capture it once when playback starts
+
+  // Apply animated media properties from keyframes
+  // Only seek during scrubbing (when timeline is NOT playing)
+  // During playback, let video play naturally at the calculated speed
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || videoType !== 'file' || !hasKeyframeControl) return;
+
+    // Only apply media_time when scrubbing (not playing)
+    // During playback, the video plays naturally from the start position at calculated speed
+    if (!timelinePlaying && animatedMediaProps?.media_time !== undefined) {
       const targetTime = animatedMediaProps.media_time;
-      // Only seek if the difference is significant (avoid micro-seeks causing stuttering)
       const timeDiff = Math.abs(video.currentTime - targetTime);
-      if (timeDiff > 0.1) {
+      if (timeDiff > 0.05) {
         video.currentTime = targetTime;
         lastTimeRef.current = targetTime;
       }
     }
 
-    // Apply media_volume
+    // Apply media_volume (can apply anytime)
     if (animatedMediaProps?.media_volume !== undefined) {
       video.volume = Math.max(0, Math.min(1, animatedMediaProps.media_volume));
-    }
-
-    // Apply media_speed (playback rate)
-    if (animatedMediaProps?.media_speed !== undefined) {
-      const speed = Math.max(0.25, Math.min(4, animatedMediaProps.media_speed));
-      if (video.playbackRate !== speed) {
-        video.playbackRate = speed;
-      }
     }
   }, [animatedMediaProps, hasKeyframeControl, videoType, timelinePlaying]);
   
@@ -329,8 +384,8 @@ export function VideoElement({
           />
         </div>
 
-        {/* Minimal URL change button - only show when selected in designer */}
-        {isSelected && !isPreview && elementId && (
+        {/* Minimal URL change button - only show when selected in designer and controls enabled */}
+        {isSelected && !isPreview && elementId && content.controls && (
           <Button
             variant="ghost"
             size="sm"
@@ -369,8 +424,8 @@ export function VideoElement({
           onError={() => setError('Failed to load video')}
         />
         
-        {/* Controls overlay (only in designer when selected, never in preview) */}
-        {isSelected && !isPreview && elementId && (
+        {/* Controls overlay (only in designer when selected, controls enabled, never in preview) */}
+        {isSelected && !isPreview && elementId && content.controls && (
           <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 z-50">
             <div className="flex items-center gap-2">
               <Button
@@ -401,7 +456,7 @@ export function VideoElement({
             </Button>
           </div>
         )}
-        
+
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/80">
             <div className="text-center">
@@ -446,8 +501,8 @@ export function VideoElement({
         onError={() => setError('Failed to load video. Check the URL format.')}
       />
       
-      {/* Controls overlay (only in designer when selected, never in preview) */}
-      {isSelected && !isPreview && elementId && (
+      {/* Controls overlay (only in designer when selected, controls enabled, never in preview) */}
+      {isSelected && !isPreview && elementId && content.controls && (
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 z-50">
           <div className="flex items-center gap-2">
             <Button
@@ -478,7 +533,7 @@ export function VideoElement({
           </Button>
         </div>
       )}
-      
+
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/80">
           <div className="text-center">

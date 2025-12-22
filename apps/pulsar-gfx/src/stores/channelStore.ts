@@ -4,8 +4,40 @@ import { useUIPreferencesStore } from './uiPreferencesStore';
 import { usePageStore } from './pageStore';
 import { usePlayoutLogStore } from './playoutLogStore';
 
-// Dev user ID for development (no auth)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000002';
+// Note: We don't use a fake DEV_USER_ID anymore since it caused 409 conflicts
+// The operator_id field should be null when running without authentication
+
+// Edge function helper for reliable channel loading (no stale connections)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function fetchChannelsViaEdgeFunction(organizationId?: string): Promise<any[]> {
+  try {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/pulsar-channels`);
+    if (organizationId) {
+      url.searchParams.set('organization_id', organizationId);
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[channelStore] Edge function error:', result);
+      return [];
+    }
+    return result.data || [];
+  } catch (err) {
+    console.error('[channelStore] Network error:', err);
+    return [];
+  }
+}
 
 export interface Channel {
   id: string;
@@ -208,18 +240,12 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   loadChannels: async () => {
     set({ isLoading: true, error: null });
     try {
-      // Use direct REST API for reliable channel loading
-      const channelsResult = await directRestSelect<any>(
-        'pulsar_channels',
-        '*',
-        undefined, // No filter - get all channels
-        5000
-      );
-
-      if (channelsResult.error) throw new Error(channelsResult.error);
+      // Use edge function for reliable channel loading (no stale connections!)
+      console.log('[channelStore] Loading channels via edge function...');
+      const rawData = await fetchChannelsViaEdgeFunction();
 
       // Sort by channel_code
-      const data = (channelsResult.data || []).sort((a: any, b: any) =>
+      const data = rawData.sort((a: any, b: any) =>
         (a.channel_code || '').localeCompare(b.channel_code || '')
       );
 
@@ -335,7 +361,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     const fullCommand: PlayerCommand = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      operatorId: DEV_USER_ID,
+      operatorId: undefined,
       ...command,
       channelId: command.channelId || channel.id,
     };
@@ -438,7 +464,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
     const fullCommand: PlayerCommand = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      operatorId: DEV_USER_ID,
+      operatorId: undefined,
       channelId,
       ...command,
     };
@@ -520,7 +546,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         projectId: template.projectId,
         projectName: projectName,
         payload: payload,
-        operatorId: DEV_USER_ID,
+        operatorId: undefined,
         triggerSource: 'manual',
       }).catch(() => {});
     }

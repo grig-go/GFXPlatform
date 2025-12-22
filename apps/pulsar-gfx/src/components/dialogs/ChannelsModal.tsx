@@ -19,7 +19,46 @@ import {
   ExternalLink,
   RefreshCw,
 } from 'lucide-react';
-import { supabase } from '@emergent-platform/supabase-client';
+
+// Edge function helper for reliable channel operations (no stale connections)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function callChannelsEdgeFunction<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string = '',
+  body?: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/pulsar-channels${path}`);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.set(key, value);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[ChannelsModal] Edge function error:', result);
+      return { data: null, error: result.error || 'Edge function request failed' };
+    }
+    return { data: result.data as T, error: null };
+  } catch (err) {
+    console.error('[ChannelsModal] Network error:', err);
+    return { data: null, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
 
 type ChannelMode = 'fill' | 'fill_key' | 'obs';
 
@@ -60,24 +99,15 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
   // Copy state
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Load channels
+  // Load channels via edge function (no stale connections!)
   const loadChannels = async () => {
-    if (!supabase) {
-      setError('Database not configured');
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('pulsar_channels')
-        .select('*')
-        .order('created_at', { ascending: true });
+      const { data, error: fetchError } = await callChannelsEdgeFunction<Channel[]>('GET');
 
-      if (fetchError) throw fetchError;
+      if (fetchError) throw new Error(fetchError);
       setChannels(data || []);
     } catch (err) {
       console.error('Failed to load channels:', err);
@@ -93,9 +123,9 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
     }
   }, [open]);
 
-  // Create new channel
+  // Create new channel via edge function
   const handleCreate = async () => {
-    if (!supabase || !newName.trim() || !newCode.trim()) return;
+    if (!newName.trim() || !newCode.trim()) return;
 
     setIsCreating(true);
     setError(null);
@@ -104,18 +134,19 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
       // Get organization ID (use default dev org for now)
       const orgId = '00000000-0000-0000-0000-000000000001';
 
-      const { data, error: createError } = await supabase
-        .from('pulsar_channels')
-        .insert({
+      const { data, error: createError } = await callChannelsEdgeFunction<Channel>(
+        'POST',
+        '',
+        {
           organization_id: orgId,
           name: newName.trim(),
           channel_code: newCode.trim().toUpperCase(),
           channel_mode: newMode,
-        })
-        .select()
-        .single();
+        }
+      );
 
-      if (createError) throw createError;
+      if (createError) throw new Error(createError);
+      if (!data) throw new Error('No data returned');
 
       // Add to list
       setChannels(prev => [...prev, data]);
@@ -137,17 +168,15 @@ export function ChannelsModal({ open, onOpenChange }: ChannelsModalProps) {
     }
   };
 
-  // Delete channel
+  // Delete channel via edge function
   const handleDelete = async (channelId: string) => {
-    if (!supabase) return;
-
     try {
-      const { error: deleteError } = await supabase
-        .from('pulsar_channels')
-        .delete()
-        .eq('id', channelId);
+      const { error: deleteError } = await callChannelsEdgeFunction<{ success: boolean }>(
+        'DELETE',
+        `/${channelId}`
+      );
 
-      if (deleteError) throw deleteError;
+      if (deleteError) throw new Error(deleteError);
 
       setChannels(prev => prev.filter(c => c.id !== channelId));
     } catch (err) {

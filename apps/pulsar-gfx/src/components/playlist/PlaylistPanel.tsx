@@ -79,6 +79,7 @@ import { usePageLibraryStore } from '@/stores/pageRepositoryStore';
 import { PAGE_DRAG_TYPE } from '@/components/pages/PageList';
 import { useConfirm } from '@/hooks/useConfirm';
 import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
+import { convertPayloadForNovaGfx } from '@/lib/payloadUtils';
 import { getDataSourceById } from '@/data/sampleDataSources';
 import { supabase } from '@emergent-platform/supabase-client';
 import { fetchEndpointData } from '@/services/novaEndpointService';
@@ -582,6 +583,10 @@ export function PlaylistPanel() {
       );
     }
 
+    // Convert FillData objects in payload to JSON strings for Nova GFX
+    // Nova GFX expects JSON strings for shape fill overrides, not raw objects
+    filteredPayload = convertPayloadForNovaGfx(filteredPayload) as Record<string, string | null>;
+
     try {
       // Send FULL element data so NovaPlayer can render correctly (position, transform, etc.)
       const elementsForCommand = template.elements?.map(el => ({
@@ -896,6 +901,9 @@ export function PlaylistPanel() {
         })
       );
     }
+
+    // Convert FillData objects in payload to JSON strings for Nova GFX
+    filteredPayload = convertPayloadForNovaGfx(filteredPayload) as Record<string, string | null>;
 
     // Send FULL element data so NovaPlayer can render correctly (position, transform, etc.)
     const elementsForCommand = template.elements?.map(el => ({

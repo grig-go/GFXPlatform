@@ -4,7 +4,6 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { PreviewPanel } from '@/components/preview/PreviewPanel';
-import { PlayoutPanel } from '@/components/playout/PlayoutPanel';
 import { ContentEditor } from '@/components/content/ContentEditor';
 import { KeyboardShortcutsDialog } from '@/components/dialogs/KeyboardShortcutsDialog';
 import { useUIStore } from '@/stores/uiStore';
@@ -16,7 +15,7 @@ import {
 } from '@emergent-platform/ui';
 
 export function MainLayout() {
-  const { showPlayoutControls, showPreview, showContentEditor } = useUIStore();
+  const { showPreview, showContentEditor } = useUIStore();
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
 
   // Initialize keyboard shortcuts with Ctrl+/ handler
@@ -45,18 +44,8 @@ export function MainLayout() {
 
         {/* Main Resizable Area */}
         <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
-          {/* Left Panel - Playout Controls (conditionally shown) */}
-          {showPlayoutControls && (
-            <>
-              <ResizablePanel defaultSize={25} minSize={15}>
-                <PlayoutPanel />
-              </ResizablePanel>
-              <ResizableHandle withHandle className="bg-border/50 hover:bg-cyan-500/30 transition-colors" />
-            </>
-          )}
-
           {/* Center - Workspace (Pages, Playlists, Custom UI) */}
-          <ResizablePanel defaultSize={showRightPanel ? 45 : 100} minSize={30}>
+          <ResizablePanel defaultSize={showRightPanel ? 70 : 100} minSize={30}>
             <div className="h-full flex flex-col overflow-hidden bg-background/50">
               <Outlet />
             </div>

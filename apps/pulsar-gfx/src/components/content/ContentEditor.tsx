@@ -29,6 +29,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { MediaPickerDialog } from '@/components/dialogs/MediaPickerDialog';
 import { getNestedValue } from '@/data/sampleDataSources';
 import { resolvePayloadBindings, type Binding } from '@/lib/bindingResolver';
+import { convertPayloadForNovaGfx } from '@/lib/payloadUtils';
 
 // Common Lucide icons for the icon picker
 const COMMON_LUCIDE_ICONS = [
@@ -527,9 +528,13 @@ export function ContentEditor() {
         }
       });
 
+      // Convert FillData objects in payload to JSON strings for Nova GFX preview
+      // Nova GFX expects JSON strings for shape fill data, not objects
+      const previewPayloadData = convertPayloadForNovaGfx(payload);
+
       setLocalPayload(payload);
-      // Initialize preview payload with page payload for real-time preview
-      setPreviewPayload(payload);
+      // Initialize preview payload with converted data for real-time preview
+      setPreviewPayload(previewPayloadData);
       setHasChanges(false);
     } else if (selectedTemplate) {
       // For templates, initialize with default values from elements (using localStorage)

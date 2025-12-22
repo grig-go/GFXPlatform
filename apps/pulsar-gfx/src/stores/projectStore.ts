@@ -1,10 +1,42 @@
 import { create } from 'zustand';
-import { supabase, ensureFreshConnection } from '@emergent-platform/supabase-client';
+import { supabase } from '@emergent-platform/supabase-client';
 import { usePlaylistStore } from './playlistStore';
 import { usePageStore } from './pageStore';
 import { useAuthStore } from './authStore';
 import { fetchEndpointData } from '@/services/novaEndpointService';
 import { usePreviewStore } from './previewStore';
+
+// Edge function helper for reliable project operations (no stale connections)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function fetchProjectsViaEdgeFunction(organizationId?: string): Promise<any[]> {
+  try {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/gfx-projects`);
+    if (organizationId) {
+      url.searchParams.set('organization_id', organizationId);
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[projectStore] Edge function error:', result);
+      return [];
+    }
+    return result.data || [];
+  } catch (err) {
+    console.error('[projectStore] Network error:', err);
+    return [];
+  }
+}
 
 // Types - these will move to @emergent-platform/types
 export interface Project {
@@ -109,33 +141,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProjects: async () => {
     set({ isLoading: true, error: null });
 
-    // Force fresh connection before loading to prevent stale data
-    try {
-      await ensureFreshConnection(true);
-    } catch (err) {
-      console.warn('[projectStore] Failed to ensure fresh connection:', err);
-    }
-
     try {
       // Get user's organization from auth store
       const { user } = useAuthStore.getState();
 
-      // Build query - filter by organization if user is logged in
-      let query = supabase
-        .from('gfx_projects')
-        .select('*')
-        .eq('archived', false);  // Filter out archived/deleted projects
+      // Use edge function for reliable project loading (no stale connections!)
+      console.log('[projectStore] Loading projects via edge function...');
+      const data = await fetchProjectsViaEdgeFunction(user?.organizationId);
 
-      // Filter by user's organization if they have one
-      if (user?.organizationId) {
-        query = query.eq('organization_id', user.organizationId);
-      }
-
-      const { data, error } = await query.order('updated_at', { ascending: false });
-
-      if (error) throw error;
-
-      const projects: Project[] = (data || []).map((p: any) => ({
+      const projects: Project[] = data.map((p: any) => ({
         id: p.id,
         name: p.name,
         slug: p.slug,
@@ -146,6 +160,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         updatedAt: new Date(p.updated_at),
       }));
 
+      console.log('[projectStore] Loaded', projects.length, 'projects');
       set({ projects, isLoading: false });
     } catch (error) {
       console.error('Failed to load projects:', error);

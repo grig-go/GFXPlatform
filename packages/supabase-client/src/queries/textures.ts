@@ -1,8 +1,49 @@
-import { supabase, ensureFreshConnection, markSupabaseSuccess } from '../client';
+import { supabase } from '../client';
 
 // Storage bucket name for textures
 // Note: The bucket in Supabase is named "Texures" (without the second 't')
 const TEXTURES_BUCKET = 'Texures';
+
+// Edge function helper for reliable texture operations (no stale connections)
+// Use environment variables directly - same pattern as media.ts
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+async function callTexturesEdgeFunction<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string = '',
+  body?: Record<string, unknown>,
+  params?: Record<string, string>
+): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/organization-textures${path}`);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.set(key, value);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[textures] Edge function error:', result);
+      return { data: null, error: result.error || 'Edge function request failed' };
+    }
+    return { data: result.data as T, error: null };
+  } catch (err) {
+    console.error('[textures] Network error:', err);
+    return { data: null, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
 
 // Types
 export interface OrganizationTexture {
@@ -256,6 +297,7 @@ async function generateVideoThumbnail(file: File, maxSize: number = 400): Promis
 
 /**
  * Fetch textures for the current user's organization
+ * Uses edge function for reliable loading (no stale connections!)
  */
 export async function fetchOrganizationTextures(
   organizationId: string,
@@ -263,46 +305,49 @@ export async function fetchOrganizationTextures(
 ): Promise<TextureListResult> {
   const { limit = 50, offset = 0, type, search, tags } = options;
 
-  // Ensure connection is fresh before querying
-  await ensureFreshConnection();
+  console.log('[textures] Fetching textures via edge function...');
 
-  let query = supabase
-    .from('organization_textures')
-    .select('*', { count: 'exact' })
-    .eq('organization_id', organizationId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  // Build params for edge function
+  const params: Record<string, string> = {
+    organization_id: organizationId,
+    limit: String(limit),
+    offset: String(offset),
+  };
 
   if (type) {
-    query = query.eq('media_type', type);
+    params.type = type;
   }
 
   if (search) {
-    query = query.ilike('name', `%${search}%`);
+    params.search = search;
   }
 
   if (tags && tags.length > 0) {
-    query = query.contains('tags', tags);
+    params.tags = tags.join(',');
   }
 
-  // Add timeout to prevent hanging
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Query timeout after 10s')), 10000);
-  });
-
-  const { data, error, count } = await Promise.race([query, timeoutPromise]);
+  const { data, error } = await callTexturesEdgeFunction<{
+    data: Record<string, unknown>[];
+    count: number;
+    hasMore: boolean;
+  }>('GET', '', undefined, params);
 
   if (error) {
     console.error('Error fetching textures:', error);
-    throw new Error(`Failed to fetch textures: ${error.message}`);
+    throw new Error(`Failed to fetch textures: ${error}`);
   }
 
-  markSupabaseSuccess();
+  // Handle both direct array and wrapped response
+  const rawData = Array.isArray(data) ? data : (data as any)?.data || [];
+  const count = Array.isArray(data) ? rawData.length : (data as any)?.count || 0;
+  const hasMore = Array.isArray(data) ? false : (data as any)?.hasMore || false;
+
+  console.log(`[textures] Loaded ${rawData.length} textures`);
 
   return {
-    data: (data || []).map(mapRowToTexture),
-    count: count || 0,
-    hasMore: (count || 0) > offset + limit,
+    data: rawData.map(mapRowToTexture),
+    count,
+    hasMore,
   };
 }
 
@@ -425,45 +470,21 @@ export async function uploadTexture(
 
 /**
  * Delete a texture
+ * Uses edge function for reliable deletion (no stale connections!)
  */
 export async function deleteTexture(textureId: string): Promise<void> {
-  // First get the texture to get storage paths
-  const { data: texture, error: fetchError } = await supabase
-    .from('organization_textures')
-    .select('storage_path, thumbnail_url')
-    .eq('id', textureId)
-    .single();
+  console.log(`[textures] Deleting texture via edge function: ${textureId}`);
 
-  if (fetchError) {
-    throw new Error(`Failed to find texture: ${fetchError.message}`);
+  const { error } = await callTexturesEdgeFunction<{ success: boolean }>(
+    'DELETE',
+    `/${textureId}`
+  );
+
+  if (error) {
+    throw new Error(`Failed to delete texture: ${error}`);
   }
 
-  // Delete from storage
-  const pathsToDelete = [texture.storage_path];
-
-  // Extract thumbnail path from URL if it exists
-  if (texture.thumbnail_url) {
-    const thumbPath = texture.storage_path.replace(/([^/]+)$/, 'thumbnails/$1.jpg');
-    pathsToDelete.push(thumbPath);
-  }
-
-  const { error: storageError } = await supabase.storage
-    .from(TEXTURES_BUCKET)
-    .remove(pathsToDelete);
-
-  if (storageError) {
-    console.warn('Failed to delete texture files:', storageError);
-  }
-
-  // Delete database record
-  const { error: dbError } = await supabase
-    .from('organization_textures')
-    .delete()
-    .eq('id', textureId);
-
-  if (dbError) {
-    throw new Error(`Failed to delete texture record: ${dbError.message}`);
-  }
+  console.log(`[textures] Deleted texture: ${textureId}`);
 }
 
 /**

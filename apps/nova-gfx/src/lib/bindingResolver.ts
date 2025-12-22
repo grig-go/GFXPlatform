@@ -21,6 +21,9 @@ export function shouldHideElement(
   const options = binding.formatter_options as { hideOnZero?: boolean; hideOnNull?: boolean } | null;
   if (!options) return false;
 
+  // Check if either hide option is enabled
+  if (!options.hideOnNull && !options.hideOnZero) return false;
+
   // Get raw value from data
   const rawValue = currentRecord ? getNestedValue(currentRecord, binding.binding_key) : undefined;
 
@@ -147,6 +150,19 @@ function applyFormatter(
     // Date formatting
     if (options.dateFormat && options.dateFormat !== 'none') {
       result = formatDate(result, options);
+    }
+
+    // Text replacements (e.g., true -> "Winner", false -> "")
+    // Apply BEFORE text case so replacements can be case-transformed
+    const replacements = options.replacements as Array<{ match: string; replace: string }> | undefined;
+    if (replacements && replacements.length > 0) {
+      const valueStr = String(result).toLowerCase();
+      for (const replacement of replacements) {
+        if (replacement.match && valueStr === replacement.match.toLowerCase()) {
+          result = replacement.replace;
+          break; // Only apply first matching replacement
+        }
+      }
     }
 
     // Text case formatting

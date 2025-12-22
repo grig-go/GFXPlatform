@@ -754,6 +754,9 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     // 1. Glass elements - backdrop-filter doesn't work with opacity: 0
     // 2. Character animation - each character handles its own opacity
     opacity: (isGlassElement || hasCharAnimation) ? 1 : animatedOpacity,
+    // Hidden by binding (hideOnNull/hideOnZero) - use visibility:hidden to hide element
+    // This preserves opacity keyframes and keeps element in DOM for animations
+    ...(isHiddenByBinding ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}),
     // Apply blend mode at container level so it blends with elements behind
     ...(contentBlendMode && contentBlendMode !== 'normal' ? { mixBlendMode: contentBlendMode as React.CSSProperties['mixBlendMode'] } : {}),
     // Apply screen mask styles (clip-path or mask-image with feathering)
@@ -1451,6 +1454,56 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
           media_muted: animatedProps.media_muted as number | undefined,
           media_speed: animatedProps.media_speed as number | undefined,
         };
+
+        // Calculate video playback speed from keyframes
+        // Find media_time keyframes to determine start/end video times and timeline duration
+        let calculatedVideoSpeed = 1;
+        const videoAnimation = animations.find(a => a.element_id === element.id && a.phase === currentPhase);
+        console.log('[Video] Speed calculation input:', {
+          elementId: element.id,
+          currentPhase,
+          hasAnimation: !!videoAnimation,
+          animationId: videoAnimation?.id,
+          totalKeyframes: keyframes.length,
+        });
+        if (videoAnimation) {
+          const videoKeyframes = keyframes
+            .filter(kf => kf.animation_id === videoAnimation.id && kf.properties.media_time !== undefined)
+            .sort((a, b) => a.position - b.position);
+
+          console.log('[Video] Found media_time keyframes:', videoKeyframes.length, videoKeyframes.map(kf => ({
+            position: kf.position,
+            media_time: kf.properties.media_time
+          })));
+
+          if (videoKeyframes.length >= 2) {
+            const firstKf = videoKeyframes[0];
+            const lastKf = videoKeyframes[videoKeyframes.length - 1];
+            const startMediaTime = firstKf.properties.media_time as number;
+            const endMediaTime = lastKf.properties.media_time as number;
+            const timelineDurationMs = lastKf.position - firstKf.position;
+
+            if (timelineDurationMs > 0) {
+              // Video duration in seconds / Timeline duration in seconds = playback speed
+              const videoDuration = endMediaTime - startMediaTime;
+              const timelineDurationSec = timelineDurationMs / 1000;
+              calculatedVideoSpeed = videoDuration / timelineDurationSec;
+              // Clamp to valid range (HTML5 video supports up to 16x in most browsers)
+              calculatedVideoSpeed = Math.max(0.25, Math.min(16, calculatedVideoSpeed));
+
+              console.log('[Video] Calculated speed:', {
+                startMediaTime,
+                endMediaTime,
+                videoDuration,
+                timelineDurationMs,
+                timelineDurationSec,
+                calculatedVideoSpeed,
+                currentInterpolatedTime: animatedProps.media_time,
+              });
+            }
+          }
+        }
+
         return (
           <VideoElement
             content={element.content}
@@ -1461,6 +1514,7 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
             isPreview={false} // In designer, show overlay when selected
             animatedMediaProps={animatedMediaProps}
             isPlaying={isPlaying}
+            calculatedSpeed={calculatedVideoSpeed}
           />
         );
 
@@ -1576,11 +1630,8 @@ export function StageElement({ element, allElements, layerZIndex = 0 }: StageEle
     }
   };
 
-  // Hide element if binding options dictate (hideOnZero, hideOnNull)
-  // Data changes will cause this to re-evaluate, making it responsive
-  if (isHiddenByBinding) {
-    return null;
-  }
+  // Note: isHiddenByBinding is now handled via visibility:hidden in transformStyle
+  // This keeps the element in the DOM, preserving opacity keyframes and other animations
 
   return (
     <div
