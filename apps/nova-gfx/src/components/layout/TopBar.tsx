@@ -3,6 +3,7 @@ import {
   Play, Settings, HelpCircle, Cpu, Palette,
   ChevronDown, Grid3X3, Wrench, FolderOpen, Sparkles,
   ExternalLink, Copy, Check, Monitor, Keyboard, Send, Layers,
+  LayoutGrid,
 } from 'lucide-react';
 import {
   Button,
@@ -21,6 +22,7 @@ import { ChannelsModal } from '@/components/dialogs/ChannelsModal';
 import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
 import { TexturesDialog } from '@/components/dialogs/TexturesDialog';
 import { UserMenu } from '@/components/auth';
+import { supabase } from '@/lib/supabase';
 
 interface TopBarProps {
   onOpenSettings?: () => void;
@@ -47,6 +49,13 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
   const [showChannelsModal, setShowChannelsModal] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [showTexturesDialog, setShowTexturesDialog] = useState(false);
+  const [apps, setApps] = useState<Array<{
+    id: string;
+    name: string;
+    app_url: string;
+    sort_order: number;
+    app_key: string;
+  }>>([]);
 
   // Sync showPublishModal with external prop
   useEffect(() => {
@@ -54,6 +63,20 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
       setShowPublishModal(openPublishModal);
     }
   }, [openPublishModal]);
+
+  // Fetch apps from backend
+  useEffect(() => {
+    const fetchApps = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.rpc("list_active_applications");
+      if (!error && data) {
+        setApps(data);
+      } else if (error) {
+        console.error("[TopBar] Failed to fetch applications:", error);
+      }
+    };
+    fetchApps();
+  }, []);
 
   // Notify parent when publish modal changes
   const handlePublishModalChange = (open: boolean) => {
@@ -192,6 +215,28 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
 
       {/* Right side - Menus */}
       <div className="flex items-center gap-0.5">
+        {/* Apps Menu */}
+        {apps.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 sm:h-8 gap-1 sm:gap-1.5 px-2 sm:px-3">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Apps</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {apps.map(app => (
+                <DropdownMenuItem
+                  key={app.id}
+                  onClick={() => window.open(app.app_url, '_blank')}
+                >
+                  {app.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         {/* Tools Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

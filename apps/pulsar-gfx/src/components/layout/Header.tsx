@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ListOrdered,
   ScrollText,
+  LayoutGrid,
 } from 'lucide-react';
 import { UserMenu } from '@/components/auth';
 import { useProjectStore } from '@/stores/projectStore';
@@ -38,6 +39,7 @@ import { ChannelsModal } from '@/components/dialogs/ChannelsModal';
 import { ProjectsModal } from '@/components/dialogs/ProjectsModal';
 import { PlaylistsModal } from '@/components/dialogs/PlaylistsModal';
 import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog';
+import { supabase } from '@/lib/supabase';
 
 interface HeaderProps {
   onShowKeyboardShortcuts?: () => void;
@@ -66,6 +68,27 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
   const [showPlaylistsModal, setShowPlaylistsModal] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [hasRestoredProject, setHasRestoredProject] = useState(false);
+  const [apps, setApps] = useState<Array<{
+    id: string;
+    name: string;
+    app_url: string;
+    sort_order: number;
+    app_key: string;
+  }>>([]);
+
+  // Fetch apps from backend
+  useEffect(() => {
+    const fetchApps = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.rpc("list_active_applications");
+      if (!error && data) {
+        setApps(data);
+      } else if (error) {
+        console.error("[Header] Failed to fetch applications:", error);
+      }
+    };
+    fetchApps();
+  }, []);
 
   // Restore last project on initial load
   // Always clear stale data and reload fresh to get latest bindings/templates
@@ -192,6 +215,28 @@ export function Header({ onShowKeyboardShortcuts }: HeaderProps) {
 
       {/* Right side - Menus */}
       <div className="flex items-center gap-0.5">
+        {/* Apps Menu */}
+        {apps.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 sm:h-8 gap-1 sm:gap-1.5 px-2 sm:px-3">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Apps</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {apps.map(app => (
+                <DropdownMenuItem
+                  key={app.id}
+                  onClick={() => window.open(app.app_url, '_blank')}
+                >
+                  {app.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         {/* Tools Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -152,6 +152,21 @@ const customFetch = async (url: RequestInfo | URL, options: RequestInit = {}) =>
 };
 
 /**
+ * Helper to check response for JWT expired errors and trigger handler
+ */
+function checkJwtExpired(response: Response, errorText: string): void {
+  if (response.status === 401 && onJwtExpired && !jwtExpiredTriggered) {
+    if (errorText.includes('JWT expired') || errorText.includes('PGRST303')) {
+      console.warn('[Supabase] JWT expired detected in direct REST call, triggering logout handler');
+      jwtExpiredTriggered = true;
+      setTimeout(() => {
+        onJwtExpired?.();
+      }, 0);
+    }
+  }
+}
+
+/**
  * Send a beacon update - use this for window close/unload scenarios.
  * Uses navigator.sendBeacon which is designed to survive page unload.
  * Returns true if beacon was queued (doesn't mean it succeeded on server).
@@ -240,6 +255,7 @@ export async function directRestUpdate(
 
     if (!response.ok) {
       const errorText = await response.text();
+      checkJwtExpired(response, errorText);
       return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
@@ -293,6 +309,7 @@ export async function directRestSelect<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
+      checkJwtExpired(response, errorText);
       return { data: null, error: `HTTP ${response.status}: ${errorText}` };
     }
 
@@ -351,6 +368,7 @@ export async function directRestInsert<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
+      checkJwtExpired(response, errorText);
       return { data: null, error: `HTTP ${response.status}: ${errorText}` };
     }
 
@@ -421,6 +439,7 @@ export async function directRestDelete(
 
     if (!response.ok) {
       const errorText = await response.text();
+      checkJwtExpired(response, errorText);
       return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
