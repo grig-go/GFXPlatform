@@ -1,11 +1,16 @@
 import { create } from 'zustand';
-import { supabase } from '@emergent-platform/supabase-client';
 import { useAuthStore } from './authStore';
+
+// Edge function URL for user preferences (bypasses stale Supabase client)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const PREFERENCES_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/pulsar-user-preferences`;
 
 /**
  * UI Preferences Store
  *
- * Persists user UI preferences to Supabase database.
+ * Persists user UI preferences to Supabase database via edge function.
+ * Uses edge function to avoid stale connection issues with Supabase client.
  * Preferences are loaded on app startup and saved on change.
  *
  * Current preferences:
@@ -83,11 +88,13 @@ let pendingUpdates: Partial<UIPreferences> = {};
 // This MUST be set synchronously before any await to prevent race conditions
 let loadingPromise: Promise<void> | null = null;
 
-// Save preferences to Supabase (debounced)
+// Save preferences to Supabase via edge function (debounced)
+// Uses edge function to bypass stale Supabase client connections
 const savePreferencesToDB = async (preferences: UIPreferences, changedField?: keyof UIPreferences) => {
   // Track which field changed so we only update that field
   if (changedField) {
     pendingUpdates[changedField] = preferences[changedField] as any;
+    console.log('[uiPreferencesStore] Queuing preference update:', changedField, '=', preferences[changedField]);
   }
 
   if (saveTimeout) {
@@ -96,41 +103,16 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
 
   saveTimeout = setTimeout(async () => {
     try {
-      // Wait for auth to be initialized AND have an access token before saving
-      const authState = useAuthStore.getState();
-      if (!authState.isInitialized || !authState.accessToken) {
-        // Wait up to 5 seconds for auth to initialize with a valid session
-        let waited = 0;
-        while (waited < 5000) {
-          const state = useAuthStore.getState();
-          if (state.isInitialized && state.accessToken) break;
-          await new Promise(resolve => setTimeout(resolve, 100));
-          waited += 100;
-        }
-      }
+      // Get user from auth store
+      const authUser = useAuthStore.getState().user;
 
-      // Get user and access token from auth store
-      const currentAuthState = useAuthStore.getState();
-      const authUser = currentAuthState.user;
-      const accessToken = currentAuthState.accessToken;
-
-      if (!authUser || !accessToken) {
+      if (!authUser) {
+        console.warn('[uiPreferencesStore] No auth user, skipping save');
         pendingUpdates = {};
         return;
       }
 
       const userId = authUser.id;
-
-      // Map store fields to DB column names
-      const fieldMapping: Record<keyof UIPreferences, string> = {
-        lastProjectId: 'last_project_id',
-        openPlaylistIds: 'open_playlist_ids',
-        activePlaylistId: 'active_playlist_id',
-        selectedChannelId: 'selected_channel_id',
-        showPlayoutControls: 'show_playout_controls',
-        showPreview: 'show_preview',
-        showContentEditor: 'show_content_editor',
-      };
 
       // Capture pending updates before clearing
       const updatesToApply = { ...pendingUpdates };
@@ -140,57 +122,28 @@ const savePreferencesToDB = async (preferences: UIPreferences, changedField?: ke
         return;
       }
 
-      // Check if preferences row exists for this user
-      const { data: existingRow, error: checkError } = await supabase
-        .from('pulsar_user_preferences')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      console.log('[uiPreferencesStore] Saving via edge function:', updatesToApply);
 
-      if (checkError) {
-        return;
-      }
+      // Use PATCH to update specific fields via edge function
+      const response = await fetch(`${PREFERENCES_FUNCTION_URL}?user_id=${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify(updatesToApply),
+      });
 
-      if (existingRow) {
-        // UPDATE existing row - only update changed fields
-        const updateData: Record<string, any> = {};
-        for (const [field, value] of Object.entries(updatesToApply)) {
-          const dbField = fieldMapping[field as keyof UIPreferences];
-          if (dbField) {
-            updateData[dbField] = value;
-          }
-        }
+      const result = await response.json();
 
-        await supabase
-          .from('pulsar_user_preferences')
-          .update(updateData)
-          .eq('user_id', userId)
-          .select();
+      if (!response.ok) {
+        console.error('[uiPreferencesStore] Edge function error:', result);
       } else {
-        // INSERT new row with defaults + changed fields
-        const insertData: Record<string, any> = {
-          user_id: userId,
-          // Defaults
-          open_playlist_ids: [],
-          show_playout_controls: true,
-          show_preview: true,
-          show_content_editor: true,
-        };
-
-        // Apply the changed fields
-        for (const [field, value] of Object.entries(updatesToApply)) {
-          const dbField = fieldMapping[field as keyof UIPreferences];
-          if (dbField) {
-            insertData[dbField] = value;
-          }
-        }
-
-        await supabase
-          .from('pulsar_user_preferences')
-          .insert(insertData)
-          .select();
+        console.log('[uiPreferencesStore] Preferences saved successfully via edge function');
       }
-    } catch {
+    } catch (err) {
+      console.error('[uiPreferencesStore] Save error:', err);
       pendingUpdates = {};
     }
   }, SAVE_DEBOUNCE_MS);
@@ -221,45 +174,55 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
     // This prevents React StrictMode double-render from creating two separate loads
     loadingPromise = (async () => {
       try {
-        // Wait for auth to be initialized AND have an access token before loading preferences
+        // Wait for auth to be initialized before loading preferences
         const authState = useAuthStore.getState();
-        if (!authState.isInitialized || !authState.accessToken) {
-          // Wait up to 5 seconds for auth to initialize with a valid session
+        if (!authState.isInitialized) {
+          // Wait up to 5 seconds for auth to initialize
           let waited = 0;
           while (waited < 5000) {
             const state = useAuthStore.getState();
-            if (state.isInitialized && state.accessToken) break;
+            if (state.isInitialized) break;
             await new Promise(resolve => setTimeout(resolve, 100));
             waited += 100;
           }
         }
 
-        // Get user and access token from auth store
-        const currentAuthState = useAuthStore.getState();
-        const authUser = currentAuthState.user;
-        const accessToken = currentAuthState.accessToken;
+        // Get user from auth store
+        const authUser = useAuthStore.getState().user;
 
-        if (!authUser || !accessToken) {
+        if (!authUser) {
+          console.log('[uiPreferencesStore] No auth user, using defaults');
           set({ isLoading: false, isLoaded: true });
           return;
         }
 
-        const { data, error } = await supabase
-          .from('pulsar_user_preferences')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .single();
+        console.log('[uiPreferencesStore] Loading preferences via edge function for user:', authUser.id);
 
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // No preferences found, use defaults
-            set({ isLoading: false, isLoaded: true });
-            return;
-          }
-          throw error;
+        // Use edge function to load preferences (bypasses stale Supabase client)
+        const response = await fetch(`${PREFERENCES_FUNCTION_URL}?user_id=${authUser.id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('[uiPreferencesStore] Edge function error:', result);
+          throw new Error(result.error || 'Failed to load preferences');
         }
 
+        const data = result.data;
+
         if (data) {
+          console.log('[uiPreferencesStore] Loaded preferences:', {
+            lastProjectId: data.last_project_id,
+            openPlaylistIds: data.open_playlist_ids,
+            activePlaylistId: data.active_playlist_id,
+          });
           set({
             lastProjectId: data.last_project_id,
             openPlaylistIds: data.open_playlist_ids || [],
@@ -272,9 +235,11 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()((set, get) => 
             isLoaded: true,
           });
         } else {
+          console.log('[uiPreferencesStore] No preferences found, using defaults');
           set({ isLoading: false, isLoaded: true });
         }
-      } catch {
+      } catch (err) {
+        console.error('[uiPreferencesStore] Load failed:', err);
         set({ error: 'Failed to load preferences', isLoading: false, isLoaded: true });
       } finally {
         // Clear the loading promise so future calls can reload if needed

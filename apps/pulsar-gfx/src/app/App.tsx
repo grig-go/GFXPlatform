@@ -88,7 +88,8 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
           const savedProject = projects.find(p => p.id === prefs.lastProjectId);
           if (savedProject) {
             console.log('Selecting saved project:', savedProject.name);
-            await useProjectStore.getState().selectProject(prefs.lastProjectId);
+            // Skip saving preference since we're restoring what's already saved
+            await useProjectStore.getState().selectProject(prefs.lastProjectId, true);
           } else if (projects.length > 0) {
             console.log('Saved project not found, selecting first project:', projects[0].name);
             await useProjectStore.getState().selectProject(projects[0].id);

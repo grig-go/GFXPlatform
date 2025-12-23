@@ -2433,6 +2433,22 @@ The AI provider will be automatically available once configured.`,
     }
     abortControllerRef.current = new AbortController();
 
+    // Safety timeout - auto-cancel after 30 seconds of no activity (stale connection protection)
+    let lastActivityTime = Date.now();
+    const STALE_CONNECTION_TIMEOUT_MS = 30000;
+    const staleCheckInterval = setInterval(() => {
+      if (Date.now() - lastActivityTime > STALE_CONNECTION_TIMEOUT_MS) {
+        console.warn('[ChatPanel] Stale connection detected - no activity for 30s, auto-cancelling');
+        abortControllerRef.current?.abort();
+        clearInterval(staleCheckInterval);
+      }
+    }, 5000);
+
+    // Helper to update activity timestamp (called when we receive chunks)
+    const updateActivity = () => {
+      lastActivityTime = Date.now();
+    };
+
     try {
       // Build conversation history for AI
       const history: AIChatMessage[] = chatMessages.map((m) => ({
@@ -2544,6 +2560,9 @@ The AI provider will be automatically available once configured.`,
           history,
           context,
           (_chunk, fullText) => {
+            // Update activity timestamp to prevent stale connection timeout
+            updateActivity();
+
             // Check if we've hit a JSON code block
             let codeBlockStart = fullText.indexOf('```json');
             let jsonPortion = '';
@@ -2770,6 +2789,9 @@ The AI provider will be automatically available once configured.`,
         autoRetryCountRef.current = 0;
       }
     } finally {
+      // Clean up stale connection checker
+      clearInterval(staleCheckInterval);
+
       setIsLoading(false);
       abortControllerRef.current = null;
       // Reset progress after a delay so user sees the final state

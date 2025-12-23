@@ -1,133 +1,159 @@
+/**
+ * AI Chat Edge Function
+ *
+ * Unified AI proxy that supports both Gemini and Claude providers.
+ * This replaces the Netlify function with a Supabase Edge Function for:
+ * - More reliable connections (no cold starts after idle)
+ * - Consistent behavior in local and production
+ * - Better integration with Supabase infrastructure
+ *
+ * Endpoints:
+ * - POST /ai-chat - Send messages to AI (Gemini or Claude)
+ * - OPTIONS /ai-chat - CORS preflight
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Anthropic from "npm:@anthropic-ai/sdk@0.25.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
 };
 
-// Available models
-const MODELS = {
-  "sonnet-fast": "claude-sonnet-4-20250514",
-  "opus-advanced": "claude-opus-4-20250514",
-  "haiku-instant": "claude-3-5-haiku-20241022",
-};
-
-const DEFAULT_SYSTEM_PROMPT = `You are Nova, an AI assistant for creating broadcast graphics. When users ask you to create graphics, you MUST respond with a JSON code block that defines the elements to create.
-
-## Response Format
-
-ALWAYS include a JSON code block with this structure when creating or modifying graphics:
-
-\`\`\`json
-{
-  "action": "create" | "update" | "delete",
-  "elements": [
-    {
-      "name": "Element Name",
-      "element_type": "shape" | "text" | "image" | "group" | "div",
-      "position_x": 100,
-      "position_y": 800,
-      "width": 500,
-      "height": 120,
-      "rotation": 0,
-      "opacity": 1,
-      "styles": {
-        "backgroundColor": "#3B82F6",
-        "borderRadius": "8px",
-        "boxShadow": "0 4px 20px rgba(0,0,0,0.3)"
-      },
-      "content": {
-        "type": "shape" | "text" | "image",
-        "shape": "rectangle" | "ellipse",
-        "fill": "#3B82F6",
-        "text": "Your Text Here",
-        "src": "image-url"
-      }
-    }
-  ],
-  "animations": [
-    {
-      "element_name": "Element Name",
-      "phase": "in" | "loop" | "out",
-      "duration": 500,
-      "easing": "ease-out",
-      "keyframes": [
-        { "position": 0, "opacity": 0, "transform": "translateX(-100px)" },
-        { "position": 100, "opacity": 1, "transform": "translateX(0)" }
-      ]
-    }
-  ]
+interface AIRequest {
+  provider: 'gemini' | 'claude';
+  model: string;
+  messages: any[];
+  systemPrompt?: string;
+  maxTokens?: number;
+  temperature?: number;
 }
-\`\`\`
 
-## Canvas Info
-- Standard broadcast canvas: 1920x1080px
-- Lower thirds: typically at y=800-950, x=50-150
-- Score bugs: typically top corners
-- Full screen: 0,0 to 1920,1080
-
-## Element Types
-- **text**: For labels, names, titles
-- **shape**: For backgrounds, containers (rectangle, ellipse)
-- **image**: For logos, photos
-- **group/div**: For containers holding multiple elements
-
-## Style Guidelines
-- Use modern gradients: \`linear-gradient(135deg, #3B82F6, #8B5CF6)\`
-- Shadows for depth: \`0 4px 20px rgba(0,0,0,0.3)\`
-- Border radius for polish: \`8px\` to \`16px\`
-- Text: white on colored backgrounds, 24-48px for names, 16-24px for titles
-
-After the JSON, add a brief explanation of what you created.`;
+console.log("[ai-chat] Edge Function started");
 
 serve(async (req) => {
+  console.log(`[ai-chat] Incoming request: ${req.method}`);
+
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  try {
-    const { message, history, systemPrompt, model } = await req.json();
-
-    const anthropic = new Anthropic({
-      apiKey: Deno.env.get("CLAUDE_API_KEY"),
-    });
-
-    const messages = history?.length
-      ? [...history, { role: "user", content: message }]
-      : [{ role: "user", content: message }];
-
-    // Use requested model or default to sonnet (fast)
-    const selectedModel = MODELS[model as keyof typeof MODELS] || MODELS["sonnet-fast"];
-
-    const response = await anthropic.messages.create({
-      model: selectedModel,
-      max_tokens: 8192, // Increased for complex graphics with many elements
-      system: systemPrompt || DEFAULT_SYSTEM_PROMPT,
-      messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    });
-
-    const assistantMessage = response.content[0].type === "text" 
-      ? response.content[0].text 
-      : "";
-
+  if (req.method !== "POST") {
     return new Response(
-      JSON.stringify({ message: assistantMessage }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+  }
+
+  try {
+    const request: AIRequest = await req.json();
+    const { provider, model, messages, systemPrompt, maxTokens = 8192, temperature = 0.7 } = request;
+
+    if (!provider || !model || !messages) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: provider, model, messages" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[ai-chat] Provider: ${provider}, Model: ${model}, Messages: ${messages.length}`);
+
+    let response;
+
+    if (provider === "gemini") {
+      const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+      if (!geminiApiKey) {
+        console.error("[ai-chat] Missing GEMINI_API_KEY environment variable");
+        return new Response(
+          JSON.stringify({ error: "Gemini API key not configured on server" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      console.log(`[ai-chat] Calling Gemini API with model: ${model}`);
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: messages,
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature,
+            },
+            safetySettings: [
+              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            ],
+          }),
+        }
+      );
+
+    } else if (provider === "claude") {
+      const claudeApiKey = Deno.env.get("CLAUDE_API_KEY");
+      if (!claudeApiKey) {
+        console.error("[ai-chat] Missing CLAUDE_API_KEY environment variable");
+        return new Response(
+          JSON.stringify({ error: "Claude API key not configured on server" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[ai-chat] Calling Claude API with model: ${model}`);
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": claudeApiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages,
+        }),
+      });
+
+    } else {
+      return new Response(
+        JSON.stringify({ error: `Unknown provider: ${provider}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`[ai-chat] API error (${response.status}):`, errorData);
+      return new Response(
+        JSON.stringify({
+          error: errorData.error?.message || `API request failed: ${response.status}`,
+        }),
+        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const data = await response.json();
+    console.log(`[ai-chat] Success - response received`);
+
+    return new Response(
+      JSON.stringify(data),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("[ai-chat] Error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

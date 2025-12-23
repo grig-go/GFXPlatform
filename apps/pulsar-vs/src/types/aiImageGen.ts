@@ -158,10 +158,21 @@ export const fetchProviderByDashboard = async (dashboard: PulsarVSDashboard): Pr
   try {
     const { supabaseAnonKey } = await import('../src/supabaseConfig');
 
+    // Try to get user's session token for organization-based filtering
+    let authToken = supabaseAnonKey;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        authToken = session.access_token;
+      }
+    } catch (e) {
+      // Fall back to anon key if session fetch fails
+    }
+
     const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/providers/by-dashboard/${dashboard}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       }
     });
@@ -504,6 +515,44 @@ export const generateImageViaBackend = async (
   const data = await response.json();
   if (!data.ok) {
     return { error: data.detail || data.error || 'Image generation failed' };
+  }
+
+  return { base64: data.base64 };
+};
+
+/**
+ * Call the backend ai_provider for image editing (Gemini)
+ * This uses the API key stored in the ai_providers table
+ */
+export const editImageViaBackend = async (
+  providerId: string,
+  sourceImage: string,
+  prompt: string
+): Promise<{ base64?: string; error?: string }> => {
+  const { supabaseAnonKey } = await import('../src/supabaseConfig');
+
+  // Call the backend proxy that handles image editing with backend API key
+  const response = await fetch(`${supabaseUrl}/functions/v1/ai_provider/edit-image`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      providerId,
+      sourceImage,
+      prompt
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    return { error: errorData.detail || errorData.error || `Image editing failed: ${response.status}` };
+  }
+
+  const data = await response.json();
+  if (!data.ok) {
+    return { error: data.detail || data.error || 'Image editing failed' };
   }
 
   return { base64: data.base64 };

@@ -46,17 +46,24 @@ export function shouldHideElement(
 
 /**
  * Apply bindings to an element's content based on the current data record
+ * When no data is available, uses default_value from binding or empty string
+ * to avoid showing raw {{field.path}} syntax
  */
 export function resolveElementBindings(
   element: Element,
   bindings: Binding[],
   currentRecord: Record<string, unknown> | null
 ): Element {
-  if (!currentRecord) return element;
-
   // Find binding for this element
   const binding = bindings.find((b) => b.element_id === element.id);
   if (!binding) return element;
+
+  // If no data record, use default_value or empty string to hide raw binding syntax
+  if (!currentRecord) {
+    // Use default_value from binding, or empty string if not set
+    const fallbackValue = binding.default_value ?? '';
+    return applyToProperty(element, binding.target_property, fallbackValue);
+  }
 
   // Get value from data using binding key (supports dot notation)
   const rawValue = getNestedValue(currentRecord, binding.binding_key);

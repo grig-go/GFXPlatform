@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
 } from '@emergent-platform/ui';
 import { Send, Loader2, Monitor, Plus, MoreVertical, Square, ExternalLink, Radio } from 'lucide-react';
-import { supabase } from '@emergent-platform/supabase-client';
+import { supabase, directRestUpdate, directRestSelect } from '@emergent-platform/supabase-client';
 import { useChannelStore } from '@/stores/channelStore';
 import { useProjectStore } from '@/stores/projectStore';
 
@@ -106,8 +106,9 @@ export function PublishModal({ open, onOpenChange, preselectedChannelId }: Publi
   const selectedProject = availableProjects.find(p => p.id === selectedProjectId);
 
   // Publish to a single channel
+  // Uses direct REST API for reliable database updates (bypasses stale Supabase client)
   const handlePublishToChannel = async (channelId: string) => {
-    if (!selectedProjectId || !supabase) return;
+    if (!selectedProjectId) return;
 
     setIsPublishing(true);
     setError(null);
@@ -115,37 +116,57 @@ export function PublishModal({ open, onOpenChange, preselectedChannelId }: Publi
     try {
       console.log('[PublishModal] Publishing project to channel:', channelId, 'Project:', selectedProjectId, 'Play immediately:', playImmediately);
 
-      // Build the command - initialize loads project, play would start playback
-      const command = {
-        type: playImmediately ? 'play' : 'initialize',
-        projectId: selectedProjectId,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Update channel with loaded project
-      const channelResult = await supabase
-        .from('pulsar_channels')
-        .update({
+      // Step 1: Update channel with loaded project using direct REST API
+      const channelResult = await directRestUpdate(
+        'pulsar_channels',
+        {
           loaded_project_id: selectedProjectId,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', channelId);
+        },
+        { column: 'id', value: channelId },
+        5000
+      );
 
-      if (channelResult.error) {
-        throw channelResult.error;
+      if (!channelResult.success) {
+        throw new Error(channelResult.error || 'Failed to update channel');
       }
 
-      // Send command to channel state
-      const stateResult = await supabase
-        .from('pulsar_channel_state')
-        .update({
-          pending_command: command,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('channel_id', channelId);
+      // Step 2: Get current command sequence
+      const stateResult = await directRestSelect<{ command_sequence: number }>(
+        'pulsar_channel_state',
+        'command_sequence',
+        { column: 'channel_id', value: channelId },
+        3000
+      );
 
-      if (stateResult.error) {
-        throw stateResult.error;
+      const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+      const newSequence = currentSequence + 1;
+
+      // Step 3: Send command with unique ID
+      const commandId = crypto.randomUUID();
+      const command = {
+        id: commandId,
+        type: 'initialize',
+        projectId: selectedProjectId,
+        timestamp: new Date().toISOString(),
+        forceReload: true,
+      };
+
+      const cmdResult = await directRestUpdate(
+        'pulsar_channel_state',
+        {
+          pending_command: command,
+          command_sequence: newSequence,
+          last_command: command,
+          last_command_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { column: 'channel_id', value: channelId },
+        5000
+      );
+
+      if (!cmdResult.success) {
+        throw new Error(cmdResult.error || 'Failed to send command');
       }
 
       // Mark channel as live locally
@@ -154,6 +175,9 @@ export function PublishModal({ open, onOpenChange, preselectedChannelId }: Publi
         next.add(channelId);
         return next;
       });
+
+      // Reload channels to refresh status
+      loadChannels().catch(() => {});
 
       // Open Nova GFX player window
       const debugParam = debugMode ? '?debug=1' : '';
@@ -171,44 +195,66 @@ export function PublishModal({ open, onOpenChange, preselectedChannelId }: Publi
   };
 
   // Stop a single channel
+  // Uses direct REST API for reliable database updates (bypasses stale Supabase client)
   const handleStopChannel = async (channelId: string) => {
-    if (!supabase) return;
-
     setIsPublishing(true);
     setError(null);
 
     try {
       console.log('[PublishModal] Stopping channel:', channelId);
 
+      // Step 1: Clear loaded_project_id on channel FIRST (most important for status)
+      // Use direct REST API for reliable update
+      const channelResult = await directRestUpdate(
+        'pulsar_channels',
+        {
+          loaded_project_id: null,
+          updated_at: new Date().toISOString(),
+        },
+        { column: 'id', value: channelId },
+        5000
+      );
+
+      if (!channelResult.success) {
+        console.error('[PublishModal] Failed to clear loaded_project_id:', channelResult.error);
+        throw new Error(channelResult.error || 'Failed to clear channel project');
+      }
+
+      // Step 2: Get current command sequence
+      const stateResult = await directRestSelect<{ command_sequence: number }>(
+        'pulsar_channel_state',
+        'command_sequence',
+        { column: 'channel_id', value: channelId },
+        3000
+      );
+
+      const currentSequence = stateResult.data?.[0]?.command_sequence || 0;
+      const newSequence = currentSequence + 1;
+
+      // Step 3: Send clear_all command with unique ID
+      const commandId = crypto.randomUUID();
       const command = {
-        type: 'stop',
+        id: commandId,
+        type: 'clear_all',
         timestamp: new Date().toISOString(),
       };
 
-      // Send stop command to channel state
-      const stateResult = await supabase
-        .from('pulsar_channel_state')
-        .update({
+      const cmdResult = await directRestUpdate(
+        'pulsar_channel_state',
+        {
           pending_command: command,
+          command_sequence: newSequence,
+          last_command: command,
+          last_command_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('channel_id', channelId);
+        },
+        { column: 'channel_id', value: channelId },
+        5000
+      );
 
-      if (stateResult.error) {
-        throw stateResult.error;
-      }
-
-      // Clear loaded_project_id on channel
-      const channelResult = await supabase
-        .from('pulsar_channels')
-        .update({
-          loaded_project_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', channelId);
-
-      if (channelResult.error) {
-        console.warn('[PublishModal] Failed to clear loaded_project_id:', channelResult.error);
+      if (!cmdResult.success) {
+        console.warn('[PublishModal] Stop command failed:', cmdResult.error);
+        // Don't throw - the channel status clear was successful
       }
 
       // Remove from live channels locally
@@ -217,6 +263,9 @@ export function PublishModal({ open, onOpenChange, preselectedChannelId }: Publi
         next.delete(channelId);
         return next;
       });
+
+      // Reload channels to refresh status across the app
+      await loadChannels();
 
       console.log('[PublishModal] Stop successful');
     } catch (err) {

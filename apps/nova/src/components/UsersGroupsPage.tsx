@@ -1908,12 +1908,37 @@ export function UsersGroupsPage() {
                   Invite User to Organization
                 </DialogTitle>
                 <DialogDescription>
-                  {inviteOrgId && (
+                  {inviteOrgId && !isSuperuser && (
                     <>Send an invitation to join <span className="font-medium">{organizations.find(o => o.id === inviteOrgId)?.name || 'the organization'}</span></>
+                  )}
+                  {isSuperuser && (
+                    <>Send an invitation to join an organization</>
                   )}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 mt-4">
+                {/* Organization selector - only for super admins */}
+                {isSuperuser && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Organization *</label>
+                    <Select value={inviteOrgId || ''} onValueChange={(v) => setInviteOrgId(v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an organization" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((org) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-muted-foreground" />
+                              {org.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {/* Email */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Email Address *</label>
@@ -1945,7 +1970,7 @@ export function UsersGroupsPage() {
                   <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={sendInvitation} disabled={isSaving || !inviteEmail}>
+                  <Button onClick={sendInvitation} disabled={isSaving || !inviteEmail || !inviteOrgId}>
                     {isSaving ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />

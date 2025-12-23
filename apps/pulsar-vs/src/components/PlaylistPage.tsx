@@ -122,10 +122,8 @@ import type { Channel } from '../types/channels';
 import { PlaylistCalendar } from './PlaylistCalendar';
 import { createLocalSamplePlaylist, createSampleScheduledPlaylist } from '../services/samplePlaylistService';
 import {
-  loadAIImageGenSettings,
-  callGoogleAPIViaProxy,
-  generateWithGemini,
-  DEFAULT_AI_SETTINGS,
+  fetchPulsarVSProviders,
+  generateTextViaBackend,
 } from '../types/aiImageGen';
 
 const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
@@ -1898,11 +1896,6 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     setAiInsightsResponse('');
 
     try {
-      const aiSettings = await loadAIImageGenSettings();
-      const hasLocalKey =
-        aiSettings.gemini.apiKey &&
-        aiSettings.gemini.apiKey !== 'YOUR_GOOGLE_STUDIO_API_KEY';
-
       // Build playlist data payload
       const playlistPayload = {
         name: selectedPlaylist.name,
@@ -1988,44 +1981,23 @@ Please provide:
 5. **Priority Suggestions** - Which items need highest priority when`;
       }
 
-      let responseText = '';
+      // Fetch AI providers from backend
+      const providers = await fetchPulsarVSProviders();
+      const textProviderId = providers.text?.id;
 
-      if (hasLocalKey) {
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${aiSettings.virtualSet?.selectedGeminiModel || DEFAULT_AI_SETTINGS.gemini.textModel}:generateContent?key=${aiSettings.gemini.apiKey}`;
-        const requestBody = {
-          contents: [{ parts: [{ text: systemPrompt }, { text: userPrompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
-        };
-
-        const response = await callGoogleAPIViaProxy(
-          apiUrl,
-          'POST',
-          { 'Content-Type': 'application/json' },
-          requestBody
-        );
-
-        if (response.candidates?.[0]?.content?.parts) {
-          responseText = response.candidates[0].content.parts[0].text;
-        } else {
-          throw new Error('Invalid response format from Gemini API');
-        }
-      } else {
-        const response = await generateWithGemini(systemPrompt + '\n\n' + userPrompt, {
-          gemini: {
-            ...aiSettings.gemini,
-            textModel: aiSettings.virtualSet?.selectedGeminiModel || DEFAULT_AI_SETTINGS.gemini.textModel,
-            apiKey: aiSettings.gemini.apiKey || DEFAULT_AI_SETTINGS.gemini.apiKey,
-          },
-        });
-
-        if (response.candidates?.[0]?.content?.parts) {
-          responseText = response.candidates[0].content.parts[0].text;
-        } else {
-          throw new Error('Invalid response format from Gemini API');
-        }
+      if (!textProviderId) {
+        throw new Error('No AI text provider configured. Please configure a provider in the admin settings.');
       }
 
-      setAiInsightsResponse(responseText);
+      const fullPrompt = systemPrompt + '\n\n' + userPrompt;
+      const backendResponse = await generateTextViaBackend(
+        textProviderId,
+        fullPrompt,
+        undefined,
+        'pulsar-vs-text'
+      );
+
+      setAiInsightsResponse(backendResponse.response);
     } catch (error) {
       console.error('AI Insights error:', error);
       toast.error('Failed to generate insights: ' + (error instanceof Error ? error.message : String(error)));

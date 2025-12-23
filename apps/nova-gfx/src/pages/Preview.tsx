@@ -821,8 +821,10 @@ export function Preview() {
   }, [previewDataPayload, currentRecordIndex]);
 
   // Resolve bindings for all elements (replace {{...}} placeholders with actual data)
+  // When no data is available, binding resolver uses default_value or empty string
+  // to hide raw {{field.path}} syntax
   const elementsWithBindings = useMemo(() => {
-    if (!currentDataRecord || previewBindings.length === 0) {
+    if (previewBindings.length === 0) {
       return elementsWithOverrides;
     }
 
@@ -834,6 +836,7 @@ export function Preview() {
       }
 
       // Resolve bindings using the binding resolver
+      // Pass currentDataRecord (may be null) - resolver handles null case with default_value
       return resolveElementBindings(element, elementBindings, currentDataRecord);
     });
   }, [elementsWithOverrides, previewBindings, currentDataRecord]);

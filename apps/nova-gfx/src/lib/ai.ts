@@ -13,6 +13,11 @@ import {
   revealProviderApiKey,
 } from '@/services/aiProviderService';
 
+// Supabase edge function URL for AI chat (more reliable than Netlify functions)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const AI_EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
+
 // Track last activity time for connection health checks
 let lastActivityTime = Date.now();
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -25,26 +30,52 @@ export function markChatActivity(): void {
 }
 
 /**
+ * Fire-and-forget warmup for AI endpoints
+ * Runs in background without blocking - just establishes TLS connections
+ */
+function warmupAIEndpoints(): void {
+  const warmupTimeout = 3000;
+
+  // Warm up in parallel, fire-and-forget (don't await)
+  const warmup = async (url: string, _name: string, headers?: Record<string, string>) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), warmupTimeout);
+      await fetch(url, { method: 'HEAD', signal: controller.signal, headers });
+      clearTimeout(timeout);
+    } catch {
+      // Ignore - warmup only
+    }
+  };
+
+  // Fire off warmups without awaiting
+  warmup(AI_EDGE_FUNCTION_URL, 'Edge function', { 'apikey': SUPABASE_ANON_KEY });
+  warmup('https://generativelanguage.googleapis.com/v1beta/models', 'Gemini API');
+  warmup('https://api.anthropic.com/v1/models', 'Claude API');
+}
+
+/**
  * Check if browser has been idle and refresh connection if needed
+ * Keeps latency low by running warmups in background
  */
 async function ensureFreshConnectionIfIdle(): Promise<void> {
   const idleTime = Date.now() - lastActivityTime;
   if (idleTime > IDLE_THRESHOLD_MS) {
-    console.log(`[AI] Browser was idle for ${Math.round(idleTime / 1000)}s, ensuring fresh connection...`);
     try {
       // Refresh the Supabase session to ensure token is valid
       if (supabase) {
         const { data, error } = await supabase.auth.refreshSession();
-        if (error) {
-          console.warn('[AI] Session refresh warning:', error.message);
-        } else if (data?.session) {
+        if (!error && data?.session) {
           // Update the auth store with refreshed token
           useAuthStore.getState().accessToken && useAuthStore.setState({ accessToken: data.session.access_token });
-          console.log('[AI] Session refreshed successfully');
         }
       }
-      // Also ensure Supabase connection is healthy
+      // Ensure Supabase connection is healthy
       await ensureFreshConnection(true);
+
+      // Fire off AI endpoint warmups in background (non-blocking)
+      // These run in parallel with the actual request to reduce perceived latency
+      warmupAIEndpoints();
     } catch (err) {
       console.warn('[AI] Connection refresh failed, continuing anyway:', err);
     }
@@ -78,16 +109,12 @@ async function resolveImagePlaceholders(
   // Then resolve AI-generated images (async)
   const hasGenerate = hasGeneratePlaceholders(resolved);
   if (hasGenerate) {
-    console.log('🖼️ Found GENERATE placeholders in text');
     const authState = useAuthStore.getState();
     const organizationId = getOrganizationId(authState.user);
     const userId = authState.user?.id;
-    const accessToken = authState.accessToken; // Get from store, not supabase.auth.getSession()
-    console.log('🖼️ Auth state:', { organizationId, userId: userId?.substring(0, 8), hasToken: !!accessToken });
+    const accessToken = authState.accessToken;
 
     if (organizationId && userId && accessToken) {
-      console.log('🖼️ Resolving GENERATE placeholders...');
-
       // Extract placeholders to get count and show progress
       const placeholders = extractGeneratePlaceholders(resolved);
       const total = placeholders.length;
@@ -2332,11 +2359,13 @@ async function sendGeminiMessage(
     let response;
 
     if (useProxy) {
-      // Use backend proxy for API call
-      response = await fetch('/.netlify/functions/ai-chat', {
+      // Use Supabase edge function for API call (more reliable than Netlify)
+      response = await fetch(AI_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           provider: 'gemini',
@@ -2506,11 +2535,13 @@ async function sendClaudeMessage(
     let response;
 
     if (useProxy) {
-      // Use backend proxy for API call
-      response = await fetch('/.netlify/functions/ai-chat', {
+      // Use Supabase edge function for API call (more reliable than Netlify)
+      response = await fetch(AI_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           provider: 'claude',
@@ -4280,9 +4311,13 @@ export async function sendDocsChatMessage(
 
       let response;
       if (useProxy) {
-        response = await fetch('/.netlify/functions/ai-chat', {
+        response = await fetch(AI_EDGE_FUNCTION_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
           body: JSON.stringify({
             provider: 'gemini',
             model: apiModel,
@@ -4327,9 +4362,13 @@ export async function sendDocsChatMessage(
 
       let response;
       if (useProxy) {
-        response = await fetch('/.netlify/functions/ai-chat', {
+        response = await fetch(AI_EDGE_FUNCTION_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
           body: JSON.stringify({
             provider: 'claude',
             model: apiModel,
@@ -4594,6 +4633,14 @@ async function sendGeminiMessageStreaming(
     let fullText = '';
 
     while (true) {
+      // Check if user cancelled before each read
+      if (signal?.aborted) {
+        reader.cancel();
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -4750,6 +4797,14 @@ async function sendClaudeMessageStreaming(
     let fullText = '';
 
     while (true) {
+      // Check if user cancelled before each read
+      if (signal?.aborted) {
+        reader.cancel();
+        const abortError = new Error('Request was cancelled');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+
       const { done, value } = await reader.read();
       if (done) break;
 
