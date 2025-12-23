@@ -2435,10 +2435,12 @@ The AI provider will be automatically available once configured.`,
 
     // Safety timeout - auto-cancel after 30 seconds of no activity (stale connection protection)
     let lastActivityTime = Date.now();
+    let staleConnectionDetected = false;
     const STALE_CONNECTION_TIMEOUT_MS = 30000;
     const staleCheckInterval = setInterval(() => {
       if (Date.now() - lastActivityTime > STALE_CONNECTION_TIMEOUT_MS) {
         console.warn('[ChatPanel] Stale connection detected - no activity for 30s, auto-cancelling');
+        staleConnectionDetected = true;
         abortControllerRef.current?.abort();
         clearInterval(staleCheckInterval);
       }
@@ -2721,14 +2723,23 @@ The AI provider will be automatically available once configured.`,
       setCreationProgress({ phase: 'error', message: 'An error occurred' });
       setActiveMessageId(null);
 
-      // Check if this was a user-initiated abort
+      // Check if this was an abort (user-initiated or stale connection)
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Chat request was cancelled by user');
-        await addChatMessage({
-          role: 'assistant',
-          content: 'Request cancelled.',
-          error: false,
-        });
+        if (staleConnectionDetected) {
+          console.log('Chat request was cancelled due to stale connection');
+          await addChatMessage({
+            role: 'assistant',
+            content: '⚠️ Connection timed out. Please refresh the page and try again.',
+            error: true,
+          });
+        } else {
+          console.log('Chat request was cancelled by user');
+          await addChatMessage({
+            role: 'assistant',
+            content: 'Request cancelled.',
+            error: false,
+          });
+        }
         // Don't store cancelled requests for retry
       } else {
         console.error('Chat error:', error);
