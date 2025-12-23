@@ -114,7 +114,11 @@ serve(async (req) => {
       if (method === "GET") {
         const { data, error } = await supabaseAdmin
           .from("pulsarvs_playlist_items")
-          .select("*")
+          .select(`
+            *,
+            media:media_assets(file_url, thumbnail_url, media_type),
+            channel:channels(name, type)
+          `)
           .eq("playlist_id", playlistId)
           .is("parent_item_id", null)
           .order("sort_order", { ascending: true });
@@ -126,7 +130,23 @@ serve(async (req) => {
           });
         }
 
-        return new Response(JSON.stringify({ success: true, data: data || [] }), {
+        // Transform items to flatten joined data and extract metadata URLs
+        const transformedItems = (data || []).map((item: any) => ({
+          ...item,
+          // Use joined media data or fall back to metadata URLs
+          media_url: item.media?.file_url || item.metadata?.media_url || null,
+          media_thumbnail: item.media?.thumbnail_url || item.metadata?.media_thumbnail || null,
+          media_type: item.media?.media_type || item.metadata?.media_type || null,
+          channel_name: item.channel?.name || null,
+          channel_type: item.channel?.type || null,
+          // Extract schedule_config from metadata for frontend
+          schedule_config: item.metadata?.schedule_config || null,
+          // Remove the nested objects from response
+          media: undefined,
+          channel: undefined,
+        }));
+
+        return new Response(JSON.stringify({ success: true, data: transformedItems }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -444,12 +464,16 @@ serve(async (req) => {
     // ============================================================
     // NESTED ITEMS SUB-RESOURCE
     // ============================================================
-    if (playlistId && subResource === "nested" && itemId) {
+    if (subResource === "nested" && itemId) {
       // Get nested items for a group
       if (method === "GET") {
         const { data, error } = await supabaseAdmin
           .from("pulsarvs_playlist_items")
-          .select("*")
+          .select(`
+            *,
+            media:media_assets(file_url, thumbnail_url, media_type),
+            channel:channels(name, type)
+          `)
           .eq("parent_item_id", itemId)
           .order("sort_order", { ascending: true });
 
@@ -460,7 +484,20 @@ serve(async (req) => {
           });
         }
 
-        return new Response(JSON.stringify({ success: true, data: data || [] }), {
+        // Transform items to flatten joined data and extract metadata URLs
+        const transformedItems = (data || []).map((item: any) => ({
+          ...item,
+          media_url: item.media?.file_url || item.metadata?.media_url || null,
+          media_thumbnail: item.media?.thumbnail_url || item.metadata?.media_thumbnail || null,
+          media_type: item.media?.media_type || item.metadata?.media_type || null,
+          channel_name: item.channel?.name || null,
+          channel_type: item.channel?.type || null,
+          schedule_config: item.metadata?.schedule_config || null,
+          media: undefined,
+          channel: undefined,
+        }));
+
+        return new Response(JSON.stringify({ success: true, data: transformedItems }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -488,17 +525,37 @@ serve(async (req) => {
           });
         }
 
-        // Get items
+        // Get items with joined data
         const { data: items } = await supabaseAdmin
           .from("pulsarvs_playlist_items")
-          .select("*")
+          .select(`
+            *,
+            media:media_assets(file_url, thumbnail_url, media_type),
+            channel:channels(name, type)
+          `)
           .eq("playlist_id", playlistId)
           .is("parent_item_id", null)
           .order("sort_order", { ascending: true });
 
+        // Transform items to flatten joined data and extract metadata URLs
+        const transformedItems = (items || []).map((item: any) => ({
+          ...item,
+          // Use joined media data or fall back to metadata URLs
+          media_url: item.media?.file_url || item.metadata?.media_url || null,
+          media_thumbnail: item.media?.thumbnail_url || item.metadata?.media_thumbnail || null,
+          media_type: item.media?.media_type || item.metadata?.media_type || null,
+          channel_name: item.channel?.name || null,
+          channel_type: item.channel?.type || null,
+          // Extract schedule_config from metadata for frontend
+          schedule_config: item.metadata?.schedule_config || null,
+          // Remove the nested objects from response
+          media: undefined,
+          channel: undefined,
+        }));
+
         return new Response(JSON.stringify({
           success: true,
-          data: { ...playlist, items: items || [] }
+          data: { ...playlist, items: transformedItems }
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
