@@ -2127,60 +2127,70 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         const generatedImageUrl = result.imageUrl || `data:image/png;base64,${result.base64}`;
         addDebugLog(`Image ${isEditMode ? 'edited' : 'generated'} successfully: ${generatedImageUrl.substring(0, 100)}...`);
 
-        // Save to media library (only for new generations, optional - works without auth)
-        if (!isEditMode) {
+        // Save to media library (for both new generations and edits)
+        let savedImageUrl = generatedImageUrl; // Default to data URL
+        try {
+          // Try to get user session for authenticated save
+          let authToken = publicAnonKey;
           try {
-            // Try to get user session for authenticated save
-            let authToken = publicAnonKey;
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session?.access_token) {
-                authToken = session.access_token;
-              }
-            } catch {
-              // Use anon key if session fetch fails
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+              authToken = session.access_token;
             }
-
-            const response = await fetch(
-              `${supabaseUrl}/functions/v1/media-library`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${authToken}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  file_url: generatedImageUrl,
-                  name: prompt.length > 50
-                    ? prompt.substring(0, 47) + "..."
-                    : prompt,
-                  description: prompt,
-                  media_type: "image",
-                  ai_model_used: selectedModel,
-                  ai_prompt: prompt,
-                  tags: ["virtual-set", "backdrop", "ai-generated"],
-                }),
-              }
-            );
-
-            if (response.ok) {
-              addDebugLog("Saved to media library");
-            } else {
-              // Don't fail the whole operation if media library save fails
-              console.warn("Media library save skipped (no auth or error)");
-            }
-          } catch (saveError) {
-            // Silently ignore - image generation still succeeded
-            console.warn("Media library save skipped:", saveError);
+          } catch {
+            // Use anon key if session fetch fails
           }
+
+          const response = await fetch(
+            `${supabaseUrl}/functions/v1/media-library`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                file_url: generatedImageUrl,
+                name: prompt.length > 50
+                  ? prompt.substring(0, 47) + "..."
+                  : prompt,
+                description: isEditMode ? `Edited: ${prompt}` : prompt,
+                media_type: "image",
+                ai_model_used: selectedModel,
+                ai_prompt: prompt,
+                tags: isEditMode
+                  ? ["virtual-set", "backdrop", "ai-edited"]
+                  : ["virtual-set", "backdrop", "ai-generated"],
+              }),
+            }
+          );
+
+          if (response.ok) {
+            const mediaData = await response.json();
+            // Use the URL from media library if available
+            // Response format is { data: { file_url, ... } }
+            const storageUrl = mediaData.data?.file_url || mediaData.url;
+            if (storageUrl) {
+              savedImageUrl = storageUrl;
+              addDebugLog(`Saved ${isEditMode ? 'edited' : 'generated'} image to media library: ${savedImageUrl}`);
+            } else {
+              addDebugLog(`Saved ${isEditMode ? 'edited' : 'generated'} image to media library (no URL returned)`);
+            }
+          } else {
+            // Don't fail the whole operation if media library save fails
+            console.warn("Media library save skipped (no auth or error)");
+          }
+        } catch (saveError) {
+          // Silently ignore - image generation still succeeded
+          console.warn("Media library save skipped:", saveError);
         }
 
         // Reload backdrops to show new/edited image
         await loadRecentBackdrops(backdropSearchQuery);
 
-        // Set as pending backdrop for preview - preserves session by updating current selection
-        setPendingBackdrop(generatedImageUrl);
-        setSelectedBackdrop(generatedImageUrl);
+        // Set as selected backdrop using the saved URL (from media library or data URL as fallback)
+        setPendingBackdrop(null); // Clear pending since we're setting it directly as selected
+        setSelectedBackdrop(savedImageUrl);
 
         // Update assistant response with friendly summary
         setBackgroundAssistantResponses((prev) => {

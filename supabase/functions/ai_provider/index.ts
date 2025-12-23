@@ -1412,11 +1412,49 @@ app.post("/ai_provider/edit-image", async (c) => {
 
     console.log('✏️ Calling Gemini image edit API with model:', provider.model);
 
-    // Clean up base64 data
+    // Convert sourceImage to base64 - handle both URL and base64 input
     let imageBase64 = sourceImage;
-    if (imageBase64.startsWith('data:')) {
-      imageBase64 = imageBase64.split(',')[1];
+    let mimeType = 'image/png';
+
+    if (sourceImage.startsWith('http://') || sourceImage.startsWith('https://')) {
+      // Fetch the image from URL and convert to base64
+      console.log('📥 Fetching image from URL:', sourceImage);
+      try {
+        const imageResponse = await fetch(sourceImage);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+        }
+
+        // Get mime type from response headers
+        const contentType = imageResponse.headers.get('content-type');
+        if (contentType) {
+          mimeType = contentType.split(';')[0].trim();
+        }
+
+        // Convert to base64
+        const imageBuffer = await imageResponse.arrayBuffer();
+        const uint8Array = new Uint8Array(imageBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8Array.length; i++) {
+          binary += String.fromCharCode(uint8Array[i]);
+        }
+        imageBase64 = btoa(binary);
+        console.log('✅ Image fetched and converted to base64, size:', imageBase64.length, 'mimeType:', mimeType);
+      } catch (fetchError) {
+        console.error('❌ Failed to fetch image from URL:', fetchError);
+        throw new Error(`Failed to fetch source image: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+      }
+    } else if (imageBase64.startsWith('data:')) {
+      // Extract mime type and base64 data from data URL
+      const matches = imageBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        mimeType = matches[1];
+        imageBase64 = matches[2];
+      } else {
+        imageBase64 = imageBase64.split(',')[1];
+      }
     }
+    // else assume it's already raw base64
 
     const editPrompt = `Edit this image: ${prompt}. Keep the rest of the image unchanged. Only modify the areas that match the description.`;
 
@@ -1430,7 +1468,7 @@ app.post("/ai_provider/edit-image", async (c) => {
           parts: [
             {
               inlineData: {
-                mimeType: 'image/png',
+                mimeType: mimeType,
                 data: imageBase64
               }
             },
