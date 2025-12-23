@@ -5,19 +5,13 @@ import { supabase, getEdgeFunctionUrl } from '../../lib/supabase';
 import type { Playlist, PlaylistItem } from '../../types/playlist';
 
 // Edge function URL for PulsarVS playlists
-const PLAYLISTS_EDGE_FN = () => {
-  const url = getEdgeFunctionUrl('pulsarvs-playlists');
-  console.log('[playlistService] PLAYLISTS_EDGE_FN called, URL:', url);
-  return url;
-};
+const PLAYLISTS_EDGE_FN = () => getEdgeFunctionUrl('pulsarvs-playlists');
 
 /**
  * Helper to get auth headers for edge function calls
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  console.log('[playlistService] getAuthHeaders - session:', session?.user?.email, 'error:', error?.message);
-  console.log('[playlistService] getAuthHeaders - access_token exists:', !!session?.access_token);
+  const { data: { session } } = await supabase.auth.getSession();
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${session?.access_token || ''}`,
@@ -31,30 +25,19 @@ async function getAuthHeaders(): Promise<HeadersInit> {
  */
 export async function getPlaylists(projectId: string): Promise<{ success: boolean; data?: Playlist[]; error?: string }> {
   try {
-    const url = `${PLAYLISTS_EDGE_FN()}?project_id=${projectId}`;
-    console.log('[playlistService] getPlaylists - URL:', url);
-
-    const headers = await getAuthHeaders();
-    console.log('[playlistService] getPlaylists - headers:', JSON.stringify(headers));
-
-    const response = await fetch(url, {
+    const response = await fetch(`${PLAYLISTS_EDGE_FN()}?project_id=${projectId}`, {
       method: 'GET',
-      headers,
+      headers: await getAuthHeaders(),
     });
 
-    console.log('[playlistService] getPlaylists - response status:', response.status, response.statusText);
-
     const data = await response.json();
-    console.log('[playlistService] getPlaylists - response data:', JSON.stringify(data));
 
     if (!response.ok || !data.success) {
-      console.error('[playlistService] Error fetching playlists:', data.error);
       return { success: false, error: data.error || 'Failed to fetch playlists' };
     }
 
     return { success: true, data: data.data };
   } catch (error) {
-    console.error('[playlistService] Error in getPlaylists:', error);
     return { success: false, error: String(error) };
   }
 }

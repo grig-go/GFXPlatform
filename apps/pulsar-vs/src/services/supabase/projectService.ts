@@ -5,19 +5,13 @@ import { supabase, getEdgeFunctionUrl } from '../../lib/supabase';
 import type { Project, CreateProjectParams, UpdateProjectParams } from '../../types/project';
 
 // Edge function URL for PulsarVS projects
-const PROJECTS_EDGE_FN = () => {
-  const url = getEdgeFunctionUrl('pulsarvs-projects');
-  console.log('[projectService] PROJECTS_EDGE_FN called, URL:', url);
-  return url;
-};
+const PROJECTS_EDGE_FN = () => getEdgeFunctionUrl('pulsarvs-projects');
 
 /**
  * Helper to get auth headers for edge function calls
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  console.log('[projectService] getAuthHeaders - session:', session?.user?.email, 'error:', error?.message);
-  console.log('[projectService] getAuthHeaders - access_token exists:', !!session?.access_token);
+  const { data: { session } } = await supabase.auth.getSession();
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${session?.access_token || ''}`,
@@ -29,30 +23,19 @@ async function getAuthHeaders(): Promise<HeadersInit> {
  */
 export async function getProjects(): Promise<{ success: boolean; data?: Project[]; error?: string }> {
   try {
-    const url = PROJECTS_EDGE_FN();
-    console.log('[projectService] getProjects - URL:', url);
-
-    const headers = await getAuthHeaders();
-    console.log('[projectService] getProjects - headers:', JSON.stringify(headers));
-
-    const response = await fetch(url, {
+    const response = await fetch(PROJECTS_EDGE_FN(), {
       method: 'GET',
-      headers,
+      headers: await getAuthHeaders(),
     });
 
-    console.log('[projectService] getProjects - response status:', response.status, response.statusText);
-
     const data = await response.json();
-    console.log('[projectService] getProjects - response data:', JSON.stringify(data));
 
     if (!response.ok || !data.success) {
-      console.error('[projectService] Error fetching projects:', data.error);
       return { success: false, error: data.error || 'Failed to fetch projects' };
     }
 
     return { success: true, data: data.data };
   } catch (error) {
-    console.error('[projectService] Error in getProjects:', error);
     return { success: false, error: String(error) };
   }
 }

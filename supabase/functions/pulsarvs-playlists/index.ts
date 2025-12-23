@@ -13,17 +13,21 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-// Helper to get user and org in one query using JWT claims
+// Helper to get user and org from JWT claims (zero DB calls when org_id is in token)
 async function getUserOrgFromToken(authHeader: string): Promise<{ userId: string; orgId: string } | null> {
   try {
-    // Extract JWT and decode to get user ID directly (faster than API call)
     const token = authHeader.replace("Bearer ", "");
     const payload = JSON.parse(atob(token.split(".")[1]));
     const userId = payload.sub;
 
     if (!userId) return null;
 
-    // Get org_id from u_users
+    // Check if org_id is already in JWT claims (fastest path - no DB call)
+    if (payload.org_id) {
+      return { userId, orgId: payload.org_id };
+    }
+
+    // Fallback: lookup org_id from DB (for tokens issued before hook was enabled)
     const { data, error } = await supabaseAdmin
       .from("u_users")
       .select("organization_id")
