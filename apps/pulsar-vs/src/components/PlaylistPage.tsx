@@ -2897,22 +2897,22 @@ Please provide:
                                     <ItemTypeIcon type={item.item_type} className="h-4 w-4" />
                                   </div>
                                 )}
-                                <div>
-                                  <div className="font-medium">{item.name}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {item.item_type === 'group' && (item as ExtendedPlaylistItem).nested_count !== undefined
-                                      ? t('itemTypes.groupCount', { count: (item as ExtendedPlaylistItem).nested_count })
-                                      : item.item_type === 'group'
-                                        ? t('itemTypes.group')
-                                        : item.item_type === 'page'
-                                          ? t('itemTypes.page')
-                                          : item.item_type === 'media'
-                                            ? t('itemTypes.media')
-                                            : item.item_type}
-                                    {item.item_type === 'media' && (
-                                      <span className="ml-1 text-blue-500">{t('itemTypes.mediaPreview')}</span>
-                                    )}
-                                  </div>
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{item.name}</div>
+                                  {/* Hide description for media items with thumbnails - thumbnail already indicates media type */}
+                                  {!(item.item_type === 'media' && item.media_thumbnail) && (
+                                    <div className="text-xs text-muted-foreground">
+                                      {item.item_type === 'group' && (item as ExtendedPlaylistItem).nested_count !== undefined
+                                        ? t('itemTypes.groupCount', { count: (item as ExtendedPlaylistItem).nested_count })
+                                        : item.item_type === 'group'
+                                          ? t('itemTypes.group')
+                                          : item.item_type === 'page'
+                                            ? t('itemTypes.page')
+                                            : item.item_type === 'media'
+                                              ? t('itemTypes.media')
+                                              : item.item_type}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </TableCell>

@@ -33,21 +33,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const loadProjects = useCallback(async () => {
     try {
-      console.log('[ProjectContext] loadProjects called');
       const result = await projectService.getProjects();
-      console.log('[ProjectContext] loadProjects result:', result);
-
-      if (!result.success) {
-        console.error('Error fetching projects:', result.error);
-        return;
-      }
-
-      if (result.data) {
+      if (result.success && result.data) {
         setProjects(result.data);
-        console.log('[ProjectContext] Projects loaded:', result.data.length);
       }
     } catch (err) {
-      console.error('Error loading projects:', err);
+      // Silent fail
     }
   }, []);
 
@@ -56,26 +47,14 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     setError(null);
 
     try {
-      console.log('[ProjectContext] loadActiveProject called');
       const result = await projectService.getActiveProject();
-      console.log('[ProjectContext] loadActiveProject result:', result);
-
       if (!result.success) {
-        console.error('Error fetching active project:', result.error);
         setActiveProjectState(null);
         setIsLoading(false);
         return;
       }
-
-      if (result.data) {
-        setActiveProjectState(result.data);
-        console.log('[ProjectContext] Active project loaded:', result.data.name);
-      } else {
-        setActiveProjectState(null);
-        console.log('[ProjectContext] No active project found');
-      }
+      setActiveProjectState(result.data || null);
     } catch (err) {
-      console.error('Error loading active project:', err);
       setError(String(err));
       setActiveProjectState(null);
     } finally {
@@ -137,10 +116,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   }, [loadProjects, loadActiveProject, activeProject]);
 
   const updateProjectChannelFn = useCallback(async (channelId: string) => {
-    if (!activeProject) {
-      console.log('[ProjectContext] No active project to update channel');
-      return;
-    }
+    if (!activeProject) return;
 
     try {
       const result = await projectService.updateProject({
@@ -148,20 +124,14 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         default_channel_id: channelId,
       });
 
-      if (!result.success) {
-        console.error('Error updating project channel:', result.error);
-        return;
-      }
-
-      if (result.data) {
+      if (result.success && result.data) {
         await loadProjects();
         if (activeProject?.id === result.data.id) {
           await loadActiveProject();
         }
-        console.log('[ProjectContext] Project channel updated to:', channelId);
       }
     } catch (err) {
-      console.error('Error updating project channel:', err);
+      // Silent fail
     }
   }, [loadProjects, loadActiveProject, activeProject]);
 
