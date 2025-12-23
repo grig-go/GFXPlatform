@@ -636,7 +636,7 @@ export function useDashboardConfig() {
     fetchConfig();
   }, []);
 
-  return config;
+  return { config, loading };
 }
 
 export { DEFAULT_DASHBOARDS };
