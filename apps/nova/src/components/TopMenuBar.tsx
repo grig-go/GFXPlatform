@@ -27,6 +27,7 @@ import { usePermissions } from "../hooks/usePermissions";
 interface TopMenuBarProps {
   onNavigate: (view: string) => void;
   dashboardConfig?: any[];
+  onOpenDashboardConfig?: () => void;
 }
 
 // Extended user type to include preferences
@@ -47,7 +48,8 @@ interface UserWithPreferences {
 
 export function TopMenuBar({
   onNavigate,
-  dashboardConfig = []
+  dashboardConfig = [],
+  onOpenDashboardConfig
 }: TopMenuBarProps) {
   // Auth hooks - user is the app user from u_users table
   const { user, signOut } = useAuth();
@@ -248,7 +250,13 @@ export function TopMenuBar({
             label: 'AI Connections',
             icon: Zap,
             onClick: () => onNavigate('ai-connections')
-          }
+          },
+          ...(onOpenDashboardConfig ? [{
+            id: 'dashboard-config',
+            label: 'Dashboard Configuration',
+            icon: LayoutGrid,
+            onClick: onOpenDashboardConfig
+          }] : [])
         ],
       },
     ],

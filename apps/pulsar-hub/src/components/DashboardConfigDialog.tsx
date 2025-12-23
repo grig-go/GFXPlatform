@@ -23,6 +23,16 @@ import {
   EyeOff,
   Loader2,
   LucideIcon,
+  Database,
+  Palette,
+  Bot,
+  ImageIcon,
+  Vote,
+  TrendingUp,
+  Cloud,
+  Trophy,
+  School,
+  Newspaper,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabaseUrl, publicAnonKey } from "@/lib/supabase";
@@ -43,7 +53,9 @@ interface DashboardConfigDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// All dashboard options for Pulsar Hub (matches Nova's Pulsar Apps tab)
 const DEFAULT_DASHBOARDS: DashboardConfig[] = [
+  // Pulsar Apps (visible by default on Pulsar Hub)
   {
     id: "pulsar-gfx",
     label: "Pulsar GFX",
@@ -80,6 +92,98 @@ const DEFAULT_DASHBOARDS: DashboardConfig[] = [
     enabled: true,
     order: 3,
   },
+  // Nova Home Categories (hidden by default on Pulsar Hub)
+  {
+    id: "data",
+    label: "Data",
+    icon: Database,
+    iconBgColor: "bg-blue-500/10",
+    iconColor: "text-blue-600",
+    enabled: false,
+    order: 4,
+  },
+  {
+    id: "graphics",
+    label: "Graphics",
+    icon: Palette,
+    iconBgColor: "bg-purple-500/10",
+    iconColor: "text-purple-600",
+    enabled: false,
+    order: 5,
+  },
+  {
+    id: "agents",
+    label: "Agent",
+    icon: Bot,
+    iconBgColor: "bg-indigo-500/10",
+    iconColor: "text-indigo-600",
+    enabled: false,
+    order: 6,
+  },
+  {
+    id: "media_library",
+    label: "Media Library",
+    icon: ImageIcon,
+    iconBgColor: "bg-pink-500/10",
+    iconColor: "text-pink-600",
+    enabled: false,
+    order: 7,
+  },
+  // Data Sub-categories (hidden by default on Pulsar Hub)
+  {
+    id: "election",
+    label: "Elections (sub category)",
+    icon: Vote,
+    iconBgColor: "bg-blue-500/10",
+    iconColor: "text-blue-600",
+    enabled: false,
+    order: 8,
+  },
+  {
+    id: "finance",
+    label: "Finance (sub category)",
+    icon: TrendingUp,
+    iconBgColor: "bg-green-500/10",
+    iconColor: "text-green-600",
+    enabled: false,
+    order: 9,
+  },
+  {
+    id: "weather",
+    label: "Weather (sub category)",
+    icon: Cloud,
+    iconBgColor: "bg-sky-500/10",
+    iconColor: "text-sky-600",
+    enabled: false,
+    order: 10,
+  },
+  {
+    id: "sports",
+    label: "Sports (sub category)",
+    icon: Trophy,
+    iconBgColor: "bg-orange-500/10",
+    iconColor: "text-orange-600",
+    enabled: false,
+    order: 11,
+  },
+  {
+    id: "school_closings",
+    label: "School Closings (sub category)",
+    icon: School,
+    iconBgColor: "bg-amber-500/10",
+    iconColor: "text-amber-600",
+    enabled: false,
+    order: 12,
+  },
+  {
+    id: "news",
+    label: "News (sub category)",
+    icon: Newspaper,
+    iconBgColor: "bg-purple-500/10",
+    iconColor: "text-purple-600",
+    enabled: false,
+    order: 13,
+  },
 ];
 
 const STORAGE_KEY = "pulsar_hub_dashboard_config";
@@ -107,7 +211,7 @@ export function DashboardConfigDialog({
     try {
       setLoading(true);
       const response = await fetch(
-        `${supabaseUrl}/functions/v1/dashboard_config?dashboard_type=pulsar`,
+        `${supabaseUrl}/functions/v1/dashboard_config?page=pulsar`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -448,25 +552,88 @@ export function DashboardConfigDialog({
 // Hook to get dashboard configuration
 export function useDashboardConfig() {
   const [config, setConfig] = useState<DashboardConfig[]>(DEFAULT_DASHBOARDS);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const fetchConfig = async () => {
       try {
-        const parsed = JSON.parse(stored);
-        const merged = DEFAULT_DASHBOARDS.map((defaultDash) => {
-          const storedDash = parsed.find(
-            (d: DashboardConfig) => d.id === defaultDash.id
+        setLoading(true);
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/dashboard_config?page=pulsar`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch config: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log("📊 useDashboardConfig: Fetched pulsar config:", data);
+
+        if (data.ok && data.dashboards && data.dashboards.length > 0) {
+          // Map backend data to frontend format
+          const mapped = data.dashboards.map((dbDash: any) => {
+            const defaultDash = DEFAULT_DASHBOARDS.find(
+              (d) => d.id === dbDash.dashboard_id
+            );
+            return {
+              id: dbDash.dashboard_id,
+              dbRecordId: dbDash.id,
+              label: defaultDash?.label || dbDash.name || dbDash.dashboard_id,
+              icon: defaultDash?.icon || Monitor,
+              iconBgColor: defaultDash?.iconBgColor || "bg-slate-500/10",
+              iconColor: defaultDash?.iconColor || "text-slate-600",
+              enabled: dbDash.visible,
+              order: dbDash.order_index,
+            };
+          });
+
+          // Filter to only include Pulsar apps (not Nova categories or sub-categories)
+          const pulsarAppsOnly = mapped.filter((m: DashboardConfig) =>
+            DEFAULT_DASHBOARDS.some(d => d.id === m.id)
           );
-          return storedDash
-            ? { ...defaultDash, enabled: storedDash.enabled, order: storedDash.order }
-            : defaultDash;
-        });
-        setConfig(merged.sort((a, b) => a.order - b.order));
+
+          setConfig(pulsarAppsOnly.sort((a: DashboardConfig, b: DashboardConfig) => a.order - b.order));
+
+          // Also save to localStorage as backup
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(pulsarAppsOnly));
+        } else {
+          // No backend data, use defaults
+          console.log("No backend config found, using defaults");
+          setConfig(DEFAULT_DASHBOARDS);
+        }
       } catch (error) {
-        console.error("Failed to load dashboard config:", error);
+        console.error("Error fetching dashboard config:", error);
+        // Fallback to localStorage
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            const merged = DEFAULT_DASHBOARDS.map((defaultDash) => {
+              const storedDash = parsed.find(
+                (d: DashboardConfig) => d.id === defaultDash.id
+              );
+              return storedDash
+                ? { ...defaultDash, enabled: storedDash.enabled, order: storedDash.order }
+                : defaultDash;
+            });
+            setConfig(merged.sort((a, b) => a.order - b.order));
+          } catch {
+            setConfig(DEFAULT_DASHBOARDS);
+          }
+        } else {
+          setConfig(DEFAULT_DASHBOARDS);
+        }
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    fetchConfig();
   }, []);
 
   return config;

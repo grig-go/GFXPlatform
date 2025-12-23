@@ -223,29 +223,15 @@ export function TopBar({
     ],
   };
 
-  // Settings Menu
+  // Settings Menu (no user info - that's in userMenu now)
   const settingsMenu = {
     id: 'settings',
     label: t('menus.settings'),
     icon: Settings,
     sections: [
-      // User info section (only show if authenticated)
-      ...(isAuthenticated && user ? [{
-        label: user.full_name || user.email,
-        items: [
-          {
-            id: 'user-org',
-            label: organization?.name || 'Organization',
-            icon: User,
-            disabled: true,
-          },
-        ],
-      }] : []),
       {
         label: t('settings.preferences'),
         items: [
-          { id: 'dark-mode-toggle', label: t('settings.darkMode') },
-          { id: 'language-switcher', label: t('settings.language') },
           {
             id: 'advanced-settings',
             label: t('settings.advancedSettings'),
@@ -266,6 +252,33 @@ export function TopBar({
           },
         ],
       },
+    ],
+  };
+
+  // User Menu - separate avatar button like Nova
+  const getUserInitials = (email?: string, name?: string | null): string => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const userMenuConfig = isAuthenticated && user ? {
+    name: user.full_name || undefined,
+    email: user.email,
+    role: organization?.name,
+    initials: getUserInitials(user.email, user.full_name),
+    sections: [
+      {
+        label: t('settings.preferences'),
+        items: [
+          { id: 'dark-mode-toggle', label: t('settings.darkMode') },
+          { id: 'language-switcher', label: t('settings.language') },
+        ],
+      },
       {
         items: [
           {
@@ -278,7 +291,7 @@ export function TopBar({
         ],
       },
     ],
-  };
+  } : undefined;
 
   // Help Menu
   const helpMenu = {
@@ -340,6 +353,7 @@ export function TopBar({
           settings: settingsMenu,
           help: helpMenu,
         }}
+        userMenu={userMenuConfig}
         darkMode={darkMode}
         onDarkModeToggle={() => {
           setDarkMode(!darkMode);

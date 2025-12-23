@@ -15,6 +15,8 @@ const sidebars: SidebarsConfig = {
         'apps/nova',
         'apps/nova-gfx',
         'apps/pulsar-gfx',
+        'apps/pulsar-vs',
+        'apps/pulsar-mcr',
       ],
     },
     {
@@ -65,6 +67,32 @@ const sidebars: SidebarsConfig = {
         'features/pulsar-loop',
         'features/pulsar-preview',
         'features/pulsar-channels',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Pulsar VS Features',
+      collapsed: false,
+      items: [
+        'pulsar-vs/virtual-sets',
+        'pulsar-vs/playlists',
+        'pulsar-vs/channels',
+        'pulsar-vs/ai-integration',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Pulsar MCR Features',
+      collapsed: false,
+      items: [
+        'pulsar-mcr/channels',
+        'pulsar-mcr/content',
+        'pulsar-mcr/templates',
+        'pulsar-mcr/widgets',
+        'pulsar-mcr/virtual-set',
+        'pulsar-mcr/integrations',
+        'pulsar-mcr/scheduling',
+        'pulsar-mcr/tips-and-troubleshooting',
       ],
     },
     {

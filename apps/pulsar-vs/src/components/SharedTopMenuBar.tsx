@@ -21,7 +21,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from './ui/sheet';
-import { LucideIcon, Menu } from 'lucide-react';
+import { LucideIcon, Menu, Moon, Sun } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -57,6 +57,15 @@ export interface TopMenu {
   sections: MenuSection[];
 }
 
+// User menu configuration for standalone user avatar button
+export interface UserMenuConfig {
+  name?: string;
+  email?: string;
+  role?: string;
+  initials: string;
+  sections: MenuSection[];
+}
+
 export interface SharedTopMenuBarProps {
   branding: Branding;
   menus: {
@@ -67,6 +76,7 @@ export interface SharedTopMenuBarProps {
     help?: TopMenu;
   };
   customMenus?: TopMenu[];
+  userMenu?: UserMenuConfig;
   darkMode?: boolean;
   onDarkModeToggle?: () => void;
   accountSettingsDialog?: ReactNode;
@@ -78,6 +88,7 @@ export function SharedTopMenuBar({
   branding,
   menus,
   customMenus = [],
+  userMenu,
   darkMode = false,
   onDarkModeToggle,
   accountSettingsDialog,
@@ -199,6 +210,94 @@ export function SharedTopMenuBar({
         {/* Desktop Menu - Hidden on mobile (<900px) */}
         <div className="hidden min-[900px]:flex items-center gap-0.5">
           {allMenus.map((menu) => renderMenu(menu))}
+
+          {/* User Avatar Dropdown */}
+          {userMenu && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full p-0 ml-1">
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-medium text-cyan-600 dark:text-cyan-400">
+                    {userMenu.initials}
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {/* User Info Header */}
+                {(userMenu.name || userMenu.email) && (
+                  <>
+                    <DropdownMenuLabel className="font-normal">
+                      {userMenu.role && (
+                        <p className="text-xs text-muted-foreground mb-0.5">{userMenu.role}</p>
+                      )}
+                      {userMenu.name && (
+                        <p className="text-sm font-medium">{userMenu.name}</p>
+                      )}
+                      {userMenu.email && (
+                        <p className="text-xs text-muted-foreground truncate">{userMenu.email}</p>
+                      )}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+
+                {/* Menu Sections */}
+                {userMenu.sections.map((section, sectionIndex) => (
+                  <div key={`user-section-${sectionIndex}`}>
+                    {section.label && <DropdownMenuLabel>{section.label}</DropdownMenuLabel>}
+                    {section.items.map((item) => {
+                      // Special handling for dark mode toggle
+                      if (item.id === 'dark-mode-toggle' && onDarkModeToggle) {
+                        return (
+                          <DropdownMenuItem
+                            key={item.id}
+                            onClick={onDarkModeToggle}
+                            className="gap-2 cursor-pointer"
+                          >
+                            {darkMode ? (
+                              <>
+                                <Sun className="w-4 h-4" />
+                                {t('settings.lightMode')}
+                              </>
+                            ) : (
+                              <>
+                                <Moon className="w-4 h-4" />
+                                {t('settings.darkMode')}
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        );
+                      }
+
+                      // Special handling for language switcher
+                      if (item.id === 'language-switcher' && languageSwitcher) {
+                        return (
+                          <div key={item.id} className="px-2 py-1.5">
+                            {languageSwitcher}
+                          </div>
+                        );
+                      }
+
+                      const ItemIcon = item.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item.id}
+                          onClick={item.onClick}
+                          disabled={item.disabled}
+                          className={`gap-2 ${item.disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${
+                            item.variant === 'destructive' ? 'text-destructive' : ''
+                          }`}
+                        >
+                          {ItemIcon && <ItemIcon className="w-4 h-4" />}
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                    {sectionIndex < userMenu.sections.length - 1 && <DropdownMenuSeparator />}
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Mobile Menu Button - Shown only on mobile (<900px) */}

@@ -13,20 +13,29 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
 // ----------------------------------------------------------------------------
-// Default home page dashboards (4 main categories + 6 sub-categories)
+// Default Nova home page dashboards
+// - Main categories (Data, Graphics, Agent, Media Library) - visible by default
+// - Pulsar apps (GFX, VS, MCR, Nexus) - hidden by default
+// - Data sub-categories - hidden by default
 // ----------------------------------------------------------------------------
 const HOME_PAGE_DEFAULTS = [
+  // Main categories (visible by default on Nova)
   { dashboard_id: "data", name: "Data", visible: true, order_index: 0, category: "home", is_subcategory: false },
   { dashboard_id: "graphics", name: "Graphics", visible: true, order_index: 1, category: "home", is_subcategory: false },
   { dashboard_id: "agents", name: "Agent", visible: true, order_index: 2, category: "home", is_subcategory: false },
   { dashboard_id: "media_library", name: "Media Library", visible: true, order_index: 3, category: "home", is_subcategory: false },
-  // Sub-categories (off by default)
-  { dashboard_id: "election", name: "Elections (sub category)", visible: false, order_index: 4, category: "home", is_subcategory: true },
-  { dashboard_id: "finance", name: "Finance (sub category)", visible: false, order_index: 5, category: "home", is_subcategory: true },
-  { dashboard_id: "weather", name: "Weather (sub category)", visible: false, order_index: 6, category: "home", is_subcategory: true },
-  { dashboard_id: "sports", name: "Sports (sub category)", visible: false, order_index: 7, category: "home", is_subcategory: true },
-  { dashboard_id: "school_closings", name: "School Closings (sub category)", visible: false, order_index: 8, category: "home", is_subcategory: true },
-  { dashboard_id: "news", name: "News (sub category)", visible: false, order_index: 9, category: "home", is_subcategory: true },
+  // Pulsar Apps (hidden by default on Nova)
+  { dashboard_id: "pulsar-gfx", name: "Pulsar GFX", visible: false, order_index: 4, category: "home", is_subcategory: false },
+  { dashboard_id: "pulsar-vs", name: "Pulsar VS", visible: false, order_index: 5, category: "home", is_subcategory: false },
+  { dashboard_id: "pulsar-mcr", name: "Pulsar MCR", visible: false, order_index: 6, category: "home", is_subcategory: false },
+  { dashboard_id: "nexus", name: "Nexus", visible: false, order_index: 7, category: "home", is_subcategory: false },
+  // Data Sub-categories (hidden by default on Nova)
+  { dashboard_id: "election", name: "Elections (sub category)", visible: false, order_index: 8, category: "home", is_subcategory: true },
+  { dashboard_id: "finance", name: "Finance (sub category)", visible: false, order_index: 9, category: "home", is_subcategory: true },
+  { dashboard_id: "weather", name: "Weather (sub category)", visible: false, order_index: 10, category: "home", is_subcategory: true },
+  { dashboard_id: "sports", name: "Sports (sub category)", visible: false, order_index: 11, category: "home", is_subcategory: true },
+  { dashboard_id: "school_closings", name: "School Closings (sub category)", visible: false, order_index: 12, category: "home", is_subcategory: true },
+  { dashboard_id: "news", name: "News (sub category)", visible: false, order_index: 13, category: "home", is_subcategory: true },
 ];
 
 // Default data dashboards (6 data options)
@@ -37,6 +46,32 @@ const DATA_PAGE_DEFAULTS = [
   { dashboard_id: "sports", name: "Sports", visible: true, order_index: 3, category: "data", is_default: false },
   { dashboard_id: "school_closings", name: "School Closings", visible: true, order_index: 4, category: "data", is_default: false },
   { dashboard_id: "news", name: "News", visible: true, order_index: 5, category: "data", is_default: false },
+];
+
+// ----------------------------------------------------------------------------
+// Default Pulsar Hub dashboards
+// - Pulsar apps (GFX, VS, MCR, Nexus) - visible by default
+// - Nova home categories (Data, Graphics, Agent, Media Library) - hidden by default
+// - Data sub-categories - hidden by default
+// ----------------------------------------------------------------------------
+const PULSAR_DEFAULTS = [
+  // Pulsar Apps (visible by default on Pulsar Hub)
+  { dashboard_id: "pulsar-gfx", name: "Pulsar GFX", visible: true, order_index: 0, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "pulsar-vs", name: "Pulsar VS", visible: true, order_index: 1, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "pulsar-mcr", name: "Pulsar MCR", visible: true, order_index: 2, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "nexus", name: "Nexus", visible: true, order_index: 3, category: "pulsar", is_subcategory: false },
+  // Nova Home Categories (hidden by default on Pulsar Hub)
+  { dashboard_id: "data", name: "Data", visible: false, order_index: 4, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "graphics", name: "Graphics", visible: false, order_index: 5, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "agents", name: "Agent", visible: false, order_index: 6, category: "pulsar", is_subcategory: false },
+  { dashboard_id: "media_library", name: "Media Library", visible: false, order_index: 7, category: "pulsar", is_subcategory: false },
+  // Data Sub-categories (hidden by default on Pulsar Hub)
+  { dashboard_id: "election", name: "Elections", visible: false, order_index: 8, category: "pulsar", is_subcategory: true },
+  { dashboard_id: "finance", name: "Finance", visible: false, order_index: 9, category: "pulsar", is_subcategory: true },
+  { dashboard_id: "weather", name: "Weather", visible: false, order_index: 10, category: "pulsar", is_subcategory: true },
+  { dashboard_id: "sports", name: "Sports", visible: false, order_index: 11, category: "pulsar", is_subcategory: true },
+  { dashboard_id: "school_closings", name: "School Closings", visible: false, order_index: 12, category: "pulsar", is_subcategory: true },
+  { dashboard_id: "news", name: "News", visible: false, order_index: 13, category: "pulsar", is_subcategory: true },
 ];
 
 // ----------------------------------------------------------------------------
@@ -81,14 +116,41 @@ app.get("/", async (c) => {
     const hasCategory = dbData && dbData.length > 0 && 'category' in dbData[0];
 
     if (page === "home") {
-      // Return home page dashboards
+      // Return home page dashboards - merge DB records with defaults
+      let homeDashboards: any[] = [];
+
       if (hasCategory) {
-        const homeDashboards = dbData.filter((d: any) => d.category === "home");
-        if (homeDashboards.length > 0) {
-          return c.json({ ok: true, count: homeDashboards.length, dashboards: homeDashboards, page: "home" });
-        }
+        homeDashboards = dbData.filter((d: any) => d.category === "home");
       }
-      // Fallback to defaults with virtual IDs
+
+      // Create a map of existing dashboard_ids from DB
+      const existingIds = new Set(homeDashboards.map((d: any) => d.dashboard_id));
+
+      // Add any missing defaults (e.g., Pulsar apps that weren't in DB yet)
+      const missingDefaults = HOME_PAGE_DEFAULTS
+        .filter(d => !existingIds.has(d.dashboard_id))
+        .map(d => ({
+          id: `home-${d.dashboard_id}`,
+          ...d,
+          customer_id: customerId || null,
+          deployment_id: deploymentId || null,
+          access_level: "admin",
+          notes: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+
+      // Combine DB records with missing defaults
+      const combined = [...homeDashboards, ...missingDefaults];
+
+      // Sort by order_index
+      combined.sort((a, b) => (a.order_index ?? 999) - (b.order_index ?? 999));
+
+      if (combined.length > 0) {
+        return c.json({ ok: true, count: combined.length, dashboards: combined, page: "home" });
+      }
+
+      // Fallback to all defaults with virtual IDs (only if no data at all)
       const defaults = HOME_PAGE_DEFAULTS.map((d, i) => ({
         id: `home-${d.dashboard_id}`,
         ...d,
@@ -136,6 +198,29 @@ app.get("/", async (c) => {
         updated_at: new Date().toISOString(),
       }));
       return c.json({ ok: true, count: defaults.length, dashboards: defaults, page: "data" });
+    }
+
+    if (page === "pulsar") {
+      // Return Pulsar apps - ONLY items with category="pulsar"
+      if (hasCategory) {
+        const pulsarDashboards = dbData.filter((d: any) => d.category === "pulsar");
+        if (pulsarDashboards.length > 0) {
+          return c.json({ ok: true, count: pulsarDashboards.length, dashboards: pulsarDashboards, page: "pulsar" });
+        }
+      }
+
+      // Fallback to defaults (Pulsar apps visible, Nova items hidden)
+      const defaults = PULSAR_DEFAULTS.map((d) => ({
+        id: `pulsar-${d.dashboard_id}`,
+        ...d,
+        customer_id: customerId || null,
+        deployment_id: deploymentId || null,
+        access_level: "admin",
+        notes: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      return c.json({ ok: true, count: defaults.length, dashboards: defaults, page: "pulsar" });
     }
 
     // Return all dashboards (legacy behavior)
@@ -228,15 +313,27 @@ app.patch("/update", async (c) => {
       for (const update of updates) {
         if (!update.id) continue;
 
-        // Handle virtual IDs (home-*, data-*) - create actual records
-        if (update.id.startsWith("home-") || update.id.startsWith("data-")) {
-          const dashboardId = update.id.replace("home-", "").replace("data-", "");
-          const category = update.id.startsWith("home-") ? "home" : "data";
+        // Handle virtual IDs (home-*, data-*, pulsar-*) - create actual records
+        if (update.id.startsWith("home-") || update.id.startsWith("data-") || update.id.startsWith("pulsar-")) {
+          let dashboardId = update.id;
+          let category = "home";
 
-          console.log("📝 Creating/updating virtual dashboard:", update.id, "->", dashboardId);
+          if (update.id.startsWith("home-")) {
+            dashboardId = update.id.replace("home-", "");
+            category = "home";
+          } else if (update.id.startsWith("data-")) {
+            dashboardId = update.id.replace("data-", "");
+            category = "data";
+          } else if (update.id.startsWith("pulsar-")) {
+            // For pulsar-pulsar-gfx, extract just the app id
+            dashboardId = update.id.replace("pulsar-", "");
+            category = "pulsar";
+          }
+
+          console.log("📝 Creating/updating virtual dashboard:", update.id, "->", dashboardId, "category:", category);
 
           // Find the default config for this dashboard
-          const defaults = category === "home" ? HOME_PAGE_DEFAULTS : DATA_PAGE_DEFAULTS;
+          const defaults = category === "home" ? HOME_PAGE_DEFAULTS : category === "data" ? DATA_PAGE_DEFAULTS : PULSAR_DEFAULTS;
           const defaultConfig = defaults.find(d => d.dashboard_id === dashboardId);
 
           if (defaultConfig) {

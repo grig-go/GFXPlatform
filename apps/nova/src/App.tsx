@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
-import { Loader2, Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, ImageIcon, School, Database, Palette } from "lucide-react";
+import { Loader2, Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, ImageIcon, School, Database, Palette, Monitor, Video, Sliders, Zap, Rocket, ExternalLink } from "lucide-react";
 import { ElectionDashboard } from "./components/ElectionDashboard";
 import { FinanceDashboard } from "./components/FinanceDashboard";
 import { SportsDashboard } from "./components/SportsDashboard";
@@ -551,7 +551,16 @@ export default function App() {
     ];
 
     const activeCategories = homeConfig.length > 0 ? homeConfig : defaultHomeCategories;
-    const visibleCategories = activeCategories.filter((c: any) => c.visible).sort((a: any, b: any) => a.order_index - b.order_index);
+    // Filter visible categories and dedupe by dashboard_id (keep first occurrence)
+    const seen = new Set<string>();
+    const visibleCategories = activeCategories
+      .filter((c: any) => c.visible)
+      .sort((a: any, b: any) => a.order_index - b.order_index)
+      .filter((c: any) => {
+        if (seen.has(c.dashboard_id)) return false;
+        seen.add(c.dashboard_id);
+        return true;
+      });
 
     // Category card data with stats (main categories + sub-categories)
     const categoryCards: Record<string, {
@@ -718,6 +727,47 @@ export default function App() {
             loading: newsStats.loading
           }
         ]
+      },
+      // Individual Pulsar apps (can be enabled on Nova home page)
+      'pulsar-gfx': {
+        id: 'pulsar-gfx',
+        title: 'Pulsar GFX',
+        description: 'AI-powered graphics content creation system for broadcast and production.',
+        icon: Monitor,
+        bgColor: 'bg-cyan-500/10',
+        iconColor: 'text-cyan-600',
+        onClick: () => window.location.href = import.meta.env.VITE_PULSAR_GFX_URL || 'http://localhost:3001',
+        stats: []
+      },
+      'pulsar-vs': {
+        id: 'pulsar-vs',
+        title: 'Pulsar VS',
+        description: 'Virtual environment and LED screen content management.',
+        icon: Video,
+        bgColor: 'bg-teal-500/10',
+        iconColor: 'text-teal-600',
+        onClick: () => window.location.href = import.meta.env.VITE_PULSAR_VS_URL || 'http://localhost:3004',
+        stats: []
+      },
+      'pulsar-mcr': {
+        id: 'pulsar-mcr',
+        title: 'Pulsar MCR',
+        description: 'Content scheduling and broadcast automation control room.',
+        icon: Sliders,
+        bgColor: 'bg-emerald-500/10',
+        iconColor: 'text-emerald-600',
+        onClick: () => window.location.href = import.meta.env.VITE_PULSAR_MCR_URL || 'http://localhost:3006',
+        stats: []
+      },
+      'nexus': {
+        id: 'nexus',
+        title: 'Nexus',
+        description: 'Operations management and venue monitoring dashboard.',
+        icon: Zap,
+        bgColor: 'bg-yellow-500/10',
+        iconColor: 'text-yellow-600',
+        onClick: () => window.location.href = import.meta.env.VITE_NEXUS_URL || 'http://localhost:3002',
+        stats: []
       }
     };
 
@@ -974,6 +1024,7 @@ export default function App() {
           permissions={usersData.permissions}
           onUpdateUser={handleUpdateUser}
           dashboardConfig={dashboardConfig}
+          onOpenDashboardConfig={() => setShowDashboardConfig(true)}
         />
         <div className="container mx-auto px-4 py-8">
           {isDataDashboard(currentView) && renderNavigation()}

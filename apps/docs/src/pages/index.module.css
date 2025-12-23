@@ -4,7 +4,7 @@
  */
 
 .heroBanner {
-  padding: 6rem 0;
+  padding: 2rem 0;
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -13,8 +13,20 @@
 
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 3rem 1.5rem;
+    padding: 1.5rem 1.5rem;
   }
+}
+
+.heroSubtitle {
+  color: #525252;
+  font-size: 1.1rem;
+  max-width: 600px;
+  margin: 0.75rem auto 0;
+  line-height: 1.6;
+}
+
+.heroSubtitle strong {
+  color: #171717;
 }
 
 .buttons {
@@ -64,9 +76,70 @@
   transition: color 0.15s ease;
 }
 
-.featureCard a:hover {
+.appGrid {
+  row-gap: 1.5rem;
+}
+
+.featureCardLink {
+  text-decoration: none;
+  display: block;
+  height: 100%;
+}
+
+.featureCardLink:hover {
+  text-decoration: none;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cardHeader h3 {
+  margin: 0;
+}
+
+.appIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.appIcon span {
+  color: white;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.learnMore {
+  color: #171717;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.sectionHeader h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #171717;
+}
+
+.sectionHeader p {
   color: #525252;
-  text-decoration: underline;
+  font-size: 1.1rem;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 /* Dark mode overrides */
@@ -101,4 +174,24 @@
 
 :global([data-theme='dark']) .featureCard a:hover {
   color: #d4d4d4;
+}
+
+:global([data-theme='dark']) .learnMore {
+  color: #fafafa;
+}
+
+:global([data-theme='dark']) .sectionHeader h2 {
+  color: #fafafa;
+}
+
+:global([data-theme='dark']) .sectionHeader p {
+  color: #a3a3a3;
+}
+
+:global([data-theme='dark']) .heroSubtitle {
+  color: #a3a3a3;
+}
+
+:global([data-theme='dark']) .heroSubtitle strong {
+  color: #fafafa;
 }

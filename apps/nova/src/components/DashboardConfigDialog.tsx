@@ -33,6 +33,11 @@ import {
   Star,
   Home,
   LayoutGrid,
+  Monitor,
+  Video,
+  Sliders,
+  Zap,
+  Rocket,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner@2.0.3";
@@ -53,19 +58,25 @@ interface DashboardConfigDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Home page categories (main + sub-categories)
+// Home page categories for Nova
 const HOME_CATEGORIES: DashboardConfig[] = [
+  // Main categories (visible by default on Nova)
   { id: "data", label: "Data", icon: Database, enabled: true, order: 0 },
   { id: "graphics", label: "Graphics", icon: Palette, enabled: true, order: 1 },
   { id: "agents", label: "Agent", icon: Bot, enabled: true, order: 2 },
   { id: "media_library", label: "Media Library", icon: ImageIcon, enabled: true, order: 3 },
-  // Sub-categories (off by default)
-  { id: "election", label: "Elections (sub category)", icon: Vote, enabled: false, order: 4 },
-  { id: "finance", label: "Finance (sub category)", icon: TrendingUp, enabled: false, order: 5 },
-  { id: "weather", label: "Weather (sub category)", icon: Cloud, enabled: false, order: 6 },
-  { id: "sports", label: "Sports (sub category)", icon: Trophy, enabled: false, order: 7 },
-  { id: "school_closings", label: "School Closings (sub category)", icon: School, enabled: false, order: 8 },
-  { id: "news", label: "News (sub category)", icon: Newspaper, enabled: false, order: 9 },
+  // Pulsar Apps (hidden by default on Nova - users can enable)
+  { id: "pulsar-gfx", label: "Pulsar GFX", icon: Monitor, enabled: false, order: 4 },
+  { id: "pulsar-vs", label: "Pulsar VS", icon: Video, enabled: false, order: 5 },
+  { id: "pulsar-mcr", label: "Pulsar MCR", icon: Sliders, enabled: false, order: 6 },
+  { id: "nexus", label: "Nexus", icon: Zap, enabled: false, order: 7 },
+  // Data Sub-categories (hidden by default on Nova)
+  { id: "election", label: "Elections (sub category)", icon: Vote, enabled: false, order: 8 },
+  { id: "finance", label: "Finance (sub category)", icon: TrendingUp, enabled: false, order: 9 },
+  { id: "weather", label: "Weather (sub category)", icon: Cloud, enabled: false, order: 10 },
+  { id: "sports", label: "Sports (sub category)", icon: Trophy, enabled: false, order: 11 },
+  { id: "school_closings", label: "School Closings (sub category)", icon: School, enabled: false, order: 12 },
+  { id: "news", label: "News (sub category)", icon: Newspaper, enabled: false, order: 13 },
 ];
 
 // Data dashboards
@@ -78,14 +89,160 @@ const DATA_DASHBOARDS: DashboardConfig[] = [
   { id: "news", label: "News", icon: Newspaper, enabled: true, order: 5 },
 ];
 
+// Pulsar tab config - Pulsar apps + Nova home categories (for unified config)
+// URLs configured via ENV vars: VITE_PULSAR_GFX_URL, VITE_PULSAR_VS_URL, etc.
+export interface PulsarAppConfig extends DashboardConfig {
+  url?: string;
+  description?: string;
+  isPulsarApp?: boolean; // true for Pulsar apps, false for Nova home categories
+}
+
+const PULSAR_APPS: PulsarAppConfig[] = [
+  // Pulsar Apps (visible by default on Pulsar Hub)
+  {
+    id: "pulsar-gfx",
+    label: "Pulsar GFX",
+    icon: Monitor,
+    enabled: true,
+    order: 0,
+    url: import.meta.env.VITE_PULSAR_GFX_URL || "http://localhost:3001",
+    description: "AI-powered graphics content creation system",
+    isPulsarApp: true
+  },
+  {
+    id: "pulsar-vs",
+    label: "Pulsar VS",
+    icon: Video,
+    enabled: true,
+    order: 1,
+    url: import.meta.env.VITE_PULSAR_VS_URL || "http://localhost:3004",
+    description: "Virtual environment and LED screen content management",
+    isPulsarApp: true
+  },
+  {
+    id: "pulsar-mcr",
+    label: "Pulsar MCR",
+    icon: Sliders,
+    enabled: true,
+    order: 2,
+    url: import.meta.env.VITE_PULSAR_MCR_URL || "http://localhost:3006",
+    description: "Content scheduling and broadcast automation",
+    isPulsarApp: true
+  },
+  {
+    id: "nexus",
+    label: "Nexus",
+    icon: Zap,
+    enabled: true,
+    order: 3,
+    url: import.meta.env.VITE_NEXUS_URL || "http://localhost:3002",
+    description: "Operations management and venue monitoring",
+    isPulsarApp: true
+  },
+  // Nova Home Categories (hidden by default on Pulsar Hub)
+  {
+    id: "data",
+    label: "Data",
+    icon: Database,
+    enabled: false,
+    order: 4,
+    description: "Election, finance, weather, sports, and news data",
+    isPulsarApp: false
+  },
+  {
+    id: "graphics",
+    label: "Graphics",
+    icon: Palette,
+    enabled: false,
+    order: 5,
+    description: "Broadcast graphics and visual assets",
+    isPulsarApp: false
+  },
+  {
+    id: "agents",
+    label: "Agent",
+    icon: Bot,
+    enabled: false,
+    order: 6,
+    description: "AI agents for data collection and automation",
+    isPulsarApp: false
+  },
+  {
+    id: "media_library",
+    label: "Media Library",
+    icon: ImageIcon,
+    enabled: false,
+    order: 7,
+    description: "Images, videos, and audio files",
+    isPulsarApp: false
+  },
+  // Data Sub-categories (hidden by default on Pulsar Hub)
+  {
+    id: "election",
+    label: "Elections (sub category)",
+    icon: Vote,
+    enabled: false,
+    order: 8,
+    description: "Election results and candidate data",
+    isPulsarApp: false
+  },
+  {
+    id: "finance",
+    label: "Finance (sub category)",
+    icon: TrendingUp,
+    enabled: false,
+    order: 9,
+    description: "Stock prices and market data",
+    isPulsarApp: false
+  },
+  {
+    id: "weather",
+    label: "Weather (sub category)",
+    icon: Cloud,
+    enabled: false,
+    order: 10,
+    description: "Weather conditions and forecasts",
+    isPulsarApp: false
+  },
+  {
+    id: "sports",
+    label: "Sports (sub category)",
+    icon: Trophy,
+    enabled: false,
+    order: 11,
+    description: "Sports scores and team data",
+    isPulsarApp: false
+  },
+  {
+    id: "school_closings",
+    label: "School Closings (sub category)",
+    icon: School,
+    enabled: false,
+    order: 12,
+    description: "School closure information",
+    isPulsarApp: false
+  },
+  {
+    id: "news",
+    label: "News (sub category)",
+    icon: Newspaper,
+    enabled: false,
+    order: 13,
+    description: "News articles and feeds",
+    isPulsarApp: false
+  },
+];
+
 const STORAGE_KEY = "nova_dashboard_config";
 const HOME_STORAGE_KEY = "nova_home_config";
 const DEFAULT_DASHBOARD_KEY = "nova_default_dashboard";
+const PULSAR_STORAGE_KEY = "nova_pulsar_config";
 
 export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDialogProps) {
-  const [activeTab, setActiveTab] = useState<"home" | "data">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "data" | "pulsar">("home");
   const [homeCategories, setHomeCategories] = useState<DashboardConfig[]>(HOME_CATEGORIES);
   const [dataDashboards, setDataDashboards] = useState<DashboardConfig[]>(DATA_DASHBOARDS);
+  const [pulsarApps, setPulsarApps] = useState<PulsarAppConfig[]>(PULSAR_APPS);
   const [defaultDashboard, setDefaultDashboard] = useState<string>("election");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -103,31 +260,26 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
     try {
       setLoading(true);
 
-      // Fetch home config
-      const homeResponse = await fetch(
-        getEdgeFunctionUrl('dashboard_config?page=home'),
-        {
-          headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
-          },
-        }
-      );
-
-      // Fetch data config
-      const dataResponse = await fetch(
-        getEdgeFunctionUrl('dashboard_config?page=data'),
-        {
-          headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
-          },
-        }
-      );
+      // Fetch all configs in parallel
+      const [homeResponse, dataResponse, pulsarResponse] = await Promise.all([
+        fetch(getEdgeFunctionUrl('dashboard_config?page=home'), {
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
+        }),
+        fetch(getEdgeFunctionUrl('dashboard_config?page=data'), {
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
+        }),
+        fetch(getEdgeFunctionUrl('dashboard_config?page=pulsar'), {
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
+        }),
+      ]);
 
       const homeData = await homeResponse.json();
       const dataData = await dataResponse.json();
+      const pulsarData = await pulsarResponse.json();
 
       console.log("📊 Fetched home config:", homeData);
       console.log("📊 Fetched data config:", dataData);
+      console.log("📊 Fetched pulsar config:", pulsarData);
 
       // Process home categories
       if (homeData.ok && homeData.dashboards?.length > 0) {
@@ -168,6 +320,25 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
         if (defaultDash) {
           setDefaultDashboard(defaultDash.id);
         }
+      }
+
+      // Process Pulsar apps
+      if (pulsarData.ok && pulsarData.dashboards?.length > 0) {
+        const mapped = pulsarData.dashboards.map((d: any) => {
+          const defaultApp = PULSAR_APPS.find(app => app.id === d.dashboard_id);
+          return {
+            id: d.dashboard_id,
+            dbRecordId: d.id,
+            label: defaultApp?.label || d.name || d.dashboard_id,
+            icon: defaultApp?.icon || Rocket,
+            enabled: d.visible,
+            order: d.order_index,
+            cloudUrl: defaultApp?.cloudUrl,
+            localUrl: defaultApp?.localUrl,
+            description: defaultApp?.description,
+          };
+        });
+        setPulsarApps(mapped.sort((a: PulsarAppConfig, b: PulsarAppConfig) => a.order - b.order));
       }
 
     } catch (error) {
@@ -214,13 +385,34 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
     if (defaultStored) {
       setDefaultDashboard(defaultStored);
     }
+
+    // Load Pulsar config
+    const pulsarStored = localStorage.getItem(PULSAR_STORAGE_KEY);
+    if (pulsarStored) {
+      try {
+        const parsed = JSON.parse(pulsarStored);
+        const merged = PULSAR_APPS.map(defaultApp => {
+          const stored = parsed.find((d: PulsarAppConfig) => d.id === defaultApp.id);
+          return stored ? { ...defaultApp, ...stored } : defaultApp;
+        });
+        setPulsarApps(merged.sort((a, b) => a.order - b.order));
+      } catch (e) {
+        setPulsarApps(PULSAR_APPS);
+      }
+    }
   };
 
-  const handleToggle = (id: string, type: "home" | "data") => {
+  const handleToggle = (id: string, type: "home" | "data" | "pulsar") => {
     if (type === "home") {
       setHomeCategories(prev =>
         prev.map(cat =>
           cat.id === id ? { ...cat, enabled: !cat.enabled } : cat
+        )
+      );
+    } else if (type === "pulsar") {
+      setPulsarApps(prev =>
+        prev.map(app =>
+          app.id === id ? { ...app, enabled: !app.enabled } : app
         )
       );
     } else {
@@ -251,7 +443,7 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
     setDragOverIndex(index);
   };
 
-  const handleDragEnd = (type: "home" | "data") => {
+  const handleDragEnd = (type: "home" | "data" | "pulsar") => {
     if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
       if (type === "home") {
         const newItems = [...homeCategories];
@@ -260,6 +452,13 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
         newItems.splice(dragOverIndex, 0, draggedItem);
         const updated = newItems.map((item, idx) => ({ ...item, order: idx }));
         setHomeCategories(updated);
+      } else if (type === "pulsar") {
+        const newItems = [...pulsarApps];
+        const draggedItem = newItems[draggedIndex];
+        newItems.splice(draggedIndex, 1);
+        newItems.splice(dragOverIndex, 0, draggedItem);
+        const updated = newItems.map((item, idx) => ({ ...item, order: idx }));
+        setPulsarApps(updated);
       } else {
         const newItems = [...dataDashboards];
         const draggedItem = newItems[draggedIndex];
@@ -330,10 +529,38 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
         console.log("✅ Saved data config:", data);
       }
 
+      // Save PULSAR apps to backend
+      const pulsarUpdates = pulsarApps
+        .filter(app => app.dbRecordId)
+        .map(app => ({
+          id: app.dbRecordId,
+          visible: app.enabled,
+          order_index: app.order,
+        }));
+
+      if (pulsarUpdates.length > 0) {
+        console.log("📤 Sending pulsar updates:", pulsarUpdates);
+        const pulsarResponse = await fetch(
+          getEdgeFunctionUrl('dashboard_config/update'),
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(pulsarUpdates),
+          }
+        );
+
+        const pulsarData = await pulsarResponse.json();
+        console.log("✅ Saved pulsar config:", pulsarData);
+      }
+
       // Save to localStorage as backup
       localStorage.setItem(HOME_STORAGE_KEY, JSON.stringify(homeCategories));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataDashboards));
       localStorage.setItem(DEFAULT_DASHBOARD_KEY, defaultDashboard);
+      localStorage.setItem(PULSAR_STORAGE_KEY, JSON.stringify(pulsarApps));
 
       toast.success("Configuration saved!", {
         description: "Your dashboard settings have been updated.",
@@ -350,6 +577,7 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
       localStorage.setItem(HOME_STORAGE_KEY, JSON.stringify(homeCategories));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataDashboards));
       localStorage.setItem(DEFAULT_DASHBOARD_KEY, defaultDashboard);
+      localStorage.setItem(PULSAR_STORAGE_KEY, JSON.stringify(pulsarApps));
 
       toast.error("Failed to save to server", {
         description: "Configuration saved locally instead.",
@@ -362,6 +590,8 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
   const handleReset = () => {
     if (activeTab === "home") {
       setHomeCategories(HOME_CATEGORIES);
+    } else if (activeTab === "pulsar") {
+      setPulsarApps(PULSAR_APPS);
     } else {
       setDataDashboards(DATA_DASHBOARDS);
       setDefaultDashboard("election");
@@ -371,10 +601,11 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
 
   const homeEnabledCount = homeCategories.filter(c => c.enabled).length;
   const dataEnabledCount = dataDashboards.filter(d => d.enabled).length;
+  const pulsarEnabledCount = pulsarApps.filter(a => a.enabled).length;
 
   const renderDashboardList = (
     items: DashboardConfig[],
-    type: "home" | "data"
+    type: "home" | "data" | "pulsar"
   ) => (
     <div className="flex-1 overflow-y-auto space-y-2 pr-2">
       {loading ? (
@@ -508,8 +739,8 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "home" | "data")} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "home" | "data" | "pulsar")} className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="home" className="gap-2">
               <Home className="w-4 h-4" />
               Home Categories
@@ -517,6 +748,10 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
             <TabsTrigger value="data" className="gap-2">
               <LayoutGrid className="w-4 h-4" />
               Data Dashboards
+            </TabsTrigger>
+            <TabsTrigger value="pulsar" className="gap-2">
+              <Rocket className="w-4 h-4" />
+              Pulsar Apps
             </TabsTrigger>
           </TabsList>
 
@@ -568,6 +803,33 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
             </p>
 
             {renderDashboardList(dataDashboards, "data")}
+          </TabsContent>
+
+          <TabsContent value="pulsar" className="flex-1 flex flex-col overflow-hidden mt-4">
+            {/* Stats Bar */}
+            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg mb-4">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-green-600" />
+                <span className="text-sm">
+                  <span className="font-semibold">{pulsarEnabledCount}</span> visible
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="font-semibold">{pulsarApps.length - pulsarEnabledCount}</span> hidden
+                </span>
+              </div>
+              <Badge variant="outline" className="ml-auto">
+                {pulsarApps.length} total
+              </Badge>
+            </div>
+
+            <p className="text-sm text-muted-foreground mb-3">
+              Configure which apps and categories are visible on the Pulsar Hub home page.
+            </p>
+
+            {renderDashboardList(pulsarApps, "pulsar")}
           </TabsContent>
         </Tabs>
 
@@ -627,3 +889,29 @@ export function useDashboardConfig() {
 
   return config;
 }
+
+// Hook to get Pulsar apps configuration
+export function usePulsarAppsConfig() {
+  const [config, setConfig] = useState<PulsarAppConfig[]>(PULSAR_APPS);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(PULSAR_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        const merged = PULSAR_APPS.map(defaultApp => {
+          const stored = parsed.find((d: PulsarAppConfig) => d.id === defaultApp.id);
+          return stored ? { ...defaultApp, ...stored } : defaultApp;
+        });
+        setConfig(merged.sort((a, b) => a.order - b.order));
+      } catch (error) {
+        console.error("Failed to load Pulsar config:", error);
+      }
+    }
+  }, []);
+
+  return config;
+}
+
+// Export constants for use in other components
+export { PULSAR_APPS };

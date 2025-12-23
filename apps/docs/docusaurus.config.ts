@@ -79,7 +79,6 @@ const config: Config = {
           position: 'right',
           label: 'API Reference',
         },
-        {to: '/blog', label: 'Changelog', position: 'right'},
       ],
     },
     footer: {
@@ -106,12 +105,24 @@ const config: Config = {
           title: 'Applications',
           items: [
             {
-              label: 'Nova GFX (Designer)',
+              label: 'Nova',
+              to: '/docs/apps/nova',
+            },
+            {
+              label: 'Nova GFX',
               to: '/docs/apps/nova-gfx',
             },
             {
-              label: 'Pulsar GFX (Playout)',
+              label: 'Pulsar GFX',
               to: '/docs/apps/pulsar-gfx',
+            },
+            {
+              label: 'Pulsar VS',
+              to: '/docs/apps/pulsar-vs',
+            },
+            {
+              label: 'Pulsar MCR',
+              to: '/docs/apps/pulsar-mcr',
             },
           ],
         },
@@ -119,8 +130,8 @@ const config: Config = {
           title: 'More',
           items: [
             {
-              label: 'Changelog',
-              to: '/blog',
+              label: 'API Reference',
+              to: '/docs/api/overview',
             },
             {
               label: 'GitHub',

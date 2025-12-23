@@ -19,6 +19,7 @@ package-lock.json
 # Claude
 .claude
 .temp
+CLAUDE.md
 
 # OS files
 .DS_Store
