@@ -76,6 +76,7 @@ import {
   Send,
   Copy,
   ExternalLink,
+  Terminal,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -147,7 +148,11 @@ interface DisplayPermission {
   action: string;
 }
 
-export function UsersGroupsPage() {
+interface UsersGroupsPageProps {
+  initialTab?: 'users' | 'groups' | 'organizations';
+}
+
+export function UsersGroupsPage({ initialTab }: UsersGroupsPageProps) {
   const { user: currentAuthUser } = useAuth();
   const { isSuperuser, isAdmin } = usePermissions();
 
@@ -161,7 +166,7 @@ export function UsersGroupsPage() {
   const [error, setError] = useState<string | null>(null);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'organizations'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'organizations'>(initialTab || 'users');
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
@@ -178,11 +183,45 @@ export function UsersGroupsPage() {
   const [editingGroup, setEditingGroup] = useState<DisplayGroup | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Helper function to copy text to clipboard with fallback
+  const copyToClipboard = (text: string, successMessage: string = 'Copied to clipboard') => {
+    // Use fallback method that works in all contexts
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      textArea.remove();
+      if (successful) {
+        toast.success(successMessage);
+      } else {
+        toast.error('Failed to copy to clipboard');
+      }
+    } catch (err) {
+      textArea.remove();
+      console.error('Failed to copy:', err);
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
   // Invite dialog state
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [inviteOrgId, setInviteOrgId] = useState<string | null>(null);
+  const [lastCreatedInvite, setLastCreatedInvite] = useState<{
+    email: string;
+    token: string;
+    orgId: string;
+    orgName: string;
+    role: string;
+  } | null>(null);
 
   // New user state
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -434,6 +473,13 @@ export function UsersGroupsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Update active tab when initialTab prop changes
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Helper functions
   const getInitials = (name: string) => {
@@ -934,43 +980,69 @@ export function UsersGroupsPage() {
       const baseUrl = window.location.origin;
       const inviteUrl = `${baseUrl}/signup?invite=${data.token}`;
 
-      // Send invitation email via edge function
-      try {
-        const { data: session } = await supabase.auth.getSession();
-        const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-        const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-        const response = await fetch(
-          `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.session?.access_token}`,
-              'apikey': novaAnonKey,
-            },
-            body: JSON.stringify({
-              email: inviteEmail,
-              inviterName: currentAuthUser.full_name || currentAuthUser.email,
-              organizationName: orgName,
-              role: inviteRole,
-              inviteUrl: inviteUrl,
-            }),
-          }
-        );
+      // Send invitation email via edge function (skip in local dev)
+      if (!import.meta.env.DEV) {
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+          const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-        const emailResult = await response.json();
-        if (emailResult.warning) {
-          console.log('Email warning:', emailResult.warning);
+          // Add timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          const response = await fetch(
+            `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.session?.access_token}`,
+                'apikey': novaAnonKey,
+              },
+              body: JSON.stringify({
+                email: inviteEmail,
+                inviterName: currentAuthUser.full_name || currentAuthUser.email,
+                organizationName: orgName,
+                role: inviteRole,
+                inviteUrl: inviteUrl,
+              }),
+              signal: controller.signal,
+            }
+          );
+
+          clearTimeout(timeoutId);
+
+          const emailResult = await response.json();
+          if (emailResult.warning) {
+            console.log('Email warning:', emailResult.warning);
+          }
+        } catch (emailErr) {
+          console.error('Failed to send invitation email:', emailErr);
+          // Don't fail the invitation if email fails - link is still valid
         }
-      } catch (emailErr) {
-        console.error('Failed to send invitation email:', emailErr);
-        // Don't fail the invitation if email fails - link is still valid
+      } else {
+        console.log('Skipping email send in local dev mode');
       }
 
-      setIsInviteDialogOpen(false);
+      // Store invite details for local dev helper (before clearing state)
+      if (import.meta.env.DEV) {
+        setLastCreatedInvite({
+          email: inviteEmail,
+          token: data.token,
+          orgId: inviteOrgId,
+          orgName: orgName,
+          role: inviteRole,
+        });
+      }
+
       setInviteEmail('');
       setInviteRole('member');
-      setInviteOrgId(null);
+      // Don't close dialog in dev mode so user can see the invite details
+      if (!import.meta.env.DEV) {
+        setIsInviteDialogOpen(false);
+        setInviteOrgId(null);
+      }
       toast.success('Invitation sent successfully');
       await fetchData();
     } catch (err) {
@@ -1046,42 +1118,52 @@ export function UsersGroupsPage() {
       if (data?.token) {
         const baseUrl = window.location.origin;
         const inviteUrl = `${baseUrl}/signup?invite=${data.token}`;
-        await navigator.clipboard.writeText(inviteUrl);
+        copyToClipboard(inviteUrl, `Invitation resent to ${email}. Link copied!`);
 
-        // Send invitation email via edge function
-        try {
-          const { data: session } = await supabase.auth.getSession();
-          const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-          const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-          const response = await fetch(
-            `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.session?.access_token}`,
-                'apikey': novaAnonKey,
-              },
-              body: JSON.stringify({
-                email: email,
-                inviterName: currentAuthUser.full_name || currentAuthUser.email,
-                organizationName: orgName,
-                role: role,
-                inviteUrl: inviteUrl,
-              }),
+        // Send invitation email via edge function (skip in local dev)
+        if (!import.meta.env.DEV) {
+          try {
+            const { data: session } = await supabase.auth.getSession();
+            const novaSupabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+            const novaAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+            // Add timeout to prevent hanging
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const response = await fetch(
+              `${novaSupabaseUrl}/functions/v1/send-invitation-email`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session?.session?.access_token}`,
+                  'apikey': novaAnonKey,
+                },
+                body: JSON.stringify({
+                  email: email,
+                  inviterName: currentAuthUser.full_name || currentAuthUser.email,
+                  organizationName: orgName,
+                  role: role,
+                  inviteUrl: inviteUrl,
+                }),
+                signal: controller.signal,
+              }
+            );
+
+            clearTimeout(timeoutId);
+
+            const emailResult = await response.json();
+            if (emailResult.warning) {
+              console.log('Email warning:', emailResult.warning);
             }
-          );
-
-          const emailResult = await response.json();
-          if (emailResult.warning) {
-            console.log('Email warning:', emailResult.warning);
+          } catch (emailErr) {
+            console.error('Failed to send invitation email:', emailErr);
+            // Don't fail - link is still valid and copied
           }
-        } catch (emailErr) {
-          console.error('Failed to send invitation email:', emailErr);
-          // Don't fail - link is still valid and copied
+        } else {
+          console.log('Skipping email send in local dev mode');
         }
-
-        toast.success(`Invitation resent to ${email}. New link copied to clipboard!`, { duration: 5000 });
       } else {
         toast.success(`Invitation resent to ${email}`);
       }
@@ -1099,8 +1181,7 @@ export function UsersGroupsPage() {
   const copyInviteLink = (token: string) => {
     const baseUrl = window.location.origin;
     const inviteUrl = `${baseUrl}/signup?invite=${token}`;
-    navigator.clipboard.writeText(inviteUrl);
-    toast.success('Invitation link copied to clipboard');
+    copyToClipboard(inviteUrl, 'Invitation link copied to clipboard');
   };
 
   // Open invite dialog for a specific org
@@ -1899,6 +1980,7 @@ export function UsersGroupsPage() {
               setInviteEmail('');
               setInviteRole('member');
               setInviteOrgId(null);
+              setLastCreatedInvite(null);
             }
           }}>
             <DialogContent className="max-w-md">
@@ -1965,24 +2047,77 @@ export function UsersGroupsPage() {
                   </Select>
                 </div>
 
+                {/* Local Development Helper - shown after invite is created */}
+                {import.meta.env.DEV && lastCreatedInvite && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Terminal className="h-4 w-4 text-amber-500" />
+                      <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                        Local Development - Invitation Created
+                      </p>
+                    </div>
+
+                    {/* Invite Link */}
+                    <div className="mb-3">
+                      <p className="text-xs text-muted-foreground mb-1">Invite Link (click to select):</p>
+                      <Input
+                        readOnly
+                        value={`${window.location.origin}/signup?invite=${lastCreatedInvite.token}`}
+                        className="text-xs font-mono cursor-pointer"
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                      />
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mb-2">
+                      SQL to create user directly (click to select, then Ctrl+C):
+                    </p>
+                    <textarea
+                      readOnly
+                      value={`INSERT INTO u_users (auth_user_id, email, full_name, organization_id, org_role, is_superuser)\nVALUES ('<auth_user_uuid>', '${lastCreatedInvite.email}', 'User Name', '${lastCreatedInvite.orgId}', '${lastCreatedInvite.role}', false);`}
+                      className="w-full bg-black/80 text-green-400 p-2 rounded text-xs font-mono resize-none cursor-pointer"
+                      rows={3}
+                      onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => {
+                          window.open('http://127.0.0.1:54323/project/default/auth/users', '_blank');
+                        }}
+                      >
+                        Open Supabase Auth
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-4">
                   <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
-                    Cancel
+                    {lastCreatedInvite ? 'Close' : 'Cancel'}
                   </Button>
-                  <Button onClick={sendInvitation} disabled={isSaving || !inviteEmail || !inviteOrgId}>
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Send Invitation
-                      </>
-                    )}
-                  </Button>
+                  {!lastCreatedInvite && (
+                    <Button onClick={sendInvitation} disabled={isSaving || !inviteEmail || !inviteOrgId}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 mr-2" />
+                          Send Invitation
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {lastCreatedInvite && (
+                    <Button onClick={() => setLastCreatedInvite(null)}>
+                      Send Another
+                    </Button>
+                  )}
                 </div>
               </div>
             </DialogContent>

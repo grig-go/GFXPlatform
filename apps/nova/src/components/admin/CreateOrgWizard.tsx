@@ -22,6 +22,8 @@ import {
   Vote,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Terminal,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Button } from '../ui/button';
@@ -95,6 +97,33 @@ interface DashboardData {
 }
 
 type WizardStep = 'details' | 'seed' | 'dashboard' | 'admin' | 'complete';
+
+// Helper function to copy text to clipboard with fallback
+const copyToClipboard = (text: string, successMessage: string = 'Copied to clipboard') => {
+  // Use fallback method that works in all contexts
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    textArea.remove();
+    if (successful) {
+      toast.success(successMessage);
+    } else {
+      toast.error('Failed to copy to clipboard');
+    }
+  } catch (err) {
+    textArea.remove();
+    console.error('Failed to copy:', err);
+    toast.error('Failed to copy to clipboard');
+  }
+};
 
 // Map database category names to user-friendly display names and descriptions
 const CATEGORY_CONFIG: Record<string, { name: string; description: string }> = {
@@ -989,21 +1018,54 @@ export function CreateOrgWizard({ open, onOpenChange, onSuccess }: CreateOrgWiza
                   </p>
 
                   {invitationToken && (
-                    <div className="w-full p-4 bg-muted rounded-lg">
-                      <p className="text-sm font-medium mb-2">Admin Invitation Link:</p>
-                      <div className="flex gap-2">
+                    <div className="w-full space-y-3">
+                      {/* Invite Link */}
+                      <div className="p-4 bg-muted rounded-lg">
+                        <p className="text-sm font-medium mb-2">Admin Invitation Link (click to select):</p>
                         <Input
                           readOnly
                           value={`${window.location.origin}/signup?invite=${invitationToken}`}
-                          className="text-xs"
+                          className="text-xs cursor-pointer"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
                         />
-                        <Button size="sm" onClick={copyInviteLink}>
-                          Copy
-                        </Button>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Share this link with the admin to complete their account setup
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Share this link with the admin to complete their account setup
-                      </p>
+
+                      {/* Local Development Helper */}
+                      {import.meta.env.DEV && (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Terminal className="h-4 w-4 text-amber-500" />
+                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                              Local Development
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            SQL to create the admin user (click to select, then Ctrl+C):
+                          </p>
+                          <textarea
+                            readOnly
+                            value={`INSERT INTO u_users (auth_user_id, email, full_name, organization_id, org_role, is_superuser)\nVALUES ('<auth_user_uuid>', '${adminEmail}', 'Admin User', '${createdOrgId}', 'admin', false);`}
+                            className="w-full bg-black/80 text-green-400 p-3 rounded text-xs font-mono resize-none cursor-pointer"
+                            rows={3}
+                            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs"
+                              onClick={() => {
+                                window.open('http://127.0.0.1:54323/project/default/auth/users', '_blank');
+                              }}
+                            >
+                              Open Supabase Auth
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>

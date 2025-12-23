@@ -65,6 +65,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [initialFeedCategory, setInitialFeedCategory] = useState<FeedCategory | undefined>(undefined);
   const [initialProviderCategory, setInitialProviderCategory] = useState<"weather" | "sports" | "news" | "finance" | "school_closings" | undefined>(undefined);
+  const [initialUsersGroupsTab, setInitialUsersGroupsTab] = useState<'users' | 'groups' | 'organizations' | undefined>(undefined);
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
   const [financeData, setFinanceData] = useState(mockFinanceData);
@@ -457,6 +458,10 @@ export default function App() {
       setInitialFeedCategory(undefined);
       setInitialProviderCategory(undefined);
     }
+    // Reset the initial users-groups tab when navigating away
+    if (view !== 'users-groups') {
+      setInitialUsersGroupsTab(undefined);
+    }
   };
 
   const handleNavigateToProvidersFromSchoolClosings = () => {
@@ -482,6 +487,11 @@ export default function App() {
   const handleNavigateToProvidersFromFinance = () => {
     setInitialProviderCategory("finance");
     setCurrentView('feeds');
+  };
+
+  const handleNavigateToOrganizations = () => {
+    setInitialUsersGroupsTab('organizations');
+    setCurrentView('users-groups');
   };
 
   // Check if current view is a data dashboard
@@ -968,7 +978,7 @@ export default function App() {
         );
       case 'users-groups':
         return (
-          <UsersGroupsPage />
+          <UsersGroupsPage initialTab={initialUsersGroupsTab} />
         );
       case 'ai-connections':
         return (
@@ -1019,12 +1029,9 @@ export default function App() {
       <div className="min-h-screen bg-background">
         <TopMenuBar
           onNavigate={(view) => handleNavigate(view as AppView)}
-          currentUser={usersData.users[0]}
-          roles={usersData.roles}
-          permissions={usersData.permissions}
-          onUpdateUser={handleUpdateUser}
           dashboardConfig={dashboardConfig}
           onOpenDashboardConfig={() => setShowDashboardConfig(true)}
+          onNavigateToOrganizations={handleNavigateToOrganizations}
         />
         <div className="container mx-auto px-4 py-8">
           {isDataDashboard(currentView) && renderNavigation()}

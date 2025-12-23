@@ -15,6 +15,7 @@ import type {
   AppUser,
   Group,
   ChannelAccess,
+  Organization,
 } from '../types/permissions';
 
 interface AuthContextValue extends AuthState {
@@ -24,6 +25,10 @@ interface AuthContextValue extends AuthState {
   getChannelAccess: (channelId: string) => ChannelAccess | undefined;
   canWriteToChannel: (channelId: string) => boolean;
   channelAccess: ChannelAccess[];
+  // Organization impersonation (superuser only)
+  availableOrganizations: Organization[];
+  impersonateOrganization: (org: Organization | null) => void;
+  clearImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -42,9 +47,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAdmin: false,
     isPending: false,
     systemLocked: false,
+    organization: null,
+    impersonatedOrganization: null,
+    effectiveOrganization: null,
   });
 
   const [channelAccess, setChannelAccess] = useState<ChannelAccess[]>([]);
+  const [availableOrganizations, setAvailableOrganizations] = useState<Organization[]>([]);
 
   // Check if system is locked (no superuser exists)
   const checkSystemLocked = useCallback(async (): Promise<boolean> => {
@@ -263,6 +272,48 @@ export function AuthProvider({ children }: AuthProviderProps) {
       userData.permissions.includes('system.manage_users') ||
       userData.groups.some(g => g.name === 'Administrators');
 
+    // Fetch user's organization
+    let userOrganization: Organization | null = null;
+    try {
+      const { data: orgMembership, error: orgError } = await supabase
+        .from('u_organization_members')
+        .select(`
+          role,
+          u_organizations (*)
+        `)
+        .eq('user_id', userData.id)
+        .maybeSingle();
+
+      if (orgError) {
+        console.error('Error fetching user organization:', orgError);
+      } else if (orgMembership?.u_organizations) {
+        // u_organizations could be an object or an array depending on the query
+        const orgs = orgMembership.u_organizations;
+        userOrganization = (Array.isArray(orgs) ? orgs[0] : orgs) as Organization;
+      }
+    } catch (err) {
+      console.error('Error fetching user organization:', err);
+    }
+
+    // For superusers, fetch all available organizations for impersonation
+    if (userData.is_superuser) {
+      try {
+        const { data: allOrgs, error: orgsError } = await supabase
+          .from('u_organizations')
+          .select('*')
+          .order('name');
+
+        if (orgsError) {
+          console.error('Error fetching organizations for superuser:', orgsError);
+        } else {
+          console.log('[AuthContext] Fetched organizations for superuser:', allOrgs?.length || 0);
+          setAvailableOrganizations(allOrgs || []);
+        }
+      } catch (err) {
+        console.error('Error fetching organizations for superuser:', err);
+      }
+    }
+
     setState(prev => ({
       ...prev,
       user: userData,
@@ -276,6 +327,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isSuperuser: userData.is_superuser,
       isAdmin,
       isPending: userData.status === 'pending',
+      organization: userOrganization,
+      effectiveOrganization: prev.impersonatedOrganization || userOrganization,
     }));
   }, [fetchUserData]);
 
@@ -428,8 +481,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isSuperuser: false,
       isAdmin: false,
       isPending: false,
+      organization: null,
+      impersonatedOrganization: null,
+      effectiveOrganization: null,
     }));
     setChannelAccess([]);
+    setAvailableOrganizations([]);
 
     // Clear the shared auth cookie
     const { cookieStorage, SHARED_AUTH_STORAGE_KEY } = await import('../lib/supabase');
@@ -476,6 +533,56 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return access?.can_write ?? false;
   }, [state.isSuperuser, state.isPending, channelAccess]);
 
+  // Impersonate an organization (superuser only)
+  const impersonateOrganization = useCallback((org: Organization | null) => {
+    if (!state.isSuperuser) {
+      console.warn('Only superusers can impersonate organizations');
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      impersonatedOrganization: org,
+      effectiveOrganization: org || prev.organization,
+    }));
+
+    // Store impersonation in sessionStorage so it persists across page refreshes
+    if (org) {
+      sessionStorage.setItem('pulsar_impersonated_org', JSON.stringify(org));
+    } else {
+      sessionStorage.removeItem('pulsar_impersonated_org');
+    }
+  }, [state.isSuperuser]);
+
+  // Clear impersonation
+  const clearImpersonation = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      impersonatedOrganization: null,
+      effectiveOrganization: prev.organization,
+    }));
+    sessionStorage.removeItem('pulsar_impersonated_org');
+  }, []);
+
+  // Restore impersonation from sessionStorage on mount
+  useEffect(() => {
+    if (state.isSuperuser && state.isAuthenticated) {
+      const stored = sessionStorage.getItem('pulsar_impersonated_org');
+      if (stored) {
+        try {
+          const org = JSON.parse(stored) as Organization;
+          setState(prev => ({
+            ...prev,
+            impersonatedOrganization: org,
+            effectiveOrganization: org,
+          }));
+        } catch {
+          sessionStorage.removeItem('pulsar_impersonated_org');
+        }
+      }
+    }
+  }, [state.isSuperuser, state.isAuthenticated]);
+
   const value: AuthContextValue = {
     ...state,
     signIn,
@@ -484,6 +591,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     getChannelAccess,
     canWriteToChannel,
     channelAccess,
+    availableOrganizations,
+    impersonateOrganization,
+    clearImpersonation,
   };
 
   return (

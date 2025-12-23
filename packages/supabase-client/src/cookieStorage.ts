@@ -104,10 +104,34 @@ export function getUrlWithAuthToken(targetUrl: string): string {
 }
 
 /**
+ * Parsed auth tokens from URL (stored for later use by setSession)
+ */
+let pendingAuthTokens: { accessToken: string; refreshToken: string } | null = null;
+
+/**
+ * Get pending auth tokens that were received from URL
+ * Used by client.ts to set the session after receiving tokens
+ */
+export function getPendingAuthTokens(): { accessToken: string; refreshToken: string } | null {
+  const tokens = pendingAuthTokens;
+  if (tokens) {
+    console.log('[Auth] getPendingAuthTokens: returning tokens (accessToken length:', tokens.accessToken.length, ')');
+  } else {
+    console.log('[Auth] getPendingAuthTokens: no pending tokens');
+  }
+  pendingAuthTokens = null; // Clear after reading
+  return tokens;
+}
+
+/**
  * Check for auth token in URL and restore session if found
  * Call this on app initialization to receive shared auth from another app
  *
- * @returns true if a token was found and restored, false otherwise
+ * IMPORTANT: This function stores the tokens for later use. The actual
+ * supabase.auth.setSession() call must be made by client.ts after this
+ * returns true, since we can't import supabase here (circular dependency).
+ *
+ * @returns true if a token was found and stored, false otherwise
  */
 export function receiveAuthTokenFromUrl(): boolean {
   if (typeof window === 'undefined') return false;
@@ -135,6 +159,10 @@ export function receiveAuthTokenFromUrl(): boolean {
         access_token: accessToken,
         refresh_token: refreshToken,
       }));
+
+      // Also store for immediate use by client.ts
+      pendingAuthTokens = { accessToken, refreshToken };
+
       console.log('[Auth] Received and stored session from URL');
 
       // Clean up the URL (remove auth_token param)

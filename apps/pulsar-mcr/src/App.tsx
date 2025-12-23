@@ -28,6 +28,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import AppsIcon from '@mui/icons-material/Apps';
 import WindowIcon from '@mui/icons-material/Window';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
+import BusinessIcon from '@mui/icons-material/Business';
 import { TemplatesProvider } from './contexts/TemplatesContext';
 import { CrossGridDragProvider } from './contexts/CrossGridDragContext';
 import { GridStateProvider, useGridState } from './contexts/GridStateContext';
@@ -54,6 +55,8 @@ import { TickerWizard } from './components/TickerWizard';
 import { DataWizard } from './components/DataWizard';
 import { WidgetWizard } from './components/WidgetWizard';
 import AIImageGenSettingsComponent from './components/AIImageGenSettings';
+import { OrganizationSwitcher } from './components/OrganizationSwitcher';
+import { getUrlWithAuthToken } from '@emergent-platform/supabase-client';
 
 // ----------------------------------------------------------------
 // Initial layout (used at startup)
@@ -427,7 +430,7 @@ const GridStatePersistence: React.FC<{ userId: string }> = ({ userId }) => {
 // App Component
 // ----------------------------------------------------------------
 const App: React.FC = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, impersonatedOrganization } = useAuth();
   const { isAdmin, isSuperuser } = usePermissions();
   const { theme, toggleTheme } = useTheme();
   const [model, setModel] = useState<Model | null>(null);
@@ -1087,7 +1090,11 @@ const App: React.FC = () => {
                           <MenuItem
                             key={app.id}
                             text={app.name}
-                            onClick={() => window.open(app.app_url, '_blank')}
+                            onClick={() => {
+                              // Use getUrlWithAuthToken to pass auth session to other apps (cross-app SSO)
+                              const urlWithAuth = getUrlWithAuthToken(app.app_url);
+                              window.open(urlWithAuth, '_blank');
+                            }}
                           />
                         ))
                       ) : (
@@ -1206,6 +1213,25 @@ const App: React.FC = () => {
                 >
                   <Button text="Window" icon={<WindowIcon style={{ width: 16, height: 16 }} />} />
                 </Popover>
+                {/* Impersonation indicator */}
+                {impersonatedOrganization && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 12px',
+                      backgroundColor: 'rgba(245, 124, 0, 0.15)',
+                      borderRadius: '4px',
+                      marginRight: '8px',
+                      height: '30px',
+                    }}
+                  >
+                    <BusinessIcon style={{ width: 16, height: 16, color: '#f57c00', marginRight: 6 }} />
+                    <span style={{ color: '#f57c00', fontSize: '13px', fontWeight: 500 }}>
+                      {impersonatedOrganization.name}
+                    </span>
+                  </div>
+                )}
                 <Popover
                   content={
                     <Menu>
@@ -1241,6 +1267,8 @@ const App: React.FC = () => {
                           <MenuItem icon={<BoltIcon style={{ width: 16, height: 16 }} />} text="AI Connectors" disabled />
                         </>
                       )}
+                      {/* Organization Switcher for superusers */}
+                      {isSuperuser && <OrganizationSwitcher />}
                       <MenuDivider />
                       <MenuItem icon={<LogoutIcon style={{ width: 16, height: 16 }} />} text="Sign Out" onClick={signOut} />
                     </Menu>

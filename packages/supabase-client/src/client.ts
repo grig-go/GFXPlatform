@@ -5,6 +5,7 @@ import {
   migrateLocalStorageToCookie,
   getUrlWithAuthToken,
   receiveAuthTokenFromUrl,
+  getPendingAuthTokens,
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
 } from './cookieStorage';
@@ -17,6 +18,7 @@ export {
   // Cross-app SSO helpers
   getUrlWithAuthToken,
   receiveAuthTokenFromUrl,
+  getPendingAuthTokens,
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
 };
@@ -494,6 +496,17 @@ let _supabase: SupabaseClient | null = createSupabaseClient();
 
 // Export a proxy that allows us to swap the underlying client
 export const supabase = _supabase as SupabaseClient;
+
+// IMPORTANT: Check for auth tokens from URL IMMEDIATELY after client creation
+// This must happen BEFORE sessionReady is initialized so the tokens are available
+// for ensureSessionInitialized() to use
+let _receivedUrlToken = false;
+if (typeof window !== 'undefined') {
+  _receivedUrlToken = receiveAuthTokenFromUrl();
+  if (_receivedUrlToken) {
+    console.log('[Supabase] URL auth token detected and stored for session initialization');
+  }
+}
 
 /**
  * Check if the Supabase connection is healthy by doing a quick ping
@@ -1056,7 +1069,7 @@ export function stopConnectionMonitor(): void {
 // ============================================================================
 
 /**
- * Ensure session is properly initialized from storage
+ * Ensure session is properly initialized from storage or URL token
  * This fixes issues where Supabase reads storage but doesn't set the auth headers
  */
 const ensureSessionInitialized = async (): Promise<void> => {
@@ -1064,8 +1077,58 @@ const ensureSessionInitialized = async (): Promise<void> => {
 
   console.log('[Supabase] ensureSessionInitialized starting...');
 
+  // FIRST: Check for auth tokens in URL (cross-app SSO)
+  // We call receiveAuthTokenFromUrl() here as well to handle race conditions
+  // where this function starts before the module-level call completes
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has(AUTH_TOKEN_PARAM)) {
+      console.log('[Supabase] Found auth_token in URL, processing...');
+      receiveAuthTokenFromUrl(); // This will store the tokens
+    }
+  }
+
+  // Now check for pending tokens (either from module-level call or the call above)
+  const pendingTokens = getPendingAuthTokens();
+  if (pendingTokens) {
+    console.log('[Supabase] Found pending auth tokens from URL, setting session...');
+    console.log('[Supabase] Access token length:', pendingTokens.accessToken.length);
+    try {
+      const result = await Promise.race([
+        _supabase.auth.setSession({
+          access_token: pendingTokens.accessToken,
+          refresh_token: pendingTokens.refreshToken,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('setSession timeout')), 5000)
+        )
+      ]);
+
+      console.log('[Supabase] setSession result:', {
+        hasData: !!result.data,
+        hasSession: !!result.data?.session,
+        hasUser: !!result.data?.user,
+        error: result.error?.message
+      });
+
+      if (result.error) {
+        console.error('[Supabase] Failed to set session from URL tokens:', result.error.message);
+        // Clear the invalid tokens from storage
+        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      } else if (result.data.session) {
+        console.log('[Supabase] Session set from URL tokens, user:', result.data.session.user?.email);
+        return; // Done - session is set
+      } else {
+        console.warn('[Supabase] setSession returned no error but also no session');
+      }
+    } catch (e) {
+      console.warn('[Supabase] setSession from URL tokens timed out:', e);
+      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+    }
+  }
+
   try {
-    // First check if Supabase already has a session
+    // Check if Supabase already has a session
     const { data: { session: existingSession }, error } = await Promise.race([
       _supabase.auth.getSession(),
       new Promise<never>((_, reject) =>
