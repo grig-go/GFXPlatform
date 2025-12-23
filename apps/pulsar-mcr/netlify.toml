@@ -1,0 +1,9 @@
+[build]
+  command = "pnpm install && pnpm --filter pulsar-mcr build"
+  publish = "dist"
+
+# SPA routing - redirect all routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

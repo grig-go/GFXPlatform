@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,11 +7,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey"
 };
 
-console.log("[pulsarvs-playlists] Edge Function started");
+// Create admin client once at module level for connection reuse
+const supabaseAdmin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
+// Helper to get user and org in one query using JWT claims
+async function getUserOrgFromToken(authHeader: string): Promise<{ userId: string; orgId: string } | null> {
+  try {
+    // Extract JWT and decode to get user ID directly (faster than API call)
+    const token = authHeader.replace("Bearer ", "");
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const userId = payload.sub;
+
+    if (!userId) return null;
+
+    // Get org_id from u_users
+    const { data, error } = await supabaseAdmin
+      .from("u_users")
+      .select("organization_id")
+      .eq("auth_user_id", userId)
+      .single();
+
+    if (error || !data) return null;
+    return { userId, orgId: data.organization_id };
+  } catch {
+    return null;
+  }
+}
 
 serve(async (req) => {
-  console.log(`[pulsarvs-playlists] Incoming request: ${req.method} ${req.url}`);
-
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -20,13 +46,6 @@ serve(async (req) => {
     const url = new URL(req.url);
     const method = req.method.toUpperCase();
 
-    // Create Supabase client with service role for database access
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Create client with user's auth token
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization header" }), {
@@ -35,38 +54,16 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Get user from auth token
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error("[pulsarvs-playlists] Auth error:", authError);
+    // Get user and org from token (single DB call instead of two)
+    const auth = await getUserOrgFromToken(authHeader);
+    if (!auth) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    // Get user's organization_id
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from("u_users")
-      .select("organization_id")
-      .eq("auth_user_id", user.id)
-      .single();
-
-    if (userError || !userData) {
-      console.error("[pulsarvs-playlists] User lookup error:", userError);
-      return new Response(JSON.stringify({ error: "User not found in organization" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
-    const userOrgId = userData.organization_id;
+    const userOrgId = auth.orgId;
 
     // Parse path and query params
     // Edge function path is like /pulsarvs-playlists or /pulsarvs-playlists/items/:playlistId
