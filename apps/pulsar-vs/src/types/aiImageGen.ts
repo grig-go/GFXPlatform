@@ -658,8 +658,8 @@ export const generateImageWithImagen = async (
       if (config.storage.enabled) {
         // Upload via media-library edge function instead of direct storage
         try {
-          const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-          const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+          const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
           // Convert base64 to blob
           const base64Response = await fetch(`data:image/png;base64,${base64Image}`);
@@ -823,8 +823,8 @@ export const editImageWithImagen = async (
     // Upload to storage if enabled
     if (config.storage.enabled) {
       try {
-        const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-        const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+        const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
         const base64Response = await fetch(`data:image/png;base64,${base64Image}`);
         const imageBlob = await base64Response.blob();

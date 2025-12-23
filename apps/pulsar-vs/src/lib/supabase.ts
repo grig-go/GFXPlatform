@@ -1,10 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
-import { supabaseUrl, supabaseAnonKey } from '../src/supabaseConfig';
+/**
+ * Supabase client for Pulsar-VS
+ * Re-exports from the shared @emergent-platform/supabase-client package
+ * This enables SSO across all Emergent apps
+ */
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export {
+  supabase,
+  // Auth helpers
+  sessionReady,
+  receiveAuthTokenFromUrl,
+  checkAuthStatus,
+  // Connection management
+  isSupabaseHealthy,
+  reconnectSupabase,
+  markSupabaseSuccess,
+  withAutoRecovery,
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
+  // URL helpers
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  getEdgeFunctionUrl,
+  // Cookie storage for SSO
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+} from '@emergent-platform/supabase-client';

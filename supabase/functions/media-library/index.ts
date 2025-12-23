@@ -186,24 +186,66 @@ serve(async (req)=>{
     // ============================================================
     if (method === "POST") {
       console.log("📤 Handling media upload/update");
-      const formData = await req.formData();
-      const id = formData.get("id");
-      const file = formData.get("file");
-      const name = formData.get("name");
-      const description = formData.get("description") || "";
-      const tagsStr = formData.get("tags") || "[]";
-      const tags = JSON.parse(tagsStr);
-      const mediaType = formData.get("media_type") || "image";
-      const createdBy = formData.get("created_by") || "user";
-      const aiModelUsed = formData.get("ai_model_used");
-      // Parse latitude and longitude (optional fields)
-      const latitudeStr = formData.get("latitude");
-      const longitudeStr = formData.get("longitude");
-      const latitude = latitudeStr && latitudeStr !== "" ? parseFloat(latitudeStr) : null;
-      const longitude = longitudeStr && longitudeStr !== "" ? parseFloat(longitudeStr) : null;
+
+      // Check content type to determine how to parse the request
+      const contentType = req.headers.get("content-type") || "";
+
+      let id: string | null = null;
+      let file: File | null = null;
+      let name: string | null = null;
+      let description: string = "";
+      let tags: string[] = [];
+      let mediaType: string = "image";
+      let createdBy: string = "user";
+      let aiModelUsed: string | null = null;
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      let base64Data: string | null = null;
+      let fileUrl: string | null = null;
+
+      if (contentType.includes("application/json")) {
+        // Handle JSON body with base64 image data
+        const body = await req.json();
+        id = body.id || null;
+        name = body.name || null;
+        description = body.description || "";
+        tags = body.tags || [];
+        mediaType = body.media_type || "image";
+        createdBy = body.created_by || "ai_generated";
+        aiModelUsed = body.ai_model_used || null;
+        latitude = body.latitude !== undefined ? parseFloat(body.latitude) : null;
+        longitude = body.longitude !== undefined ? parseFloat(body.longitude) : null;
+
+        // Check for base64 data in file_url (data:image/png;base64,...)
+        if (body.file_url && body.file_url.startsWith("data:")) {
+          fileUrl = body.file_url;
+          // Extract base64 data
+          const matches = body.file_url.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            base64Data = matches[2];
+          }
+        }
+      } else {
+        // Handle FormData
+        const formData = await req.formData();
+        id = formData.get("id") as string | null;
+        file = formData.get("file") as File | null;
+        name = formData.get("name") as string | null;
+        description = (formData.get("description") as string) || "";
+        const tagsStr = (formData.get("tags") as string) || "[]";
+        tags = JSON.parse(tagsStr);
+        mediaType = (formData.get("media_type") as string) || "image";
+        createdBy = (formData.get("created_by") as string) || "user";
+        aiModelUsed = formData.get("ai_model_used") as string | null;
+        // Parse latitude and longitude (optional fields)
+        const latitudeStr = formData.get("latitude") as string | null;
+        const longitudeStr = formData.get("longitude") as string | null;
+        latitude = latitudeStr && latitudeStr !== "" ? parseFloat(latitudeStr) : null;
+        longitude = longitudeStr && longitudeStr !== "" ? parseFloat(longitudeStr) : null;
+      }
       // Update metadata only
-      if (id && !file) {
-        const updateData = {};
+      if (id && !file && !base64Data) {
+        const updateData: Record<string, unknown> = {};
         if (name) updateData.name = name;
         if (description !== undefined) updateData.description = description;
         if (tags) updateData.tags = tags;
@@ -232,6 +274,86 @@ serve(async (req)=>{
           }
         });
       }
+
+      // Handle base64 data upload (from AI generation)
+      if (base64Data) {
+        console.log("📤 Handling base64 image upload");
+        const bucketName = "media";
+        const timestamp = Date.now();
+        const folder = mediaType === "video" ? "video" : mediaType === "audio" ? "audio" : "image";
+        const storagePath = `${folder}/${timestamp}_${crypto.randomUUID()}.png`;
+
+        // Decode base64 to Uint8Array
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const { data: uploadData, error: uploadError } = await supabase.storage.from(bucketName).upload(storagePath, bytes, {
+          contentType: "image/png",
+          upsert: false
+        });
+
+        if (uploadError) return new Response(JSON.stringify({
+          error: "Failed to upload file",
+          details: uploadError.message
+        }), {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+
+        // Get the public URL and fix it for local development
+        const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
+        const publicUrl = fixStorageUrl(urlData.publicUrl, req.url);
+
+        // Insert DB record
+        const { data: assetData, error: dbError } = await supabase.from("media_assets").insert({
+          name: name || `AI Generated ${new Date().toISOString()}`,
+          file_name: `ai_generated_${timestamp}.png`,
+          description,
+          storage_path: uploadData.path,
+          file_url: publicUrl,
+          thumbnail_url: publicUrl,
+          media_type: mediaType,
+          created_by: createdBy,
+          ai_model_used: aiModelUsed,
+          tags,
+          metadata: {
+            size: bytes.length,
+            mimeType: "image/png"
+          },
+          latitude,
+          longitude
+        }).select().single();
+
+        if (dbError) {
+          await supabase.storage.from(bucketName).remove([uploadData.path]);
+          return new Response(JSON.stringify({
+            error: "Failed to create database record",
+            details: dbError.message
+          }), {
+            status: 500,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          data: assetData
+        }), {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+      }
+
       if (!file) return new Response(JSON.stringify({
         error: "No file provided"
       }), {

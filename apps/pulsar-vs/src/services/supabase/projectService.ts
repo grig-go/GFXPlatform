@@ -1,28 +1,83 @@
 // services/projectService.ts
-// Service for project CRUD operations via Supabase RPC
+// Service for project CRUD operations via Supabase Edge Functions
 
-import { supabase } from '../../lib/supabase';
+import { supabase, getEdgeFunctionUrl } from '../../lib/supabase';
 import type { Project, CreateProjectParams, UpdateProjectParams } from '../../types/project';
+
+// Edge function URL for PulsarVS projects
+const PROJECTS_EDGE_FN = () => {
+  const url = getEdgeFunctionUrl('pulsarvs-projects');
+  console.log('[projectService] PROJECTS_EDGE_FN called, URL:', url);
+  return url;
+};
+
+/**
+ * Helper to get auth headers for edge function calls
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  console.log('[projectService] getAuthHeaders - session:', session?.user?.email, 'error:', error?.message);
+  console.log('[projectService] getAuthHeaders - access_token exists:', !!session?.access_token);
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session?.access_token || ''}`,
+  };
+}
 
 /**
  * Fetch all projects
  */
 export async function getProjects(): Promise<{ success: boolean; data?: Project[]; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_get_projects');
-    
-    if (error) {
-      console.error('Error fetching projects:', error);
-      return { success: false, error: error.message };
+    const url = PROJECTS_EDGE_FN();
+    console.log('[projectService] getProjects - URL:', url);
+
+    const headers = await getAuthHeaders();
+    console.log('[projectService] getProjects - headers:', JSON.stringify(headers));
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+
+    console.log('[projectService] getProjects - response status:', response.status, response.statusText);
+
+    const data = await response.json();
+    console.log('[projectService] getProjects - response data:', JSON.stringify(data));
+
+    if (!response.ok || !data.success) {
+      console.error('[projectService] Error fetching projects:', data.error);
+      return { success: false, error: data.error || 'Failed to fetch projects' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Failed to fetch projects' };
-    }
-    
+
     return { success: true, data: data.data };
   } catch (error) {
-    console.error('Error in getProjects:', error);
+    console.error('[projectService] Error in getProjects:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Fetch a specific project by ID
+ */
+export async function getProject(projectId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}?id=${projectId}`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error fetching project:', data.error);
+      return { success: false, error: data.error || 'Failed to fetch project' };
+    }
+
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Error in getProject:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -32,17 +87,19 @@ export async function getProjects(): Promise<{ success: boolean; data?: Project[
  */
 export async function getActiveProject(): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_get_active_project');
-    
-    if (error) {
-      console.error('Error fetching active project:', error);
-      return { success: false, error: error.message };
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}?active=true`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error fetching active project:', data.error);
+      return { success: false, error: data.error || 'No active project' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'No active project' };
-    }
-    
+
     return { success: true, data: data.data };
   } catch (error) {
     console.error('Error in getActiveProject:', error);
@@ -55,25 +112,28 @@ export async function getActiveProject(): Promise<{ success: boolean; data?: Pro
  */
 export async function createProject(params: CreateProjectParams): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_create_project', {
-      p_name: params.name,
-      p_description: params.description || null,
-      p_default_channel_id: params.default_channel_id || null,
-      p_default_instance_id: params.default_instance_id || null,
-      p_color: params.color || 'blue',
-      p_icon: params.icon || '📁',
-      p_settings: params.settings || {}
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: params.name,
+        description: params.description || null,
+        default_channel_id: params.default_channel_id || null,
+        default_instance_id: params.default_instance_id || null,
+        color: params.color || 'blue',
+        icon: params.icon || '📁',
+        settings: params.settings || {},
+      }),
     });
-    
-    if (error) {
-      console.error('Error creating project:', error);
-      return { success: false, error: error.message };
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error creating project:', data.error);
+      return { success: false, error: data.error || 'Failed to create project' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Failed to create project' };
-    }
-    
+
     return { success: true, data: data.data };
   } catch (error) {
     console.error('Error in createProject:', error);
@@ -86,26 +146,29 @@ export async function createProject(params: CreateProjectParams): Promise<{ succ
  */
 export async function updateProject(params: UpdateProjectParams): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_update_project', {
-      p_id: params.id,
-      p_name: params.name || null,
-      p_description: params.description || null,
-      p_default_channel_id: params.default_channel_id || null,
-      p_default_instance_id: params.default_instance_id || null,
-      p_color: params.color || null,
-      p_icon: params.icon || null,
-      p_settings: params.settings || null
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        id: params.id,
+        name: params.name || undefined,
+        description: params.description || undefined,
+        default_channel_id: params.default_channel_id || undefined,
+        default_instance_id: params.default_instance_id || undefined,
+        color: params.color || undefined,
+        icon: params.icon || undefined,
+        settings: params.settings || undefined,
+      }),
     });
-    
-    if (error) {
-      console.error('Error updating project:', error);
-      return { success: false, error: error.message };
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error updating project:', data.error);
+      return { success: false, error: data.error || 'Failed to update project' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Failed to update project' };
-    }
-    
+
     return { success: true, data: data.data };
   } catch (error) {
     console.error('Error in updateProject:', error);
@@ -118,19 +181,23 @@ export async function updateProject(params: UpdateProjectParams): Promise<{ succ
  */
 export async function setActiveProject(projectId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_set_active_project', {
-      p_id: projectId
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        id: projectId,
+        action: 'setActive',
+      }),
     });
-    
-    if (error) {
-      console.error('Error setting active project:', error);
-      return { success: false, error: error.message };
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error setting active project:', data.error);
+      return { success: false, error: data.error || 'Failed to set active project' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Failed to set active project' };
-    }
-    
+
     return { success: true, data: data.data };
   } catch (error) {
     console.error('Error in setActiveProject:', error);
@@ -143,22 +210,51 @@ export async function setActiveProject(projectId: string): Promise<{ success: bo
  */
 export async function deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc('pulsarvs_delete_project', {
-      p_id: projectId
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}?id=${projectId}`, {
+      method: 'DELETE',
+      headers,
     });
-    
-    if (error) {
-      console.error('Error deleting project:', error);
-      return { success: false, error: error.message };
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error deleting project:', data.error);
+      return { success: false, error: data.error || 'Failed to delete project' };
     }
-    
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Failed to delete project' };
-    }
-    
+
     return { success: true };
   } catch (error) {
     console.error('Error in deleteProject:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Batch delete multiple projects
+ */
+export async function deleteProjects(projectIds: string[]): Promise<{ success: boolean; deleted_count?: number; error?: string }> {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${PROJECTS_EDGE_FN()}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        action: 'delete',
+        ids: projectIds,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error('Error batch deleting projects:', data.error);
+      return { success: false, error: data.error || 'Failed to delete projects' };
+    }
+
+    return { success: true, deleted_count: data.deleted_count };
+  } catch (error) {
+    console.error('Error in deleteProjects:', error);
     return { success: false, error: String(error) };
   }
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, setJwtExpiredHandler, resetJwtExpiredTrigger } from '@/lib/supabase';
 import { initializeAIModelsFromBackend } from '@/lib/ai';
 
 // Default dev organization ID - used when user has no organization_id
@@ -274,6 +274,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', handleVisibilityChange);
       }
+
+      // Set up JWT expiration handler for automatic logout
+      // This triggers when any API call returns 401 with "JWT expired"
+      setJwtExpiredHandler(() => {
+        console.log('[Auth] JWT expired - automatically signing out user');
+        get().signOut();
+      });
     }
   },
 
@@ -307,6 +314,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       }
 
       console.log('[Auth] Signed in successfully, fetching user data...');
+
+      // Reset the JWT expired trigger so it can fire again if needed
+      resetJwtExpiredTrigger();
 
       // Store access token
       set({ accessToken: session.access_token });

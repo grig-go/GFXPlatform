@@ -28,6 +28,10 @@ export {
   cookieStorage,
   SHARED_AUTH_STORAGE_KEY,
   migrateLocalStorageToCookie,
+  // JWT expiration handling
+  setJwtExpiredHandler,
+  clearJwtExpiredHandler,
+  resetJwtExpiredTrigger,
 } from '@emergent-platform/supabase-client';
 
 export type { User, Session } from '@supabase/supabase-js';

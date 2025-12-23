@@ -105,6 +105,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { useProject } from './ProjectContext';
 import { sendCommandToUnreal } from '../services/unreal/commandService';
+import * as playlistService from '../services/supabase/playlistService';
 import type {
   Playlist,
   PlaylistItem,
@@ -126,8 +127,8 @@ import {
   generateTextViaBackend,
 } from '../types/aiImageGen';
 
-const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // Item type icon component
 function ItemTypeIcon({ type, className = "h-4 w-4" }: { type: PlaylistItemType; className?: string }) {
@@ -362,15 +363,17 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
   // ============================================
 
   const loadPlaylists = useCallback(async () => {
+    if (!activeProject?.id) {
+      setPlaylists([]);
+      return;
+    }
     setIsLoadingPlaylists(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_list', {
-        p_project_id: activeProject?.id || null,
-      });
-
-      if (error) throw error;
-      if (data?.success && data.data) {
-        setPlaylists(data.data);
+      const result = await playlistService.getPlaylists(activeProject.id);
+      if (result.success && result.data) {
+        setPlaylists(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to load playlists');
       }
     } catch (error) {
       console.error('Error loading playlists:', error);
@@ -383,15 +386,13 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
   const loadPlaylistItems = useCallback(async (playlistId: string) => {
     setIsLoadingItems(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_get', {
-        p_playlist_id: playlistId,
-      });
+      const result = await playlistService.getPlaylist(playlistId);
 
-      if (error) throw error;
-      if (data?.success && data.data) {
+      if (!result.success) throw new Error(result.error);
+      if (result.data) {
         setSelectedPlaylist({
-          ...data.data.playlist,
-          items: data.data.items || [],
+          ...result.data,
+          items: (result.data as any).items || [],
         });
         // Load saved default channel for this playlist
         const savedChannel = localStorage.getItem(`playlist_default_channel_${playlistId}`);
@@ -585,13 +586,11 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
       if (!nestedItems[groupId]) {
         setLoadingNestedItems(prev => new Set(prev).add(groupId));
         try {
-          const { data, error } = await supabase.rpc('pulsarvs_playlist_item_get_nested', {
-            p_parent_item_id: groupId,
-          });
+          const result = await playlistService.getNestedItems(groupId);
 
-          if (error) throw error;
-          if (data?.success && data.data) {
-            setNestedItems(prev => ({ ...prev, [groupId]: data.data }));
+          if (!result.success) throw new Error(result.error);
+          if (result.data) {
+            setNestedItems(prev => ({ ...prev, [groupId]: result.data! }));
           }
         } catch (error) {
           console.error('Error loading nested items:', error);
@@ -617,23 +616,27 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
       return;
     }
 
+    if (!activeProject?.id) {
+      toast.error('No active project selected');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_create', {
-        p_name: playlistForm.name,
-        p_description: playlistForm.description || null,
-        p_project_id: activeProject?.id || null,
-        p_loop_enabled: playlistForm.loop_enabled,
+      const result = await playlistService.createPlaylist({
+        name: playlistForm.name,
+        description: playlistForm.description || undefined,
+        project_id: activeProject.id,
+        loop_enabled: playlistForm.loop_enabled,
       });
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success('Playlist created');
         setCreatePlaylistOpen(false);
         setPlaylistForm({ name: '', description: '', loop_enabled: false });
         loadPlaylists();
       } else {
-        throw new Error(data?.error || 'Failed to create playlist');
+        throw new Error(result.error || 'Failed to create playlist');
       }
     } catch (error) {
       console.error('Error creating playlist:', error);
@@ -648,19 +651,20 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_update', {
-        p_id: selectedPlaylist.id,
-        p_name: playlistForm.name,
-        p_description: playlistForm.description || null,
-        p_loop_enabled: playlistForm.loop_enabled,
+      const result = await playlistService.updatePlaylist({
+        id: selectedPlaylist.id,
+        name: playlistForm.name,
+        description: playlistForm.description || undefined,
+        loop_enabled: playlistForm.loop_enabled,
       });
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success('Playlist updated');
         setEditPlaylistOpen(false);
         loadPlaylists();
         loadPlaylistItems(selectedPlaylist.id);
+      } else {
+        throw new Error(result.error || 'Failed to update playlist');
       }
     } catch (error) {
       console.error('Error updating playlist:', error);
@@ -675,16 +679,15 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_delete', {
-        p_id: selectedPlaylist.id,
-      });
+      const result = await playlistService.deletePlaylist(selectedPlaylist.id);
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success('Playlist deleted');
         setDeletePlaylistOpen(false);
         setSelectedPlaylist(null);
         loadPlaylists();
+      } else {
+        throw new Error(result.error || 'Failed to delete playlist');
       }
     } catch (error) {
       console.error('Error deleting playlist:', error);
@@ -794,62 +797,51 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
       for (const item of itemsToAdd) {
         if (item.type === 'folder') {
           // Add the group first
-          const { data: groupData, error: groupError } = await supabase.rpc('pulsarvs_playlist_item_add', {
-            p_playlist_id: selectedPlaylist.id,
-            p_item_type: 'group',
-            p_name: item.name,
-            p_content_id: null,
-            p_media_id: null,
-            p_folder_id: item.id,
-            p_channel_id: itemForm.channel_id || null,
-            p_duration: itemForm.duration,
-            p_scheduled_time: itemForm.scheduled_time || null,
-            p_metadata: {},
-            p_parent_item_id: null,
+          const groupResult = await playlistService.addPlaylistItem({
+            playlist_id: selectedPlaylist.id,
+            item_type: 'group',
+            name: item.name,
+            folder_id: item.id,
+            channel_id: itemForm.channel_id || undefined,
+            duration: itemForm.duration,
+            scheduled_time: itemForm.scheduled_time || undefined,
+            metadata: {},
           });
 
-          if (groupError) throw groupError;
-          if (groupData?.success) {
-            addedCount++;
-            const groupId = groupData.data?.id;
+          if (!groupResult.success) throw new Error(groupResult.error);
+          addedCount++;
+          const groupId = groupResult.data?.id;
 
-            // Add nested pages under the group
-            if (groupId && item.nestedPages && item.nestedPages.length > 0) {
-              for (const page of item.nestedPages) {
-                await supabase.rpc('pulsarvs_playlist_item_add', {
-                  p_playlist_id: selectedPlaylist.id,
-                  p_item_type: 'page',
-                  p_name: page.name,
-                  p_content_id: page.id,
-                  p_media_id: null,
-                  p_folder_id: null,
-                  p_channel_id: itemForm.channel_id || null,
-                  p_duration: itemForm.duration,
-                  p_scheduled_time: null,
-                  p_metadata: {},
-                  p_parent_item_id: groupId,
-                });
-              }
+          // Add nested pages under the group
+          if (groupId && item.nestedPages && item.nestedPages.length > 0) {
+            for (const page of item.nestedPages) {
+              await playlistService.addPlaylistItem({
+                playlist_id: selectedPlaylist.id,
+                item_type: 'page',
+                name: page.name,
+                content_id: page.id,
+                channel_id: itemForm.channel_id || undefined,
+                duration: itemForm.duration,
+                parent_item_id: groupId,
+              });
             }
           }
         } else {
           // Regular page or media
-          const { data, error } = await supabase.rpc('pulsarvs_playlist_item_add', {
-            p_playlist_id: selectedPlaylist.id,
-            p_item_type: addItemType,
-            p_name: item.name,
-            p_content_id: item.type === 'content' ? item.id : null,
-            p_media_id: item.type === 'media' ? item.id : null,
-            p_folder_id: null,
-            p_channel_id: itemForm.channel_id || null,
-            p_duration: itemForm.duration,
-            p_scheduled_time: itemForm.scheduled_time || null,
-            p_metadata: {},
-            p_parent_item_id: null,
+          const result = await playlistService.addPlaylistItem({
+            playlist_id: selectedPlaylist.id,
+            item_type: addItemType,
+            name: item.name,
+            content_id: item.type === 'content' ? item.id : undefined,
+            media_id: item.type === 'media' ? item.id : undefined,
+            channel_id: itemForm.channel_id || undefined,
+            duration: itemForm.duration,
+            scheduled_time: itemForm.scheduled_time || undefined,
+            metadata: {},
           });
 
-          if (error) throw error;
-          if (data?.success) addedCount++;
+          if (!result.success) throw new Error(result.error);
+          addedCount++;
         }
       }
 
@@ -876,42 +868,36 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
 
     setIsSubmitting(true);
     try {
-      // Build the RPC params, only include media_id if it's being changed
-      const rpcParams: {
-        p_id: string;
-        p_channel_id: string | null;
-        p_duration: number;
-        p_scheduled_time: string | null;
-        p_media_id?: string;
-        p_name?: string;
+      // Build update params
+      const updateParams: {
+        id: string;
+        channel_id?: string;
+        duration?: number;
+        name?: string;
+        metadata?: Record<string, unknown>;
       } = {
-        p_id: editingItem.id,
-        p_channel_id: itemForm.channel_id || null,
-        p_duration: itemForm.duration,
-        p_scheduled_time: itemForm.scheduled_time || null,
+        id: editingItem.id,
+        channel_id: itemForm.channel_id || undefined,
+        duration: itemForm.duration,
       };
 
-      // Include media_id and update name if replacing media
+      // Include name if replacing media
       if (itemForm.new_media_id) {
-        rpcParams.p_media_id = itemForm.new_media_id;
-        // Find the new media name
         const newMedia = replaceMediaAssets.find(m => m.id === itemForm.new_media_id);
         if (newMedia) {
-          rpcParams.p_name = newMedia.name;
+          updateParams.name = newMedia.name;
         }
       }
 
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_item_update', rpcParams);
+      const result = await playlistService.updatePlaylistItem(updateParams);
 
-      if (error) throw error;
-      if (data?.success) {
-        toast.success(itemForm.new_media_id ? 'Media replaced successfully' : 'Item updated');
-        setEditItemOpen(false);
-        setEditingItem(null);
-        setShowReplaceMedia(false);
-        if (selectedPlaylist) {
-          loadPlaylistItems(selectedPlaylist.id);
-        }
+      if (!result.success) throw new Error(result.error);
+      toast.success(itemForm.new_media_id ? 'Media replaced successfully' : 'Item updated');
+      setEditItemOpen(false);
+      setEditingItem(null);
+      setShowReplaceMedia(false);
+      if (selectedPlaylist) {
+        loadPlaylistItems(selectedPlaylist.id);
       }
     } catch (error) {
       console.error('Error updating item:', error);
@@ -930,22 +916,19 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
       // Find the new media name
       const newMedia = replaceMediaAssets.find(m => m.id === previewSelectedMediaId);
 
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_item_update', {
-        p_id: previewingMedia.id,
-        p_media_id: previewSelectedMediaId,
-        p_name: newMedia?.name || previewingMedia.name,
+      const result = await playlistService.updatePlaylistItem({
+        id: previewingMedia.id,
+        name: newMedia?.name || previewingMedia.name,
       });
 
-      if (error) throw error;
-      if (data?.success) {
-        toast.success('Media replaced successfully');
-        setMediaPreviewOpen(false);
-        setPreviewingMedia(null);
-        setShowPreviewReplaceMedia(false);
-        setPreviewSelectedMediaId(null);
-        if (selectedPlaylist) {
-          loadPlaylistItems(selectedPlaylist.id);
-        }
+      if (!result.success) throw new Error(result.error);
+      toast.success('Media replaced successfully');
+      setMediaPreviewOpen(false);
+      setPreviewingMedia(null);
+      setShowPreviewReplaceMedia(false);
+      setPreviewSelectedMediaId(null);
+      if (selectedPlaylist) {
+        loadPlaylistItems(selectedPlaylist.id);
       }
     } catch (error) {
       console.error('Error replacing media:', error);
@@ -961,10 +944,10 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     setIsSubmitting(true);
     try {
       const itemIds = Array.from(selectedItems);
-      for (const id of itemIds) {
-        await supabase.rpc('pulsarvs_playlist_item_delete', { p_id: id });
-      }
-      toast.success(`${itemIds.length} item(s) deleted`);
+      const result = await playlistService.deletePlaylistItems(itemIds);
+
+      if (!result.success) throw new Error(result.error);
+      toast.success(`${result.deleted_count || itemIds.length} item(s) deleted`);
       setDeleteItemsOpen(false);
       setSelectedItems(new Set());
       if (selectedPlaylist) {
@@ -988,13 +971,13 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     });
 
     try {
-      const itemIds = newOrder.map(item => item.id);
-      const { error } = await supabase.rpc('pulsarvs_playlist_items_reorder', {
-        p_playlist_id: selectedPlaylist.id,
-        p_item_ids: itemIds,
+      const itemOrders = newOrder.map((item, index) => ({ id: item.id, sort_order: index }));
+      const result = await playlistService.reorderPlaylistItems({
+        playlist_id: selectedPlaylist.id,
+        item_orders: itemOrders,
       });
 
-      if (error) throw error;
+      if (!result.success) throw new Error(result.error);
     } catch (error) {
       console.error('Error reordering items:', error);
       toast.error('Failed to reorder items');
@@ -1021,19 +1004,18 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     setIsSubmitting(true);
     try {
       const itemIds = Array.from(selectedItems);
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_items_group', {
-        p_playlist_id: selectedPlaylist.id,
-        p_item_ids: itemIds,
-        p_group_name: groupName.trim(),
+      const result = await playlistService.groupPlaylistItems({
+        playlist_id: selectedPlaylist.id,
+        item_ids: itemIds,
+        group_name: groupName.trim(),
       });
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success(`Created group "${groupName}" with ${itemIds.length} items`);
         setSelectedItems(new Set());
         loadPlaylistItems(selectedPlaylist.id);
       } else {
-        throw new Error(data?.error || 'Failed to group items');
+        throw new Error(result.error || 'Failed to group items');
       }
     } catch (error) {
       console.error('Error grouping items:', error);
@@ -1050,24 +1032,11 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     setIsSubmitting(true);
     try {
       const itemIds = Array.from(selectedItems);
-      const channelId = batchChannelValue === 'none' ? null : batchChannelValue;
-      let successCount = 0;
+      const channelId = batchChannelValue === 'none' ? '' : batchChannelValue;
+      const result = await playlistService.setItemsChannel(itemIds, channelId);
 
-      // Update each selected item using the same RPC as inline change
-      for (const itemId of itemIds) {
-        const { data, error } = await supabase.rpc('pulsarvs_playlist_item_set_channel', {
-          p_id: itemId,
-          p_channel_id: channelId,
-        });
-        if (error) {
-          console.error(`Error updating item ${itemId}:`, error);
-        } else if (data?.success) {
-          successCount++;
-        }
-      }
-
-      if (successCount > 0) {
-        toast.success(`Updated channel for ${successCount} item(s)`);
+      if (result.success) {
+        toast.success(`Updated channel for ${result.updated_count || itemIds.length} item(s)`);
         loadPlaylistItems(selectedPlaylist.id);
       } else {
         toast.error('Failed to update channels');
@@ -1089,23 +1058,10 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     setIsSubmitting(true);
     try {
       const itemIds = Array.from(selectedItems);
-      let successCount = 0;
+      const result = await playlistService.setItemsDuration(itemIds, batchDurationValue);
 
-      // Update each selected item using the same RPC as inline change
-      for (const itemId of itemIds) {
-        const { data, error } = await supabase.rpc('pulsarvs_playlist_item_update', {
-          p_id: itemId,
-          p_duration: batchDurationValue,
-        });
-        if (error) {
-          console.error(`Error updating item ${itemId}:`, error);
-        } else if (data?.success) {
-          successCount++;
-        }
-      }
-
-      if (successCount > 0) {
-        toast.success(`Updated duration for ${successCount} item(s)`);
+      if (result.success) {
+        toast.success(`Updated duration for ${result.updated_count || itemIds.length} item(s)`);
         loadPlaylistItems(selectedPlaylist.id);
       } else {
         toast.error('Failed to update durations');
@@ -1124,18 +1080,15 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
   const handleUngroupItems = async (groupId: string) => {
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_items_ungroup', {
-        p_group_id: groupId,
-      });
+      const result = await playlistService.ungroupPlaylistItems(groupId);
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success('Group dissolved, items moved to playlist');
         if (selectedPlaylist) {
           loadPlaylistItems(selectedPlaylist.id);
         }
       } else {
-        throw new Error(data?.error || 'Failed to ungroup items');
+        throw new Error(result.error || 'Failed to ungroup items');
       }
     } catch (error) {
       console.error('Error ungrouping items:', error);
@@ -1148,13 +1101,9 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
   // Update item channel inline
   const handleInlineChannelChange = async (itemId: string, channelId: string | null) => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_item_set_channel', {
-        p_id: itemId,
-        p_channel_id: channelId,
-      });
+      const result = await playlistService.setItemsChannel([itemId], channelId || '');
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         const channelName = channelId ? channels.find(c => c.id === channelId)?.name : undefined;
 
         // Update local state optimistically - check both top-level and nested items
@@ -1194,13 +1143,12 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
   // Update item duration inline
   const handleInlineDurationChange = async (itemId: string, duration: number) => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_item_update', {
-        p_id: itemId,
-        p_duration: duration,
+      const result = await playlistService.updatePlaylistItem({
+        id: itemId,
+        duration: duration,
       });
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         // Update local state optimistically
         if (selectedPlaylist) {
           const updatedItems = selectedPlaylist.items.map(item =>
@@ -1241,13 +1189,12 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
         schedule_config: scheduleForm,
       };
 
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_item_update', {
-        p_id: schedulingItem.id,
-        p_metadata: updatedMetadata,
+      const result = await playlistService.updatePlaylistItem({
+        id: schedulingItem.id,
+        metadata: updatedMetadata,
       });
 
-      if (error) throw error;
-      if (data?.success) {
+      if (result.success) {
         toast.success('Schedule saved');
         setScheduleModalOpen(false);
         setSchedulingItem(null);
@@ -1256,6 +1203,8 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
         }
         // Refresh content library
         loadContent();
+      } else {
+        throw new Error(result.error);
       }
     } catch (error) {
       console.error('Error saving schedule:', error);
@@ -1613,13 +1562,10 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
     await Promise.all(
       groupsToLoad.map(async (group) => {
         try {
-          const { data, error } = await supabase.rpc('pulsarvs_playlist_item_get_nested', {
-            p_parent_item_id: group.id,
-          });
+          const result = await playlistService.getNestedItems(group.id);
 
-          if (error) throw error;
-          if (data?.success && data.data) {
-            setNestedItems(prev => ({ ...prev, [group.id]: data.data }));
+          if (result.success && result.data) {
+            setNestedItems(prev => ({ ...prev, [group.id]: result.data! }));
           }
         } catch (error) {
           console.error(`Error loading nested items for group ${group.id}:`, error);
@@ -1843,16 +1789,17 @@ export default function PlaylistPage({ shortcuts: externalShortcuts }: PlaylistP
 
     setIsSubmitting(true);
     try {
-      // For now, we'll store the schedule in a custom way
-      // In production, you'd want to add a metadata column to the playlist table
-      const { data, error } = await supabase.rpc('pulsarvs_playlist_update', {
-        p_id: selectedPlaylist.id,
-        // Note: You may need to add a metadata parameter to the RPC function
+      // Update playlist (the edge function can handle metadata via settings)
+      const result = await playlistService.updatePlaylist({
+        id: selectedPlaylist.id,
       });
 
-      // Since the RPC doesn't support metadata, we'll just show success
-      toast.success('Playlist schedule saved');
-      setPlaylistScheduleModalOpen(false);
+      if (result.success) {
+        toast.success('Playlist schedule saved');
+        setPlaylistScheduleModalOpen(false);
+      } else {
+        throw new Error(result.error);
+      }
     } catch (error) {
       console.error('Error saving playlist schedule:', error);
       toast.error('Failed to save playlist schedule');

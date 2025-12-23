@@ -53,6 +53,10 @@ export {
   refreshSessionIfNeeded,
   checkAuthStatus,
   ensureAuth,
+  // JWT expiration handling
+  setJwtExpiredHandler,
+  clearJwtExpiredHandler,
+  resetJwtExpiredTrigger,
 } from './client';
 
 export type { User, Session } from './client';

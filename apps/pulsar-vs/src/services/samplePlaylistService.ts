@@ -1,5 +1,6 @@
 // Sample Playlist Service - Creates demo playlist with scheduled media events
 import { supabase } from '../lib/supabase';
+import * as playlistService from './supabase/playlistService';
 import type { ScheduleConfig, DayOfWeek } from '../types/playlist';
 
 // Sample media items with public domain / placeholder images
@@ -222,21 +223,20 @@ function getUpcomingHolidays(): string[] {
 
 export async function createSampleScheduledPlaylist(projectId: string): Promise<{ success: boolean; playlistId?: string; error?: string }> {
   try {
-    // 1. Create the playlist using RPC
-    const { data: playlistResult, error: playlistError } = await supabase.rpc('pulsarvs_playlist_create', {
-      p_name: 'Demo Schedule Playlist',
-      p_description: 'Sample playlist demonstrating scheduled media events across different time slots and days',
-      p_project_id: projectId,
-      p_loop_enabled: true,
+    // 1. Create the playlist using edge function
+    const playlistResult = await playlistService.createPlaylist({
+      name: 'Demo Schedule Playlist',
+      description: 'Sample playlist demonstrating scheduled media events across different time slots and days',
+      project_id: projectId,
+      loop_enabled: true,
     });
 
-    if (playlistError) throw playlistError;
-    if (!playlistResult?.success) throw new Error(playlistResult?.error || 'Failed to create playlist');
+    if (!playlistResult.success) throw new Error(playlistResult.error || 'Failed to create playlist');
 
     const playlistId = playlistResult.data?.id;
     if (!playlistId) throw new Error('No playlist ID returned');
 
-    // 2. Add playlist items with schedules using RPC
+    // 2. Add playlist items with schedules using edge function
     for (let index = 0; index < SAMPLE_MEDIA.length; index++) {
       const media = SAMPLE_MEDIA[index];
       const schedule = SAMPLE_SCHEDULES.find(s => s.name === media.name)?.config || {
@@ -244,27 +244,21 @@ export async function createSampleScheduledPlaylist(projectId: string): Promise<
         ruleType: 'daily' as const,
       };
 
-      const { data: itemResult, error: itemError } = await supabase.rpc('pulsarvs_playlist_item_add', {
-        p_playlist_id: playlistId,
-        p_item_type: 'media',
-        p_name: media.name,
-        p_content_id: null,
-        p_media_id: null,
-        p_folder_id: null,
-        p_channel_id: null,
-        p_duration: 30 + (index * 5), // Varying durations
-        p_scheduled_time: null,
-        p_metadata: {
+      const itemResult = await playlistService.addPlaylistItem({
+        playlist_id: playlistId,
+        item_type: 'media',
+        name: media.name,
+        duration: 30 + (index * 5), // Varying durations
+        metadata: {
           schedule_config: schedule,
           media_url: media.url,
           media_thumbnail: media.thumbnail,
           media_type: media.media_type,
         },
-        p_parent_item_id: null,
       });
 
-      if (itemError) {
-        console.error(`Error adding item ${media.name}:`, itemError);
+      if (!itemResult.success) {
+        console.error(`Error adding item ${media.name}:`, itemResult.error);
         // Continue adding other items even if one fails
       }
     }

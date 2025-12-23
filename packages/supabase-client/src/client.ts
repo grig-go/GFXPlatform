@@ -91,12 +91,62 @@ if (typeof import.meta !== 'undefined' && import.meta.env) {
 }
 
 
-// Custom fetch that disables caching
-const customFetch = (url: RequestInfo | URL, options: RequestInit = {}) => {
+// Global JWT expiration handler - will be set by apps that want auto-logout
+let onJwtExpired: (() => void) | null = null;
+
+/**
+ * Set the callback to be called when JWT expires (401 with JWT expired error)
+ * This allows apps to auto-logout users when their session expires
+ */
+export function setJwtExpiredHandler(handler: () => void): void {
+  onJwtExpired = handler;
+}
+
+/**
+ * Clear the JWT expiration handler
+ */
+export function clearJwtExpiredHandler(): void {
+  onJwtExpired = null;
+}
+
+// Track if we've already triggered the JWT expired handler to prevent multiple calls
+let jwtExpiredTriggered = false;
+
+/**
+ * Reset the JWT expired trigger (call this after user logs in again)
+ */
+export function resetJwtExpiredTrigger(): void {
+  jwtExpiredTriggered = false;
+}
+
+// Custom fetch that disables caching and handles JWT expiration
+const customFetch = async (url: RequestInfo | URL, options: RequestInit = {}) => {
   const headers = new Headers(options.headers);
   headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   headers.set('Pragma', 'no-cache');
-  return fetch(url, { ...options, headers, cache: 'no-store' });
+
+  const response = await fetch(url, { ...options, headers, cache: 'no-store' });
+
+  // Check for JWT expired error (401 with specific message)
+  if (response.status === 401 && onJwtExpired && !jwtExpiredTriggered) {
+    // Clone response to read body without consuming it
+    const clonedResponse = response.clone();
+    try {
+      const body = await clonedResponse.text();
+      if (body.includes('JWT expired') || body.includes('PGRST303')) {
+        console.warn('[Supabase] JWT expired detected, triggering logout handler');
+        jwtExpiredTriggered = true;
+        // Call handler asynchronously to not block the current request
+        setTimeout(() => {
+          onJwtExpired?.();
+        }, 0);
+      }
+    } catch {
+      // Ignore body read errors
+    }
+  }
+
+  return response;
 };
 
 /**

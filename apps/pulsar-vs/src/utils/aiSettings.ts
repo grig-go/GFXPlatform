@@ -1,4 +1,4 @@
-const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 
 export const GEMINI_MODELS = [
   'gemini-2.5-flash-lite',

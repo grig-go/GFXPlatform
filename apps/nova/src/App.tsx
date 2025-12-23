@@ -753,7 +753,7 @@ export default function App() {
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto auto-rows-fr">
           {homeConfigLoading ? (
             <div className="col-span-full text-center py-12">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
@@ -772,9 +772,10 @@ export default function App() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
+                  className="h-full"
                 >
                   <Card
-                    className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border min-h-[200px]"
+                    className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border h-full min-h-[200px]"
                     onClick={cardData.onClick}
                   >
                     <CardContent className="p-6 h-full flex flex-col">

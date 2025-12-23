@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabase';
+import * as projectService from '../services/supabase/projectService';
 import type { Project, CreateProjectParams, UpdateProjectParams } from '../types/project';
 
 interface ProjectContextType {
@@ -33,15 +33,18 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const loadProjects = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_get_projects');
-      
-      if (error) {
-        console.error('Error fetching projects:', error);
+      console.log('[ProjectContext] loadProjects called');
+      const result = await projectService.getProjects();
+      console.log('[ProjectContext] loadProjects result:', result);
+
+      if (!result.success) {
+        console.error('Error fetching projects:', result.error);
         return;
       }
-      
-      if (data?.success && data?.data) {
-        setProjects(data.data);
+
+      if (result.data) {
+        setProjects(result.data);
+        console.log('[ProjectContext] Projects loaded:', result.data.length);
       }
     } catch (err) {
       console.error('Error loading projects:', err);
@@ -51,20 +54,22 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   const loadActiveProject = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_get_active_project');
-      
-      if (error) {
-        console.error('Error fetching active project:', error);
+      console.log('[ProjectContext] loadActiveProject called');
+      const result = await projectService.getActiveProject();
+      console.log('[ProjectContext] loadActiveProject result:', result);
+
+      if (!result.success) {
+        console.error('Error fetching active project:', result.error);
         setActiveProjectState(null);
         setIsLoading(false);
         return;
       }
-      
-      if (data?.success && data?.data) {
-        setActiveProjectState(data.data);
-        console.log('[ProjectContext] Active project loaded:', data.data.name);
+
+      if (result.data) {
+        setActiveProjectState(result.data);
+        console.log('[ProjectContext] Active project loaded:', result.data.name);
       } else {
         setActiveProjectState(null);
         console.log('[ProjectContext] No active project found');
@@ -80,28 +85,20 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const createProjectFn = useCallback(async (params: CreateProjectParams): Promise<Project | null> => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_create_project', {
-        p_name: params.name,
-        p_description: params.description || null,
-        p_default_channel_id: params.default_channel_id || null,
-        p_default_instance_id: params.default_instance_id || null,
-        p_color: params.color || 'blue',
-        p_icon: params.icon || '📁',
-        p_settings: params.settings || {}
-      });
-      
-      if (error) {
-        console.error('Error creating project:', error);
-        toast.error('Failed to create project', { description: error.message });
+      const result = await projectService.createProject(params);
+
+      if (!result.success) {
+        console.error('Error creating project:', result.error);
+        toast.error('Failed to create project', { description: result.error });
         return null;
       }
-      
-      if (data?.success && data?.data) {
+
+      if (result.data) {
         await loadProjects();
         toast.success(`Project "${params.name}" created`);
-        return data.data;
+        return result.data;
       }
-      
+
       toast.error('Failed to create project');
       return null;
     } catch (err) {
@@ -113,32 +110,23 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const updateProjectFn = useCallback(async (params: UpdateProjectParams): Promise<Project | null> => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_update_project', {
-        p_id: params.id,
-        p_name: params.name || null,
-        p_description: params.description || null,
-        p_default_channel_id: params.default_channel_id || null,
-        p_default_instance_id: params.default_instance_id || null,
-        p_color: params.color || null,
-        p_icon: params.icon || null,
-        p_settings: params.settings || null
-      });
-      
-      if (error) {
-        console.error('Error updating project:', error);
-        toast.error('Failed to update project', { description: error.message });
+      const result = await projectService.updateProject(params);
+
+      if (!result.success) {
+        console.error('Error updating project:', result.error);
+        toast.error('Failed to update project', { description: result.error });
         return null;
       }
-      
-      if (data?.success && data?.data) {
+
+      if (result.data) {
         await loadProjects();
         if (activeProject?.id === params.id) {
           await loadActiveProject();
         }
         toast.success('Project updated');
-        return data.data;
+        return result.data;
       }
-      
+
       toast.error('Failed to update project');
       return null;
     } catch (err) {
@@ -153,27 +141,21 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       console.log('[ProjectContext] No active project to update channel');
       return;
     }
-    
+
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_update_project', {
-        p_id: activeProject.id,
-        p_name: null,
-        p_description: null,
-        p_default_channel_id: channelId,
-        p_default_instance_id: null,
-        p_color: null,
-        p_icon: null,
-        p_settings: null
+      const result = await projectService.updateProject({
+        id: activeProject.id,
+        default_channel_id: channelId,
       });
-      
-      if (error) {
-        console.error('Error updating project channel:', error);
+
+      if (!result.success) {
+        console.error('Error updating project channel:', result.error);
         return;
       }
-      
-      if (data?.success && data?.data) {
+
+      if (result.data) {
         await loadProjects();
-        if (activeProject?.id === data.data.id) {
+        if (activeProject?.id === result.data.id) {
           await loadActiveProject();
         }
         console.log('[ProjectContext] Project channel updated to:', channelId);
@@ -186,20 +168,18 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   const setActiveProjectFn = useCallback(async (projectId: string) => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_set_active_project', {
-        p_id: projectId
-      });
-      
-      if (error) {
-        console.error('Error setting active project:', error);
-        toast.error('Failed to switch project', { description: error.message });
+      const result = await projectService.setActiveProject(projectId);
+
+      if (!result.success) {
+        console.error('Error setting active project:', result.error);
+        toast.error('Failed to switch project', { description: result.error });
         return;
       }
-      
-      if (data?.success && data?.data) {
-        setActiveProjectState(data.data);
+
+      if (result.data) {
+        setActiveProjectState(result.data);
         await loadProjects();
-        toast.success(`Switched to "${data.data.name}"`);
+        toast.success(`Switched to "${result.data.name}"`);
       } else {
         toast.error('Failed to switch project');
       }
@@ -213,27 +193,20 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
   const deleteProjectFn = useCallback(async (projectId: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('pulsarvs_delete_project', {
-        p_id: projectId
-      });
-      
-      if (error) {
-        console.error('Error deleting project:', error);
-        toast.error('Failed to delete project', { description: error.message });
+      const result = await projectService.deleteProject(projectId);
+
+      if (!result.success) {
+        console.error('Error deleting project:', result.error);
+        toast.error('Failed to delete project', { description: result.error });
         return false;
       }
-      
-      if (data?.success) {
-        await loadProjects();
-        if (activeProject?.id === projectId) {
-          setActiveProjectState(null);
-        }
-        toast.success('Project deleted');
-        return true;
+
+      await loadProjects();
+      if (activeProject?.id === projectId) {
+        setActiveProjectState(null);
       }
-      
-      toast.error('Failed to delete project');
-      return false;
+      toast.success('Project deleted');
+      return true;
     } catch (err) {
       console.error('Error deleting project:', err);
       toast.error('Failed to delete project');

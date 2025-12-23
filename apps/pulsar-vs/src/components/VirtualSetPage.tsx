@@ -58,8 +58,8 @@ import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useProject } from "./ProjectContext";
 
-const supabaseUrl = import.meta.env.VITE_PULSAR_VS_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const publicAnonKey = import.meta.env.VITE_PULSAR_VS_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 import { ProjectSelector } from "./ProjectSelector";
 import { ProjectManagementModal } from "./ProjectManagementModal";
 import {

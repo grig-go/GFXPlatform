@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { ContactSupportDialog } from './ContactSupportDialog';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 type PageView = 'virtual-set' | 'playlist';
 
@@ -58,6 +59,7 @@ export function TopBar({
   onPageChange,
 }: TopBarProps = {}) {
   const { t } = useTranslation('nav');
+  const { user, organization, signOut, isAuthenticated } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
   const [contactSupportOpen, setContactSupportOpen] = useState(false);
   const [channelsOpen, setChannelsOpen] = useState(false);
@@ -227,6 +229,18 @@ export function TopBar({
     label: t('menus.settings'),
     icon: Settings,
     sections: [
+      // User info section (only show if authenticated)
+      ...(isAuthenticated && user ? [{
+        label: user.full_name || user.email,
+        items: [
+          {
+            id: 'user-org',
+            label: organization?.name || 'Organization',
+            icon: User,
+            disabled: true,
+          },
+        ],
+      }] : []),
       {
         label: t('settings.preferences'),
         items: [
@@ -259,7 +273,7 @@ export function TopBar({
             label: t('settings.signOut'),
             icon: LogOut,
             variant: 'destructive' as const,
-            onClick: () => console.log('Sign Out')
+            onClick: () => signOut(),
           },
         ],
       },
