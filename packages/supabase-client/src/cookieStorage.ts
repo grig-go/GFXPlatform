@@ -150,9 +150,22 @@ export const cookieStorage = {
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
-        const cookieDomain = getCookieDomain();
-        setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
-        console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME });
+        const encodedSize = encodeURIComponent(minimalTokens).length;
+        console.log('[Auth SSO] Cookie data sizes', {
+          rawSize: minimalTokens.length,
+          encodedSize,
+          accessTokenLen: sessionData.access_token.length,
+          refreshTokenLen: sessionData.refresh_token.length
+        });
+
+        // Cookies have a ~4KB limit. If too large, skip cookie (will use URL token relay instead)
+        if (encodedSize > 4000) {
+          console.warn('[Auth SSO] Cookie too large, skipping cookie storage. Use URL token relay for SSO.');
+        } else {
+          const cookieDomain = getCookieDomain();
+          setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
+          console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME, encodedSize });
+        }
       }
     } catch (e) {
       // Value might not be JSON, just store in localStorage only
@@ -389,6 +402,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.7');
+  console.log('[Auth SSO] Module loaded - version 1.0.8');
   syncCookieToLocalStorage();
 }
