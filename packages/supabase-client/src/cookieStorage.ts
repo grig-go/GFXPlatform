@@ -392,5 +392,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
+  console.log('[Auth SSO] Module loaded - version 1.0.4');
   syncCookieToLocalStorage();
 }
