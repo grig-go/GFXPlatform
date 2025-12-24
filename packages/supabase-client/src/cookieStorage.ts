@@ -109,6 +109,7 @@ export const cookieStorage = {
 
     // First check localStorage
     const localValue = localStorage.getItem(key);
+    console.log('[Auth SSO] getItem called', { key, hasLocalValue: !!localValue, localValueLength: localValue?.length });
     if (localValue) {
       return localValue;
     }
@@ -388,6 +389,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.6');
+  console.log('[Auth SSO] Module loaded - version 1.0.7');
   syncCookieToLocalStorage();
 }
