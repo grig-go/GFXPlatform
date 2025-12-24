@@ -37,12 +37,44 @@ import {
   initializeAgentsData,
   setOnDataChange
 } from "./data/agentsData";
-import { mockFinanceData } from "./data/mockFinanceData";
-import { mockSportsData } from "./data/mockSportsData";
-import { mockWeatherData } from "./data/mockWeatherData";
-import { mockNewsData } from "./data/mockNewsData";
-import { mockFeedsData } from "./data/mockFeedsData";
-import { mockUsersData } from "./data/mockUsersData";
+// Empty initial data structures - no mock data to prevent flash before backend loads
+import type { FinanceDashboardData } from "./types/finance";
+import type { SportsData } from "./types/sports";
+import type { WeatherDashboardData } from "./types/weather";
+import type { FeedsData } from "./types/feeds";
+import type { UsersGroupsData } from "./types/usersGroups";
+
+const emptyFinanceData: FinanceDashboardData = {
+  securities: [],
+  watchlists: [],
+  lastUpdated: new Date().toISOString()
+};
+
+const emptySportsData: SportsData = {
+  leagues: [],
+  teams: [],
+  players: [],
+  games: [],
+  venues: [],
+  tournaments: [],
+  lastUpdated: new Date().toISOString()
+};
+
+const emptyWeatherData: WeatherDashboardData = {
+  locations: [],
+  lastUpdated: new Date().toISOString()
+};
+
+const emptyFeedsData: FeedsData = {
+  feeds: [],
+  providers: []
+};
+
+const emptyUsersData: UsersGroupsData = {
+  users: [],
+  groups: [],
+  organizations: []
+};
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
 import { useSportsData } from "./utils/useSportsData";
@@ -68,12 +100,13 @@ export default function App() {
   const [initialUsersGroupsTab, setInitialUsersGroupsTab] = useState<'users' | 'groups' | 'organizations' | undefined>(undefined);
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
-  const [financeData, setFinanceData] = useState(mockFinanceData);
-  const [sportsData, setSportsData] = useState(mockSportsData);
-  const [weatherData, setWeatherData] = useState(mockWeatherData);
-  const [feedsData, setFeedsData] = useState(mockFeedsData);
+  // Initialize with empty data to prevent mock data flash before backend loads
+  const [financeData, setFinanceData] = useState(emptyFinanceData);
+  const [sportsData, setSportsData] = useState(emptySportsData);
+  const [weatherData, setWeatherData] = useState(emptyWeatherData);
+  const [feedsData, setFeedsData] = useState(emptyFeedsData);
   const [agentsData, setAgentsData] = useState(importedAgentsData);
-  const [usersData, setUsersData] = useState(mockUsersData);
+  const [usersData, setUsersData] = useState(emptyUsersData);
   const [showDashboardConfig, setShowDashboardConfig] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
   const [dashboardConfigLoading, setDashboardConfigLoading] = useState(true);

@@ -6,7 +6,27 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 // ============================================================================
 // SUPABASE CLIENT
 // ============================================================================
-const getSupabaseClient = ()=>createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+// Service role client - bypasses RLS (use only for admin/write operations)
+const getSupabaseClient = ()=>createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+// User-scoped client - respects RLS based on user's JWT
+const getUserClient = (authHeader: string | null) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(supabaseUrl, supabaseAnonKey);
+};
 // ============================================================================
 // SERVER SETUP
 // ============================================================================
@@ -69,10 +89,13 @@ app.get("/health", (c)=>{
 // ============================================================================
 // NEWS ARTICLES ROUTES
 // ============================================================================
-// Get stored articles from database
+// Get stored articles from database (respects RLS for org filtering)
 app.get("/news-articles/stored", async (c)=>{
   try {
-    const supabase = getSupabaseClient();
+    const authHeader = c.req.header("Authorization");
+    const userClient = getUserClient(authHeader);
+    console.log(`[NEWS STORED] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
     // Get query parameters
     const url = new URL(c.req.url);
     const limit = parseInt(url.searchParams.get("limit") || "100");
@@ -89,8 +112,8 @@ app.get("/news-articles/stored", async (c)=>{
       country,
       search
     });
-    // Build query
-    let query = supabase.from("news_articles").select("*", {
+    // Build query - use userClient for RLS filtering
+    let query = userClient.from("news_articles").select("*", {
       count: "exact"
     });
     // Apply filters

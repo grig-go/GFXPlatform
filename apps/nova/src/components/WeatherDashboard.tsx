@@ -664,52 +664,7 @@ export function WeatherDashboard({
   );
 
 
-
   // Don't block the entire page while loading - show the dashboard with loading states
-
-  // Show helpful message when no locations are configured
-  if (locations.length === 0 && !loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-              <Cloud className="w-6 h-6 text-blue-600" />
-              Weather Dashboard
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Monitor weather conditions with real-time data and forecasts
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <p className="text-xs text-muted-foreground">
-              Last updated {new Date(lastUpdated).toLocaleTimeString()}
-            </p>
-          </div>
-        </div>
-
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Cloud className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="mb-2">No Weather Locations</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Add locations to start monitoring weather conditions. You'll need to configure a weather provider first.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" onClick={onNavigateToProviders} className="gap-2">
-                <Wind className="w-4 h-4" />
-                Manage Weather Providers
-              </Button>
-              <WeatherLocationSearch 
-                onAddLocation={handleAddLocation}
-                existingLocationIds={[]}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

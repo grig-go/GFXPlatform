@@ -8,14 +8,33 @@ import { XMLParser } from "npm:fast-xml-parser";
 // ----------------------------------------------------------------------------
 // Supabase client
 // ----------------------------------------------------------------------------
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const LEGACY_TLS_PROXY_URL = Deno.env.get("LEGACY_TLS_PROXY_URL"); // e.g., https://your-app.railway.app
 console.log("[school_closing] Booting function…");
 console.log("🔍 SUPABASE_URL:", SUPABASE_URL);
 console.log("🔍 SUPABASE_SERVICE_ROLE_KEY (present?):", !!SUPABASE_SERVICE_ROLE_KEY);
 console.log("🔍 LEGACY_TLS_PROXY_URL:", LEGACY_TLS_PROXY_URL || "(not set)");
+
+// Service role client - bypasses RLS (use only for admin/write operations)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// User-scoped client - respects RLS based on user's JWT
+const getUserClient = (authHeader: string | null) => {
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+};
 // ----------------------------------------------------------------------------
 // Server setup
 // ----------------------------------------------------------------------------
@@ -46,11 +65,15 @@ app.use("/*", cors({
   credentials: true
 }));
 // ----------------------------------------------------------------------------
-// GET / - Fetch table contents for UI
+// GET / - Fetch table contents for UI (respects RLS for org filtering)
 // ----------------------------------------------------------------------------
 app.get("/", async (c)=>{
   console.log("📥 Fetching school_closings table...");
-  const { data, error } = await supabase.from("school_closings").select("*").order("fetched_at", {
+  const authHeader = c.req.header("Authorization");
+  const userClient = getUserClient(authHeader);
+  console.log(`[school_closing] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
+  const { data, error } = await userClient.from("school_closings").select("*").order("fetched_at", {
     ascending: false
   });
   if (error) {
