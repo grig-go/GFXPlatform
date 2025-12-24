@@ -1,5 +1,6 @@
 // Re-export everything from the shared supabase-client package
 // This ensures there's only ONE Supabase client instance across the app
+// and enables SSO via shared cookie storage
 export {
   supabase,
   isSupabaseConfigured,
@@ -17,17 +18,43 @@ export {
   ensureFreshConnection,
   forceReconnect,
   getTimeSinceLastSuccess,
+  // Connection health monitoring
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
   // Fresh client for critical operations
   createFreshClient,
   // Direct REST API (bypasses Supabase client entirely)
   directRestUpdate,
   directRestSelect,
+  directRestInsert,
+  directRestDelete,
   // Beacon for window close scenarios
   sendBeaconUpdate,
   // Cookie storage for SSO
   cookieStorage,
   SHARED_AUTH_STORAGE_KEY,
   migrateLocalStorageToCookie,
+  // Cross-app SSO helpers
+  getUrlWithAuthToken,
+  receiveAuthTokenFromUrl,
+  navigateWithAuth,
+  AUTH_TOKEN_PARAM,
+  // URL and config helpers
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  getProjectId,
+  getEdgeFunctionUrl,
+  getRestUrl,
+  getSupabaseHeaders,
+  // Timeout and auto-recovery helpers
+  withTimeout,
+  withAutoRecovery,
+  // Session management
+  sessionReady,
+  refreshSessionIfNeeded,
+  checkAuthStatus,
+  ensureAuth,
   // JWT expiration handling
   setJwtExpiredHandler,
   clearJwtExpiredHandler,

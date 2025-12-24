@@ -28,7 +28,7 @@ const app = new Hono().basePath("/create-user");
 app.use("*", cors({
   origin: "*",
   allowMethods: ["POST", "OPTIONS"],
-  allowHeaders: ["Authorization", "Content-Type", "apikey", "x-client-info"],
+  allowHeaders: ["Authorization", "Content-Type", "apikey", "x-client-info", "cache-control", "pragma", "expires"],
 }));
 
 // ============================================================================

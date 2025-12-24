@@ -5,7 +5,6 @@
  * Instructs users to run the create-superuser script.
  */
 
-import React from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Terminal, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';

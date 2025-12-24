@@ -67,7 +67,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Use withAutoRecovery to handle stuck connections
       const { data, error } = await withAutoRecovery(
-        (client) => client
+        async (client) => await client
           .from('u_users')
           .select('id')
           .eq('is_superuser', true)
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.log('[Auth] Query: u_users where auth_user_id =', authUserId);
       const startTime = Date.now();
       const { data: userData, error: userError } = await withAutoRecovery(
-        (client) => client
+        async (client) => await client
           .from('u_users')
           .select(`
             *,
@@ -180,9 +180,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.error('Error fetching group permissions:', groupPermsError);
         }
 
-        groupPermissions = groupPermsData
+        groupPermissions = (groupPermsData
           ?.map((p: any) => getPermKey(p))
-          .filter(Boolean) || [];
+          .filter((x): x is string => x !== null) || []);
       }
 
       // Fetch direct user permissions
@@ -200,10 +200,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const directPermissions = directPermsData
         ?.map((p: any) => getPermKey(p))
-        .filter(Boolean) || [];
+        .filter((x): x is string => x !== null) || [];
 
       // Combine and deduplicate permissions
-      const allPermissions = [...new Set([...groupPermissions, ...directPermissions])];
+      const allPermissions: string[] = [...new Set([...groupPermissions, ...directPermissions])];
 
       // Fetch channel access for Pulsar
       const { data: channelAccessData, error: channelAccessError } = await supabase
@@ -459,7 +459,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Sign in
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });

@@ -42,7 +42,6 @@ export function ProtectedRoute({
     hasAnyPermission,
     hasAllPermissions,
     canReadPage,
-    isSuperuser,
   } = usePermissions();
 
   // Track auth view (login or signup)
@@ -86,7 +85,6 @@ export function ProtectedRoute({
     }
     return (
       <LoginPage
-        appName={appName}
         onNavigateToSignUp={() => setAuthView('signup')}
       />
     );

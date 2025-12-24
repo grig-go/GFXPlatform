@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, receiveAuthTokenFromUrl, sessionReady } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
 // Timeout helper for async operations
@@ -182,6 +182,18 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
 
         try {
+          // Check for auth token in URL (from cross-app SSO)
+          // This must happen BEFORE checking session to store the token first
+          const receivedToken = receiveAuthTokenFromUrl();
+          if (receivedToken) {
+            console.log('[authStore] Received auth token from URL (cross-app SSO)');
+          }
+
+          // Wait for session to be restored from cookie storage before proceeding
+          console.log('[authStore] Waiting for session restoration from cookie storage...');
+          await sessionReady;
+          console.log('[authStore] Session restoration complete');
+
           // Get current session with a timeout to prevent hanging
           // If session fetch times out, continue without session (user can log in manually)
           const sessionResult = await withTimeoutNull(

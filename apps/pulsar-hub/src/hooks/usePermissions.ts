@@ -78,7 +78,7 @@ export function usePermissions(): UsePermissionsReturn {
   // Check if user has a specific permission
   const hasPermission = useCallback((
     permission: PermissionKey,
-    options?: PermissionCheckOptions
+    _options?: PermissionCheckOptions
   ): boolean => {
     // Superusers have all permissions
     if (isSuperuser) return true;
