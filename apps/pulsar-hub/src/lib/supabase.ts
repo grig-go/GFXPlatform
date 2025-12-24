@@ -1,16 +1,40 @@
-import { createClient } from "@supabase/supabase-js";
+/**
+ * Supabase client for Pulsar Hub
+ * Re-exports from the shared @emergent-platform/supabase-client package
+ * This enables SSO across all Emergent apps via shared cookie storage
+ */
 
-// Pulsar Hub uses the same Supabase project as Nexus
-const supabaseUrl = import.meta.env.VITE_PULSAR_HUB_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_PULSAR_HUB_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+export {
+  supabase,
+  // Auth helpers
+  sessionReady,
+  receiveAuthTokenFromUrl,
+  checkAuthStatus,
+  initializeAuth,
+  getCurrentUser,
+  isAuthInitialized,
+  waitForAuth,
+  signOut,
+  // Connection management
+  isSupabaseHealthy,
+  reconnectSupabase,
+  markSupabaseSuccess,
+  withAutoRecovery,
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
+  // URL helpers
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  getEdgeFunctionUrl,
+  // Cookie storage for SSO
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+} from '@emergent-platform/supabase-client';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing Supabase environment variables (VITE_PULSAR_HUB_SUPABASE_URL or VITE_SUPABASE_URL). Check your .env file."
-  );
-}
+export type { User, Session } from '@supabase/supabase-js';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Export URL and key for edge function calls
-export { supabaseUrl, supabaseAnonKey as publicAnonKey };
+// Backward-compatible exports
+import { getSupabaseUrl, getSupabaseAnonKey } from '@emergent-platform/supabase-client';
+export const supabaseUrl = getSupabaseUrl();
+export const publicAnonKey = getSupabaseAnonKey();
