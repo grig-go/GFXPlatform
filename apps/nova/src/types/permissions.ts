@@ -137,6 +137,8 @@ export interface AuditLogEntry {
 export interface AuthState {
   user: AppUserWithPermissions | null;
   organization: Organization | null;  // Current user's organization
+  impersonatedOrganization: Organization | null;  // Organization being impersonated (superuser only)
+  effectiveOrganization: Organization | null;  // The org to use for queries (impersonated or actual)
   session: {
     access_token: string;
     refresh_token: string;

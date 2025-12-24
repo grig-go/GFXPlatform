@@ -14,6 +14,9 @@ import {
   Rss,
   Tv,
   Ticket,
+  Building2,
+  ArrowLeftRight,
+  X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -21,6 +24,7 @@ import { SupportRequestDialog } from "./dialogs/SupportRequestDialog";
 import { SupportTicketsDialog } from "./dialogs/SupportTicketsDialog";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown, UserMenuConfig } from "./shared/SharedTopMenuBar";
 import { supabase } from "../utils/supabase/client";
+import { getUrlWithAuthToken } from "@emergent-platform/supabase-client";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
 
@@ -28,6 +32,7 @@ interface TopMenuBarProps {
   onNavigate: (view: string) => void;
   dashboardConfig?: any[];
   onOpenDashboardConfig?: () => void;
+  onNavigateToOrganizations?: () => void;
 }
 
 // Extended user type to include preferences
@@ -49,10 +54,11 @@ interface UserWithPreferences {
 export function TopMenuBar({
   onNavigate,
   dashboardConfig = [],
-  onOpenDashboardConfig
+  onOpenDashboardConfig,
+  onNavigateToOrganizations
 }: TopMenuBarProps) {
   // Auth hooks - user is the app user from u_users table
-  const { user, signOut } = useAuth();
+  const { user, signOut, availableOrganizations, impersonatedOrganization, impersonateOrganization, clearImpersonation } = useAuth();
   const { isAdmin, isSuperuser, canReadPage } = usePermissions();
 
   // Cast user to include preferences
@@ -194,7 +200,9 @@ export function TopMenuBar({
           label: app.name,
           onClick: () => {
             console.log('App clicked:', app.name, 'navigating to:', app.app_url);
-            window.open(app.app_url, '_blank');
+            // Use getUrlWithAuthToken to pass auth session to other apps (cross-app SSO)
+            const urlWithAuth = getUrlWithAuthToken(app.app_url);
+            window.open(urlWithAuth, '_blank');
           },
         })),
       },
@@ -245,6 +253,12 @@ export function TopMenuBar({
             icon: Users,
             onClick: () => onNavigate('users-groups')
           },
+          ...(isSuperuser && onNavigateToOrganizations ? [{
+            id: 'organizations',
+            label: 'Organizations',
+            icon: Building2,
+            onClick: onNavigateToOrganizations
+          }] : []),
           {
             id: 'ai-connections',
             label: 'AI Connections',
@@ -259,6 +273,33 @@ export function TopMenuBar({
           }] : [])
         ],
       },
+      // Organization impersonation section (superuser only)
+      ...(isSuperuser ? [{
+        label: 'Switch Organization',
+        items: [
+          // Clear impersonation option (only when impersonating)
+          ...(impersonatedOrganization ? [{
+            id: 'clear-impersonation',
+            label: `Exit: ${impersonatedOrganization.name}`,
+            icon: X,
+            onClick: () => clearImpersonation(),
+          }] : []),
+          // List all available organizations
+          ...availableOrganizations.map(org => ({
+            id: `org-${org.id}`,
+            label: org.name,
+            icon: Building2,
+            onClick: () => impersonateOrganization(org),
+          })),
+          // Show message if no organizations
+          ...(availableOrganizations.length === 0 ? [{
+            id: 'no-orgs',
+            label: 'No organizations available',
+            icon: Building2,
+            disabled: true,
+          }] : []),
+        ],
+      }] : []),
     ],
   } : undefined;
 
@@ -370,6 +411,22 @@ export function TopMenuBar({
           />
         }
       />
+
+      {/* Impersonation Banner */}
+      {impersonatedOrganization && (
+        <div className="bg-orange-500/15 border-b border-orange-500/30 px-4 py-2 flex items-center justify-center gap-2">
+          <Building2 className="w-4 h-4 text-orange-600" />
+          <span className="text-orange-700 dark:text-orange-400 text-sm font-medium">
+            Viewing as: {impersonatedOrganization.name}
+          </span>
+          <button
+            onClick={() => clearImpersonation()}
+            className="ml-2 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Support Request Dialog */}
       <SupportRequestDialog

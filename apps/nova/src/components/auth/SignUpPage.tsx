@@ -62,19 +62,29 @@ export function SignUpPage({ appName = 'Nova', onSignUpSuccess, onNavigateToLogi
       const { data, error } = await supabase
         .rpc('validate_u_invitation_token', { p_token: token });
 
-      if (error || !data) {
+      if (error || !data || data.length === 0) {
         setError('Invalid or expired invitation link.');
         setInviteToken(null);
         return;
       }
 
+      // RPC returns a TABLE, so data is an array - get the first row
+      const inviteData = data[0];
+
+      // Check if the invitation is valid
+      if (!inviteData.is_valid) {
+        setError(inviteData.error_message || 'Invalid or expired invitation link.');
+        setInviteToken(null);
+        return;
+      }
+
       setInvitationInfo({
-        organization_name: data.organization_name,
-        organization_id: data.organization_id,
-        role: data.role,
-        email: data.email,
+        organization_name: inviteData.organization_name,
+        organization_id: inviteData.organization_id,
+        role: inviteData.role,
+        email: inviteData.email,
       });
-      setEmail(data.email);
+      setEmail(inviteData.email);
     } catch (err) {
       console.error('Error validating invitation:', err);
       setError('Failed to validate invitation.');
@@ -138,9 +148,9 @@ export function SignUpPage({ appName = 'Nova', onSignUpSuccess, onNavigateToLogi
         return;
       }
 
-      // If we have an invitation, accept it
+      // If we have an invitation, accept it (this also creates the u_users record)
       if (inviteToken && invitationInfo) {
-        const { error: acceptError } = await supabase
+        const { data: acceptData, error: acceptError } = await supabase
           .rpc('accept_u_invitation', {
             p_token: inviteToken,
             p_user_id: authData.user.id,
@@ -149,6 +159,8 @@ export function SignUpPage({ appName = 'Nova', onSignUpSuccess, onNavigateToLogi
         if (acceptError) {
           console.error('Error accepting invitation:', acceptError);
           // Don't fail the signup, just log the error
+        } else if (acceptData && acceptData.length > 0 && !acceptData[0].success) {
+          console.error('Failed to accept invitation:', acceptData[0].error_message);
         }
       }
 

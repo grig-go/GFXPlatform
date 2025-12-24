@@ -8,8 +8,22 @@
 // User status enum
 export type UserStatus = 'active' | 'pending' | 'inactive';
 
+// Organization role enum
+export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';
+
 // Application keys
 export type AppKey = 'system' | 'nova' | 'pulsar';
+
+// Organization structure
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  settings?: Record<string, unknown>;
+  allowed_domains?: string[];
+  created_at: string;
+  updated_at: string;
+}
 
 // Permission structure from database
 export interface Permission {
@@ -104,6 +118,12 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+// User organization membership
+export interface UserOrganization {
+  organization: Organization;
+  role: OrgRole;
+}
+
 // Auth context state
 export interface AuthState {
   user: AppUserWithPermissions | null;
@@ -118,6 +138,10 @@ export interface AuthState {
   isAdmin: boolean;
   isPending: boolean;
   systemLocked: boolean; // True if no superuser exists
+  // Organization support
+  organization: Organization | null; // User's actual organization
+  impersonatedOrganization: Organization | null; // Organization being impersonated (superuser only)
+  effectiveOrganization: Organization | null; // The org to use for queries (impersonated or actual)
 }
 
 // Permission check options

@@ -31,6 +31,10 @@ interface AuthContextValue extends AuthState {
   sendInvitation: (email: string, role: OrgRole) => Promise<{ error: Error | null; invitation?: Invitation }>;
   revokeInvitation: (invitationId: string) => Promise<{ error: Error | null }>;
   getInvitations: () => Promise<Invitation[]>;
+  // Organization impersonation (superuser only)
+  availableOrganizations: Organization[];
+  impersonateOrganization: (org: Organization | null) => void;
+  clearImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -43,6 +47,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>({
     user: null,
     organization: null,
+    impersonatedOrganization: null,
+    effectiveOrganization: null,
     session: null,
     isLoading: true,
     isAuthenticated: false,
@@ -54,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   });
 
   const [channelAccess, setChannelAccess] = useState<ChannelAccess[]>([]);
+  const [availableOrganizations, setAvailableOrganizations] = useState<Organization[]>([]);
 
   // Track if initialization is in progress to prevent race conditions
   const initializingRef = useRef(false);
@@ -286,11 +293,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Check if user is org admin (owner or admin in their organization)
     const isOrgAdmin = userData.org_role === 'owner' || userData.org_role === 'admin';
 
+    // For superusers, fetch all available organizations for impersonation
+    if (userData.is_superuser) {
+      try {
+        const { data: allOrgs, error: orgsError } = await supabase
+          .from('u_organizations')
+          .select('*')
+          .order('name');
+
+        if (orgsError) {
+          console.error('[Auth] Error fetching organizations for superuser:', orgsError);
+        } else {
+          console.log('[Auth] Fetched organizations for superuser:', allOrgs?.length || 0);
+          setAvailableOrganizations(allOrgs || []);
+        }
+      } catch (err) {
+        console.error('[Auth] Error fetching organizations for superuser:', err);
+      }
+    }
+
     console.log('[Auth] Setting authenticated state, isAdmin:', isAdmin, 'isSuperuser:', userData.is_superuser, 'isOrgAdmin:', isOrgAdmin);
     setState(prev => ({
       ...prev,
       user: userData,
       organization,
+      effectiveOrganization: prev.impersonatedOrganization || organization,
       session: {
         access_token: session.access_token,
         refresh_token: session.refresh_token,
@@ -482,6 +509,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       ...prev,
       user: null,
       organization: null,
+      impersonatedOrganization: null,
+      effectiveOrganization: null,
       session: null,
       isAuthenticated: false,
       isSuperuser: false,
@@ -490,6 +519,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isPending: false,
     }));
     setChannelAccess([]);
+    setAvailableOrganizations([]);
+    sessionStorage.removeItem('nova_impersonated_org');
 
     // Clear the shared auth cookie (this is where the session is stored)
     cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
@@ -623,6 +654,56 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [state.user?.organization_id]);
 
+  // Impersonate an organization (superuser only)
+  const impersonateOrganization = useCallback((org: Organization | null) => {
+    if (!state.isSuperuser) {
+      console.warn('Only superusers can impersonate organizations');
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      impersonatedOrganization: org,
+      effectiveOrganization: org || prev.organization,
+    }));
+
+    // Store impersonation in sessionStorage so it persists across page refreshes
+    if (org) {
+      sessionStorage.setItem('nova_impersonated_org', JSON.stringify(org));
+    } else {
+      sessionStorage.removeItem('nova_impersonated_org');
+    }
+  }, [state.isSuperuser]);
+
+  // Clear impersonation
+  const clearImpersonation = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      impersonatedOrganization: null,
+      effectiveOrganization: prev.organization,
+    }));
+    sessionStorage.removeItem('nova_impersonated_org');
+  }, []);
+
+  // Restore impersonation from sessionStorage on mount
+  useEffect(() => {
+    if (state.isSuperuser && state.isAuthenticated) {
+      const stored = sessionStorage.getItem('nova_impersonated_org');
+      if (stored) {
+        try {
+          const org = JSON.parse(stored) as Organization;
+          setState(prev => ({
+            ...prev,
+            impersonatedOrganization: org,
+            effectiveOrganization: org,
+          }));
+        } catch {
+          sessionStorage.removeItem('nova_impersonated_org');
+        }
+      }
+    }
+  }, [state.isSuperuser, state.isAuthenticated]);
+
   const value: AuthContextValue = {
     ...state,
     signIn,
@@ -634,6 +715,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     sendInvitation,
     revokeInvitation,
     getInvitations,
+    availableOrganizations,
+    impersonateOrganization,
+    clearImpersonation,
   };
 
   return (
