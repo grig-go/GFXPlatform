@@ -1,10 +1,15 @@
+import { useState } from 'react';
 import HomePage from './components/HomePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/auth/LoginPage';
+import { SignUpPage } from './components/auth/SignUpPage';
 import { Loader2 } from 'lucide-react';
+
+type AuthView = 'login' | 'signup';
 
 function AppContent() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [authView, setAuthView] = useState<AuthView>('login');
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -18,9 +23,20 @@ function AppContent() {
     );
   }
 
-  // Show login page if not authenticated
+  // Show login or signup page if not authenticated
   if (!isAuthenticated) {
-    return <LoginPage />;
+    if (authView === 'signup') {
+      return (
+        <SignUpPage
+          onNavigateToLogin={() => setAuthView('login')}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        onNavigateToSignUp={() => setAuthView('signup')}
+      />
+    );
   }
 
   // Show main app if authenticated

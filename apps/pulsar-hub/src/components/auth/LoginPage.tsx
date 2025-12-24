@@ -1,30 +1,24 @@
 /**
- * Login Page Component for Pulsar MCR
+ * Login Page Component
  *
- * Full-page login form using BlueprintJS components.
- * Layout matches Nova and Pulsar Hub for consistency.
+ * Full-page login form for Pulsar Hub.
  */
 
 import React, { useState } from 'react';
-import {
-  Card,
-  FormGroup,
-  InputGroup,
-  Button,
-  Callout,
-  Intent,
-  Spinner,
-  SpinnerSize,
-} from '@blueprintjs/core';
+import { Loader2, Eye, EyeOff, LogIn, AlertCircle, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../hooks/useTheme';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Alert, AlertDescription } from '../ui/alert';
 
 interface LoginPageProps {
   onLoginSuccess?: () => void;
   onNavigateToSignUp?: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigateToSignUp }) => {
+export function LoginPage({ onLoginSuccess, onNavigateToSignUp }: LoginPageProps) {
   const { signIn, isLoading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [email, setEmail] = useState('');
@@ -64,55 +58,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
 
   const isLoading = authLoading || isSubmitting;
 
-  const lockButton = (
-    <Button
-      icon={showPassword ? 'eye-off' : 'eye-open'}
-      intent={Intent.NONE}
-      minimal={true}
-      onClick={() => setShowPassword(!showPassword)}
-      tabIndex={-1}
-    />
-  );
-
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: 'var(--bg-primary)',
-        padding: '20px',
-        position: 'relative',
-      }}
-    >
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
       {/* Theme toggle button */}
       <Button
-        icon={theme === 'dark' ? 'flash' : 'moon'}
-        minimal
+        variant="ghost"
+        size="icon"
         onClick={toggleTheme}
+        className="absolute top-4 right-4"
         title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-        }}
-      />
+      >
+        {theme === 'dark' ? (
+          <Sun className="h-5 w-5" />
+        ) : (
+          <Moon className="h-5 w-5" />
+        )}
+      </Button>
 
-      <div style={{ width: '100%', maxWidth: '400px' }}>
-        {/* Logo/Branding - side by side like Nova/Pulsar Hub */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-            marginBottom: '32px',
-          }}
-        >
+      <div className="w-full max-w-md">
+        {/* Logo/Branding - side by side like TopBar */}
+        <div className="flex items-center justify-center gap-4 mb-8">
           {/* Emergent Logo */}
           <svg
-            style={{ height: '28px', color: 'var(--text-primary)' }}
+            className="h-7 text-foreground"
             viewBox="0 0 1185 176"
             xmlns="http://www.w3.org/2000/svg"
             aria-label="EMERGENT"
@@ -137,58 +105,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
             </g>
           </svg>
 
-          {/* Pulsar MCR with Icon */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                height: '40px',
-                width: '40px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #137cbd, #9179f2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              }}
-            >
-              <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold' }}>P</span>
+          {/* Pulsar with Icon */}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 flex items-center justify-center shadow-sm">
+              <span className="text-white text-lg font-bold">P</span>
             </div>
-            <span style={{ fontSize: '24px', fontWeight: 500, color: 'var(--text-primary)' }}>
-              Pulsar MCR
-            </span>
+            <span className="text-2xl font-medium">Pulsar</span>
           </div>
         </div>
 
         {/* Login Card */}
-        <Card
-          elevation={3}
-          style={{
-            padding: '24px',
-            backgroundColor: 'var(--bg-secondary)',
-          }}
-        >
-          <h2
-            style={{
-              margin: '0 0 24px',
-              textAlign: 'center',
-              fontSize: '20px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-            }}
-          >
+        <div className="bg-card border border-border rounded-lg p-6 shadow-xl">
+          <h2 className="text-xl font-semibold mb-6 text-center">
             Welcome Back
           </h2>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <Callout intent={Intent.DANGER} style={{ marginBottom: '20px' }}>
-                {error}
-              </Callout>
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
-            <FormGroup label="Email" labelFor="email-input" style={{ marginBottom: '15px' }}>
-              <InputGroup
-                id="email-input"
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
@@ -197,70 +140,65 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                 required
                 autoComplete="email"
                 autoFocus
-                large
               />
-            </FormGroup>
+            </div>
 
-            <FormGroup label="Password" labelFor="password-input" style={{ marginBottom: '25px' }}>
-              <InputGroup
-                id="password-input"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-                required
-                autoComplete="current-password"
-                rightElement={lockButton}
-                large
-              />
-            </FormGroup>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                  required
+                  autoComplete="current-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
 
             <Button
               type="submit"
-              intent={Intent.PRIMARY}
-              fill
-              large
+              className="w-full"
               disabled={isLoading || !email || !password}
-              icon={isLoading ? undefined : 'log-in'}
             >
               {isLoading ? (
                 <>
-                  <Spinner size={SpinnerSize.SMALL} />
-                  <span style={{ marginLeft: '8px' }}>Signing in...</span>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
                 </>
               ) : (
-                'Sign In'
+                <>
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Sign In
+                </>
               )}
             </Button>
           </form>
-        </Card>
+        </div>
 
         {/* Sign Up Link */}
         {onNavigateToSignUp && (
-          <p
-            style={{
-              textAlign: 'center',
-              marginTop: '16px',
-              marginBottom: 0,
-              color: 'var(--text-secondary)',
-              fontSize: '14px',
-            }}
-          >
+          <p className="text-center text-sm text-muted-foreground mt-4">
             Don't have an account?{' '}
             <button
               onClick={onNavigateToSignUp}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#137cbd',
-                cursor: 'pointer',
-                padding: 0,
-                fontSize: '14px',
-                textDecoration: 'none',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
-              onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}
+              className="text-primary hover:underline"
             >
               Sign up
             </button>
@@ -268,21 +206,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
         )}
 
         {/* Footer */}
-        <p
-          style={{
-            textAlign: 'center',
-            marginTop: '24px',
-            marginBottom: 0,
-            color: 'var(--text-secondary)',
-            fontSize: '12px',
-          }}
-        >
+        <p className="text-center text-xs text-muted-foreground mt-6">
           By signing in, you agree to our{' '}
           <a
             href="https://www.emergent.solutions/terms-of-service"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--text-secondary)', textDecoration: 'underline' }}
+            className="underline hover:text-foreground transition-colors"
           >
             Terms of Service
           </a>{' '}
@@ -291,7 +221,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
             href="https://www.emergent.solutions/private-policy"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--text-secondary)', textDecoration: 'underline' }}
+            className="underline hover:text-foreground transition-colors"
           >
             Privacy Policy
           </a>
@@ -300,6 +230,4 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
       </div>
     </div>
   );
-};
-
-export default LoginPage;
+}

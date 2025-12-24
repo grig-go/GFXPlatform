@@ -1,7 +1,10 @@
 // Pulsar GFX Channel Types (Placeholder for future implementation)
 // A "Channel" represents a video output destination with multiple layers
 
-import type { PlaybackState } from './database';
+/**
+ * Playback state for a layer
+ */
+export type PlaybackState = 'idle' | 'playing' | 'paused' | 'stopped' | 'error';
 
 /**
  * A Channel represents a single video output (e.g., "Program", "Preview", "CG1")

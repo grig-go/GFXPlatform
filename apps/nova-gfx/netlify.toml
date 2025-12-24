@@ -1,5 +1,6 @@
 [build]
-  command = "cd ../.. && pnpm install && pnpm --filter nova-gfx build && pnpm --filter docs build && cp -r apps/docs/build apps/nova-gfx/dist/docs"
+  # Force fresh install and rebuild - clean dist first to avoid stale cache
+  command = "cd ../.. && rm -rf apps/nova-gfx/dist && pnpm install && pnpm --filter nova-gfx build && pnpm --filter docs build && cp -r apps/docs/build apps/nova-gfx/dist/docs"
   publish = "dist"
   functions = "netlify/functions"
 

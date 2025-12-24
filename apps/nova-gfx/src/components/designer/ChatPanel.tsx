@@ -508,6 +508,7 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   const pendingAIChangesRef = useRef<{ changes: any; messageId: string } | null>(null); // Stores pending changes when user wants to skip images
   const skipImagesRef = useRef(false); // Flag to skip remaining image generation
   const imageGenAbortRef = useRef<AbortController | null>(null); // AbortController for image generation
+  const staleCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // Stale connection check interval
   const [isSkippingImages, setIsSkippingImages] = useState(false); // UI state for skip button visibility
   const shouldRestartRecognition = useRef(false); // Track if we should auto-restart
   // Track last failed request for auto-retry on duplicate message
@@ -566,6 +567,60 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps) {
   const [modelDisplayInfo, setModelDisplayInfo] = useState<AIModelDisplayInfo | null>(null);
   useEffect(() => {
     getCurrentModelDisplayInfo().then(setModelDisplayInfo).catch(console.warn);
+  }, []);
+
+  // Subscribe to auth state changes - cleanup when user signs out
+  // This prevents stale timers from interfering with sign-in after JWT expiration
+  useEffect(() => {
+    const unsubscribe = useAuthStore.subscribe((state, prevState) => {
+      // User just signed out
+      if (prevState.user && !state.user) {
+        console.log('[ChatPanel] User signed out - cleaning up active requests');
+
+        // Clear stale connection check interval first
+        if (staleCheckIntervalRef.current) {
+          clearInterval(staleCheckIntervalRef.current);
+          staleCheckIntervalRef.current = null;
+        }
+
+        // Abort any ongoing chat request
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+
+        // Abort any ongoing image generation
+        if (imageGenAbortRef.current) {
+          imageGenAbortRef.current.abort();
+          imageGenAbortRef.current = null;
+        }
+
+        // Reset loading state
+        setIsLoading(false);
+        setCreationProgress({ phase: 'idle', message: '' });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up any active intervals/controllers when component unmounts
+      if (staleCheckIntervalRef.current) {
+        clearInterval(staleCheckIntervalRef.current);
+        staleCheckIntervalRef.current = null;
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      if (imageGenAbortRef.current) {
+        imageGenAbortRef.current.abort();
+        imageGenAbortRef.current = null;
+      }
+    };
   }, []);
 
   // Load available endpoints on mount
@@ -2437,12 +2492,20 @@ The AI provider will be automatically available once configured.`,
     let lastActivityTime = Date.now();
     let staleConnectionDetected = false;
     const STALE_CONNECTION_TIMEOUT_MS = 30000;
-    const staleCheckInterval = setInterval(() => {
+
+    // Clear any previous stale check interval before creating a new one
+    if (staleCheckIntervalRef.current) {
+      clearInterval(staleCheckIntervalRef.current);
+    }
+    staleCheckIntervalRef.current = setInterval(() => {
       if (Date.now() - lastActivityTime > STALE_CONNECTION_TIMEOUT_MS) {
         console.warn('[ChatPanel] Stale connection detected - no activity for 30s, auto-cancelling');
         staleConnectionDetected = true;
         abortControllerRef.current?.abort();
-        clearInterval(staleCheckInterval);
+        if (staleCheckIntervalRef.current) {
+          clearInterval(staleCheckIntervalRef.current);
+          staleCheckIntervalRef.current = null;
+        }
       }
     }, 5000);
 
@@ -2801,7 +2864,10 @@ The AI provider will be automatically available once configured.`,
       }
     } finally {
       // Clean up stale connection checker
-      clearInterval(staleCheckInterval);
+      if (staleCheckIntervalRef.current) {
+        clearInterval(staleCheckIntervalRef.current);
+        staleCheckIntervalRef.current = null;
+      }
 
       setIsLoading(false);
       abortControllerRef.current = null;

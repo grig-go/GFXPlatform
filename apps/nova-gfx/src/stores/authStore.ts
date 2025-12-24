@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured, setJwtExpiredHandler, resetJwtExpiredTrigger } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, setJwtExpiredHandler, resetJwtExpiredTrigger, receiveAuthTokenFromUrl, sessionReady } from '@/lib/supabase';
 import { initializeAIModelsFromBackend } from '@/lib/ai';
 
 // Default dev organization ID - used when user has no organization_id
@@ -119,6 +119,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     set({ isLoading: true });
 
     try {
+      // Check for auth token in URL (from cross-app SSO)
+      // This must happen BEFORE checking session to store the token first
+      const receivedToken = receiveAuthTokenFromUrl();
+      if (receivedToken) {
+        console.log('[Auth] Received auth token from URL (cross-app SSO)');
+      }
+
+      // Wait for session to be restored from cookie storage before proceeding
+      console.log('[Auth] Waiting for session restoration from cookie storage...');
+      await sessionReady;
+      console.log('[Auth] Session restoration complete');
+
       // Use Supabase SDK to get session - it reads from cookie storage automatically
       // This enables SSO because all apps share the same cookie
       console.log('[Auth] Checking for existing session via Supabase SDK...');

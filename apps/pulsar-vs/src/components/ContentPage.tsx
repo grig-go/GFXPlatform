@@ -895,30 +895,61 @@ function ContentPage({ onPlayContent, selectedChannel, refreshTrigger }: Content
 
       console.log('📡 Using channel:', channelName);
 
+      // Fetch object_path from pulsar_connections via get_instance_by_channel RPC
+      let objectPath: string | null = null;
+      const { data: instanceData, error: instanceError } = await supabase.rpc('get_instance_by_channel', {
+        p_channel_name: channelName,
+      });
+
+      if (!instanceError && instanceData?.success && instanceData?.data) {
+        objectPath = instanceData.data.object_path;
+        console.log('📍 Got object_path from instance:', objectPath);
+      }
+
+      // If not in RPC response, try fetching directly from pulsar_connections
+      // Query by friendly_name since that matches the channel name from the channels table
+      if (!objectPath) {
+        const { data: connectionData, error: connectionError } = await supabase
+          .from('pulsar_connections')
+          .select('object_path')
+          .eq('friendly_name', channelName)
+          .single();
+
+        if (!connectionError && connectionData?.object_path) {
+          objectPath = connectionData.object_path;
+          console.log('📍 Got object_path from pulsar_connections:', objectPath);
+        }
+      }
+
+      // Require object_path from database - no fallback to avoid version mismatches
+      if (!objectPath) {
+        console.error('❌ No object_path configured in pulsar_connections for channel:', channelName);
+        toast.error('No object_path configured for this channel. Please configure it in pulsar_connections.');
+        return;
+      }
+
       // Detect project type from tags, project_type field, or scene_config fields
       const isAirport = item.project_type === 'Airport' ||
         item.tags?.includes('airport') ||
         (item.scene_config && ('timeOfDay' in item.scene_config || 'BaseDown' in item.scene_config));
 
       console.log('📋 Project type:', isAirport ? 'Airport' : 'VirtualSet');
+      console.log('📍 Using object_path:', objectPath);
 
       if (isAirport) {
-        // Airport: send scene parameters only
+        // Airport: send scene parameters only - use ALL fields from scene_config
         const airportParams = item.scene_config || {};
+        const parameters: Record<string, string> = {};
+        Object.entries(airportParams).forEach(([key, value]) => {
+          if (key !== 'summary' && typeof value === 'string') {
+            parameters[key] = value;
+          }
+        });
+
         const messageObject = {
-          objectPath: "/Game/UEDPIE_0_RigLevel01.RigLevel01:PersistentLevel.SceneController_C_1",
+          objectPath: objectPath,
           functionName: "ChangeScene",
-          parameters: {
-            timeOfDay: airportParams.timeOfDay || "",
-            environment_background: airportParams.environment_background || "",
-            BaseDown: airportParams.BaseDown || "",
-            BaseTop: airportParams.BaseTop || "",
-            DecoDown: airportParams.DecoDown || "",
-            DecoTop: airportParams.DecoTop || "",
-            ElementDown: airportParams.ElementDown || "",
-            ElementMiddle: airportParams.ElementMiddle || "",
-            ElementTop: airportParams.ElementTop || "",
-          },
+          parameters,
         };
         console.log('✈️ Airport command:', messageObject);
 
@@ -937,21 +968,18 @@ function ContentPage({ onPlayContent, selectedChannel, refreshTrigger }: Content
         // VirtualSet: send scene parameters and backdrop as SEPARATE messages
         const vsParams = item.scene_config || {};
 
-        // Message 1: Scene configuration (matches VirtualSetPage exactly)
+        // Message 1: Scene configuration - use ALL fields from scene_config dynamically
+        const parameters: Record<string, string> = {};
+        Object.entries(vsParams).forEach(([key, value]) => {
+          if (key !== 'summary' && typeof value === 'string') {
+            parameters[key] = value;
+          }
+        });
+
         const sceneMessage = {
-          objectPath: "/Game/-Levels/UEDPIE_0_CleanLevel.CleanLevel:PersistentLevel.BP_SetManager_v4_C_1",
+          objectPath: objectPath,
           functionName: "ChangeScene",
-          parameters: {
-            WallLeft: vsParams.WallLeft || "",
-            WallRight: vsParams.WallRight || "",
-            WallBack: vsParams.WallBack || "",
-            Back: vsParams.Back || "",
-            Platform: vsParams.Platform || "",
-            Roof: vsParams.Roof || "",
-            Screen: vsParams.Screen || "",
-            Columns: vsParams.Columns || "",
-            Floor: vsParams.Floor || "",
-          },
+          parameters,
         };
         console.log('🏠 VirtualSet scene command:', sceneMessage);
 
@@ -965,7 +993,7 @@ function ContentPage({ onPlayContent, selectedChannel, refreshTrigger }: Content
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           const backdropMessage = {
-            objectPath: "/Game/-Levels/UEDPIE_0_CleanLevel.CleanLevel:PersistentLevel.BP_SetManager_v4_C_1",
+            objectPath: objectPath,
             functionName: "SetBackdropImage",
             parameters: { URL: item.backdrop_url }
           };

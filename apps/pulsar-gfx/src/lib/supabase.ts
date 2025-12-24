@@ -1,31 +1,64 @@
-import { createClient, User, Session } from '@supabase/supabase-js';
+// Re-export everything from the shared supabase-client package
+// This ensures there's only ONE Supabase client instance across the app
+// and enables SSO via shared cookie storage
+export {
+  supabase,
+  isSupabaseConfigured,
+  isDevUserConfigured,
+  initializeAuth,
+  getCurrentUser,
+  isAuthInitialized,
+  waitForAuth,
+  signOut,
+  // Connection management
+  isSupabaseHealthy,
+  reconnectSupabase,
+  markSupabaseSuccess,
+  markSupabaseFailure,
+  ensureFreshConnection,
+  forceReconnect,
+  getTimeSinceLastSuccess,
+  // Connection health monitoring
+  startConnectionMonitor,
+  stopConnectionMonitor,
+  isConnectionHealthy,
+  // Fresh client for critical operations
+  createFreshClient,
+  // Direct REST API (bypasses Supabase client entirely)
+  directRestUpdate,
+  directRestSelect,
+  directRestInsert,
+  directRestDelete,
+  // Beacon for window close scenarios
+  sendBeaconUpdate,
+  // Cookie storage for SSO
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  migrateLocalStorageToCookie,
+  // Cross-app SSO helpers
+  getUrlWithAuthToken,
+  receiveAuthTokenFromUrl,
+  navigateWithAuth,
+  AUTH_TOKEN_PARAM,
+  // URL and config helpers
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  getProjectId,
+  getEdgeFunctionUrl,
+  getRestUrl,
+  getSupabaseHeaders,
+  // Timeout and auto-recovery helpers
+  withTimeout,
+  withAutoRecovery,
+  // Session management
+  sessionReady,
+  refreshSessionIfNeeded,
+  checkAuthStatus,
+  ensureAuth,
+  // JWT expiration handling
+  setJwtExpiredHandler,
+  clearJwtExpiredHandler,
+  resetJwtExpiredTrigger,
+} from '@emergent-platform/supabase-client';
 
-// Get Supabase credentials from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Validate environment variables
-if (!supabaseUrl) {
-  console.error('Missing VITE_SUPABASE_URL environment variable');
-}
-if (!supabaseAnonKey) {
-  console.error('Missing VITE_SUPABASE_ANON_KEY environment variable');
-}
-
-// Create Supabase client (will be null if credentials are missing)
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  : null as any;
-
-// Helper to check if Supabase is configured
-export function isSupabaseConfigured(): boolean {
-  return Boolean(supabaseUrl && supabaseAnonKey);
-}
-
-// Re-export types for convenience
-export type { User, Session };
+export type { User, Session } from '@supabase/supabase-js';

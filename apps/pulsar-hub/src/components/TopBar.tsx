@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { SupportRequestDialog } from "./SupportRequestDialog";
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, type SupportedLanguage } from "@/i18n";
 
@@ -35,6 +36,7 @@ interface TopBarProps {
 
 export function TopBar({ onOpenConfig }: TopBarProps) {
   const { t } = useTranslation('nav');
+  const { user, signOut, isSuperuser, isAdmin } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
@@ -47,6 +49,21 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
       app_key: string;
     }>
   >([]);
+
+  // Get user initials for avatar
+  const getUserInitials = (email?: string, name?: string | null): string => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   // Initialize dark mode from localStorage
   useEffect(() => {
@@ -328,14 +345,106 @@ export function TopBar({ onOpenConfig }: TopBarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* User Icon */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-[rgb(0,0,0)] dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <User className="w-5 h-5" />
-          </Button>
+          {/* User Menu */}
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-8 w-8 rounded-full bg-violet-200 dark:bg-violet-300 text-violet-700 hover:opacity-90"
+                >
+                  <span className="text-sm font-semibold">
+                    {getUserInitials(user.email, user.full_name)}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-56 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              >
+                {/* User Info with Role */}
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-0.5">
+                    {(isSuperuser || isAdmin) && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {isSuperuser ? 'Superuser' : 'Administrator'}
+                      </p>
+                    )}
+                    {user.full_name && (
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {user.full_name}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {user.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+
+                {/* Preferences */}
+                <DropdownMenuLabel className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('settings.preferences')}
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={toggleDarkMode}
+                  className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                >
+                  {darkMode ? (
+                    <>
+                      <Sun className="w-4 h-4 me-2" />
+                      {t('settings.lightMode')}
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4 me-2" />
+                      {t('settings.darkMode')}
+                    </>
+                  )}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+
+                {/* Account Settings - opens Nova */}
+                <DropdownMenuItem
+                  className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                  onClick={() => {
+                    // Open Nova with account settings
+                    const novaUrl = import.meta.env.DEV
+                      ? 'http://localhost:5173?openSettings=true'
+                      : '/nova?openSettings=true';
+                    window.open(novaUrl, '_blank');
+                  }}
+                >
+                  <User className="w-4 h-4 me-2" />
+                  {t('settings.accountSettings')}
+                </DropdownMenuItem>
+
+                {/* Support Tickets - for @emergent.new users */}
+                {user.email?.endsWith('@emergent.new') && (
+                  <DropdownMenuItem
+                    className="text-slate-700 dark:text-slate-100 cursor-pointer"
+                    onClick={() => setShowSupportDialog(true)}
+                  >
+                    <HelpCircle className="w-4 h-4 me-2" />
+                    Support Tickets
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+
+                {/* Sign Out */}
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="text-red-600 dark:text-red-400 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 me-2" />
+                  {t('settings.signOut')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 

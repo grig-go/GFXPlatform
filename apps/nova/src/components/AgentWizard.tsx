@@ -29,7 +29,8 @@ import * as agentWizardApi from "../utils/agentWizardApi";
 
 const supabaseUrl = import.meta.env.VITE_NOVA_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
 const publicAnonKey = import.meta.env.VITE_NOVA_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const novaBaseUrl = import.meta.env.VITE_NOVA_URL || '';
+// Nova API base URL points to Supabase edge functions
+const novaApiBaseUrl = `${supabaseUrl}/functions/v1`;
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
@@ -1067,9 +1068,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             type: 'api',
             category: 'Nova Weather',
             api_config: {
-              url: `${novaBaseUrl}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
+              url: `${novaApiBaseUrl}/nova-weather?type=current&channel=all&dataProvider=all&state=all`,
               method: 'GET',
-              headers: {},
+              headers: { 'Authorization': `Bearer ${publicAnonKey}` },
               data_path: 'locations',  // Use data_path for the actual field
               dataPath: 'locations',    // Keep both for compatibility
               dynamicUrlParams: [],
@@ -1104,9 +1105,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             type: 'api',
             category: 'Nova Election',
             api_config: {
-              url: `${novaBaseUrl}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
+              url: `${novaApiBaseUrl}/nova-election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
               method: 'GET',
-              headers: {},
+              headers: { 'Authorization': `Bearer ${publicAnonKey}` },
               data_path: 'races',  // Use data_path for the actual field
               dataPath: 'races',    // Keep both for compatibility
               dynamicUrlParams: [],
@@ -1141,9 +1142,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             type: 'api',
             category: 'Nova Finance',
             api_config: {
-              url: `${novaBaseUrl}/nova/finance?type=all&change=all&symbol=all`,
+              url: `${novaApiBaseUrl}/nova-finance?type=all&change=all&symbol=all`,
               method: 'GET',
-              headers: {},
+              headers: { 'Authorization': `Bearer ${publicAnonKey}` },
               data_path: 'securities',  // Use data_path for the actual field
               dataPath: 'securities',    // Keep both for compatibility
               dynamicUrlParams: [],
@@ -1177,9 +1178,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             type: 'api',
             category: 'Nova Sports',
             api_config: {
-              url: `${novaBaseUrl}/nova/sports?view=teams&league=all&provider=all`,
+              url: `${novaApiBaseUrl}/nova-sports?view=teams&league=all&provider=all`,
               method: 'GET',
-              headers: {},
+              headers: { 'Authorization': `Bearer ${publicAnonKey}` },
               data_path: 'data',  // Use data_path for the actual field
               dataPath: 'data',    // Keep both for compatibility
               dynamicUrlParams: [],
@@ -1474,7 +1475,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         authConfig: authData?.authConfig || formData.authConfig, // Use synchronously returned auth data
         status: formData.status || 'ACTIVE',
         cache: formData.cache || '15M',
-        url: `${novaBaseUrl}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
+        url: `${novaApiBaseUrl}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
         created: editAgent?.created || new Date().toISOString(),
         lastRun: editAgent?.lastRun,
         runCount: editAgent?.runCount || 0,
@@ -4042,6 +4043,43 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
+  // Auto-fetch sample data for existing data sources when editing an agent
+  // This ensures the field mapping step has data to display
+  // Must be placed after handleTestDataSource is defined
+  useEffect(() => {
+    const fetchSampleDataForExistingSources = async () => {
+      if (!editAgent || !open) return;
+
+      const dataSources = editAgent.dataSources || [];
+      if (dataSources.length === 0) return;
+
+      // Check if we already have sample data for all sources
+      const missingSampleData = dataSources.filter((ds: AgentDataSource) => !sampleData[ds.id]);
+      if (missingSampleData.length === 0) {
+        console.log('[EditMode] Sample data already exists for all sources');
+        return;
+      }
+
+      console.log('[EditMode] Auto-fetching sample data for', missingSampleData.length, 'data sources');
+
+      // Fetch sample data for each data source that's missing
+      for (const source of missingSampleData) {
+        try {
+          console.log('[EditMode] Fetching sample data for:', source.name);
+          await handleTestDataSource(source);
+          console.log('[EditMode] Successfully fetched sample data for:', source.name);
+        } catch (error) {
+          console.warn('[EditMode] Failed to fetch sample data for:', source.name, error);
+          // Don't fail completely - the user can manually test the connection
+        }
+      }
+    };
+
+    // Small delay to let formData be fully populated first
+    const timeoutId = setTimeout(fetchSampleDataForExistingSources, 500);
+    return () => clearTimeout(timeoutId);
+  }, [editAgent, open, sampleData]);
+
   const renderOutputFormat = () => {
     return (
       <OutputFormatStep
@@ -4358,7 +4396,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             <div>
               <p className="text-sm text-muted-foreground mb-2">Generated Endpoint</p>
               <code className="text-xs bg-muted p-2 rounded block break-all">
-                {novaBaseUrl}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
+                {novaApiBaseUrl}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
               </code>
             </div>
           </CardContent>
