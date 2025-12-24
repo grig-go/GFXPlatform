@@ -43,17 +43,28 @@ function setCookie(name: string, value: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
   const isSecure = window.location.protocol === 'https:';
-  let cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+  // Build cookie string - domain must come before other attributes for some browsers
+  let cookie = `${name}=${encodeURIComponent(value)}`;
+
+  if (domain) {
+    cookie += `; Domain=${domain}`;
+  }
+
+  cookie += '; Path=/; Max-Age=31536000; SameSite=None';
 
   if (isSecure) {
     cookie += '; Secure';
   }
 
-  if (domain) {
-    cookie += `; domain=${domain}`;
-  }
-
+  console.log('[Auth SSO] Setting cookie string:', cookie.substring(0, 100) + '...');
   document.cookie = cookie;
+
+  // Verify it was set
+  setTimeout(() => {
+    const allCookies = document.cookie;
+    const hasIt = allCookies.includes(name);
+    console.log('[Auth SSO] Cookie verification:', { cookieWasSet: hasIt, allCookiesLength: allCookies.length });
+  }, 100);
 }
 
 /**
