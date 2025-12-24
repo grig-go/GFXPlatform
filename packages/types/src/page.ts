@@ -1,7 +1,10 @@
 // Pulsar GFX Page Types (Placeholder for future implementation)
 // A "Page" is an instance of a Template with specific content values
 
-import type { TickerTopicType } from './database';
+/**
+ * Topic types for ticker items
+ */
+export type TickerTopicType = 'news' | 'sports' | 'weather' | 'finance' | 'entertainment' | 'breaking' | 'custom';
 
 /**
  * A Page is a runtime instance of a Template with filled-in data values.

@@ -695,7 +695,7 @@ export interface InteractiveAppRuntime {
     isSubmitting: boolean;
   }>;
   // Active timers
-  activeTimers: Map<string, NodeJS.Timeout>;
+  activeTimers: Map<string, ReturnType<typeof setTimeout>>;
   // Event queue
   eventQueue: InteractionEvent[];
   // Is processing

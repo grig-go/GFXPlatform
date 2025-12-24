@@ -1,7 +1,15 @@
 // Pulsar GFX Playout Types (Placeholder for future implementation)
 // Types for controlling playback state and sending commands to Nova Player
 
-import type { PlaybackStateType, PlaybackCommandType } from './database';
+/**
+ * Playback state types for a layer
+ */
+export type PlaybackStateType = 'idle' | 'playing' | 'paused' | 'stopped' | 'error';
+
+/**
+ * Basic playback command types
+ */
+export type PlaybackCommandType = 'play' | 'stop' | 'pause' | 'resume' | 'next' | 'previous' | 'cue';
 
 /**
  * Real-time playout state for a layer

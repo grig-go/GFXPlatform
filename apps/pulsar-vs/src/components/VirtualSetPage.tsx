@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -79,6 +79,7 @@ import {
 
 import { sendCommandToUnreal } from "../services/unreal/commandService";
 import { BackdropFilter } from "./BackdropFilter";
+import { ChatInput, ChatInputRef } from "./ChatInput";
 import { getAirportInstructions } from "../utils/aiSettingsApi";
 import type { BackdropAsset } from "./BackdropFilter";
 
@@ -242,6 +243,65 @@ function isAirportOptions(options: AvailableOptions): options is AirportAvailabl
   return 'timeOfDay' in options || 'BaseDown' in options;
 }
 
+// Helper functions for VirtualSet Actor:Material split dropdowns
+function parseActorMaterial(combined: string): { actor: string; material: string } {
+  const colonIndex = combined.indexOf(':');
+  if (colonIndex === -1) {
+    return { actor: combined, material: '' };
+  }
+  return {
+    actor: combined.substring(0, colonIndex),
+    material: combined.substring(colonIndex + 1),
+  };
+}
+
+function combineActorMaterial(actor: string, material: string): string {
+  if (!actor) return '';
+  if (!material) return actor;
+  return `${actor}:${material}`;
+}
+
+function getUniqueActors(options: string[]): string[] {
+  const actors = new Set<string>();
+  options.forEach(opt => {
+    // Skip empty strings, __none__, and other invalid values
+    if (!opt || opt === '' || opt === '__none__') return;
+    const { actor } = parseActorMaterial(opt);
+    if (actor && actor !== '__none__') actors.add(actor);
+  });
+  return Array.from(actors);
+}
+
+function getMaterialsForActor(options: string[], selectedActor: string): string[] {
+  const materials = new Set<string>();
+  options.forEach(opt => {
+    const { actor, material } = parseActorMaterial(opt);
+    if (actor === selectedActor && material) {
+      materials.add(material);
+    }
+  });
+  return Array.from(materials);
+}
+
+function getAllUniqueMaterials(options: string[]): string[] {
+  const materials = new Set<string>();
+  options.forEach(opt => {
+    // Skip empty strings, __none__, and other invalid values
+    if (!opt || opt === '' || opt === '__none__') return;
+
+    // If option has colon, extract material part
+    // If no colon, the option itself IS the material (material-only option)
+    if (opt.includes(':')) {
+      const { material } = parseActorMaterial(opt);
+      if (material && material !== '__none__') materials.add(material);
+    } else {
+      // Material-only option (no actor prefix)
+      materials.add(opt);
+    }
+  });
+  return Array.from(materials);
+}
+
 // Other interfaces
 interface ChannelConfig {
   id: string;
@@ -303,8 +363,6 @@ export default function VirtualSetPage({
   const { activeProject, updateProjectChannel } = useProject();
 
   // State
-  const [environmentPrompt, setEnvironmentPrompt] = useState("");
-  const [backgroundPrompt, setBackgroundPrompt] = useState("");
   const [isGeneratingEnvironment, setIsGeneratingEnvironment] = useState(false);
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [isSendingCommand, setIsSendingCommand] = useState(false);
@@ -324,8 +382,8 @@ export default function VirtualSetPage({
   const [backgroundAssistantResponses, setBackgroundAssistantResponses] = useState<string[]>([]);
   const environmentChatRef = useRef<HTMLDivElement>(null);
   const backgroundChatRef = useRef<HTMLDivElement>(null);
-  const environmentInputRef = useRef<HTMLTextAreaElement>(null);
-  const backgroundInputRef = useRef<HTMLTextAreaElement>(null);
+  const environmentInputRef = useRef<ChatInputRef>(null);
+  const backgroundInputRef = useRef<ChatInputRef>(null);
 
   // Speech recognition state
   const [isRecordingEnvironment, setIsRecordingEnvironment] = useState(false);
@@ -834,13 +892,28 @@ export default function VirtualSetPage({
 
           if (hasAllowedMaterials) {
             // Use only allowed materials for this actor
+            let foundMaterials = 0;
             actor.allowedMaterials.forEach((matId: string) => {
               const material = allMaterials.find((m: any) => m.materialid === matId);
               if (material) {
                 // Use Actor:MaterialID format (e.g., "BP_Floor:Wood1")
                 actorMaterialOptions.push(`${actorId}:${material.materialid}`);
+                foundMaterials++;
+              } else {
+                // Material not found in allMaterials - use the ID directly
+                // This handles cases where allowedMaterials uses different naming
+                actorMaterialOptions.push(`${actorId}:${matId}`);
+                foundMaterials++;
+                console.warn(`Material "${matId}" not found in allMaterials for actor ${actorId}, using ID directly`);
               }
             });
+            // If no materials were found, fall back to all materials
+            if (foundMaterials === 0) {
+              console.warn(`No valid materials found for actor ${actorId}, falling back to all materials`);
+              allMaterials.forEach((material: any) => {
+                actorMaterialOptions.push(`${actorId}:${material.materialid}`);
+              });
+            }
           } else {
             // No specific materials restricted - use ALL materials
             allMaterials.forEach((material: any) => {
@@ -1071,13 +1144,15 @@ export default function VirtualSetPage({
   // GENERATE ENVIRONMENT (UPDATED FOR BOTH TYPES)
   // ============================================
 
-  const generateEnvironment = async () => {
+  const generateEnvironment = useCallback(async (promptText: string) => {
+    const prompt = promptText;
+
     if (isGeneratingEnvironment) {
       console.log("⚠️ Already generating environment, skipping duplicate call...");
       return;
     }
 
-    if (!environmentPrompt.trim()) {
+    if (!prompt.trim()) {
       showSnackbar("Please enter an environment description", "warning");
       return;
     }
@@ -1088,7 +1163,7 @@ export default function VirtualSetPage({
     }
 
     setIsGeneratingEnvironment(true);
-    addDebugLog(`Generating environment for prompt: "${environmentPrompt}" (Type: ${currentProjectType})`);
+    addDebugLog(`Generating environment for prompt: "${prompt}" (Type: ${currentProjectType})`);
 
     try {
       // Always use backend provider (API key stored securely in database)
@@ -1104,11 +1179,11 @@ export default function VirtualSetPage({
         // Airport-specific AI prompt - load custom instructions
         const customInstructions = await getAirportInstructions();
         systemPrompt = buildAirportSystemPrompt(availableOptions as AirportAvailableOptions, customInstructions);
-        userPrompt = buildAirportUserPrompt(environmentPrompt, currentScene as AirportSceneParameters);
+        userPrompt = buildAirportUserPrompt(prompt, currentScene as AirportSceneParameters);
       } else {
         // VirtualSet-specific AI prompt (existing logic)
         systemPrompt = buildVirtualSetSystemPrompt(availableOptions as VirtualSetAvailableOptions);
-        userPrompt = buildVirtualSetUserPrompt(environmentPrompt, currentScene as VirtualSetSceneParameters);
+        userPrompt = buildVirtualSetUserPrompt(prompt, currentScene as VirtualSetSceneParameters);
       }
 
       const fullPrompt = systemPrompt + "\n\n" + userPrompt;
@@ -1149,17 +1224,14 @@ export default function VirtualSetPage({
       const assistantSummary = sceneParams.summary || "Scene updated successfully";
 
       // Add to history
-      setEnvironmentPromptHistory((prev) => [...prev, environmentPrompt]);
+      setEnvironmentPromptHistory((prev) => [...prev, prompt]);
       setEnvironmentAssistantResponses((prev) => [...prev, assistantSummary]);
-      setEnvironmentPrompt("");
 
       setTimeout(() => {
         if (environmentChatRef.current) {
           environmentChatRef.current.scrollTop = environmentChatRef.current.scrollHeight;
         }
-        if (environmentInputRef.current) {
-          environmentInputRef.current.focus();
-        }
+        environmentInputRef.current?.focus();
       }, 100);
     } catch (error) {
       console.error("Environment generation failed:", error);
@@ -1171,7 +1243,7 @@ export default function VirtualSetPage({
     } finally {
       setIsGeneratingEnvironment(false);
     }
-  };
+  }, [isGeneratingEnvironment, availableOptions, currentProjectType, aiProviders.text, currentScene, generatedFields]);
 
   // NEW: Build Airport system prompt
   const buildAirportSystemPrompt = (options: AirportAvailableOptions, customInstructions?: string): string => {
@@ -1405,7 +1477,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
     try {
       // Build parameters dynamically from the schema keys
-      const dynamicKeys = getOptionKeys();
+      const dynamicKeys = optionKeys;
       const dynamicParameters: Record<string, string> = {};
 
       for (const key of dynamicKeys) {
@@ -1593,8 +1665,8 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         else interimTranscript += transcript;
       }
       const currentText = finalTranscript + interimTranscript;
-      if (type === "environment") setEnvironmentPrompt(currentText);
-      else setBackgroundPrompt(currentText);
+      if (type === "environment") environmentInputRef.current?.setValue(currentText);
+      else backgroundInputRef.current?.setValue(currentText);
     };
 
     recognition.onerror = (event: any) => {
@@ -1966,19 +2038,21 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
   // BACKGROUND IMAGE GENERATION
   // ============================================
 
-  const generateBackgroundImage = async () => {
+  const generateBackgroundImage = useCallback(async (promptText: string) => {
+    const prompt = promptText;
+
     if (isGeneratingBackground) {
       console.log("⚠️ Already generating background, skipping duplicate call...");
       return;
     }
 
-    if (!backgroundPrompt.trim()) {
+    if (!prompt.trim()) {
       showSnackbar("Please enter a background description", "warning");
       return;
     }
 
     setIsGeneratingBackground(true);
-    addDebugLog(`Generating background image for prompt: "${backgroundPrompt}"`);
+    addDebugLog(`Generating background image for prompt: "${prompt}"`);
 
     try {
       // Always use backend provider (API key stored securely in database)
@@ -1992,7 +2066,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       const isEditMode = selectedBackdrop && maskDataUri;
 
       // Add to history immediately
-      setBackgroundPromptHistory((prev) => [...prev, backgroundPrompt]);
+      setBackgroundPromptHistory((prev) => [...prev, prompt]);
       setBackgroundAssistantResponses((prev) => [
         ...prev,
         isEditMode ? "Editing your image..." : "Generating your backdrop..."
@@ -2019,7 +2093,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         const backendEditResult = await editImageViaBackend(
           imageEditProviderId,
           selectedBackdrop!,  // Source image
-          backgroundPrompt    // What to generate/edit
+          prompt    // What to generate/edit
         );
 
         if (backendEditResult.error) {
@@ -2032,7 +2106,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         clearDrawing();
       } else {
         // GENERATE MODE: Create new image from scratch via backend
-        const enhancedPrompt = `Professional virtual set backdrop: ${backgroundPrompt}. High quality, cinematic lighting, broadcast quality, 4K resolution.`;
+        const enhancedPrompt = `Professional virtual set backdrop: ${prompt}. High quality, cinematic lighting, broadcast quality, 4K resolution.`;
 
         addDebugLog(`Calling backend image generation provider: ${imageGenProviderId}...`);
 
@@ -2053,71 +2127,80 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         const generatedImageUrl = result.imageUrl || `data:image/png;base64,${result.base64}`;
         addDebugLog(`Image ${isEditMode ? 'edited' : 'generated'} successfully: ${generatedImageUrl.substring(0, 100)}...`);
 
-        // Save to media library (only for new generations, optional - works without auth)
-        if (!isEditMode) {
+        // Save to media library (for both new generations and edits)
+        let savedImageUrl = generatedImageUrl; // Default to data URL
+        try {
+          // Try to get user session for authenticated save
+          let authToken = publicAnonKey;
           try {
-            // Try to get user session for authenticated save
-            let authToken = publicAnonKey;
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session?.access_token) {
-                authToken = session.access_token;
-              }
-            } catch {
-              // Use anon key if session fetch fails
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+              authToken = session.access_token;
             }
-
-            const response = await fetch(
-              `${supabaseUrl}/functions/v1/media-library`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${authToken}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  file_url: generatedImageUrl,
-                  name: backgroundPrompt.length > 50
-                    ? backgroundPrompt.substring(0, 47) + "..."
-                    : backgroundPrompt,
-                  description: backgroundPrompt,
-                  media_type: "image",
-                  ai_model_used: selectedModel,
-                  ai_prompt: backgroundPrompt,
-                  tags: ["virtual-set", "backdrop", "ai-generated"],
-                }),
-              }
-            );
-
-            if (response.ok) {
-              addDebugLog("Saved to media library");
-            } else {
-              // Don't fail the whole operation if media library save fails
-              console.warn("Media library save skipped (no auth or error)");
-            }
-          } catch (saveError) {
-            // Silently ignore - image generation still succeeded
-            console.warn("Media library save skipped:", saveError);
+          } catch {
+            // Use anon key if session fetch fails
           }
+
+          const response = await fetch(
+            `${supabaseUrl}/functions/v1/media-library`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                file_url: generatedImageUrl,
+                name: prompt.length > 50
+                  ? prompt.substring(0, 47) + "..."
+                  : prompt,
+                description: isEditMode ? `Edited: ${prompt}` : prompt,
+                media_type: "image",
+                ai_model_used: selectedModel,
+                ai_prompt: prompt,
+                tags: isEditMode
+                  ? ["virtual-set", "backdrop", "ai-edited"]
+                  : ["virtual-set", "backdrop", "ai-generated"],
+              }),
+            }
+          );
+
+          if (response.ok) {
+            const mediaData = await response.json();
+            // Use the URL from media library if available
+            // Response format is { data: { file_url, ... } }
+            const storageUrl = mediaData.data?.file_url || mediaData.url;
+            if (storageUrl) {
+              savedImageUrl = storageUrl;
+              addDebugLog(`Saved ${isEditMode ? 'edited' : 'generated'} image to media library: ${savedImageUrl}`);
+            } else {
+              addDebugLog(`Saved ${isEditMode ? 'edited' : 'generated'} image to media library (no URL returned)`);
+            }
+          } else {
+            // Don't fail the whole operation if media library save fails
+            console.warn("Media library save skipped (no auth or error)");
+          }
+        } catch (saveError) {
+          // Silently ignore - image generation still succeeded
+          console.warn("Media library save skipped:", saveError);
         }
 
         // Reload backdrops to show new/edited image
         await loadRecentBackdrops(backdropSearchQuery);
 
-        // Set as pending backdrop for preview - preserves session by updating current selection
-        setPendingBackdrop(generatedImageUrl);
-        setSelectedBackdrop(generatedImageUrl);
+        // Set as selected backdrop using the saved URL (from media library or data URL as fallback)
+        setPendingBackdrop(null); // Clear pending since we're setting it directly as selected
+        setSelectedBackdrop(savedImageUrl);
 
         // Update assistant response with friendly summary
         setBackgroundAssistantResponses((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = isEditMode
-            ? t('ai.doneUpdatedImage', { prompt: backgroundPrompt })
-            : t('ai.heresYourBackdrop', { prompt: backgroundPrompt });
+            ? t('ai.doneUpdatedImage', { prompt: prompt })
+            : t('ai.heresYourBackdrop', { prompt: prompt });
           return updated;
         });
 
-        setBackgroundPrompt("");
         showSnackbar(isEditMode ? t('toast.backgroundEdited') : t('toast.backgroundGenerated'), "success");
 
         // Auto-scroll to bottom
@@ -2125,9 +2208,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
           if (backgroundChatRef.current) {
             backgroundChatRef.current.scrollTop = backgroundChatRef.current.scrollHeight;
           }
-          if (backgroundInputRef.current) {
-            backgroundInputRef.current.focus();
-          }
+          backgroundInputRef.current?.focus();
         }, 100);
       } else {
         throw new Error(result.error || "Failed to generate image");
@@ -2148,13 +2229,13 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     } finally {
       setIsGeneratingBackground(false);
     }
-  };
+  }, [isGeneratingBackground, aiProviders.imageGen, aiProviders.imageEdit, selectedBackdrop, backdropSearchQuery, t]);
 
   // ============================================
-  // HELPER: Get option keys for current project type
+  // HELPER: Get option keys for current project type (memoized)
   // ============================================
 
-  const getOptionKeys = (): string[] => {
+  const optionKeys = useMemo((): string[] => {
     if (currentProjectType === "Airport") {
       return ["timeOfDay","environment_background", "BaseDown", "BaseTop", "DecoDown", "DecoTop", "ElementDown", "ElementMiddle", "ElementTop"];
     }
@@ -2170,7 +2251,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     }
     // Fallback to default keys for old schema
     return ["Floor", "WallLeft", "WallBack", "WallRight", "Platform", "Columns", "Roof", "Back", "Screen"];
-  };
+  }, [currentProjectType, availableOptions]);
 
   const getProjectIcon = () => {
     if (currentProjectType === "Airport") {
@@ -2488,7 +2569,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                     setEnvironmentAssistantResponses([]);
                     setCurrentScene(null);
                     setGeneratedFields(null);
-                    setEnvironmentPrompt("");
+                    environmentInputRef.current?.clear();
                     showSnackbar(t('toast.historyCleared'), "info");
                   }}
                 >
@@ -2533,46 +2614,19 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
               <div className="p-3 relative border">
                 <div className="flex gap-2 items-end">
-                  <div className="relative flex-1">
-                    <Textarea
-                      ref={environmentInputRef}
-                      placeholder={
-                        currentProjectType === "Airport"
-                          ? t('chat.airportExample')
-                          : t('chat.virtualSetExample')
-                      }
-                      value={environmentPrompt}
-                      onChange={(e) => setEnvironmentPrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (environmentPrompt.trim() && !isGeneratingEnvironment) {
-                            generateEnvironment();
-                          }
-                        }
-                      }}
-                      className="bg-background pr-24 resize-none min-h-[44px]"
-                      rows={1}
-                      disabled={isGeneratingEnvironment}
-                    />
-                    <Button
-                      size="icon"
-                      onClick={() => toggleSpeechRecognition("environment")}
-                      disabled={isGeneratingEnvironment}
-                      variant={isRecordingEnvironment ? "default" : "ghost"}
-                      className={`absolute end-12 bottom-2 h-8 w-8 ${isRecordingEnvironment ? "bg-red-500 hover:bg-red-600 animate-pulse" : ""}`}
-                    >
-                      {isRecordingEnvironment ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-                    </Button>
-                    <Button
-                      size="icon"
-                      onClick={generateEnvironment}
-                      disabled={isGeneratingEnvironment || !environmentPrompt.trim()}
-                      className="absolute end-2 bottom-2 h-8 w-8"
-                    >
-                      {isGeneratingEnvironment ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 rtl:-scale-x-100" />}
-                    </Button>
-                  </div>
+                  <ChatInput
+                    ref={environmentInputRef}
+                    placeholder={
+                      currentProjectType === "Airport"
+                        ? t('chat.airportExample')
+                        : t('chat.virtualSetExample')
+                    }
+                    onSubmit={generateEnvironment}
+                    isLoading={isGeneratingEnvironment}
+                    onMicClick={() => toggleSpeechRecognition("environment")}
+                    isRecording={isRecordingEnvironment}
+                    icon="send"
+                  />
 
                   <Button
                     variant={showGeneratedFields ? "default" : "outline"}
@@ -2611,10 +2665,93 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {availableOptions && getOptionKeys().map((key) => {
+                        {availableOptions && optionKeys.map((key) => {
                           const options = (availableOptions as any)[key] || [];
                           const value = (generatedFields as any)?.[key] || "";
+                          const isVirtualSetStrings = currentProjectType === "VirtualSet" && options.length > 0 && typeof options[0] === 'string';
 
+                          // For VirtualSet: parse current value into actor and material
+                          const { actor: currentActor, material: currentMaterial } = isVirtualSetStrings
+                            ? parseActorMaterial(value)
+                            : { actor: '', material: '' };
+
+                          // Get unique actors and ALL unique materials (independent selection)
+                          const uniqueActors = isVirtualSetStrings ? getUniqueActors(options as string[]) : [];
+                          const allMaterials = isVirtualSetStrings ? getAllUniqueMaterials(options as string[]) : [];
+
+                          // Handler to update combined value
+                          const updateCombinedValue = (newActor: string, newMaterial: string) => {
+                            const combined = combineActorMaterial(newActor, newMaterial);
+                            console.log(`🔄 Split dropdown change: ${key} = "${combined}" (actor: ${newActor}, material: ${newMaterial})`);
+                            setGeneratedFields((prevFields) => {
+                              const updatedFields = { ...(prevFields || {}), [key]: combined };
+                              console.log(`🔄 Updated ${key}:`, JSON.stringify(updatedFields, null, 2));
+                              return updatedFields as SceneParameters;
+                            });
+                            setCurrentScene((prevScene) => {
+                              return { ...(prevScene || {}), [key]: combined } as SceneParameters;
+                            });
+                          };
+
+                          // VirtualSet: Show split Actor/Material dropdowns
+                          if (isVirtualSetStrings) {
+                            return (
+                              <div key={key} className="space-y-2">
+                                <Label>{key}</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {/* Actor dropdown */}
+                                  <div className="min-w-0">
+                                    <Select
+                                      value={currentActor || "__none__"}
+                                      onValueChange={(val) => {
+                                        const newActor = val === "__none__" ? "" : val;
+                                        // Actor and material are independent - keep current material as-is
+                                        // Material dropdown will update its available options based on new actor
+                                        updateCombinedValue(newActor, currentMaterial);
+                                      }}
+                                    >
+                                      <SelectTrigger className="text-xs w-full [&>span]:truncate [&>span]:max-w-[calc(100%-20px)]">
+                                        <SelectValue placeholder="Actor" />
+                                      </SelectTrigger>
+                                      <SelectContent side="bottom" className="max-h-60 overflow-y-auto">
+                                        <SelectItem value="__none__"><em>{t('generatedFields.noneDisabled')}</em></SelectItem>
+                                        {uniqueActors.map((actor, idx) => (
+                                          <SelectItem key={`${actor}-${idx}`} value={actor}>{actor}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {/* Material dropdown - independent from actor */}
+                                  <div className="min-w-0">
+                                    <Select
+                                      value={currentMaterial || "__none__"}
+                                      onValueChange={(val) => {
+                                        const newMaterial = val === "__none__" ? "" : val;
+                                        updateCombinedValue(currentActor, newMaterial);
+                                      }}
+                                    >
+                                      <SelectTrigger className="text-xs w-full [&>span]:truncate [&>span]:max-w-[calc(100%-20px)]">
+                                        <SelectValue placeholder="Material" />
+                                      </SelectTrigger>
+                                      <SelectContent side="bottom" className="max-h-60 overflow-y-auto">
+                                        <SelectItem value="__none__"><em>{t('generatedFields.noneDisabled')}</em></SelectItem>
+                                        {allMaterials.map((material, idx) => (
+                                          <SelectItem key={`${material}-${idx}`} value={material}>{material}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                {value && (
+                                  <p className="text-xs text-muted-foreground truncate" title={value}>
+                                    Combined: {value}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Airport or other: Keep single dropdown
                           return (
                             <div key={key} className="space-y-2">
                               <Label htmlFor={`field-${key}`}>{key}</Label>
@@ -2623,13 +2760,11 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                                 onValueChange={(val) => {
                                   const newValue = val === "__none__" ? "" : val;
                                   console.log(`🔄 Dropdown change: ${key} = "${newValue}"`);
-                                  // Use functional update to ensure we always have the latest state
                                   setGeneratedFields((prevFields) => {
                                     const updatedFields = { ...(prevFields || {}), [key]: newValue };
                                     console.log(`🔄 Updated ${key}:`, JSON.stringify(updatedFields, null, 2));
                                     return updatedFields as SceneParameters;
                                   });
-                                  // Also sync with currentScene for consistency
                                   setCurrentScene((prevScene) => {
                                     return { ...(prevScene || {}), [key]: newValue } as SceneParameters;
                                   });
@@ -2642,12 +2777,10 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                                   <SelectItem value="__none__"><em>{t('generatedFields.noneDisabled')}</em></SelectItem>
                                   {options
                                     .filter((option: string | AirportOptionItem) => {
-                                      // Filter out empty strings, __none__ (already added above), and items with empty IDs
                                       const optionId = typeof option === 'string' ? option : option.id;
                                       return optionId && optionId !== "" && optionId !== "__none__";
                                     })
                                     .map((option: string | AirportOptionItem, idx: number) => {
-                                      // Handle both string (VirtualSet) and object (Airport) options
                                       const optionId = typeof option === 'string' ? option : option.id;
                                       const optionName = typeof option === 'string' ? option : option.name;
                                       return (
@@ -2659,8 +2792,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                               {value && (
                                 <p className="text-xs text-muted-foreground">
                                   Selected: {
-                                    // Show name for Airport, id for VirtualSet
-                                    currentProjectType === "Airport" && options.length > 0 && typeof options[0] !== 'string'
+                                    options.length > 0 && typeof options[0] !== 'string'
                                       ? (options as AirportOptionItem[]).find(o => o.id === value)?.name || value
                                       : value
                                   }
@@ -2702,7 +2834,7 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                     onClick={() => {
                       setBackgroundPromptHistory([]);
                       setBackgroundAssistantResponses([]);
-                      setBackgroundPrompt("");
+                      backgroundInputRef.current?.clear();
                       showSnackbar(t('toast.backgroundHistoryCleared'), "info");
                     }}
                   >
@@ -2743,42 +2875,15 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
                 <div className="p-3 bg-transparent relative border">
                   <div className="flex gap-2 items-end">
-                    <div className="relative flex-1">
-                      <Textarea
-                        ref={backgroundInputRef}
-                        placeholder={t('background.inputExample')}
-                        value={backgroundPrompt}
-                        onChange={(e) => setBackgroundPrompt(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            if (backgroundPrompt.trim() && !isGeneratingBackground) {
-                              generateBackgroundImage();
-                            }
-                          }
-                        }}
-                        className="bg-background pr-24 resize-none min-h-[44px]"
-                        rows={1}
-                        disabled={isGeneratingBackground}
-                      />
-                      <Button
-                        size="icon"
-                        onClick={() => toggleSpeechRecognition("background")}
-                        disabled={isGeneratingBackground}
-                        variant={isRecordingBackground ? "default" : "ghost"}
-                        className={`absolute end-12 bottom-2 h-8 w-8 ${isRecordingBackground ? "bg-red-500 hover:bg-red-600 animate-pulse" : ""}`}
-                      >
-                        {isRecordingBackground ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-                      </Button>
-                      <Button
-                        size="icon"
-                        onClick={generateBackgroundImage}
-                        disabled={isGeneratingBackground || !backgroundPrompt.trim()}
-                        className="absolute end-2 bottom-2 h-8 w-8"
-                      >
-                        {isGeneratingBackground ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                      </Button>
-                    </div>
+                    <ChatInput
+                      ref={backgroundInputRef}
+                      placeholder={t('background.inputExample')}
+                      onSubmit={generateBackgroundImage}
+                      isLoading={isGeneratingBackground}
+                      onMicClick={() => toggleSpeechRecognition("background")}
+                      isRecording={isRecordingBackground}
+                      icon="sparkles"
+                    />
 
                     <Button
                       variant="outline"

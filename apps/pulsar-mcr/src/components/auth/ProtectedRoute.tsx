@@ -5,13 +5,16 @@
  * Handles loading states, authentication checks, and permission verification.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Spinner, SpinnerSize } from '@blueprintjs/core';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { LoginPage } from './LoginPage';
+import { SignUpPage } from './SignUpPage';
 import { SystemLocked } from './SystemLocked';
 import type { PermissionKey } from '../../types/permissions';
+
+type AuthView = 'login' | 'signup';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -44,6 +47,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     canReadPage,
     canWriteChannel,
   } = usePermissions();
+
+  // Auth view state for login/signup navigation
+  const [authView, setAuthView] = useState<AuthView>('login');
 
   // Track if we've ever been authenticated to prevent flicker during state updates
   const wasAuthenticatedRef = React.useRef(false);
@@ -118,8 +124,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         </div>
       );
     }
-    console.log('[ProtectedRoute] Not authenticated - showing login page');
-    return <LoginPage />;
+    console.log('[ProtectedRoute] Not authenticated - showing auth page:', authView);
+    if (authView === 'signup') {
+      return (
+        <SignUpPage
+          onNavigateToLogin={() => setAuthView('login')}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        onNavigateToSignUp={() => setAuthView('signup')}
+      />
+    );
   }
 
   // Check page-level permission

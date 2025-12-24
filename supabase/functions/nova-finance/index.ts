@@ -369,42 +369,22 @@ serve(async (req) => {
       );
     }
 
-    // Fetch finance data from the finance_dashboard edge function
-    const financeResponse = await fetch(
-      `${supabaseUrl}/functions/v1/finance_dashboard/stocks`,
-      {
-        headers: {
-          Authorization: `Bearer ${supabaseServiceKey}`,
-        },
-      }
-    );
+    // Query f_stocks table directly
+    const { data: securities, error: dbError } = await supabase
+      .from("f_stocks")
+      .select("*")
+      .order("symbol");
 
-    if (!financeResponse.ok) {
-      const errorText = await financeResponse.text();
-      console.error("Finance data fetch failed:", financeResponse.status, errorText);
+    if (dbError) {
+      console.error("Database query failed:", dbError);
       return new Response(
         JSON.stringify({
           error: 'Failed to fetch finance data',
-          details: errorText.substring(0, 200)
+          details: dbError.message
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const financeResult = await financeResponse.json();
-
-    if (!financeResult.ok) {
-      console.error("Finance fetch failed:", financeResult.error || financeResult.detail);
-      return new Response(
-        JSON.stringify({
-          error: 'Finance fetch failed',
-          details: financeResult.error || financeResult.detail
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const securities = financeResult.stocks || [];
 
     console.log(`Successfully fetched ${securities.length} securities`);
 

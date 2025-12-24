@@ -13568,3 +13568,40 @@ export const Constants = {
     },
   },
 } as const
+
+// ============================================================================
+// Convenience Type Aliases
+// These extract the Row types from the generated Database type for easier use
+// ============================================================================
+
+// GFX Types
+export type Element = Tables<'gfx_elements'>;
+export type Animation = Tables<'gfx_animations'>;
+export type Binding = Tables<'gfx_bindings'>;
+export type Template = Tables<'gfx_templates'>;
+export type Project = Tables<'gfx_projects'>;
+export type Layer = Tables<'gfx_layers'>;
+export type Folder = Tables<'gfx_folders'>;
+export type Keyframe = Tables<'gfx_keyframes'>;
+
+// User/Organization Types
+export type Organization = Tables<'u_organizations'>;
+export type User = Tables<'u_users'>;
+
+// AI Types - simple placeholder since ai_changes may not exist as a table
+export interface AIChanges {
+  elements?: Partial<Element>[];
+  animations?: Partial<Animation>[];
+  bindings?: Partial<Binding>[];
+  deleted_element_ids?: string[];
+  deleted_animation_ids?: string[];
+  deleted_binding_ids?: string[];
+}
+
+// Design System - simplified version for database storage
+export interface ProjectDesignSystem {
+  colors?: Record<string, string>;
+  fonts?: Record<string, string>;
+  spacing?: Record<string, number>;
+  [key: string]: unknown;
+}
