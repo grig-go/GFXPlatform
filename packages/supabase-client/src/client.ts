@@ -921,9 +921,9 @@ export type { User, Session };
  * Helper to wrap a promise with a timeout
  * Useful for detecting hung database queries
  */
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+export function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, operation: string): Promise<T> {
   return Promise.race([
-    promise,
+    Promise.resolve(promise),
     new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error(`[Supabase] ${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
     )
@@ -939,7 +939,7 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation
  * @param operationName Name for logging
  */
 export async function withAutoRecovery<T>(
-  operationFn: (client: SupabaseClient) => Promise<T>,
+  operationFn: (client: SupabaseClient) => PromiseLike<T>,
   timeoutMs: number = 10000,
   operationName: string = 'operation'
 ): Promise<T> {

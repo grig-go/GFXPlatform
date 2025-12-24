@@ -1,11 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, sessionReady } from '../lib/supabase';
-
-// Get the current user's ID
-const getCurrentUserId = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id;
-};
+import { useAuth } from '../contexts/AuthContext';
 
 export interface Content {
   id: string;
@@ -45,6 +40,72 @@ export const useContent = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Get effective organization for impersonation support
+  const { effectiveOrganization, isSuperuser, user } = useAuth();
+
+  const fetchContent = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        console.log('No active session - user needs to log in');
+        setContent([]);
+        setError('Please log in to view content');
+        return;
+      }
+
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+      console.log('[useContent] Fetching with effectiveOrgId:', effectiveOrgId);
+
+      // Build base query - for superusers, filter by effective org to support impersonation
+      let containersQuery = supabase
+        .from('content')
+        .select('*')
+        .in('type', ['bucketFolder', 'bucket', 'itemFolder'])
+        .order('order');
+
+      let itemsQuery = supabase
+        .from('content')
+        .select('*')
+        .eq('type', 'item')
+        .order('order');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        containersQuery = containersQuery.eq('organization_id', effectiveOrgId);
+        itemsQuery = itemsQuery.eq('organization_id', effectiveOrgId);
+      }
+
+      // Fetch all containers (unlimited)
+      const { data: containers, error: containerError } = await containersQuery;
+
+      if (containerError) throw containerError;
+
+      // Then fetch items (can be limited since we have all parents)
+      const { data: items, error: itemError } = await itemsQuery;
+
+      if (itemError) throw itemError;
+
+      // Combine both results
+      const allContent = [...(containers || []), ...(items || [])];
+
+      console.log('[useContent] Fetched content:', allContent.length, 'items for org:', effectiveOrgId);
+      setContent(allContent);
+    } catch (err) {
+      console.error('Error in fetchContent:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveOrganization?.id, isSuperuser]);
+
   useEffect(() => {
     // Set up auth state listener
     const { data: authListener } = supabase.auth.onAuthStateChange((event, _session) => {
@@ -63,57 +124,9 @@ export const useContent = () => {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchContent]);
 
-  const fetchContent = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Wait for session to be restored from cookies before checking
-      await sessionReady;
-
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        console.log('No active session - user needs to log in');
-        setContent([]);
-        setError('Please log in to view content');
-        return;
-      }
-  
-      // First fetch all containers (unlimited)
-      const { data: containers, error: containerError } = await supabase
-        .from('content')
-        .select('*')
-        .in('type', ['bucketFolder', 'bucket', 'itemFolder'])
-        .order('order');
-        
-      if (containerError) throw containerError;
-  
-      // Then fetch items (can be limited since we have all parents)
-      const { data: items, error: itemError } = await supabase
-        .from('content')
-        .select('*')
-        .eq('type', 'item')
-        .order('order');
-        
-      if (itemError) throw itemError;
-  
-      // Combine both results
-      const allContent = [...(containers || []), ...(items || [])];
-      
-      console.log('Fetched content:', allContent.length, 'items');
-      setContent(allContent);
-    } catch (err) {
-      console.error('Error in fetchContent:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshContentIfNeeded = async (expectedTree?: Content[]) => {
+  const refreshContentIfNeeded = useCallback(async (expectedTree?: Content[]) => {
     try {
       // Wait for session to be restored, then check
       await sessionReady;
@@ -123,10 +136,20 @@ export const useContent = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+
+      let query = supabase
         .from('content')
         .select('*')
         .order('order');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        query = query.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -150,51 +173,55 @@ export const useContent = () => {
       console.error('Error in refreshContentIfNeeded:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
-  };
+  }, [effectiveOrganization?.id, isSuperuser]);
 
-  const createContent = async (content: Omit<Content, 'id' | 'user_id'>) => {
+  const createContent = useCallback(async (newContent: Omit<Content, 'id' | 'user_id'>) => {
     try {
       setError(null); // Clear any previous errors
-      const { children, ...contentWithoutChildren } = content as any;
-      
+      const { children, ...contentWithoutChildren } = newContent as any;
+
       // Get the current maximum order value for the target parent
       let query = supabase
         .from('content')
         .select('order');
-      
+
       if (contentWithoutChildren.parent_id) {
         query = query.eq('parent_id', contentWithoutChildren.parent_id);
       } else {
         query = query.is('parent_id', null);
       }
-  
+
       const { data: existingContent } = await query;
-  
-      const maxOrder = existingContent?.reduce((max, ch) => 
+
+      const maxOrder = existingContent?.reduce((max, ch) =>
         ch.order > max ? ch.order : max, -1) ?? -1;
-      
-      const userId = await getCurrentUserId();
-      if (!userId) {
+
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to create content');
       }
-  
+
+      // Use effective organization for new content
+      const effectiveOrgId = effectiveOrganization?.id;
+
       const contentData = {
         ...contentWithoutChildren,
-        user_id: userId,
+        user_id: user.auth_user_id,
+        organization_id: effectiveOrgId,
         order: maxOrder + 1
       };
-  
+
       const { data, error } = await supabase
         .from('content')
         .insert([contentData])
         .select()
         .single();
-  
+
       if (error) {
         console.error('Error creating content:', error);
         throw error;
       }
-      
+
       setContent(prev => [...prev, data]);
       return data;
     } catch (err) {
@@ -202,15 +229,15 @@ export const useContent = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, effectiveOrganization?.id]);
 
-  const updateContent = async (id: string, updates: Partial<Content>) => {
+  const updateContent = useCallback(async (id: string, updates: Partial<Content>) => {
     try {
       setError(null); // Clear any previous errors
       const { children, ...updatesWithoutChildren } = updates as any;
-      
-      const userId = await getCurrentUserId();
-      if (!userId) {
+
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update content');
       }
 
@@ -230,7 +257,7 @@ export const useContent = () => {
         throw error;
       }
       
-      setContent(prev => prev.map(item => 
+      setContent(prev => prev.map(item =>
         item.id === id ? { ...item, ...data } : item
       ));
       return data;
@@ -239,13 +266,12 @@ export const useContent = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
-  const deleteContent = async (id: string) => {
+  const deleteContent = useCallback(async (id: string) => {
     try {
       setError(null); // Clear any previous errors
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to delete content');
       }
 
@@ -266,17 +292,16 @@ export const useContent = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
   // Batch delete multiple content items in a single database operation
-  const deleteContentBatch = async (ids: string[]) => {
+  const deleteContentBatch = useCallback(async (ids: string[]) => {
     try {
       setError(null); // Clear any previous errors
 
       if (ids.length === 0) return { success: true };
 
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to delete content');
       }
 
@@ -297,7 +322,7 @@ export const useContent = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
   return {
     content,

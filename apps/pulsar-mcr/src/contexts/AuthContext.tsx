@@ -6,8 +6,17 @@
  * Compatible with Nova's shared auth system for SSO.
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase, sessionReady, receiveAuthTokenFromUrl } from '../lib/supabase';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import {
+  supabase,
+  sessionReady,
+  receiveAuthTokenFromUrl,
+  cookieStorage,
+  SHARED_AUTH_STORAGE_KEY,
+  withAutoRecovery,
+  startConnectionMonitor,
+  stopConnectionMonitor,
+} from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import type {
   AuthState,
@@ -55,6 +64,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [channelAccess, setChannelAccess] = useState<ChannelAccess[]>([]);
   const [availableOrganizations, setAvailableOrganizations] = useState<Organization[]>([]);
 
+  // Track if initialization is in progress to prevent race conditions
+  const initializingRef = useRef(false);
+  const initializedRef = useRef(false);
+
   // Check if system is locked (no superuser exists)
   const checkSystemLocked = useCallback(async (): Promise<boolean> => {
     try {
@@ -76,25 +89,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  // Fetch full user data with permissions
-  const fetchUserData = useCallback(async (authUserId: string): Promise<AppUserWithPermissions | null> => {
+  // Fetch full user data with permissions and organization
+  const fetchUserData = useCallback(async (authUserId: string): Promise<{ user: AppUserWithPermissions; organization: Organization | null } | null> => {
     try {
       console.log('[AuthContext] Fetching user data for auth_user_id:', authUserId);
-      console.log('[AuthContext] Starting u_users query...');
+      console.log('[AuthContext] Starting u_users query with organization join...');
 
-      // Fetch user from u_users - use maybeSingle to avoid errors when no rows
-      // Add timeout to detect hanging queries
-      const queryPromise = supabase
-        .from('u_users')
-        .select('*')
-        .eq('auth_user_id', authUserId)
-        .maybeSingle();
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Query timeout after 10s')), 10000);
-      });
-
-      const { data: userData, error: userError } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      // Fetch user from u_users with organization (like Nova does)
+      const result = await withAutoRecovery(
+        (client) => client
+          .from('u_users')
+          .select(`
+            *,
+            u_organizations (*)
+          `)
+          .eq('auth_user_id', authUserId)
+          .single(),
+        10000,
+        'fetchUserData'
+      );
+      const { data: userData, error: userError } = result as { data: any; error: any };
 
       console.log('[AuthContext] User data result:', { userData, userError });
 
@@ -103,10 +117,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return null;
       }
 
-      const appUser = userData as AppUser;
+      // Extract organization from joined data (like Nova does)
+      const { u_organizations: orgData, ...userFields } = userData;
+      const organization = orgData as Organization | null;
+      const appUser = userFields as AppUser;
+      console.log('[AuthContext] Extracted organization:', organization?.name);
 
-        // If user is superuser, they have all permissions
-        if (appUser.is_superuser) {
+      // If user is superuser, they have all permissions
+      if (appUser.is_superuser) {
         // Fetch all channel access for superuser (they can write to all)
         const { data: allChannels } = await supabase
           .from('channels')
@@ -123,10 +141,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setChannelAccess(superuserChannelAccess);
 
         return {
-          ...appUser,
-          groups: [],
-          permissions: ['*'], // Wildcard for superuser
-          directPermissions: [],
+          user: {
+            ...appUser,
+            groups: [],
+            permissions: ['*'], // Wildcard for superuser
+            directPermissions: [],
+          },
+          organization,
         };
       }
 
@@ -209,10 +230,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setChannelAccess(channelAccessData || []);
 
       return {
-        ...appUser,
-        groups,
-        permissions: allPermissions,
-        directPermissions,
+        user: {
+          ...appUser,
+          groups,
+          permissions: allPermissions,
+          directPermissions,
+        },
+        organization,
       };
     } catch (err) {
       console.error('Error in fetchUserData:', err);
@@ -228,6 +252,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setState(prev => ({
         ...prev,
         user: null,
+        organization: null,
         session: null,
         isLoading: false,
         isAuthenticated: false,
@@ -240,10 +265,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     console.log('[AuthContext] Session user id:', session.user?.id);
-    const userData = await fetchUserData(session.user.id);
-    console.log('[AuthContext] fetchUserData returned:', userData ? 'user found' : 'null');
+    const result = await fetchUserData(session.user.id);
+    console.log('[AuthContext] fetchUserData returned:', result ? 'user found' : 'null');
 
-    if (!userData) {
+    if (!result) {
       // Only clear auth state on initial load or if we've never been authenticated
       // Don't kick user out if fetchUserData fails during a token refresh
       setState(prev => {
@@ -252,6 +277,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return {
             ...prev,
             user: null,
+            organization: null,
             session: null,
             isLoading: false,
             isAuthenticated: false,
@@ -267,33 +293,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
+    const { user: userData, organization } = result;
+
     // Check if user is admin (has manage_users permission or is in Administrators group)
     const isAdmin = userData.is_superuser ||
       userData.permissions.includes('system.manage_users') ||
       userData.groups.some(g => g.name === 'Administrators');
-
-    // Fetch user's organization
-    let userOrganization: Organization | null = null;
-    try {
-      const { data: orgMembership, error: orgError } = await supabase
-        .from('u_organization_members')
-        .select(`
-          role,
-          u_organizations (*)
-        `)
-        .eq('user_id', userData.id)
-        .maybeSingle();
-
-      if (orgError) {
-        console.error('Error fetching user organization:', orgError);
-      } else if (orgMembership?.u_organizations) {
-        // u_organizations could be an object or an array depending on the query
-        const orgs = orgMembership.u_organizations;
-        userOrganization = (Array.isArray(orgs) ? orgs[0] : orgs) as Organization;
-      }
-    } catch (err) {
-      console.error('Error fetching user organization:', err);
-    }
 
     // For superusers, fetch all available organizations for impersonation
     if (userData.is_superuser) {
@@ -317,6 +322,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({
       ...prev,
       user: userData,
+      organization,
       session: {
         access_token: session.access_token,
         refresh_token: session.refresh_token,
@@ -327,8 +333,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isSuperuser: userData.is_superuser,
       isAdmin,
       isPending: userData.status === 'pending',
-      organization: userOrganization,
-      effectiveOrganization: prev.impersonatedOrganization || userOrganization,
+      effectiveOrganization: prev.impersonatedOrganization || organization,
     }));
   }, [fetchUserData]);
 
@@ -337,48 +342,77 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let mounted = true;
 
     const initialize = async () => {
-      // Check for auth token in URL (from cross-app SSO)
-      // This must happen BEFORE sessionReady to store the token first
-      receiveAuthTokenFromUrl();
+      console.log('[AuthContext] Starting initialization...');
+      initializingRef.current = true;
 
-      // Wait for session to be properly initialized from cookie storage
-      await sessionReady;
+      try {
+        // Check for auth token in URL (from cross-app SSO)
+        // This must happen BEFORE sessionReady to store the token first
+        const receivedToken = receiveAuthTokenFromUrl();
+        if (receivedToken) {
+          console.log('[AuthContext] Received auth token from URL (cross-app SSO)');
+        }
 
-      // Check system lock state
-      const isLocked = await checkSystemLocked();
+        // Wait for session to be properly initialized from cookie storage
+        console.log('[AuthContext] Waiting for session restoration from cookie storage...');
+        await sessionReady;
+        console.log('[AuthContext] Session restoration complete');
 
-      if (!mounted) return;
+        // Check system lock state
+        console.log('[AuthContext] Checking system lock...');
+        const isLocked = await checkSystemLocked();
+        console.log('[AuthContext] System locked:', isLocked);
 
-      setState(prev => ({ ...prev, systemLocked: isLocked }));
+        if (!mounted) return;
 
-      // Get current session
-      const { data: { session }, error } = await supabase.auth.getSession();
+        setState(prev => ({ ...prev, systemLocked: isLocked }));
 
-      if (error) {
-        console.error('Error getting session:', error);
+        // Get current session
+        console.log('[AuthContext] Getting session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('[AuthContext] Session result:', { hasSession: !!session, error });
+
+        if (error) {
+          console.error('[AuthContext] Error getting session:', error);
+        }
+
+        if (!mounted) return;
+
+        if (session) {
+          console.log('[AuthContext] Processing session for user:', session.user.email);
+          await handleSessionChange(session, true); // isInitialLoad = true
+          console.log('[AuthContext] Session change handled');
+        } else {
+          console.log('[AuthContext] No session, setting isLoading to false');
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
+      } catch (err) {
+        console.error('[AuthContext] Error during auth initialization:', err);
+        if (mounted) {
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
       }
 
-      if (!mounted) return;
-
-      if (session) {
-        await handleSessionChange(session, true); // isInitialLoad = true
-      } else {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
+      console.log('[AuthContext] Initialization complete');
+      initializingRef.current = false;
+      initializedRef.current = true;
     };
 
     initialize();
+
+    // Start connection health monitor to detect and recover from stuck connections
+    startConnectionMonitor();
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
 
-        console.log('[AuthContext] Auth state change event:', event, 'session:', session ? 'exists' : 'null');
+        console.log('[AuthContext] Auth state change:', event, '| initializing:', initializingRef.current, '| initialized:', initializedRef.current);
 
-        // Skip INITIAL_SESSION - we handle initialization ourselves
-        if (event === 'INITIAL_SESSION') {
-          console.log('[AuthContext] Skipping INITIAL_SESSION event - handled by initialize()');
+        // Skip INITIAL_SESSION and SIGNED_IN during initialization - we handle it in initialize()
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !initializedRef.current) {
+          console.log('[AuthContext] Skipping auth event during initialization');
           return;
         }
 
@@ -387,6 +421,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setState(prev => ({
             ...prev,
             user: null,
+            organization: null,
             session: null,
             isAuthenticated: false,
             isSuperuser: false,
@@ -394,32 +429,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
             isPending: false,
           }));
           setChannelAccess([]);
-        } else if (event === 'SIGNED_IN' && session) {
-          // SIGNED_IN can fire on visibility change even if already authenticated
-          // Only treat as initial load if not already authenticated
-          setState(prev => {
-            if (prev.isAuthenticated) {
-              // Already authenticated - just update session tokens, don't refetch user data
-              console.log('[AuthContext] SIGNED_IN but already authenticated - just updating session tokens');
-              return {
-                ...prev,
-                session: {
-                  access_token: session.access_token,
-                  refresh_token: session.refresh_token,
-                  expires_at: session.expires_at || 0,
-                },
-              };
-            }
-            // Not authenticated - need to fetch user data
-            console.log('[AuthContext] SIGNED_IN and not authenticated - fetching user data');
-            handleSessionChange(session, true);
-            return prev;
-          });
         } else if (event === 'TOKEN_REFRESHED' && session) {
-          // Token refresh - don't kick user out on failure, just update session tokens
-          console.log('[AuthContext] TOKEN_REFRESHED - updating session');
+          // TOKEN_REFRESHED: Only update session tokens, don't re-fetch user data
+          console.log('[AuthContext] Token refreshed, updating session tokens only');
+          setState(prev => ({
+            ...prev,
+            session: {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+              expires_at: session.expires_at || 0,
+            },
+          }));
+        } else if (event === 'SIGNED_IN' && session && initializedRef.current) {
+          // SIGNED_IN after initialization: Check if this is a session recovery or new login
+          let shouldRefetch = false;
+
           setState(prev => {
-            if (prev.isAuthenticated && prev.session) {
+            const currentUserId = prev.user?.auth_user_id;
+            const newUserId = session.user.id;
+
+            if (currentUserId && currentUserId === newUserId) {
+              // Same user - just update session tokens
+              console.log('[AuthContext] SIGNED_IN for same user, updating session tokens only');
               return {
                 ...prev,
                 session: {
@@ -429,18 +460,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 },
               };
             }
+            // Different user or no previous user - need full refresh
+            shouldRefetch = true;
             return prev;
           });
-        } else if (session) {
-          // Other events with session - only process if not already authenticated
-          console.log('[AuthContext] Other event with session:', event);
-          setState(prev => {
-            if (!prev.isAuthenticated) {
-              // Not authenticated, try to authenticate
-              handleSessionChange(session, true);
-            }
-            return prev;
-          });
+
+          if (shouldRefetch) {
+            console.log('[AuthContext] SIGNED_IN with different/new user, fetching user data');
+            await handleSessionChange(session, true);
+          }
+        } else if (session && initializedRef.current) {
+          // Other events (USER_UPDATED, etc.): Full user data refresh
+          console.log('[AuthContext] Processing auth state change for session, event:', event);
+          await handleSessionChange(session, false);
         }
       }
     );
@@ -448,6 +480,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      stopConnectionMonitor();
     };
   }, [checkSystemLocked, handleSessionChange]);
 
@@ -476,23 +509,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({
       ...prev,
       user: null,
+      organization: null,
+      impersonatedOrganization: null,
+      effectiveOrganization: null,
       session: null,
       isAuthenticated: false,
       isSuperuser: false,
       isAdmin: false,
       isPending: false,
-      organization: null,
-      impersonatedOrganization: null,
-      effectiveOrganization: null,
     }));
     setChannelAccess([]);
     setAvailableOrganizations([]);
+    sessionStorage.removeItem('pulsar_impersonated_org');
 
-    // Clear the shared auth cookie
-    const { cookieStorage, SHARED_AUTH_STORAGE_KEY } = await import('../lib/supabase');
+    // Clear the shared auth cookie (already imported at top of file)
     cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
 
-    // Also clear any legacy localStorage keys
+    // Also clear any legacy localStorage keys for backwards compatibility
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('sb-')) {
         localStorage.removeItem(key);

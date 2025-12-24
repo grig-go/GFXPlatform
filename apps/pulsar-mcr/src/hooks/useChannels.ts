@@ -1,11 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, sessionReady } from '../lib/supabase';
-
-// Get the current user's ID
-const getCurrentUserId = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id;
-};
+import { useAuth } from '../contexts/AuthContext';
 
 // New Channel type - represents the main channels table
 export interface Channel {
@@ -65,28 +60,10 @@ export const useChannels = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Set up auth state listener
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, _session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        fetchChannelsAndPlaylists();
-      } else if (event === 'SIGNED_OUT') {
-        setChannels([]);
-        setChannelPlaylists([]);
-        setError('You must be logged in to view channels');
-      }
-    });
+  // Get effective organization for impersonation support
+  const { effectiveOrganization, isSuperuser, user } = useAuth();
 
-    // Initial fetch
-    fetchChannelsAndPlaylists();
-
-    // Cleanup
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  const fetchChannelsAndPlaylists = async () => {
+  const fetchChannelsAndPlaylists = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -107,30 +84,48 @@ export const useChannels = () => {
 
       console.log('Fetching channels and playlists for user:', session.user.id);
 
-      // Fetch channels from the new channels table
-      const { data: channelsData, error: channelsError } = await supabase
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+      console.log('[useChannels] Fetching with effectiveOrgId:', effectiveOrgId);
+
+      // Build channels query with organization filter for superusers
+      let channelsQuery = supabase
         .from('channels')
         .select('*')
         .order('created_at');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        channelsQuery = channelsQuery.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data: channelsData, error: channelsError } = await channelsQuery;
 
       if (channelsError) {
         console.error('Error fetching channels:', channelsError);
         throw channelsError;
       }
 
-      // Fetch channel playlists from the renamed table
-      const { data: playlistsData, error: playlistsError } = await supabase
+      // Fetch channel playlists from the renamed table with organization filter
+      let playlistsQuery = supabase
         .from('channel_playlists')
         .select('*')
         .order('order');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        playlistsQuery = playlistsQuery.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data: playlistsData, error: playlistsError } = await playlistsQuery;
 
       if (playlistsError) {
         console.error('Error fetching channel playlists:', playlistsError);
         throw playlistsError;
       }
 
-      console.log('Fetched channels:', channelsData);
-      console.log('Fetched channel playlists:', playlistsData);
+      console.log('[useChannels] Fetched channels:', channelsData?.length || 0, 'for org:', effectiveOrgId);
+      console.log('[useChannels] Fetched channel playlists:', playlistsData?.length || 0);
       setChannels(channelsData || []);
       setChannelPlaylists(playlistsData || []);
     } catch (err) {
@@ -139,7 +134,28 @@ export const useChannels = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveOrganization?.id, isSuperuser]);
+
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, _session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        fetchChannelsAndPlaylists();
+      } else if (event === 'SIGNED_OUT') {
+        setChannels([]);
+        setChannelPlaylists([]);
+        setError('You must be logged in to view channels');
+      }
+    });
+
+    // Initial fetch
+    fetchChannelsAndPlaylists();
+
+    // Cleanup
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [fetchChannelsAndPlaylists]);
 
   // Keep the old fetchChannels as an alias for compatibility
   const fetchChannels = fetchChannelsAndPlaylists;
@@ -149,7 +165,7 @@ export const useChannels = () => {
    * Compares the expected tree (provided as a parameter) with the latest DB tree.
    * If they differ, updates the local channels state.
    */
-  const refreshChannelsIfNeeded = async (expectedTree?: ChannelPlaylist[]) => {
+  const refreshChannelsIfNeeded = useCallback(async (expectedTree?: ChannelPlaylist[]) => {
     try {
       // Check session first
       const { data: { session } } = await supabase.auth.getSession();
@@ -158,16 +174,34 @@ export const useChannels = () => {
         return;
       }
 
-      // Refresh both channels and playlists
-      const { data: channelsData } = await supabase
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+
+      // Refresh both channels and playlists with organization filter
+      let channelsQuery = supabase
         .from('channels')
         .select('*')
         .order('created_at');
 
-      const { data: playlistsData, error } = await supabase
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        channelsQuery = channelsQuery.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data: channelsData } = await channelsQuery;
+
+      // Build playlists query with organization filter
+      let playlistsQuery = supabase
         .from('channel_playlists')
         .select('*')
         .order('order');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        playlistsQuery = playlistsQuery.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data: playlistsData, error } = await playlistsQuery;
 
       if (error) throw error;
 
@@ -194,13 +228,20 @@ export const useChannels = () => {
       console.error('Error in refreshChannelsIfNeeded:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
-  };
+  }, [effectiveOrganization?.id, isSuperuser]);
 
-  const createChannel = async (channel: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) => {
+  const createChannel = useCallback(async (channel: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) => {
     try {
+      // Use effective organization for new channels
+      const effectiveOrgId = effectiveOrganization?.id;
+      const channelData = {
+        ...channel,
+        organization_id: effectiveOrgId,
+      };
+
       const { data, error } = await supabase
         .from('channels')
-        .insert([channel])
+        .insert([channelData])
         .select()
         .single();
 
@@ -216,9 +257,9 @@ export const useChannels = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [effectiveOrganization?.id]);
 
-  const createChannelPlaylist = async (playlist: Omit<ChannelPlaylist, 'id' | 'user_id'>) => {
+  const createChannelPlaylist = useCallback(async (playlist: Omit<ChannelPlaylist, 'id' | 'user_id'>) => {
     try {
       // Remove children and computed properties from the playlist object before sending to the database
       const { children, channel_type, ...playlistWithoutChildren } = playlist as any;
@@ -238,16 +279,19 @@ export const useChannels = () => {
       const maxOrder = existingPlaylists?.reduce((max, pl) =>
         pl.order > max ? pl.order : max, -1) ?? -1;
 
-      // Get the current user's ID
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to create channel playlists');
       }
 
-      // Add the user_id to the playlist data
+      // Use effective organization for new playlists
+      const effectiveOrgId = effectiveOrganization?.id;
+
+      // Add the user_id and organization_id to the playlist data
       const playlistData = {
         ...playlistWithoutChildren,
-        user_id: userId,
+        user_id: user.auth_user_id,
+        organization_id: effectiveOrgId,
         order: maxOrder + 1
       };
 
@@ -269,7 +313,7 @@ export const useChannels = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, effectiveOrganization?.id]);
 
   const updateChannel = async (id: string, updates: Partial<Channel>) => {
     try {
@@ -296,14 +340,12 @@ export const useChannels = () => {
     }
   };
 
-  const updateChannelPlaylist = async (id: string, updates: Partial<ChannelPlaylist>) => {
+  const updateChannelPlaylist = useCallback(async (id: string, updates: Partial<ChannelPlaylist>) => {
     try {
       // Remove children from the updates object before sending to the database
       const { children, ...updatesWithoutChildren } = updates as any;
 
-      // Get the current user's ID
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update channel playlists');
       }
 
@@ -333,7 +375,7 @@ export const useChannels = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
   const checkChannelUsage = async (channelId: string): Promise<{ isUsed: boolean; count: number }> => {
     try {
@@ -378,10 +420,9 @@ export const useChannels = () => {
     }
   };
 
-  const deleteChannelPlaylist = async (id: string) => {
+  const deleteChannelPlaylist = useCallback(async (id: string) => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to delete channel playlists');
       }
 
@@ -402,15 +443,14 @@ export const useChannels = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
   // Batch delete multiple channel playlist items in a single database operation
-  const deleteChannelPlaylistBatch = async (ids: string[]) => {
+  const deleteChannelPlaylistBatch = useCallback(async (ids: string[]) => {
     try {
       if (ids.length === 0) return { success: true };
 
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to delete channel playlists');
       }
 
@@ -431,7 +471,7 @@ export const useChannels = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
   return {
     // Main channels data

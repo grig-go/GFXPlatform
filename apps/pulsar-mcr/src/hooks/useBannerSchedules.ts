@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, sessionReady } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import {
   BannerSchedule,
   BannerScheduleFormData,
@@ -87,11 +88,6 @@ const fetchMediaAssets = async (mediaIds: string[]): Promise<Map<string, MediaAs
   return mediaMap;
 };
 
-// Get the current user's ID
-const getCurrentUserId = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id;
-};
 
 // Helper to convert time string to minutes for comparison
 const timeToMinutes = (time: string): number => {
@@ -215,6 +211,9 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Get effective organization for impersonation support
+  const { effectiveOrganization, isSuperuser, user } = useAuth();
+
   const fetchSchedules = useCallback(async (filters?: BannerScheduleFilters) => {
     try {
       setLoading(true);
@@ -230,11 +229,20 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
         return;
       }
 
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+      console.log('[useBannerSchedules] Fetching with effectiveOrgId:', effectiveOrgId);
+
       let query = supabase
         .from('banner_schedules')
         .select('*')
         .order('priority', { ascending: false })
         .order('created_at', { ascending: false });
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        query = query.eq('organization_id', effectiveOrgId);
+      }
 
       // Apply filters - for channel_id filter, check if it's in the channel_ids array
       if (filters?.channel_id) {
@@ -323,6 +331,7 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
         media: mediaMap.get(schedule.media_id)
       }));
 
+      console.log('[useBannerSchedules] Fetched schedules:', schedulesWithMedia?.length || 0, 'for org:', effectiveOrganization?.id);
       setSchedules(schedulesWithMedia);
     } catch (err) {
       console.error('Error in fetchSchedules:', err);
@@ -330,11 +339,11 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [effectiveOrganization?.id, isSuperuser]);
 
   const createSchedule = useCallback(async (data: BannerScheduleFormData): Promise<BannerSchedule> => {
-    const userId = await getCurrentUserId();
-    if (!userId) {
+    // Use user from auth context
+    if (!user?.auth_user_id) {
       throw new Error('User must be authenticated to create banner schedules');
     }
 
@@ -352,10 +361,14 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
       }
     };
 
+    // Use effective organization for new schedules
+    const effectiveOrgId = effectiveOrganization?.id;
+
     // Prepare insert data - convert empty strings to null for timestamp fields
     const insertData = {
       ...data,
-      user_id: userId,
+      user_id: user.auth_user_id,
+      organization_id: effectiveOrgId,
       start_date: toISOString(data.start_date),
       end_date: toISOString(data.end_date),
       time_ranges: JSON.stringify(data.time_ranges),
@@ -378,7 +391,7 @@ export const useBannerSchedules = (): UseBannerSchedulesReturn => {
     await fetchSchedules();
 
     return newSchedule;
-  }, [fetchSchedules]);
+  }, [fetchSchedules, user?.auth_user_id, effectiveOrganization?.id]);
 
   const updateSchedule = useCallback(async (
     id: string,

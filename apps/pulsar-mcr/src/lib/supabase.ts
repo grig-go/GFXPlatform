@@ -41,6 +41,7 @@ export {
   cookieStorage,
   SHARED_AUTH_STORAGE_KEY,
   migrateLocalStorageToCookie,
+  syncCookieToLocalStorage,
 
   // Cross-app SSO helpers
   getUrlWithAuthToken,

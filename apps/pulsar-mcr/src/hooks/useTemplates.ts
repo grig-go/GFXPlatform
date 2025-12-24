@@ -1,11 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, sessionReady } from '../lib/supabase';
-
-// Get the current user's ID
-const getCurrentUserId = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id;
-};
+import { useAuth } from '../contexts/AuthContext';
 
 export interface Template {
   id: string;
@@ -69,6 +64,76 @@ export const useTemplates = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Get effective organization for impersonation support
+  const { effectiveOrganization, isSuperuser, user } = useAuth();
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Wait for session to be restored from cookies before checking
+      await sessionReady;
+
+      // First check if we have a session
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        console.log('No active session - user needs to log in');
+        setTemplates([]);
+        setError('Please log in to view templates');
+        return;
+      }
+
+      // Get the effective organization ID for impersonation support
+      const effectiveOrgId = effectiveOrganization?.id;
+      console.log('[useTemplates] Fetching with effectiveOrgId:', effectiveOrgId);
+
+      // Build query with organization filter for superusers
+      let query = supabase
+        .from('templates')
+        .select('*')
+        .order('order');
+
+      // For superusers, filter by effective org to support impersonation
+      if (isSuperuser && effectiveOrgId) {
+        query = query.eq('organization_id', effectiveOrgId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching templates:', error);
+        throw error;
+      }
+
+      // Fetch template_settings for displayNameFormat
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('template_settings')
+        .select('template_id, settings');
+
+      if (settingsError) {
+        console.error('Error fetching template_settings:', settingsError);
+        // Don't throw - settings are optional
+      }
+
+      // Build a map of template_id -> settings
+      const settingsMap: Record<string, TemplateSettings['settings']> = {};
+      settingsData?.forEach(s => {
+        settingsMap[s.template_id] = s.settings || {};
+      });
+      setTemplateSettings(settingsMap);
+
+      console.log('[useTemplates] Fetched templates:', data?.length || 0, 'for org:', effectiveOrgId);
+      setTemplates(data || []);
+    } catch (err) {
+      console.error('Error in fetchTemplates:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveOrganization?.id, isSuperuser]);
+
   useEffect(() => {
     // Set up auth state listener
     const { data: authListener } = supabase.auth.onAuthStateChange((event, _session) => {
@@ -126,71 +191,14 @@ export const useTemplates = () => {
       authListener.subscription.unsubscribe();
       settingsSubscription.unsubscribe();
     };
-  }, []);
-
-  const fetchTemplates = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Wait for session to be restored from cookies before checking
-      await sessionReady;
-
-      // First check if we have a session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        console.log('No active session - user needs to log in');
-        setTemplates([]);
-        setError('Please log in to view templates');
-        return;
-      }
-
-      console.log('Fetching templates for user:', session.user.id);
-
-      const { data, error } = await supabase
-        .from('templates')
-        .select('*')
-        .order('order');
-
-      if (error) {
-        console.error('Error fetching templates:', error);
-        throw error;
-      }
-
-      // Fetch template_settings for displayNameFormat
-      const { data: settingsData, error: settingsError } = await supabase
-        .from('template_settings')
-        .select('template_id, settings');
-
-      if (settingsError) {
-        console.error('Error fetching template_settings:', settingsError);
-        // Don't throw - settings are optional
-      }
-
-      // Build a map of template_id -> settings
-      const settingsMap: Record<string, TemplateSettings['settings']> = {};
-      settingsData?.forEach(s => {
-        settingsMap[s.template_id] = s.settings || {};
-      });
-      setTemplateSettings(settingsMap);
-
-      console.log('Fetched templates:', data);
-      setTemplates(data || []);
-    } catch (err) {
-      console.error('Error in fetchTemplates:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fetchTemplates]);
 
   /**
    * refreshTemplatesIfNeeded:
    * Compares the expected tree (provided as a parameter) with the latest DB tree.
    * If they differ, updates the local templates state.
    */
-  const refreshTemplatesIfNeeded = async (newData?: Template[]): Promise<void> => {
+  const refreshTemplatesIfNeeded = useCallback(async (newData?: Template[]): Promise<void> => {
     try {
       // Check session first
       const { data: { session } } = await supabase.auth.getSession();
@@ -206,16 +214,26 @@ export const useTemplates = () => {
       } else {
         // Otherwise, fetch fresh data
         setLoading(true);
-        
-        const { data, error } = await supabase
+
+        // Get the effective organization ID for impersonation support
+        const effectiveOrgId = effectiveOrganization?.id;
+
+        let query = supabase
           .from('templates')
           .select('*')
           .order('order');
-        
+
+        // For superusers, filter by effective org to support impersonation
+        if (isSuperuser && effectiveOrgId) {
+          query = query.eq('organization_id', effectiveOrgId);
+        }
+
+        const { data, error } = await query;
+
         if (error) {
           throw error;
         }
-        
+
         // Ensure data is not null or undefined before using it
         if (data) {
           setTemplates(data);
@@ -230,53 +248,56 @@ export const useTemplates = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveOrganization?.id, isSuperuser]);
 
-  const createTemplate = async (template: Omit<Template, 'id' | 'user_id'>) => {
+  const createTemplate = useCallback(async (template: Omit<Template, 'id' | 'user_id'>) => {
     try {
       // Remove children from the template object before sending to the database
       const { children, ...templateWithoutChildren } = template as any;
-      
+
       // Get the current maximum order value for the target parent
       let query = supabase
         .from('templates')
         .select('order');
-      
+
       if (templateWithoutChildren.parent_id) {
         query = query.eq('parent_id', templateWithoutChildren.parent_id);
       } else {
         query = query.is('parent_id', null);
       }
-  
+
       const { data: existingTemplates } = await query;
-  
-      const maxOrder = existingTemplates?.reduce((max, ch) => 
+
+      const maxOrder = existingTemplates?.reduce((max, ch) =>
         ch.order > max ? ch.order : max, -1) ?? -1;
-      
-      // Get the current user's ID
-      const userId = await getCurrentUserId();
-      if (!userId) {
+
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to create templates');
       }
-      
-      // Add the user_id to the template data
+
+      // Use effective organization for new templates
+      const effectiveOrgId = effectiveOrganization?.id;
+
+      // Add the user_id and organization_id to the template data
       const templateData = {
         ...templateWithoutChildren,
-        user_id: userId,
+        user_id: user.auth_user_id,
+        organization_id: effectiveOrgId,
         order: maxOrder + 1
       };
-      
+
       const { data, error } = await supabase
         .from('templates')
         .insert([templateData])
         .select()
         .single();
-        
+
       if (error) {
         console.error('Error creating template:', error);
         throw error;
       }
-      
+
       setTemplates(prev => [...prev, data]);
       return data;
     } catch (err) {
@@ -284,66 +305,64 @@ export const useTemplates = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, effectiveOrganization?.id]);
 
-  const updateTemplate = async (id: string, updates: Partial<Template>) => {
+  const updateTemplate = useCallback(async (id: string, updates: Partial<Template>) => {
     try {
       // Remove children from the updates object before sending to the database
       const { children, ...updatesWithoutChildren } = updates as any;
-      
-      // Get the current user's ID
-      const userId = await getCurrentUserId();
-      if (!userId) {
+
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update templates');
       }
-      
+
       // Don't override user_id in updates
       const updateData = {
         ...updatesWithoutChildren
       };
-      
+
       const { data, error } = await supabase
         .from('templates')
         .update(updateData)
         .eq('id', id)
         .select()
         .single();
-      
+
       if (error) {
         console.error('Error updating template:', error);
         throw error;
       }
-      
-      setTemplates(prev => prev.map(template => 
+
+      setTemplates(prev => prev.map(template =>
         template.id === id ? { ...template, ...data } : template
       ));
-      
+
       return data;
     } catch (err) {
       console.error('Error in updateTemplate:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
 
-  const deleteTemplate = async (id: string) => {
+  const deleteTemplate = useCallback(async (id: string) => {
     try {
-      // Get the current user's ID
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to delete templates');
       }
-      
+
       const { error } = await supabase
         .from('templates')
         .delete()
         .eq('id', id);
-      
+
       if (error) {
         console.error('Error deleting template:', error);
         throw error;
       }
-      
+
       setTemplates(prev => prev.filter(template => template.id !== id));
       return { success: true };
     } catch (err) {
@@ -351,20 +370,20 @@ export const useTemplates = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id]);
   
   // Batch update for multiple templates, useful for reordering
-  const batchUpdateTemplates = async (updates: { id: string, updates: Partial<Template> }[]) => {
+  const batchUpdateTemplates = useCallback(async (updates: { id: string, updates: Partial<Template> }[]) => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update templates');
       }
 
       // Create an array of promises for each update
       const updatePromises = updates.map(({ id, updates }) => {
         const { children, ...updatesWithoutChildren } = updates as any;
-        
+
         return supabase
           .from('templates')
           .update(updatesWithoutChildren)
@@ -373,7 +392,7 @@ export const useTemplates = () => {
 
       // Execute all updates in parallel
       const results = await Promise.all(updatePromises);
-      
+
       // Check for errors
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
@@ -389,13 +408,13 @@ export const useTemplates = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, fetchTemplates]);
 
   // Toggle favorite status for a template
-  const toggleFavorite = async (id: string) => {
+  const toggleFavorite = useCallback(async (id: string) => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update templates');
       }
 
@@ -430,13 +449,13 @@ export const useTemplates = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, templates]);
 
   // Set a template as the default (only one can be default at a time)
-  const setDefaultTemplate = async (id: string) => {
+  const setDefaultTemplate = useCallback(async (id: string) => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) {
+      // Use user from auth context
+      if (!user?.auth_user_id) {
         throw new Error('User must be authenticated to update templates');
       }
 
@@ -454,7 +473,7 @@ export const useTemplates = () => {
         await supabase
           .from('templates')
           .update({ is_default: false })
-          .eq('user_id', userId)
+          .eq('user_id', user.auth_user_id)
           .eq('is_default', true);
       }
 
@@ -489,7 +508,7 @@ export const useTemplates = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
-  };
+  }, [user?.auth_user_id, templates]);
 
   // Get unique carousel names from all templates
   const getUniqueCarouselNames = (): string[] => {
