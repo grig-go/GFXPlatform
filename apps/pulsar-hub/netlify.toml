@@ -1,5 +1,6 @@
 [build]
-  command = "cd ../.. && pnpm install && pnpm --filter pulsar-hub build"
+  # Force fresh install and rebuild - clean dist first to avoid stale cache
+  command = "cd ../.. && rm -rf apps/pulsar-hub/dist && pnpm install && pnpm --filter pulsar-hub build"
   publish = "dist"
 
 # SPA routing - redirect all routes to index.html
