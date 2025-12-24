@@ -73,7 +73,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "framer-motion";
-import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
+import { getEdgeFunctionUrl, getAccessToken } from "../utils/supabase/config";
 import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
 
 // Backend data structure from school_closings table
@@ -135,11 +135,12 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   // Fetch all closings from backend
   const fetchSchoolClosings = async () => {
     try {
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('school_closing'),
         {
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -168,12 +169,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('school_closing/fetch'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -220,13 +222,14 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Sending manual entry:", dataToSend);
 
     try {
+      const token = await getAccessToken();
       const url = getEdgeFunctionUrl('school_closing/manual');
       console.log("📡 [SchoolClosings] POST to:", url);
-      
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),
@@ -286,13 +289,14 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("🗑️ [SchoolClosings] Deleting school:", schoolToDelete.id);
 
     try {
+      const token = await getAccessToken();
       const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToDelete.id}`);
       console.log("📡 [SchoolClosings] DELETE to:", url);
-      
+
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -414,13 +418,14 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Updating manual entry:", dataToSend);
 
     try {
+      const token = await getAccessToken();
       const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToEdit.id}`);
       console.log("📡 [SchoolClosings] PUT to:", url);
-      
+
       const response = await fetch(url, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),

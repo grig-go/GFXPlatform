@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getEdgeFunctionUrl, getSupabaseAnonKey } from "./supabase/config";
+import { getEdgeFunctionUrl } from "./supabase/config";
+import { getAccessToken } from "./supabase";
 
 export interface FinanceDataStats {
   totalSecurities: number;
@@ -29,11 +30,12 @@ export function useFinanceData() {
   const fetchFinanceData = async () => {
     try {
       // Fetch from finance_dashboard edge function
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('finance_dashboard/stocks'),
         {
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );

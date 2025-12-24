@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getRestUrl, getSupabaseHeaders } from "./supabase/config";
+import { getRestUrl, getAccessToken } from "./supabase/config";
 
 export interface SchoolClosingsDataStats {
   activeClosings: number;
@@ -19,10 +19,13 @@ export function useSchoolClosingsData() {
       setStats(prev => ({ ...prev, loading: true, error: null }));
 
       // Fetch all school closings from the database
+      const token = await getAccessToken();
       const response = await fetch(
         getRestUrl('school_closings?select=id,status_day'),
         {
-          headers: getSupabaseHeaders(),
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 

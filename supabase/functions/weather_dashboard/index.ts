@@ -8,8 +8,35 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 // ============================================================================
 // SUPABASE CLIENT
 // ============================================================================
-const getSupabaseClient = ()=>createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
-const supabase = getSupabaseClient();
+// Service role client - bypasses RLS (use only for admin operations)
+const getServiceClient = () => createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
+// User-scoped client - respects RLS based on user's JWT
+const getUserClient = (authHeader: string | null) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  // If we have a Bearer token, use it to create a user-scoped client
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(supabaseUrl, supabaseAnonKey);
+};
+
+// Default to service client for backward compatibility with writes
+const supabase = getServiceClient();
 // ============================================================================
 // SERVER SETUP
 // ============================================================================
@@ -979,9 +1006,16 @@ app.get("/weather-data", async (c)=>{
       console.log(`[/weather-data] 🌍 Ingest triggered for ALL active providers`);
     }
     // ============================================================================
-    // 📡 Fetch provider(s)
+    // GET USER-SCOPED CLIENT FOR RLS-RESPECTING QUERIES
     // ============================================================================
-    let providers = [];
+    const authHeader = c.req.header("Authorization");
+    const userClient = getUserClient(authHeader);
+    console.log(`[/weather-data] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
+    // ============================================================================
+    // 📡 Fetch provider(s) - providers are shared, use service role
+    // ============================================================================
+    let providers: any[] = [];
     if (providerId && providerId !== "all") {
       console.log(`🎯 Fetching data only for provider: ${providerId}`);
       const { data: singleProvider, error: provError } = await supabase.from("data_providers").select("*").eq("id", providerId).eq("is_active", true).maybeSingle();
@@ -1007,9 +1041,9 @@ app.get("/weather-data", async (c)=>{
     const providersDuration = Date.now() - requestStart;
     console.log(`[/weather-data] ✅ Found ${providers.length} active weather provider(s) in ${providersDuration}ms`);
 
-    // ✅ Fetch ALL active locations (including CSV/News12)
+    // ✅ Fetch active locations - use userClient for org filtering
     const locationsStart = Date.now();
-    const { data: allLocations, error: locError } = await supabase.from("weather_locations").select("*").eq("is_active", true).order("name");
+    const { data: allLocations, error: locError } = await userClient.from("weather_locations").select("*").eq("is_active", true).order("name");
     const locationsDuration = Date.now() - locationsStart;
 
     if (locError) {

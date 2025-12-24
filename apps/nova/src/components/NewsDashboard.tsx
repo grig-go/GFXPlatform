@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "./ui/label";
 import { useNewsProviders } from "../utils/useNewsProviders";
 import { Article } from "../utils/useNewsFeed";
-import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl, getAccessToken } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { NewsDebugPanel } from "./NewsDebugPanel";
 import { NewsAIInsights } from "./NewsAIInsights";
@@ -105,10 +105,10 @@ export function NewsDashboard({
 
       console.log('📡 [NEWS] Fetching from:', url.toString());
 
-      const anonKey = getSupabaseAnonKey();
+      const token = await getAccessToken();
       const response = await fetch(url.toString(), {
         headers: {
-          Authorization: `Bearer ${anonKey}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -278,10 +278,11 @@ export function NewsDashboard({
       console.log('📡 [NEWS] Fetching articles from:', url);
       console.log('📡 [NEWS] Params:', { q, country: formattedProviders[0]?.country, language: formattedProviders[0]?.language });
 
+      const token = await getAccessToken();
       const articlesResponse = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${anonKey}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache'
         },

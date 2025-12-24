@@ -8,8 +8,35 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 // ============================================================================
 // SUPABASE CLIENT
 // ============================================================================
-const getSupabaseClient = ()=>createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
-const supabase = getSupabaseClient();
+// Service role client - bypasses RLS (use only for admin operations)
+const getServiceClient = () => createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
+// User-scoped client - respects RLS based on user's JWT
+const getUserClient = (authHeader: string | null) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  // If we have a Bearer token, use it to create a user-scoped client
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(supabaseUrl, supabaseAnonKey);
+};
+
+// Default to service client for backward compatibility with writes
+const supabase = getServiceClient();
 // ============================================================================
 // SERVER SETUP
 // ============================================================================
@@ -115,8 +142,17 @@ app.get("/health", (c)=>c.json({
 // GET all stocks/crypto
 app.get("/stocks", async (c)=>{
   try {
-    const { data, error } = await supabase.from("f_stocks").select("*").order("symbol");
-    if (error) return jsonErr(c, 500, "STOCKS_FETCH_FAILED", error.message);
+    // Use user-scoped client to respect RLS organization filtering
+    const authHeader = c.req.header("Authorization");
+    const userClient = getUserClient(authHeader);
+    console.log(`[/stocks] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
+    const { data, error } = await userClient.from("f_stocks").select("*").order("symbol");
+    if (error) {
+      console.error(`[/stocks] ❌ Error:`, error);
+      return jsonErr(c, 500, "STOCKS_FETCH_FAILED", error.message);
+    }
+    console.log(`[/stocks] ✅ Returning ${data?.length || 0} stocks`);
     return c.json({
       ok: true,
       stocks: data || []

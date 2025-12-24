@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { WeatherLocationWithOverrides, createOverride, FieldOverride } from "../types/weather";
-import { getEdgeFunctionUrl, getSupabaseAnonKey } from "./supabase/config";
+import { getEdgeFunctionUrl } from "./supabase/config";
+import { getAccessToken } from "./supabase";
 
 export interface WeatherDataStats {
   locations: WeatherLocationWithOverrides[];
@@ -43,9 +44,9 @@ function saveCachedData(data: WeatherDataStats) {
 const FETCH_TIMEOUT_MS = 30000;
 
 export function useWeatherData() {
-  // Initialize with cached data if available, otherwise empty
-  const cachedData = loadCachedData();
-  const [stats, setStats] = useState<WeatherDataStats>(cachedData || {
+  // Don't use cached data - always start with loading state
+  // Cache can contain data from a different user/org session
+  const [stats, setStats] = useState<WeatherDataStats>({
     locations: [],
     totalLocations: 0,
     activeAlerts: 0,
@@ -69,11 +70,12 @@ export function useWeatherData() {
       const url = getEdgeFunctionUrl('weather_dashboard/weather-data');
       console.log('[useWeatherData] 📡 Fetching from:', url);
 
+      const token = await getAccessToken();
       const response = await fetch(
         url,
         {
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
           },
           signal: controller.signal,
         }

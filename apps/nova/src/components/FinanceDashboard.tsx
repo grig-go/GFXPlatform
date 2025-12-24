@@ -62,6 +62,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   // Backend data state
   const [backendSecurities, setBackendSecurities] = useState<FinanceSecurityWithSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backendLoaded, setBackendLoaded] = useState(false); // Track if backend has loaded (even with 0 results)
   const [error, setError] = useState<string | null>(null);
   const [backendOverrideCount, setBackendOverrideCount] = useState(0);
   
@@ -171,11 +172,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       console.log(`📊 Loaded ${securities.length} securities from finance_dashboard`);
       console.log('📊 Securities data:', securities.map(s => ({ symbol: s.security.symbol, name: s.security.name.value, type: s.security.type })));
       setBackendSecurities(securities);
-      
+      setBackendLoaded(true); // Mark as loaded even if 0 results (RLS filtering)
+
       // Count total overrides from backend (securities with custom names)
       const overrideCount = securities.filter(sec => sec.security.name.isOverridden).length;
       setBackendOverrideCount(overrideCount);
-      
+
       console.log(`📊 Total overrides: ${overrideCount}`);
       
       // If not skipping refresh, auto-refresh prices after initial load
@@ -630,8 +632,9 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     setPreselectedSecurityId(undefined);
   };
 
-  // Use backend data instead of props
-  const activeSecurities = backendSecurities.length > 0 ? backendSecurities : securities;
+  // Use backend data instead of props - once backend has loaded, always use backend data
+  // (even if empty, which means RLS is filtering out data for this org)
+  const activeSecurities = backendLoaded ? backendSecurities : securities;
   
   const filteredSecurities = useMemo(() => {
     const filtered = activeSecurities.filter(item => {

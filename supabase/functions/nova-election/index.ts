@@ -435,6 +435,27 @@ function transformElectionData(rawData) {
     parties: Array.from(partiesMap.values())
   };
 }
+// Helper to create user-scoped client that respects RLS
+function getUserClient(authHeader: string | null) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+
+  // If we have a Bearer token, use it to create a user-scoped client
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(supabaseUrl, supabaseAnonKey);
+}
+
 serve(async (req)=>{
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -442,9 +463,11 @@ serve(async (req)=>{
     });
   }
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Use user-scoped client to respect RLS organization filtering
+    const authHeader = req.headers.get('Authorization');
+    const supabase = getUserClient(authHeader);
+    console.log(`[nova-election] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
     const url = new URL(req.url);
     const pathname = url.pathname;
 

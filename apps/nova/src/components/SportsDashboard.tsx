@@ -28,7 +28,7 @@ import {
   League
 } from "../types/sports";
 import { Activity, Users, User, Calendar, MapPin, TrendingUp, Trophy, Rss, RefreshCw } from "lucide-react";
-import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
+import { getEdgeFunctionUrl, getRestUrl, getAccessToken, getSupabaseAnonKey } from "../utils/supabase/config";
 import { supabase } from "../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";

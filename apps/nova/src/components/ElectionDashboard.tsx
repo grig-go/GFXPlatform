@@ -26,7 +26,7 @@ import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateField
 import { supabase, withAutoRecovery } from '../utils/supabase/client';
 import { SyntheticGroup } from '../utils/useSyntheticRaceWorkflow';
 import { currentElectionYear } from '../utils/constants';
-import { getEdgeFunctionUrl, getSupabaseAnonKey } from '../utils/supabase/config';
+import { getEdgeFunctionUrl, getAccessToken } from '../utils/supabase/config';
 import { motion } from "framer-motion";
 
 interface ElectionDashboardProps {
@@ -1084,12 +1084,13 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const fetchSyntheticGroupsViaEdge = async () => {
     try {
       console.log('📦 Fetching synthetic groups via edge function...');
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('nova-election/synthetic-groups'),
         {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -1121,12 +1122,13 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const handleCreateSyntheticGroup = async (name: string, description?: string): Promise<string | null> => {
     try {
       console.log('📦 Creating synthetic group via edge function:', name);
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('nova-election/synthetic-groups'),
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ name, description }),

@@ -144,13 +144,43 @@ app.post('/sports-data/sync', async (c)=>{
 // ============================================================================
 // SPORTS DATA ROUTES (Database)
 // ============================================================================
-const getSupabase = ()=>createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
+// Service role client - bypasses RLS (use only for admin operations)
+const getSupabase = () => createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+);
+
+// User-scoped client - respects RLS based on user's JWT
+const getUserClient = (authHeader: string | null) => {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+  // If we have a Bearer token, use it to create a user-scoped client
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+
+  // Fallback to anon client (will still respect RLS, but as anonymous)
+  return createClient(supabaseUrl, supabaseAnonKey);
+};
 // Get all teams
 app.get('/sports-data/teams', async (c)=>{
   try {
-    const supabase = getSupabase();
-    const { data: teams, error } = await supabase.from('sports_teams').select('*').order('name');
+    // Use user-scoped client to respect RLS organization filtering
+    const authHeader = c.req.header('Authorization');
+    const userClient = getUserClient(authHeader);
+    console.log(`[/sports-data/teams] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
+    const { data: teams, error } = await userClient.from('sports_teams').select('*').order('name');
     if (error) throw error;
+    console.log(`[/sports-data/teams] ✅ Returning ${teams?.length || 0} teams`);
     return c.json({
       teams: teams || []
     });
@@ -193,8 +223,12 @@ app.get('/sports-data/venues', async (c)=>{
 // Get all tournaments
 app.get('/sports-data/tournaments', async (c)=>{
   try {
-    const supabase = getSupabase();
-    const { data: leagues, error } = await supabase.from('sports_leagues').select('*').order('name');
+    // Use user-scoped client to respect RLS organization filtering
+    const authHeader = c.req.header('Authorization');
+    const userClient = getUserClient(authHeader);
+    console.log(`[/sports-data/tournaments] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+
+    const { data: leagues, error } = await userClient.from('sports_leagues').select('*').order('name');
     if (error) throw error;
     const tournaments = (leagues || []).map((league)=>({
         id: league.id,
@@ -207,6 +241,7 @@ app.get('/sports-data/tournaments', async (c)=>{
         logo_url: league.logo_url,
         is_active: league.is_active
       }));
+    console.log(`[/sports-data/tournaments] ✅ Returning ${tournaments?.length || 0} tournaments`);
     return c.json({
       tournaments
     });

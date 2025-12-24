@@ -10,7 +10,27 @@ import {
   getProjectId as _getProjectId,
   getEdgeFunctionUrl as _getEdgeFunctionUrl,
   getSupabaseHeaders as _getSupabaseHeaders,
+  supabase,
 } from '@emergent-platform/supabase-client';
+
+/**
+ * Get the current user's access token for authenticated API calls.
+ * This should be used instead of anon key when calling edge functions
+ * that need to respect RLS organization filtering.
+ * @returns The access token or anon key as fallback
+ */
+export async function getAccessToken(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return session.access_token;
+    }
+  } catch (e) {
+    console.warn('[getAccessToken] Failed to get session:', e);
+  }
+  // Fallback to anon key
+  return _getSupabaseAnonKey();
+}
 
 /**
  * Get Supabase URL from environment variables

@@ -28,5 +28,6 @@ export {
   getEdgeFunctionUrl,
   getRestUrl,
   getSupabaseHeaders,
+  getAccessToken,
 } from './config';
 

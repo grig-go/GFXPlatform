@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { getEdgeFunctionUrl, getSupabaseAnonKey } from './supabase/config';
+import { getEdgeFunctionUrl, getAccessToken } from './supabase/config';
 
 export type Article = {
   id: string;
@@ -42,26 +42,31 @@ export function useNewsFeed(opts: {
     setLoading(true);
     setError(null);
 
-    const anonKey = getSupabaseAnonKey();
+    const fetchNews = async () => {
+      try {
+        const token = await getAccessToken();
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
 
-    // Add required auth headers for Supabase Edge Functions
-    fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${anonKey}`,
-        'apikey': anonKey,
-        'Cache-Control': 'no-cache'
-      }
-    })
-      .then(r => {
-        if (!r.ok) {
-          throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        return r.json();
-      })
-      .then(d => { if (!abort) setArticles(d.articles ?? []); })
-      .catch(e => { if (!abort) setError(String(e)); })
-      .finally(() => { if (!abort) setLoading(false); });
+
+        const data = await response.json();
+        if (!abort) setArticles(data.articles ?? []);
+      } catch (e) {
+        if (!abort) setError(String(e));
+      } finally {
+        if (!abort) setLoading(false);
+      }
+    };
+
+    fetchNews();
     return () => { abort = true; };
   }, [url]);
 
