@@ -129,6 +129,8 @@ export const cookieStorage = {
   setItem: (key: string, value: string): void => {
     if (typeof window === 'undefined') return;
 
+    console.log('[Auth SSO] setItem called', { key, valueLength: value?.length });
+
     // Always store in localStorage
     localStorage.setItem(key, value);
 
@@ -140,10 +142,13 @@ export const cookieStorage = {
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
-        setCookie(SHARED_COOKIE_NAME, minimalTokens, getCookieDomain());
+        const cookieDomain = getCookieDomain();
+        setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
+        console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME });
       }
     } catch (e) {
       // Value might not be JSON, just store in localStorage only
+      console.log('[Auth SSO] setItem value is not JSON, skipping cookie sync');
     }
   },
 
@@ -291,9 +296,15 @@ export function navigateWithAuth(targetUrl: string, path = ''): void {
 export function syncCookieToLocalStorage(): boolean {
   if (typeof window === 'undefined') return false;
 
+  const hostname = window.location.hostname;
+  const cookieDomain = getCookieDomain();
+  console.log('[Auth SSO] syncCookieToLocalStorage called', { hostname, cookieDomain });
+
   // If we already have a session in localStorage, sync it TO the cookie
   // (in case this is the first login and other subdomains need it)
   const existingLocal = localStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+  console.log('[Auth SSO] localStorage check:', { hasLocal: !!existingLocal, key: SHARED_AUTH_STORAGE_KEY });
+
   if (existingLocal) {
     try {
       const sessionData = JSON.parse(existingLocal);
@@ -303,17 +314,20 @@ export function syncCookieToLocalStorage(): boolean {
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
-        setCookie(SHARED_COOKIE_NAME, minimalTokens, getCookieDomain());
-        console.log('[Auth] Synced existing localStorage session to shared cookie');
+        setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
+        console.log('[Auth SSO] Synced existing localStorage session to shared cookie', { cookieDomain });
         return false; // Session existed, no restoration needed
       }
     } catch (e) {
+      console.error('[Auth SSO] Error parsing localStorage:', e);
       // Continue to check cookie
     }
   }
 
   // No localStorage session, check if there's a shared cookie to restore from
   const cookieValue = getCookie(SHARED_COOKIE_NAME);
+  console.log('[Auth SSO] Cookie check:', { hasCookie: !!cookieValue, cookieName: SHARED_COOKIE_NAME });
+
   if (cookieValue) {
     try {
       const tokens = JSON.parse(cookieValue);
@@ -324,12 +338,14 @@ export function syncCookieToLocalStorage(): boolean {
           refresh_token: tokens.refresh_token,
         });
         localStorage.setItem(SHARED_AUTH_STORAGE_KEY, sessionData);
-        console.log('[Auth] Restored session from shared cookie to localStorage');
+        console.log('[Auth SSO] Restored session from shared cookie to localStorage');
         return true;
       }
     } catch (e) {
-      console.error('[Auth] Error parsing shared cookie:', e);
+      console.error('[Auth SSO] Error parsing shared cookie:', e);
     }
+  } else {
+    console.log('[Auth SSO] No shared cookie found, user not logged in on any subdomain');
   }
 
   return false;
