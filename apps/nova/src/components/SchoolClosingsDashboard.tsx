@@ -75,6 +75,7 @@ import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "framer-motion";
 import { getEdgeFunctionUrl, getAccessToken } from "../utils/supabase/config";
 import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
+import { useAuth } from "../contexts/AuthContext";
 
 // Backend data structure from school_closings table
 interface SchoolClosing {
@@ -100,6 +101,9 @@ interface SchoolClosingsDashboardProps {
 }
 
 export default function SchoolClosingsDashboard({ onNavigateToProviders }: SchoolClosingsDashboardProps = {}) {
+  // Get effective organization for impersonation support
+  const { effectiveOrganization } = useAuth();
+
   const [schools, setSchools] = useState<SchoolClosing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -136,13 +140,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   const fetchSchoolClosings = async () => {
     try {
       const token = await getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const response = await fetch(
         getEdgeFunctionUrl('school_closing'),
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers }
       );
 
       if (!response.ok) {
@@ -160,23 +167,28 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     }
   };
 
-  // Initial load
+  // Initial load (refetch when impersonation changes)
   useEffect(() => {
     fetchSchoolClosings();
-  }, []);
+  }, [effectiveOrganization?.id]);
 
   // Refresh: fetch from XML source and update database
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       const token = await getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const response = await fetch(
         getEdgeFunctionUrl('school_closing/fetch'),
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
         }
       );
 

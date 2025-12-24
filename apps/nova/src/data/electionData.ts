@@ -1,6 +1,6 @@
 import { ElectionData, Race, Candidate, CandidateProfile, Party, createOverride } from '../types/election';
 import { currentElectionYear } from '../utils/constants';
-import { supabase } from '../utils/supabase/client';
+import { supabase, sessionReady } from '../utils/supabase/client';
 
 // State name mapping
 const stateNames: Record<string, string> = {
@@ -62,6 +62,19 @@ interface CachedData {
   data: ElectionData;
   lastFetchedAt: string;
   dataVersion: string;
+}
+
+// Pagination metadata interface
+export interface PaginationInfo {
+  currentPage: number;
+  pageSize: number;
+  totalRaces: number;
+  totalPages: number;
+}
+
+// Result with pagination
+export interface ElectionDataWithPagination extends ElectionData {
+  pagination: PaginationInfo;
 }
 
 // In-memory cache
@@ -140,51 +153,102 @@ function formatRaceTitle(
 
 // Main function to fetch election data from Supabase using RPC for better performance
 async function fetchElectionDataFromSupabase(year?: number): Promise<any[]> {
+  // Wait for session to be initialized (with timeout to prevent blocking)
+  // Note: The RPC function is SECURITY DEFINER so it bypasses RLS anyway,
+  // but we still wait to ensure the Supabase client is ready
+  try {
+    await Promise.race([
+      sessionReady,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('sessionReady timeout')), 5000))
+    ]);
+  } catch (e) {
+    console.warn('[electionData] sessionReady timed out, proceeding anyway:', e);
+  }
+
   const allResults: any[] = [];
-  const batchSize = 20000;
-  let offset = 0;
-  let hasMore = true;
 
   console.log('Fetching election data from Supabase...', year ? `for year ${year}` : 'all years');
 
-  while (hasMore) {
-    // Use RPC function for optimized query with pagination
-    const { data, error } = await supabase
-      .rpc('fetch_election_data_for_ui', { p_year: year || null })
-      .range(offset, offset + batchSize - 1);
+  // Fetch all data in one go with a large limit (RPC functions don't paginate well with .range())
+  // The default Supabase limit is 1000, so we must explicitly set a higher limit
+  const { data, error } = await supabase
+    .rpc('fetch_election_data_for_ui', { p_year: year || null })
+    .limit(50000); // Set a high limit to get all rows
 
-    if (error) {
-      console.error('Error fetching election data:', error);
-      throw error;
-    }
+  if (error) {
+    console.error('Error fetching election data:', error);
+    throw error;
+  }
 
-    if (data && data.length > 0) {
-      allResults.push(...data);
-      console.log(`Fetched batch: ${data.length} rows, total so far: ${allResults.length}`);
-      
-      // Debug: Log the first row to see what fields are available
-      if (offset === 0 && data.length > 0) {
-        console.log('🔍 First row from RPC - checking election ID fields:', {
-          election_id: data[0].election_id,
-          election_uuid: data[0].election_uuid,
-          available_election_fields: Object.keys(data[0]).filter(k => k.includes('election')),
-          sample_full_row: data[0]
-        });
-      }
+  if (data && data.length > 0) {
+    allResults.push(...data);
+    console.log(`Fetched ${data.length} rows from RPC`);
 
-      // Check if we got a full batch (might be more data)
-      if (data.length === batchSize) {
-        offset += batchSize;
-      } else {
-        hasMore = false;
-      }
-    } else {
-      hasMore = false;
-    }
+    // Debug: Log the first row to see what fields are available
+    console.log('🔍 First row from RPC - checking election ID fields:', {
+      election_id: data[0].election_id,
+      election_uuid: data[0].election_uuid,
+      available_election_fields: Object.keys(data[0]).filter(k => k.includes('election')),
+      sample_full_row: data[0]
+    });
   }
 
   console.log(`Total election data rows fetched: ${allResults.length}`);
   return allResults;
+}
+
+// New paginated function - fetches from server with filters applied at database level
+async function fetchElectionDataPaginated(
+  year?: number,
+  raceType?: string,
+  page: number = 1,
+  pageSize: number = 50,
+  effectiveOrgId?: string  // For superuser impersonation
+): Promise<{ data: any[], pagination: PaginationInfo }> {
+  // Wait for session to be initialized
+  try {
+    await Promise.race([
+      sessionReady,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('sessionReady timeout')), 5000))
+    ]);
+  } catch (e) {
+    console.warn('[electionData] sessionReady timed out, proceeding anyway:', e);
+  }
+
+  console.log(`[fetchElectionDataPaginated] Fetching page ${page} with pageSize ${pageSize}`, {
+    year, raceType, effectiveOrgId
+  });
+
+  // Call the new paginated RPC function with org filter support
+  const { data, error } = await supabase
+    .rpc('fetch_election_data_paginated', {
+      p_year: year || null,
+      p_race_type: raceType || null,
+      p_page: page,
+      p_page_size: pageSize,
+      p_effective_org_id: effectiveOrgId || null  // Pass impersonated org ID
+    });
+
+  if (error) {
+    console.error('Error fetching paginated election data:', error);
+    throw error;
+  }
+
+  // Extract pagination info from first row (all rows have the same total counts)
+  const totalRaces = data && data.length > 0 ? Number(data[0].total_races) : 0;
+  const totalPages = Math.ceil(totalRaces / pageSize);
+
+  console.log(`[fetchElectionDataPaginated] Fetched ${data?.length || 0} rows, ${totalRaces} total races, ${totalPages} pages`);
+
+  return {
+    data: data || [],
+    pagination: {
+      currentPage: page,
+      pageSize,
+      totalRaces,
+      totalPages
+    }
+  };
 }
 
 // Transform Supabase data to match ElectionData format
@@ -208,8 +272,20 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
     raceTypesInData.add(row.race_type);
 
     // Filter by year and race type if specified
-    if (filterYear && row.year !== filterYear) return;
-    if (filterRaceType && row.race_type !== filterRaceType) return;
+    if (filterYear && row.year !== filterYear) {
+      // Debug first few mismatches
+      if (racesMap.size < 3) {
+        console.log('[transformToElectionData] Year mismatch:', { filterYear, rowYear: row.year, rowYearType: typeof row.year });
+      }
+      return;
+    }
+    if (filterRaceType && row.race_type !== filterRaceType) {
+      // Debug first few mismatches
+      if (racesMap.size < 3) {
+        console.log('[transformToElectionData] RaceType mismatch:', { filterRaceType, rowRaceType: row.race_type });
+      }
+      return;
+    }
 
     const raceKey = `${row.race_type}-${row.year}-${row.race_race_id}`;
 
@@ -653,6 +729,16 @@ async function isCacheValid(): Promise<boolean> {
   if (!cachedElectionData) return false;
 
   try {
+    // Wait for session to be initialized (with timeout)
+    try {
+      await Promise.race([
+        sessionReady,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('sessionReady timeout')), 3000))
+      ]);
+    } catch (e) {
+      console.warn('[electionData] isCacheValid sessionReady timed out');
+    }
+
     // Check if data has changed by comparing the last_fetch_at from the data source
     const { data, error } = await supabase
       .from('e_election_data_sources')
@@ -695,7 +781,7 @@ export async function getElectionData(filterYear?: number, filterRaceType?: stri
       cachedRawData.set(cacheKey, rawData);
       console.log('Fetched', rawData.length, 'rows from database');
 
-      // Get the latest data version for cache validation
+      // Get the latest data version for cache validation (sessionReady already called in fetchElectionDataFromSupabase)
       const { data: versionData } = await supabase
         .from('e_election_data_sources')
         .select('last_fetch_at')
@@ -719,6 +805,25 @@ export async function getElectionData(filterYear?: number, filterRaceType?: stri
     } else {
       console.log(`Using cached raw data for year ${cacheKey}`);
       rawData = cachedRawData.get(cacheKey)!;
+    }
+
+    // Debug: log first row to see actual values
+    if (rawData.length > 0) {
+      // Check ALL rows for unique values, not just first 100
+      const allYears = [...new Set(rawData.map(r => r.year))];
+      const allRaceTypes = [...new Set(rawData.map(r => r.race_type))];
+      console.log('[getElectionData] Raw data sample:', {
+        totalRows: rawData.length,
+        firstRowYear: rawData[0].year,
+        firstRowYearType: typeof rawData[0].year,
+        firstRowRaceType: rawData[0].race_type,
+        allUniqueYears: allYears,
+        allUniqueRaceTypes: allRaceTypes,
+        raceTypeBreakdown: allRaceTypes.map(rt => ({
+          type: rt,
+          count: rawData.filter(r => r.race_type === rt).length
+        }))
+      });
     }
 
     // Apply filters if provided
@@ -857,7 +962,8 @@ export const initializeElectionData = async (): Promise<ElectionData> => {
 
   dataLoadPromise = (async () => {
     try {
-      console.log('Starting to fetch election data...');
+      console.log('[initializeElectionData] 🚀 Starting to fetch election data...');
+      console.log('[initializeElectionData] currentElectionYear:', currentElectionYear);
       isElectionDataLoading = true;
       electionDataError = null;
 
@@ -865,13 +971,17 @@ export const initializeElectionData = async (): Promise<ElectionData> => {
       const data = await getElectionData(currentElectionYear || undefined);
       electionData = data;
 
-      console.log('Election data loaded successfully with', electionData.races.length, 'races');
-      console.log(electionData);
+      console.log('[initializeElectionData] ✅ Election data loaded successfully with', electionData.races.length, 'races');
       isElectionDataLoading = false;
 
       return electionData;
     } catch (error) {
-      console.error('Failed to initialize election data:', error);
+      console.error('[initializeElectionData] ❌ Failed to initialize election data:', error);
+      console.error('[initializeElectionData] Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
       electionDataError = error as Error;
       isElectionDataLoading = false;
 
@@ -885,14 +995,56 @@ export const initializeElectionData = async (): Promise<ElectionData> => {
 };
 
 // Start loading immediately
-initializeElectionData();
+console.log('[electionData] Module loaded, supabase client exists:', !!supabase);
+console.log('[electionData] Clearing cache to force fresh fetch...');
+cachedRawData.clear();
+cachedElectionData = null;
+dataLoadPromise = null;
+console.log('[electionData] Calling initializeElectionData...');
+initializeElectionData().then(() => {
+  console.log('[electionData] initializeElectionData completed');
+}).catch(e => {
+  console.error('[electionData] initializeElectionData failed:', e);
+});
 
-// Function to get filtered election data
+// Function to get filtered election data (legacy - uses client-side filtering)
 export async function getFilteredElectionData(year?: number, raceType?: string): Promise<ElectionData> {
   // Convert race type to lowercase to match database
   const dbRaceType = raceType?.toLowerCase();
 
   return await getElectionData(year, dbRaceType);
+}
+
+// New function: Get paginated election data with server-side filtering
+export async function getPaginatedElectionData(
+  year?: number,
+  raceType?: string,
+  page: number = 1,
+  pageSize: number = 50,
+  effectiveOrgId?: string  // For superuser impersonation - pass the impersonated org ID
+): Promise<ElectionDataWithPagination> {
+  try {
+    // Convert race type to lowercase to match database
+    const dbRaceType = raceType?.toLowerCase();
+
+    console.log(`[getPaginatedElectionData] Fetching page ${page}, pageSize ${pageSize}, year ${year}, raceType ${dbRaceType}, effectiveOrgId ${effectiveOrgId}`);
+
+    // Fetch paginated data from server with filters applied at DB level
+    const { data: rawData, pagination } = await fetchElectionDataPaginated(year, dbRaceType, page, pageSize, effectiveOrgId);
+
+    // Transform to ElectionData format (no additional filtering needed - already done at DB level)
+    const electionData = transformToElectionData(rawData);
+
+    console.log(`[getPaginatedElectionData] Transformed ${electionData.races.length} races`);
+
+    return {
+      ...electionData,
+      pagination
+    };
+  } catch (error) {
+    console.error('[getPaginatedElectionData] Error:', error);
+    throw error;
+  }
 }
 
 // Function to manually refresh the data

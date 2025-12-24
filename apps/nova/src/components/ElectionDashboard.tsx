@@ -9,11 +9,12 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { RefreshCw, Download, Plus, Database, AlertTriangle, BarChart3, List, Vote, Crown, Building, Users, Flag, Edit, X, Loader2, Rss } from "lucide-react";
+import { RefreshCw, Download, Plus, Database, AlertTriangle, BarChart3, List, Vote, Crown, Building, Users, Flag, Edit, X, Loader2, Rss, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { Race, CandidateProfile, Party, getFieldValue, isFieldOverridden, ElectionData } from "../types/election";
 import { Input } from "./ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import {
   Dialog,
   DialogContent,
@@ -21,12 +22,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { getFilteredElectionData, clearElectionDataCache } from "../data/electionData";
+import { getFilteredElectionData, getPaginatedElectionData, clearElectionDataCache, PaginationInfo } from "../data/electionData";
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { supabase, withAutoRecovery } from '../utils/supabase/client';
 import { SyntheticGroup } from '../utils/useSyntheticRaceWorkflow';
 import { currentElectionYear } from '../utils/constants';
 import { getEdgeFunctionUrl, getAccessToken } from '../utils/supabase/config';
+import { useAuth } from '../contexts/AuthContext';
 import { motion } from "framer-motion";
 
 interface ElectionDashboardProps {
@@ -41,6 +43,9 @@ interface ElectionDashboardProps {
 }
 
 export function ElectionDashboard({ races, candidates = [], parties = [], onUpdateRace, lastUpdated, onNavigateToFeeds }: ElectionDashboardProps) {
+  // Get effective organization for impersonation support
+  const { effectiveOrganization } = useAuth();
+
   const [activeTab, setActiveTab] = useState('all-races');
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
   const [partySearchTerm, setPartySearchTerm] = useState('');
@@ -66,7 +71,17 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const [debugRPCData, setDebugRPCData] = useState<any>(null); // Raw RPC response for debugging
   const [isLoadingDebugData, setIsLoadingDebugData] = useState(false); // Loading state for debug fetch
 
-  // Fetch filtered data when year or race type changes
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
+
+  // Reset to page 1 when filters change (including when effective org changes due to impersonation)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, selectedRaceType, effectiveOrganization?.id]);
+
+  // Fetch filtered data when year, race type, page, page size, or effective org changes
   useEffect(() => {
     let mounted = true;
 
@@ -75,17 +90,25 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       try {
         // Parse year - use undefined if 'all' to fetch all years (>= 2012)
         const year = selectedYear !== 'all' ? parseInt(selectedYear) : undefined;
-        const raceType = selectedRaceType !== 'all' ? selectedRaceType.toUpperCase() : undefined;
+        const raceType = selectedRaceType !== 'all' ? selectedRaceType : undefined;
 
-        console.log('Fetching filtered data with params:', { year, raceType, refreshTrigger });
-        const data = await getFilteredElectionData(year, raceType);
+        // Get the effective organization ID for impersonation support
+        const effectiveOrgId = effectiveOrganization?.id;
+
+        console.log('Fetching paginated data with params:', { year, raceType, currentPage, pageSize, effectiveOrgId, refreshTrigger });
+
+        // Use the new paginated function with server-side filtering and org impersonation support
+        const data = await getPaginatedElectionData(year, raceType, currentPage, pageSize, effectiveOrgId);
 
         if (mounted) {
-          console.log('Filtered data received:', {
+          console.log('Paginated data received:', {
             racesCount: data.races.length,
-            firstRace: data.races[0]
+            pagination: data.pagination,
+            firstRace: data.races[0],
+            effectiveOrgId
           });
           setFilteredElectionData(data);
+          setPaginationInfo(data.pagination);
         }
       } catch (error) {
         console.error('Failed to fetch filtered election data:', error);
@@ -101,7 +124,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
     return () => {
       mounted = false;
     };
-  }, [selectedYear, selectedRaceType, refreshTrigger]);
+  }, [selectedYear, selectedRaceType, currentPage, pageSize, refreshTrigger, effectiveOrganization?.id]);
 
   // Use filtered data once loaded, otherwise use props (for initial render)
   console.log('filteredElectionDataaaaaaa')
@@ -1906,6 +1929,93 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
               ))
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {paginationInfo && paginationInfo.totalPages > 0 && (
+            <div className="flex items-center justify-between border-t pt-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Show</span>
+                <Select
+                  value={pageSize.toString()}
+                  onValueChange={(value) => {
+                    setPageSize(parseInt(value));
+                    setCurrentPage(1); // Reset to first page when changing page size
+                  }}
+                >
+                  <SelectTrigger className="w-[70px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="200">200</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span>races per page</span>
+                <span className="mx-2">|</span>
+                <span>
+                  Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, paginationInfo.totalRaces)} of {paginationInfo.totalRaces} races
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1 || isLoadingFiltered}
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1 || isLoadingFiltered}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1 px-2">
+                  <span className="text-sm">Page</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={paginationInfo.totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const page = parseInt(e.target.value);
+                      if (page >= 1 && page <= paginationInfo.totalPages) {
+                        setCurrentPage(page);
+                      }
+                    }}
+                    className="w-14 h-8 text-center"
+                  />
+                  <span className="text-sm">of {paginationInfo.totalPages}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage((prev) => Math.min(paginationInfo.totalPages, prev + 1))}
+                  disabled={currentPage === paginationInfo.totalPages || isLoadingFiltered}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage(paginationInfo.totalPages)}
+                  disabled={currentPage === paginationInfo.totalPages || isLoadingFiltered}
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="candidates" className="space-y-6">

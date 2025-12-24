@@ -9,9 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { TrendingUp, TrendingDown, Minus, Building2, Database, Brain, Rss, CheckCircle2, AlertCircle, Eye, Loader2, RefreshCw, X } from "lucide-react";
-import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl, getAccessToken } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
+import { useAuth } from "../contexts/AuthContext";
 
 interface FinanceDashboardProps {
   securities: FinanceSecurityWithSnapshot[];
@@ -50,6 +51,9 @@ interface DataProviderStats {
 }
 
 export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, onDeleteSecurity, lastUpdated, onNavigateToFeeds }: FinanceDashboardProps) {
+  // Get effective organization for impersonation support
+  const { effectiveOrganization } = useAuth();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -85,10 +89,10 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   const [loadingOverrides, setLoadingOverrides] = useState(false);
   const [removingOverride, setRemovingOverride] = useState<string | null>(null);
 
-  // Fetch stocks and crypto from backend
+  // Fetch stocks and crypto from backend (refetch when impersonation changes)
   useEffect(() => {
     fetchBackendData();
-  }, []);
+  }, [effectiveOrganization?.id]);
 
   // Fetch data provider info from backend
   useEffect(() => {
@@ -100,12 +104,18 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       console.log('📡 Fetching backend data from finance_dashboard...');
       setLoading(true);
       setError(null);
-      
-      // Fetch from finance_dashboard edge function
+
+      // Fetch from finance_dashboard edge function with user's access token for RLS filtering
+      const token = await getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const response = await fetch(getEdgeFunctionUrl('finance_dashboard/stocks'), {
-        headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
-        },
+        headers,
       });
       
       if (!response.ok) {
@@ -209,17 +219,23 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       setLoading(true);
       setError(null);
-      
+
       if (!silent) {
         toast.info('Fetching latest prices from APIs...');
       }
-      
+
       // Call the refresh endpoint to get fresh data from Alpaca/CoinGecko
+      const token = await getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const response = await fetch(getEdgeFunctionUrl('finance_dashboard/stocks/refresh'), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -259,11 +275,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   const fetchDataProviders = async () => {
     try {
       // Fetch providers from public view (masked credentials)
+      const token = await getAccessToken();
       const response = await fetch(
         getRestUrl('data_providers_public?select=*&category=eq.finance'),
         {
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
             apikey: getSupabaseAnonKey(),
           },
         }
@@ -487,14 +504,15 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   const handleOpenOverridesDialog = async () => {
     setOverridesDialogOpen(true);
     setLoadingOverrides(true);
-    
+
     try {
       // Fetch all securities with custom names from finance_dashboard edge function
+      const token = await getAccessToken();
       const response = await fetch(
         getEdgeFunctionUrl('finance_dashboard/stocks/overrides/list'),
         {
           headers: {
-            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -584,17 +602,18 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const url = getEdgeFunctionUrl(`finance_dashboard/stocks/${symbol}`);
       console.log(`📝 Saving custom name for ${symbol} (${type}):`, customName);
       console.log(`📡 Request URL:`, url);
-      
-      const body = { 
+
+      const body = {
         custom_name: customName || null  // null to clear
       };
-      
+
       console.log(`📦 Request body:`, body);
-      
+
+      const token = await getAccessToken();
       const response = await fetch(url, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

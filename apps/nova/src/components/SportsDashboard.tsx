@@ -15,10 +15,10 @@ import { SportsDebugPanel } from "./SportsDebugPanel";
 import { StandingsTable } from "./StandingsTable";
 import { TournamentsView } from "./TournamentsView";
 import { BettingView } from "./BettingView";
-import { 
-  SportsData, 
-  SportsFilters as SportsFiltersType, 
-  SportsView, 
+import {
+  SportsData,
+  SportsFilters as SportsFiltersType,
+  SportsView,
   SportsEntityWithOverrides,
   Team,
   Player,
@@ -30,6 +30,7 @@ import {
 import { Activity, Users, User, Calendar, MapPin, TrendingUp, Trophy, Rss, RefreshCw } from "lucide-react";
 import { getEdgeFunctionUrl, getRestUrl, getAccessToken, getSupabaseAnonKey } from "../utils/supabase/config";
 import { supabase } from "../utils/supabase/client";
+import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -38,10 +39,11 @@ interface SportsDashboardProps {
   onNavigateToProviders?: () => void;
 }
 
-export function SportsDashboard({ 
+export function SportsDashboard({
   onNavigateToFeeds,
   onNavigateToProviders
 }: SportsDashboardProps) {
+  const { effectiveOrganization } = useAuth();
   const [currentView, setCurrentView] = useState<SportsView>('teams');
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
@@ -71,11 +73,11 @@ export function SportsDashboard({
   const [leagues, setLeagues] = useState<League[]>([]);
   const [lastUpdated, setLastUpdated] = useState(new Date().toISOString());
 
-  // Fetch all sports data on mount
+  // Fetch all sports data on mount and when effective organization changes
   useEffect(() => {
     fetchAllSportsData();
     fetchProviders();
-  }, []);
+  }, [effectiveOrganization?.id]);
 
   // Auto-select first league when switching to standings view
   useEffect(() => {
@@ -87,358 +89,318 @@ export function SportsDashboard({
   const fetchAllSportsData = async () => {
     try {
       setLoading(true);
-      console.log('[Sports Dashboard] Fetching sports data from Supabase...');
-      
-      // Fetch teams from sports_teams table
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('sports_teams')
-        .select(`
-          id,
-          sportradar_id,
-          name,
-          short_name,
-          abbreviation,
-          logo_url,
-          colors,
-          country,
-          country_code,
-          city,
-          venue,
-          api_source,
-          created_at,
-          updated_at
-        `)
-        .order('name');
+      console.log('[Sports Dashboard] Fetching sports data...');
 
-      if (teamsError) {
+      // Get access token for authenticated requests
+      const token = await getAccessToken();
+
+      // Build headers with impersonation support
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+        console.log('[Sports Dashboard] 🎭 Impersonating org:', effectiveOrganization.id);
+      }
+
+      // Fetch teams from edge function
+      try {
+        const teamsResponse = await fetch(
+          getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
+          { headers }
+        );
+
+        if (teamsResponse.ok) {
+          const teamsResult = await teamsResponse.json();
+          const teamsData = teamsResult.teams || [];
+          console.log('[Sports Dashboard] Teams fetched via edge function:', teamsData.length);
+
+          // Transform database teams to SportsEntityWithOverrides format
+          const transformedTeams: SportsEntityWithOverrides[] = teamsData.map((team: any) => ({
+            entity: {
+              id: team.id,
+              name: team.name,
+              abbrev: team.abbreviation || team.short_name || '',
+              city: team.city || '',
+              logo_url: team.logo_url || '',
+              brand: team.colors ? {
+                primary_color: team.colors.primary || '#000000',
+                secondary_color: team.colors.secondary || '#FFFFFF',
+                text_color: team.colors.text || '#000000'
+              } : {
+                primary_color: '#000000',
+                secondary_color: '#FFFFFF',
+                text_color: '#000000'
+              },
+              short_name: team.short_name,
+              country: team.country,
+              country_code: team.country_code,
+              venue: team.venue,
+              sportradar_id: team.sportradar_id,
+            } as Team,
+            overrides: [],
+            lastUpdated: team.updated_at || team.created_at || new Date().toISOString(),
+            primaryProvider: team.api_source || 'unknown',
+          }));
+
+          setTeams(transformedTeams);
+        } else {
+          console.error('[Sports Dashboard] Error fetching teams:', await teamsResponse.text());
+          toast.error('Failed to load teams data');
+          setTeams([]);
+        }
+      } catch (teamsError) {
         console.error('[Sports Dashboard] Error fetching teams:', teamsError);
         toast.error('Failed to load teams data');
         setTeams([]);
-      } else {
-        console.log('[Sports Dashboard] Teams fetched:', teamsData?.length || 0);
-        console.log('[Sports Dashboard] Sample team data:', teamsData?.[0]);
-        
-        // Transform database teams to SportsEntityWithOverrides format
-        const transformedTeams: SportsEntityWithOverrides[] = (teamsData || []).map(team => ({
-          entity: {
-            id: team.id,
-            name: team.name,
-            abbrev: team.abbreviation || team.short_name || '',
-            city: team.city || '',
-            logo_url: team.logo_url || '',
-            brand: team.colors ? {
-              primary_color: team.colors.primary || '#000000',
-              secondary_color: team.colors.secondary || '#FFFFFF',
-              text_color: team.colors.text || '#000000'
-            } : {
+      }
+
+      // Fetch leagues/tournaments from edge function
+      try {
+        const leaguesResponse = await fetch(
+          getEdgeFunctionUrl('sports_dashboard/sports-data/tournaments'),
+          { headers }
+        );
+
+        if (leaguesResponse.ok) {
+          const leaguesResult = await leaguesResponse.json();
+          const leaguesData = leaguesResult.tournaments || [];
+          console.log('[Sports Dashboard] Leagues fetched via edge function:', leaguesData.length);
+
+          // Transform database leagues to League format
+          const transformedLeagues: League[] = leaguesData.map((league: any) => ({
+            id: league.id,
+            name: league.name,
+            abbrev: league.alternative_name || league.name,
+            sport: league.sport || 'soccer',
+            category: 'professional',
+            logo_url: league.logo_url || '',
+            brand: {
               primary_color: '#000000',
               secondary_color: '#FFFFFF',
-              text_color: '#000000'
+              text_color: '#FFFFFF'
             },
-            // Additional fields from database
-            short_name: team.short_name,
-            country: team.country,
-            country_code: team.country_code,
-            venue: team.venue,
-            sportradar_id: team.sportradar_id,
-          } as Team,
-          overrides: [],
-          lastUpdated: team.updated_at || team.created_at || new Date().toISOString(),
-          primaryProvider: team.api_source || 'unknown',
-        }));
-        
-        setTeams(transformedTeams);
-      }
-      
-      // Fetch leagues from sports_leagues table
-      const { data: leaguesData, error: leaguesError } = await supabase
-        .from('sports_leagues')
-        .select(`
-          id,
-          sportradar_id,
-          name,
-          alternative_name,
-          type,
-          gender,
-          logo_url,
-          active,
-          sport,
-          api_source,
-          created_at,
-          updated_at,
-          sports_categories (
-            name,
-            country_code
-          )
-        `)
-        .order('name');
+            country: league.country || '',
+            sportradar_id: league.external_id || league.sportradar_id,
+          }));
 
-      if (leaguesError) {
+          setLeagues(transformedLeagues);
+        } else {
+          console.error('[Sports Dashboard] Error fetching leagues:', await leaguesResponse.text());
+          toast.error('Failed to load leagues data');
+          setLeagues([]);
+        }
+      } catch (leaguesError) {
         console.error('[Sports Dashboard] Error fetching leagues:', leaguesError);
         toast.error('Failed to load leagues data');
         setLeagues([]);
-      } else {
-        console.log('[Sports Dashboard] Leagues fetched:', leaguesData?.length || 0);
-        
-        // Transform database leagues to League format
-        const transformedLeagues: League[] = (leaguesData || []).map(league => ({
-          id: league.id,
-          name: league.name,
-          abbrev: league.alternative_name || league.name, // Use alternative_name or full name
-          sport: league.sport || 'soccer',
-          category: 'professional', // Default value since column doesn't exist
-          logo_url: league.logo_url || '',
-          brand: {
-            primary_color: '#000000',
-            secondary_color: '#FFFFFF',
-            text_color: '#FFFFFF'
-          },
-          country: league.sports_categories?.name || '', // Get country from sports_categories relationship
-          sportradar_id: league.sportradar_id,
-        }));
-        
-        setLeagues(transformedLeagues);
       }
       
-      // Fetch players from sports_players table
-      const { data: playersData, error: playersError } = await supabase
-        .from('sports_players')
-        .select(`
-          id,
-          sportradar_id,
-          name,
-          first_name,
-          last_name,
-          nationality,
-          nationality_code,
-          date_of_birth,
-          jersey_number,
-          position,
-          photo_url,
-          team_id,
-          sports_teams (
+      // Fetch players - Note: No edge function endpoint yet, using direct Supabase query
+      // Players will be filtered by RLS based on user's actual org (not impersonated org)
+      // TODO: Add /sports-data/players endpoint for full impersonation support
+      try {
+        const { data: playersData, error: playersError } = await supabase
+          .from('sports_players')
+          .select(`
             id,
+            sportradar_id,
             name,
-            short_name,
-            abbreviation,
-            logo_url,
-            colors
-          )
-        `)
-        .order('name');
-
-      if (playersError) {
-        console.error('[Sports Dashboard] Error fetching players:', playersError);
-        toast.error('Failed to load players data');
-        setPlayers([]);
-      } else {
-        console.log('[Sports Dashboard] Players fetched:', playersData?.length || 0);
-        console.log('[Sports Dashboard] Sample player data:', playersData?.[0]);
-        
-        // Transform database players to SportsEntityWithOverrides format
-        const transformedPlayers: SportsEntityWithOverrides[] = (playersData || []).map(player => ({
-          entity: {
-            id: player.id,
-            name: {
-              display: player.name,
-              full: `${player.first_name || ''} ${player.last_name || ''}`.trim() || player.name,
-              first: player.first_name || '',
-              last: player.last_name || ''
-            },
-            bio: {
-              position: player.position || '',
-              nationality: player.nationality || '',
-              nationality_code: player.nationality_code || '',
-              date_of_birth: player.date_of_birth || '',
-              jersey_number: player.jersey_number
-            },
-            photo_url: player.photo_url || '',
-            team_id: player.team_id,
-            team: player.sports_teams ? {
-              id: player.sports_teams.id,
-              name: player.sports_teams.name,
-              short_name: player.sports_teams.short_name,
-              abbreviation: player.sports_teams.abbreviation,
-              logo_url: player.sports_teams.logo_url,
-              colors: player.sports_teams.colors
-            } : undefined,
-            sportradar_id: player.sportradar_id,
-          } as Player,
-          overrides: [],
-          lastUpdated: new Date().toISOString(),
-          primaryProvider: 'sportradar',
-        }));
-        
-        setPlayers(transformedPlayers);
-      }
-      
-      // Fetch games from sports_events table
-      const { data: gamesData, error: gamesError } = await supabase
-        .from('sports_events')
-        .select(`
-          id,
-          sportradar_id,
-          start_time,
-          start_time_confirmed,
-          venue_name,
-          venue_city,
-          venue_capacity,
-          round,
-          round_number,
-          match_day,
-          status,
-          home_score,
-          away_score,
-          attendance,
-          referee,
-          home_team:sports_teams!sports_events_home_team_id_fkey (
-            id,
-            name,
-            short_name,
-            abbreviation,
-            logo_url,
-            colors
-          ),
-          away_team:sports_teams!sports_events_away_team_id_fkey (
-            id,
-            name,
-            short_name,
-            abbreviation,
-            logo_url,
-            colors
-          ),
-          sports_seasons (
-            id,
-            name,
-            sports_leagues (
+            first_name,
+            last_name,
+            nationality,
+            nationality_code,
+            date_of_birth,
+            jersey_number,
+            position,
+            photo_url,
+            team_id,
+            sports_teams (
               id,
               name,
-              logo_url
+              short_name,
+              abbreviation,
+              logo_url,
+              colors
             )
-          )
-        `)
-        .order('start_time', { ascending: false });
+          `)
+          .order('name');
 
-      if (gamesError) {
-        console.error('[Sports Dashboard] Error fetching games:', gamesError);
-        toast.error('Failed to load games data');
-        setGames([]);
-      } else {
-        console.log('[Sports Dashboard] Games fetched:', gamesData?.length || 0);
-        console.log('[Sports Dashboard] Sample game data:', gamesData?.[0]);
-        
-        // Transform database games to SportsEntityWithOverrides format
-        const transformedGames: SportsEntityWithOverrides[] = (gamesData || []).map(game => ({
-          entity: {
-            id: game.id,
-            sportradar_id: game.sportradar_id,
-            date: game.start_time,
-            time: game.start_time,
-            status: game.status || 'scheduled',
-            score: {
-              home: game.home_score || 0,
-              away: game.away_score || 0
-            },
-            teams: {
-              home: game.home_team ? {
-                id: game.home_team.id,
-                name: game.home_team.name,
-                abbrev: game.home_team.abbreviation || game.home_team.short_name || '',
-                logo_url: game.home_team.logo_url || '',
-                short_name: game.home_team.short_name,
-                colors: game.home_team.colors
-              } : {
-                id: '',
-                name: 'TBD',
-                abbrev: 'TBD',
-                logo_url: '',
-                short_name: 'TBD'
+        if (playersError) {
+          console.error('[Sports Dashboard] Error fetching players:', playersError);
+          setPlayers([]);
+        } else {
+          console.log('[Sports Dashboard] Players fetched:', playersData?.length || 0);
+
+          const transformedPlayers: SportsEntityWithOverrides[] = (playersData || []).map(player => ({
+            entity: {
+              id: player.id,
+              name: {
+                display: player.name,
+                full: `${player.first_name || ''} ${player.last_name || ''}`.trim() || player.name,
+                first: player.first_name || '',
+                last: player.last_name || ''
               },
-              away: game.away_team ? {
-                id: game.away_team.id,
-                name: game.away_team.name,
-                abbrev: game.away_team.abbreviation || game.away_team.short_name || '',
-                logo_url: game.away_team.logo_url || '',
-                short_name: game.away_team.short_name,
-                colors: game.away_team.colors
-              } : {
-                id: '',
-                name: 'TBD',
-                abbrev: 'TBD',
-                logo_url: '',
-                short_name: 'TBD'
-              }
-            },
-            venue: game.venue_name || '',
-            venue_city: game.venue_city,
-            venue_capacity: game.venue_capacity,
-            attendance: game.attendance,
-            referee: game.referee,
-            round: game.round,
-            round_number: game.round_number,
-            match_day: game.match_day,
-            start_time_confirmed: game.start_time_confirmed,
-            competition_stage: game.round || '',
-            league: game.sports_seasons?.sports_leagues ? {
-              id: game.sports_seasons.sports_leagues.id,
-              name: game.sports_seasons.sports_leagues.name,
-              logo_url: game.sports_seasons.sports_leagues.logo_url
-            } : undefined,
-            season: game.sports_seasons ? {
-              id: game.sports_seasons.id,
-              name: game.sports_seasons.name
-            } : undefined
-          } as Game,
-          overrides: [],
-          lastUpdated: new Date().toISOString(),
-          primaryProvider: 'sportradar',
-        }));
-        
-        setGames(transformedGames);
-      }
-      
-      // Fetch venues using get_venues RPC
-      const { data: venuesData, error: venuesError } = await supabase
-        .rpc('get_venues', { p_country: null, p_limit: 50 });
+              bio: {
+                position: player.position || '',
+                nationality: player.nationality || '',
+                nationality_code: player.nationality_code || '',
+                date_of_birth: player.date_of_birth || '',
+                jersey_number: player.jersey_number
+              },
+              photo_url: player.photo_url || '',
+              team_id: player.team_id,
+              team: player.sports_teams ? {
+                id: player.sports_teams.id,
+                name: player.sports_teams.name,
+                short_name: player.sports_teams.short_name,
+                abbreviation: player.sports_teams.abbreviation,
+                logo_url: player.sports_teams.logo_url,
+                colors: player.sports_teams.colors
+              } : undefined,
+              sportradar_id: player.sportradar_id,
+            } as Player,
+            overrides: [],
+            lastUpdated: new Date().toISOString(),
+            primaryProvider: 'sportradar',
+          }));
 
-      if (venuesError) {
+          setPlayers(transformedPlayers);
+        }
+      } catch (playersError) {
+        console.error('[Sports Dashboard] Error fetching players:', playersError);
+        setPlayers([]);
+      }
+
+      // Fetch games from edge function
+      try {
+        const gamesResponse = await fetch(
+          getEdgeFunctionUrl('sports_dashboard/sports-data/games'),
+          { headers }
+        );
+
+        if (gamesResponse.ok) {
+          const gamesResult = await gamesResponse.json();
+          const gamesData = gamesResult.games || [];
+          console.log('[Sports Dashboard] Games fetched via edge function:', gamesData.length);
+
+          const transformedGames: SportsEntityWithOverrides[] = gamesData.map((game: any) => ({
+            entity: {
+              id: game.id,
+              sportradar_id: game.sportradar_id,
+              date: game.start_time,
+              time: game.start_time,
+              status: game.status || 'scheduled',
+              score: {
+                home: game.home_score || 0,
+                away: game.away_score || 0
+              },
+              teams: {
+                home: game.home_team ? {
+                  id: game.home_team.id,
+                  name: game.home_team.name,
+                  abbrev: game.home_team.abbreviation || game.home_team.short_name || '',
+                  logo_url: game.home_team.logo_url || '',
+                  short_name: game.home_team.short_name,
+                  colors: game.home_team.colors
+                } : {
+                  id: '',
+                  name: 'TBD',
+                  abbrev: 'TBD',
+                  logo_url: '',
+                  short_name: 'TBD'
+                },
+                away: game.away_team ? {
+                  id: game.away_team.id,
+                  name: game.away_team.name,
+                  abbrev: game.away_team.abbreviation || game.away_team.short_name || '',
+                  logo_url: game.away_team.logo_url || '',
+                  short_name: game.away_team.short_name,
+                  colors: game.away_team.colors
+                } : {
+                  id: '',
+                  name: 'TBD',
+                  abbrev: 'TBD',
+                  logo_url: '',
+                  short_name: 'TBD'
+                }
+              },
+              venue: game.venue_name || '',
+              venue_city: game.venue_city,
+              venue_capacity: game.venue_capacity,
+              attendance: game.attendance,
+              referee: game.referee,
+              round: game.round,
+              round_number: game.round_number,
+              match_day: game.match_day,
+              start_time_confirmed: game.start_time_confirmed,
+              competition_stage: game.round || '',
+              league: game.league || undefined,
+              season: game.season || undefined
+            } as Game,
+            overrides: [],
+            lastUpdated: new Date().toISOString(),
+            primaryProvider: 'sportradar',
+          }));
+
+          setGames(transformedGames);
+        } else {
+          console.error('[Sports Dashboard] Error fetching games:', await gamesResponse.text());
+          setGames([]);
+        }
+      } catch (gamesError) {
+        console.error('[Sports Dashboard] Error fetching games:', gamesError);
+        setGames([]);
+      }
+
+      // Fetch venues from edge function
+      try {
+        const venuesResponse = await fetch(
+          getEdgeFunctionUrl('sports_dashboard/sports-data/venues'),
+          { headers }
+        );
+
+        if (venuesResponse.ok) {
+          const venuesResult = await venuesResponse.json();
+          const venuesData = venuesResult.venues || [];
+          console.log('[Sports Dashboard] Venues fetched via edge function:', venuesData.length);
+
+          const transformedVenues: SportsEntityWithOverrides[] = venuesData.map((venue: any) => ({
+            entity: {
+              id: venue.id,
+              name: venue.name,
+              address: {
+                city: venue.city,
+                country: venue.country,
+                country_code: venue.country_code
+              },
+              capacity: venue.capacity,
+              surface: venue.surface,
+              media: venue.image_url ? {
+                photos: [{
+                  role: 'main',
+                  url: venue.image_url
+                }]
+              } : undefined,
+              geo: venue.latitude && venue.longitude ? {
+                lat: venue.latitude,
+                lng: venue.longitude
+              } : undefined,
+              providers: {}
+            } as Venue,
+            overrides: [],
+            lastUpdated: new Date().toISOString(),
+            primaryProvider: 'sportradar',
+          }));
+
+          setVenues(transformedVenues);
+        } else {
+          console.error('[Sports Dashboard] Error fetching venues:', await venuesResponse.text());
+          setVenues([]);
+        }
+      } catch (venuesError) {
         console.error('[Sports Dashboard] Error fetching venues:', venuesError);
-        toast.error('Failed to load venues data');
         setVenues([]);
-      } else {
-        console.log('[Sports Dashboard] Venues fetched:', venuesData?.length || 0);
-        console.log('[Sports Dashboard] Sample venue data:', venuesData?.[0]);
-        
-        // Transform RPC venues to SportsEntityWithOverrides format
-        const transformedVenues: SportsEntityWithOverrides[] = (venuesData || []).map((venue: any) => ({
-          entity: {
-            id: venue.id,
-            name: venue.name,
-            address: {
-              city: venue.city,
-              country: venue.country,
-              country_code: venue.country_code
-            },
-            capacity: venue.capacity,
-            surface: venue.surface,
-            media: venue.image_url ? {
-              photos: [{
-                role: 'main',
-                url: venue.image_url
-              }]
-            } : undefined,
-            geo: venue.latitude && venue.longitude ? {
-              lat: venue.latitude,
-              lng: venue.longitude
-            } : undefined,
-            providers: {}
-          } as Venue,
-          overrides: [],
-          lastUpdated: new Date().toISOString(),
-          primaryProvider: 'sportradar',
-        }));
-        
-        setVenues(transformedVenues);
       }
       
       // For now, keep other entities empty

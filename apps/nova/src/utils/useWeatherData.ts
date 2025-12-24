@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { WeatherLocationWithOverrides, createOverride, FieldOverride } from "../types/weather";
 import { getEdgeFunctionUrl } from "./supabase/config";
 import { getAccessToken } from "./supabase";
+import { useAuth } from "../contexts/AuthContext";
 
 export interface WeatherDataStats {
   locations: WeatherLocationWithOverrides[];
@@ -44,6 +45,9 @@ function saveCachedData(data: WeatherDataStats) {
 const FETCH_TIMEOUT_MS = 30000;
 
 export function useWeatherData() {
+  // Get effective organization for impersonation support
+  const { effectiveOrganization } = useAuth();
+
   // Don't use cached data - always start with loading state
   // Cache can contain data from a different user/org session
   const [stats, setStats] = useState<WeatherDataStats>({
@@ -71,12 +75,17 @@ export function useWeatherData() {
       console.log('[useWeatherData] 📡 Fetching from:', url);
 
       const token = await getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const response = await fetch(
         url,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           signal: controller.signal,
         }
       );
@@ -208,9 +217,10 @@ export function useWeatherData() {
 
   useEffect(() => {
     fetchWeatherData();
-    
+
     // Auto-refresh removed - use manual refresh button instead
-  }, []);
+    // Re-fetch when impersonation changes
+  }, [effectiveOrganization?.id]);
 
   return { stats, refresh: fetchWeatherData };
 }

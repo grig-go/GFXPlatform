@@ -11,22 +11,34 @@ import {
   getEdgeFunctionUrl as _getEdgeFunctionUrl,
   getSupabaseHeaders as _getSupabaseHeaders,
   supabase,
+  sessionReady,
 } from '@emergent-platform/supabase-client';
 
 /**
  * Get the current user's access token for authenticated API calls.
  * This should be used instead of anon key when calling edge functions
  * that need to respect RLS organization filtering.
+ *
+ * IMPORTANT: This function waits for the session to be initialized before
+ * attempting to get the access token. This ensures the JWT is available
+ * for RLS filtering.
+ *
  * @returns The access token or anon key as fallback
  */
 export async function getAccessToken(): Promise<string> {
   try {
+    // Wait for session to be initialized from storage/URL
+    // This is critical - without this, we might check for session before it's restored
+    await sessionReady;
+
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) {
+      console.log('[getAccessToken] ✅ Got user access token');
       return session.access_token;
     }
+    console.warn('[getAccessToken] ⚠️ No session found after sessionReady, falling back to anon key');
   } catch (e) {
-    console.warn('[getAccessToken] Failed to get session:', e);
+    console.warn('[getAccessToken] ❌ Failed to get session:', e);
   }
   // Fallback to anon key
   return _getSupabaseAnonKey();

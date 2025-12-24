@@ -1,6 +1,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.49.8';
 import { Hono } from 'npm:hono';
 import { cors } from 'npm:hono/cors';
+
+const BUILD_ID = new Date().toISOString();
 console.log('[sports_dashboard] boot', BUILD_ID);
 const app = new Hono().basePath('/sports_dashboard');
 // Disable noisy logger that breaks JSON responses
@@ -14,7 +16,8 @@ app.use('/*', cors({
     'Cache-Control',
     'Pragma',
     'x-client-info',
-    'apikey'
+    'apikey',
+    'X-Effective-Org-Id' // For superuser impersonation
   ],
   allowMethods: [
     'GET',
@@ -145,40 +148,88 @@ app.post('/sports-data/sync', async (c)=>{
 // SPORTS DATA ROUTES (Database)
 // ============================================================================
 // Service role client - bypasses RLS (use only for admin operations)
-const getSupabase = () => createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-);
-
+const getSupabase = ()=>createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
 // User-scoped client - respects RLS based on user's JWT
-const getUserClient = (authHeader: string | null) => {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
+const getUserClient = (authHeader)=>{
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
   // If we have a Bearer token, use it to create a user-scoped client
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.replace('Bearer ', '');
     return createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
+          Authorization: `Bearer ${token}`
+        }
+      }
     });
   }
-
   // Fallback to anon client (will still respect RLS, but as anonymous)
   return createClient(supabaseUrl, supabaseAnonKey);
 };
+// Get effective organization ID for impersonation support
+// Returns: { orgId: string | null, isSuperuser: boolean }
+async function getEffectiveOrgId(authHeader, effectiveOrgHeader) {
+  const userClient = getUserClient(authHeader);
+  // First get the authenticated user's ID from the JWT
+  const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
+  if (authError || !authUser) {
+    console.log('[getEffectiveOrgId] Could not get auth user, returning null org');
+    return {
+      orgId: null,
+      isSuperuser: false
+    };
+  }
+  console.log(`[getEffectiveOrgId] Auth user: ${authUser.email}`);
+  // Check if user is superuser - filter by auth_user_id to get only this user's row
+  const { data: userData, error } = await userClient.from('u_users').select('is_superuser, organization_id').eq('auth_user_id', authUser.id).single();
+  if (error || !userData) {
+    console.log('[getEffectiveOrgId] Could not get user data, returning null org', error);
+    return {
+      orgId: null,
+      isSuperuser: false
+    };
+  }
+  const isSuperuser = userData.is_superuser === true;
+  // If superuser and effective org header is provided, use it for impersonation
+  if (isSuperuser && effectiveOrgHeader) {
+    console.log(`[getEffectiveOrgId] 🎭 Superuser impersonating org: ${effectiveOrgHeader}`);
+    return {
+      orgId: effectiveOrgHeader,
+      isSuperuser: true
+    };
+  }
+  // If superuser without impersonation header, show all data (null org)
+  if (isSuperuser) {
+    console.log('[getEffectiveOrgId] 👑 Superuser viewing all orgs');
+    return {
+      orgId: null,
+      isSuperuser: true
+    };
+  }
+  // Regular user - use their actual organization
+  console.log(`[getEffectiveOrgId] 👤 Regular user, org: ${userData.organization_id}`);
+  return {
+    orgId: userData.organization_id,
+    isSuperuser: false
+  };
+}
 // Get all teams
 app.get('/sports-data/teams', async (c)=>{
   try {
-    // Use user-scoped client to respect RLS organization filtering
+    // Get effective organization for impersonation support
     const authHeader = c.req.header('Authorization');
-    const userClient = getUserClient(authHeader);
-    console.log(`[/sports-data/teams] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
-
-    const { data: teams, error } = await userClient.from('sports_teams').select('*').order('name');
+    const effectiveOrgHeader = c.req.header('X-Effective-Org-Id');
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+    console.log(`[/sports-data/teams] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
+    // Use service client with manual org filter for impersonation support
+    const supabase = getSupabase();
+    let query = supabase.from('sports_teams').select('*');
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      query = query.eq('organization_id', orgId);
+    }
+    const { data: teams, error } = await query.order('name');
     if (error) throw error;
     console.log(`[/sports-data/teams] ✅ Returning ${teams?.length || 0} teams`);
     return c.json({
@@ -195,8 +246,80 @@ app.get('/sports-data/teams', async (c)=>{
 // Get all games
 app.get('/sports-data/games', async (c)=>{
   try {
+    // Get effective organization for impersonation support
+    const authHeader = c.req.header('Authorization');
+    const effectiveOrgHeader = c.req.header('X-Effective-Org-Id');
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+    console.log(`[/sports-data/games] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
+    // Use service client with manual org filter for impersonation support
+    const supabase = getSupabase();
+    let query = supabase.from('sports_events').select(`
+      id,
+      sportradar_id,
+      start_time,
+      start_time_confirmed,
+      venue_name,
+      venue_city,
+      venue_capacity,
+      round,
+      round_number,
+      match_day,
+      status,
+      home_score,
+      away_score,
+      attendance,
+      referee,
+      organization_id,
+      home_team:sports_teams!sports_events_home_team_id_fkey (
+        id,
+        name,
+        short_name,
+        abbreviation,
+        logo_url,
+        colors
+      ),
+      away_team:sports_teams!sports_events_away_team_id_fkey (
+        id,
+        name,
+        short_name,
+        abbreviation,
+        logo_url,
+        colors
+      ),
+      sports_seasons (
+        id,
+        name,
+        sports_leagues (
+          id,
+          name,
+          logo_url
+        )
+      )
+    `);
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      query = query.eq('organization_id', orgId);
+    }
+    const { data: games, error } = await query.order('start_time', {
+      ascending: false
+    });
+    if (error) throw error;
+    // Transform games to include league and season info
+    const transformedGames = (games || []).map((game)=>({
+        ...game,
+        league: game.sports_seasons?.sports_leagues ? {
+          id: game.sports_seasons.sports_leagues.id,
+          name: game.sports_seasons.sports_leagues.name,
+          logo_url: game.sports_seasons.sports_leagues.logo_url
+        } : undefined,
+        season: game.sports_seasons ? {
+          id: game.sports_seasons.id,
+          name: game.sports_seasons.name
+        } : undefined
+      }));
+    console.log(`[/sports-data/games] ✅ Returning ${transformedGames?.length || 0} games`);
     return c.json({
-      games: []
+      games: transformedGames
     });
   } catch (error) {
     console.error('Error fetching games:', error);
@@ -209,8 +332,26 @@ app.get('/sports-data/games', async (c)=>{
 // Get all venues
 app.get('/sports-data/venues', async (c)=>{
   try {
+    // Get effective organization for impersonation support
+    const authHeader = c.req.header('Authorization');
+    const effectiveOrgHeader = c.req.header('X-Effective-Org-Id');
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+    console.log(`[/sports-data/venues] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
+    // Use service client with manual org filter for impersonation support
+    // Call get_venues RPC which extracts unique venues from sports_events
+    const supabase = getSupabase();
+    const { data: venues, error } = await supabase.rpc('get_venues', {
+      p_country: null,
+      p_limit: 100
+    });
+    if (error) throw error;
+    // Note: get_venues RPC doesn't filter by org, so we filter here if needed
+    // This is a workaround until get_venues supports org filtering
+    let filteredVenues = venues || [];
+    // TODO: Add organization filtering to get_venues RPC for proper impersonation support
+    console.log(`[/sports-data/venues] ✅ Returning ${filteredVenues?.length || 0} venues`);
     return c.json({
-      venues: []
+      venues: filteredVenues
     });
   } catch (error) {
     console.error('Error fetching venues:', error);
@@ -223,12 +364,19 @@ app.get('/sports-data/venues', async (c)=>{
 // Get all tournaments
 app.get('/sports-data/tournaments', async (c)=>{
   try {
-    // Use user-scoped client to respect RLS organization filtering
+    // Get effective organization for impersonation support
     const authHeader = c.req.header('Authorization');
-    const userClient = getUserClient(authHeader);
-    console.log(`[/sports-data/tournaments] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
-
-    const { data: leagues, error } = await userClient.from('sports_leagues').select('*').order('name');
+    const effectiveOrgHeader = c.req.header('X-Effective-Org-Id');
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+    console.log(`[/sports-data/tournaments] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
+    // Use service client with manual org filter for impersonation support
+    const supabase = getSupabase();
+    let query = supabase.from('sports_leagues').select('*');
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      query = query.eq('organization_id', orgId);
+    }
+    const { data: leagues, error } = await query.order('name');
     if (error) throw error;
     const tournaments = (leagues || []).map((league)=>({
         id: league.id,

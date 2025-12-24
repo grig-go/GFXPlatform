@@ -35,6 +35,52 @@ const getUserClient = (authHeader: string | null) => {
   return createClient(supabaseUrl, supabaseAnonKey);
 };
 
+// Get effective organization ID for impersonation support
+// Returns: { orgId: string | null, isSuperuser: boolean }
+async function getEffectiveOrgId(authHeader: string | null, effectiveOrgHeader: string | null): Promise<{ orgId: string | null, isSuperuser: boolean }> {
+  const userClient = getUserClient(authHeader);
+
+  // First get the authenticated user's ID from the JWT
+  const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
+
+  if (authError || !authUser) {
+    console.log('[getEffectiveOrgId] Could not get auth user, returning null org');
+    return { orgId: null, isSuperuser: false };
+  }
+
+  console.log(`[getEffectiveOrgId] Auth user: ${authUser.email}`);
+
+  // Check if user is superuser - filter by auth_user_id to get only this user's row
+  const { data: userData, error } = await userClient
+    .from('u_users')
+    .select('is_superuser, organization_id')
+    .eq('auth_user_id', authUser.id)
+    .single();
+
+  if (error || !userData) {
+    console.log('[getEffectiveOrgId] Could not get user data, returning null org', error);
+    return { orgId: null, isSuperuser: false };
+  }
+
+  const isSuperuser = userData.is_superuser === true;
+
+  // If superuser and effective org header is provided, use it for impersonation
+  if (isSuperuser && effectiveOrgHeader) {
+    console.log(`[getEffectiveOrgId] 🎭 Superuser impersonating org: ${effectiveOrgHeader}`);
+    return { orgId: effectiveOrgHeader, isSuperuser: true };
+  }
+
+  // If superuser without impersonation header, show all data (null org)
+  if (isSuperuser) {
+    console.log('[getEffectiveOrgId] 👑 Superuser viewing all orgs');
+    return { orgId: null, isSuperuser: true };
+  }
+
+  // Regular user - use their actual organization
+  console.log(`[getEffectiveOrgId] 👤 Regular user, org: ${userData.organization_id}`);
+  return { orgId: userData.organization_id, isSuperuser: false };
+}
+
 // Default to service client for backward compatibility with writes
 const supabase = getServiceClient();
 // ============================================================================
@@ -56,7 +102,8 @@ app.use("/*", cors({
     "Cache-Control",
     "Pragma",
     "x-client-info",
-    "apikey"
+    "apikey",
+    "X-Effective-Org-Id"  // For superuser impersonation
   ],
   allowMethods: [
     "GET",
@@ -111,9 +158,24 @@ app.get("/health", (c)=>c.json({
 // GET all locations
 app.get("/locations", async (c)=>{
   try {
-    const { data, error } = await supabase.from("weather_locations").select("*").eq("is_active", true).neq("provider_id", "weather_provider:news12_local") // ✅ exclude static CSV provider
-    .order("name");
+    // Get effective organization for impersonation support
+    const authHeader = c.req.header("Authorization");
+    const effectiveOrgHeader = c.req.header("X-Effective-Org-Id");
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+
+    console.log(`[/locations] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
+
+    // Use service client with manual org filter for impersonation support
+    let query = supabase.from("weather_locations").select("*").eq("is_active", true).neq("provider_id", "weather_provider:news12_local"); // ✅ exclude static CSV provider
+
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      query = query.eq("organization_id", orgId);
+    }
+
+    const { data, error } = await query.order("name");
     if (error) return jsonErr(c, 500, "LOCATIONS_FETCH_FAILED", error.message);
+    console.log(`[/locations] ✅ Returning ${data?.length || 0} locations`);
     return c.json({
       ok: true,
       locations: data || []
@@ -1006,11 +1068,12 @@ app.get("/weather-data", async (c)=>{
       console.log(`[/weather-data] 🌍 Ingest triggered for ALL active providers`);
     }
     // ============================================================================
-    // GET USER-SCOPED CLIENT FOR RLS-RESPECTING QUERIES
+    // GET EFFECTIVE ORG FOR IMPERSONATION SUPPORT
     // ============================================================================
     const authHeader = c.req.header("Authorization");
-    const userClient = getUserClient(authHeader);
-    console.log(`[/weather-data] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+    const effectiveOrgHeader = c.req.header("X-Effective-Org-Id");
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+    console.log(`[/weather-data] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
 
     // ============================================================================
     // 📡 Fetch provider(s) - providers are shared, use service role
@@ -1041,9 +1104,16 @@ app.get("/weather-data", async (c)=>{
     const providersDuration = Date.now() - requestStart;
     console.log(`[/weather-data] ✅ Found ${providers.length} active weather provider(s) in ${providersDuration}ms`);
 
-    // ✅ Fetch active locations - use userClient for org filtering
+    // ✅ Fetch active locations - use service client with manual org filter for impersonation
     const locationsStart = Date.now();
-    const { data: allLocations, error: locError } = await userClient.from("weather_locations").select("*").eq("is_active", true).order("name");
+    let locationsQuery = supabase.from("weather_locations").select("*").eq("is_active", true);
+
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      locationsQuery = locationsQuery.eq("organization_id", orgId);
+    }
+
+    const { data: allLocations, error: locError } = await locationsQuery.order("name");
     const locationsDuration = Date.now() - locationsStart;
 
     if (locError) {

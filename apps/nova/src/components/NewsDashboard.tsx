@@ -11,6 +11,7 @@ import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl, getAccessToken } fr
 import { toast } from "sonner@2.0.3";
 import { NewsDebugPanel } from "./NewsDebugPanel";
 import { NewsAIInsights } from "./NewsAIInsights";
+import { useAuth } from "../contexts/AuthContext";
 import { 
   Newspaper, Clock, RefreshCw, Loader2, ExternalLink, Rss, Database
 } from "lucide-react";
@@ -22,10 +23,13 @@ interface NewsDashboardProps {
 
 type TimeFilter = 'today' | 'yesterday' | 'week' | 'month' | 'all';
 
-export function NewsDashboard({ 
+export function NewsDashboard({
   onNavigateToFeeds,
   onNavigateToProviders
 }: NewsDashboardProps) {
+  // Get effective organization for impersonation support
+  const { effectiveOrganization } = useAuth();
+
   // Filter states
   const [q, setQ] = useState<string>('');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
@@ -76,10 +80,10 @@ export function NewsDashboard({
     fetchProviders();
   }, []);
 
-  // Fetch all articles on mount and when filters change
+  // Fetch all articles on mount and when filters/impersonation change
   useEffect(() => {
     fetchAllArticles();
-  }, [selectedProvider, timeFilter]);
+  }, [selectedProvider, timeFilter, effectiveOrganization?.id]);
 
   // Fetch all articles from database
   const fetchAllArticles = async () => {
@@ -106,11 +110,14 @@ export function NewsDashboard({
       console.log('📡 [NEWS] Fetching from:', url.toString());
 
       const token = await getAccessToken();
-      const response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        headers['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
+      const response = await fetch(url.toString(), { headers });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -279,13 +286,18 @@ export function NewsDashboard({
       console.log('📡 [NEWS] Params:', { q, country: formattedProviders[0]?.country, language: formattedProviders[0]?.language });
 
       const token = await getAccessToken();
+      const articlesHeaders: Record<string, string> = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      };
+      // Add effective org header for superuser impersonation support
+      if (effectiveOrganization?.id) {
+        articlesHeaders['X-Effective-Org-Id'] = effectiveOrganization.id;
+      }
       const articlesResponse = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
-        },
+        headers: articlesHeaders,
         body: JSON.stringify({
           providers: formattedProviders,
           q,

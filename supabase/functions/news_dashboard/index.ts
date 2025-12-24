@@ -27,6 +27,52 @@ const getUserClient = (authHeader: string | null) => {
   // Fallback to anon client (will still respect RLS, but as anonymous)
   return createClient(supabaseUrl, supabaseAnonKey);
 };
+
+// Get effective organization ID for impersonation support
+// Returns: { orgId: string | null, isSuperuser: boolean }
+async function getEffectiveOrgId(authHeader: string | null, effectiveOrgHeader: string | null): Promise<{ orgId: string | null, isSuperuser: boolean }> {
+  const userClient = getUserClient(authHeader);
+
+  // First get the authenticated user's ID from the JWT
+  const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
+
+  if (authError || !authUser) {
+    console.log('[getEffectiveOrgId] Could not get auth user, returning null org');
+    return { orgId: null, isSuperuser: false };
+  }
+
+  console.log(`[getEffectiveOrgId] Auth user: ${authUser.email}`);
+
+  // Check if user is superuser - filter by auth_user_id to get only this user's row
+  const { data: userData, error } = await userClient
+    .from('u_users')
+    .select('is_superuser, organization_id')
+    .eq('auth_user_id', authUser.id)
+    .single();
+
+  if (error || !userData) {
+    console.log('[getEffectiveOrgId] Could not get user data, returning null org', error);
+    return { orgId: null, isSuperuser: false };
+  }
+
+  const isSuperuser = userData.is_superuser === true;
+
+  // If superuser and effective org header is provided, use it for impersonation
+  if (isSuperuser && effectiveOrgHeader) {
+    console.log(`[getEffectiveOrgId] 🎭 Superuser impersonating org: ${effectiveOrgHeader}`);
+    return { orgId: effectiveOrgHeader, isSuperuser: true };
+  }
+
+  // If superuser without impersonation header, show all data (null org)
+  if (isSuperuser) {
+    console.log('[getEffectiveOrgId] 👑 Superuser viewing all orgs');
+    return { orgId: null, isSuperuser: true };
+  }
+
+  // Regular user - use their actual organization
+  console.log(`[getEffectiveOrgId] 👤 Regular user, org: ${userData.organization_id}`);
+  return { orgId: userData.organization_id, isSuperuser: false };
+}
 // ============================================================================
 // SERVER SETUP
 // ============================================================================
@@ -44,7 +90,8 @@ app.use("/*", cors({
     "Cache-Control",
     "Pragma",
     "x-client-info",
-    "apikey"
+    "apikey",
+    "X-Effective-Org-Id"  // For superuser impersonation
   ],
   allowMethods: [
     "GET",
@@ -92,9 +139,12 @@ app.get("/health", (c)=>{
 // Get stored articles from database (respects RLS for org filtering)
 app.get("/news-articles/stored", async (c)=>{
   try {
+    // Get effective organization for impersonation support
     const authHeader = c.req.header("Authorization");
-    const userClient = getUserClient(authHeader);
-    console.log(`[NEWS STORED] 🔐 Using ${authHeader ? 'user-scoped' : 'anonymous'} client for RLS`);
+    const effectiveOrgHeader = c.req.header("X-Effective-Org-Id");
+    const { orgId, isSuperuser } = await getEffectiveOrgId(authHeader, effectiveOrgHeader);
+
+    console.log(`[NEWS STORED] 🔐 Effective org: ${orgId || 'ALL'}, isSuperuser: ${isSuperuser}`);
 
     // Get query parameters
     const url = new URL(c.req.url);
@@ -112,10 +162,18 @@ app.get("/news-articles/stored", async (c)=>{
       country,
       search
     });
-    // Build query - use userClient for RLS filtering
-    let query = userClient.from("news_articles").select("*", {
+
+    // Use service client with manual org filter for impersonation support
+    const supabase = getSupabaseClient();
+    let query = supabase.from("news_articles").select("*", {
       count: "exact"
     });
+
+    // Apply org filter if we have an effective org ID
+    if (orgId) {
+      query = query.eq("organization_id", orgId);
+    }
+
     // Apply filters
     if (provider) query = query.eq("provider", provider);
     if (source) query = query.eq("source", source);
