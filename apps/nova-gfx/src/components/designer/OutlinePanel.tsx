@@ -54,6 +54,7 @@ import { AddressContextMenu } from '@/components/common/AddressContextMenu';
 import { buildLayerAddress, buildTemplateAddress, buildElementAddress } from '@/lib/address';
 import { NewProjectDialog } from '@/components/dialogs/NewProjectDialog';
 import { useConfirm } from '@/hooks/useConfirm';
+import { getUrlWithAuthToken } from '@emergent-platform/supabase-client';
 import type { Template, Element, Layer } from '@emergent-platform/types';
 
 export function OutlinePanel() {
@@ -309,7 +310,8 @@ export function OutlinePanel() {
                 if (project?.id) {
                   // Pulsar GFX URL - configurable via env, defaults to localhost:5174
                   const pulsarUrl = import.meta.env.VITE_PULSAR_GFX_URL || 'http://localhost:5174';
-                  window.open(`${pulsarUrl}?project=${project.id}`, '_blank');
+                  const urlWithAuth = getUrlWithAuthToken(`${pulsarUrl}?project=${project.id}`);
+                  window.open(urlWithAuth, '_blank');
                 }
               }}
               disabled={!project?.id}

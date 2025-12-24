@@ -15,8 +15,8 @@
 // Shared storage key - must be identical across all apps
 export const SHARED_AUTH_STORAGE_KEY = 'sb-shared-auth-token';
 
-// Cookie name for cross-subdomain token sharing
-const SHARED_COOKIE_NAME = 'sb-shared-tokens';
+// Cookie name for cross-subdomain token sharing (matches localStorage key for consistency)
+const SHARED_COOKIE_NAME = 'sb-shared-auth-token';
 
 // URL parameter name for token relay
 export const AUTH_TOKEN_PARAM = 'auth_token';
@@ -392,6 +392,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.4');
+  console.log('[Auth SSO] Module loaded - version 1.0.5');
   syncCookieToLocalStorage();
 }

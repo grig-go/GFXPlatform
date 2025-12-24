@@ -23,6 +23,7 @@ import { SupportRequestDialog } from '@/components/dialogs/SupportRequestDialog'
 import { TexturesDialog } from '@/components/dialogs/TexturesDialog';
 import { UserMenu } from '@/components/auth';
 import { supabase } from '@/lib/supabase';
+import { getUrlWithAuthToken } from '@emergent-platform/supabase-client';
 
 interface TopBarProps {
   onOpenSettings?: () => void;
@@ -390,7 +391,8 @@ export function TopBar({ onOpenSettings, onOpenDesignSystem, onOpenAISettings, o
               onClick={() => {
                 if (project?.id) {
                   const pulsarUrl = import.meta.env.VITE_PULSAR_GFX_URL || 'http://localhost:5174';
-                  window.open(`${pulsarUrl}?project=${project.id}`, '_blank');
+                  const urlWithAuth = getUrlWithAuthToken(`${pulsarUrl}?project=${project.id}`);
+                  window.open(urlWithAuth, '_blank');
                 }
               }}
               disabled={!project?.id}
