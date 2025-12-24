@@ -7,6 +7,7 @@ import {
   receiveAuthTokenFromUrl,
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
+  syncCookieToLocalStorage,
 } from './cookieStorage';
 
 // Re-export cookie storage and SSO helpers for apps that need it
@@ -19,6 +20,7 @@ export {
   receiveAuthTokenFromUrl,
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
+  syncCookieToLocalStorage,
 };
 
 // Read Supabase credentials from environment variables

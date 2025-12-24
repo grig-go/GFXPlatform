@@ -278,3 +278,64 @@ export function navigateWithAuth(targetUrl: string, path = ''): void {
   const urlWithAuth = getUrlWithAuthToken(fullUrl);
   window.location.href = urlWithAuth;
 }
+
+/**
+ * Sync shared cookie to localStorage on app initialization
+ * This ensures cross-subdomain SSO works by proactively restoring the session
+ * BEFORE Supabase tries to read from storage.
+ *
+ * Call this function early in your app initialization.
+ *
+ * @returns true if a session was synced from cookie, false otherwise
+ */
+export function syncCookieToLocalStorage(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  // If we already have a session in localStorage, sync it TO the cookie
+  // (in case this is the first login and other subdomains need it)
+  const existingLocal = localStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+  if (existingLocal) {
+    try {
+      const sessionData = JSON.parse(existingLocal);
+      if (sessionData.access_token && sessionData.refresh_token) {
+        // Ensure the cookie is set
+        const minimalTokens = JSON.stringify({
+          access_token: sessionData.access_token,
+          refresh_token: sessionData.refresh_token,
+        });
+        setCookie(SHARED_COOKIE_NAME, minimalTokens, getCookieDomain());
+        console.log('[Auth] Synced existing localStorage session to shared cookie');
+        return false; // Session existed, no restoration needed
+      }
+    } catch (e) {
+      // Continue to check cookie
+    }
+  }
+
+  // No localStorage session, check if there's a shared cookie to restore from
+  const cookieValue = getCookie(SHARED_COOKIE_NAME);
+  if (cookieValue) {
+    try {
+      const tokens = JSON.parse(cookieValue);
+      if (tokens.access_token && tokens.refresh_token) {
+        // Restore to localStorage so Supabase finds it
+        const sessionData = JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+        });
+        localStorage.setItem(SHARED_AUTH_STORAGE_KEY, sessionData);
+        console.log('[Auth] Restored session from shared cookie to localStorage');
+        return true;
+      }
+    } catch (e) {
+      console.error('[Auth] Error parsing shared cookie:', e);
+    }
+  }
+
+  return false;
+}
+
+// Auto-run sync on module load (for immediate SSO on page load)
+if (typeof window !== 'undefined') {
+  syncCookieToLocalStorage();
+}

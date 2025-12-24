@@ -38,6 +38,7 @@ export {
   receiveAuthTokenFromUrl,
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
+  syncCookieToLocalStorage,
   // URL and config helpers
   getSupabaseUrl,
   getSupabaseAnonKey,
