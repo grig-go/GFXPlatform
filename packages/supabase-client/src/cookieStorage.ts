@@ -38,33 +38,61 @@ function getCookieDomain(): string | undefined {
 
 /**
  * Set a cookie with optional domain for cross-subdomain sharing
+ *
+ * IMPORTANT: For cross-subdomain cookies to work:
+ * 1. Domain MUST be set to parent domain (e.g., .emergent.new)
+ * 2. SameSite=None is required for cross-site cookie access
+ * 3. Secure is REQUIRED when using SameSite=None (even on HTTPS)
+ * 4. Path=/ ensures cookie is available on all paths
  */
 function setCookie(name: string, value: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
+  // SameSite=None REQUIRES Secure attribute - always include it on HTTPS
+  // On HTTP (localhost), we can't use Secure, but SameSite=None won't work anyway
   const isSecure = window.location.protocol === 'https:';
-  // Build cookie string - domain must come before other attributes for some browsers
-  let cookie = `${name}=${encodeURIComponent(value)}`;
 
+  // Build cookie parts as an array for clarity
+  const parts: string[] = [
+    `${name}=${encodeURIComponent(value)}`,
+  ];
+
+  // Domain MUST come early in the cookie string
   if (domain) {
-    cookie += `; Domain=${domain}`;
+    parts.push(`Domain=${domain}`);
   }
 
-  cookie += '; Path=/; Max-Age=31536000; SameSite=None';
+  parts.push('Path=/');
+  parts.push('Max-Age=31536000'); // 1 year
 
+  // For cross-subdomain to work on HTTPS, we need SameSite=None + Secure
   if (isSecure) {
-    cookie += '; Secure';
+    parts.push('SameSite=None');
+    parts.push('Secure');
+  } else {
+    // On localhost/HTTP, use Lax (None won't work without Secure)
+    parts.push('SameSite=Lax');
   }
 
-  console.log('[Auth SSO] Setting cookie string:', cookie.substring(0, 100) + '...');
+  const cookie = parts.join('; ');
+
+  console.log('[Auth SSO] Setting cookie:', {
+    name,
+    domain,
+    isSecure,
+    valueLength: value.length,
+    cookieString: cookie.substring(0, 150) + '...'
+  });
+
   document.cookie = cookie;
 
-  // Verify it was set
-  setTimeout(() => {
-    const allCookies = document.cookie;
-    const hasIt = allCookies.includes(name);
-    console.log('[Auth SSO] Cookie verification:', { cookieWasSet: hasIt, allCookiesLength: allCookies.length });
-  }, 100);
+  // Verify it was set (synchronous check is more reliable than setTimeout)
+  const wasSet = document.cookie.includes(name);
+  console.log('[Auth SSO] Cookie set result:', { wasSet, allCookiesLength: document.cookie.length });
+
+  if (!wasSet) {
+    console.error('[Auth SSO] Cookie was NOT set! This may be due to browser restrictions.');
+  }
 }
 
 /**
@@ -402,6 +430,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.8');
+  console.log('[Auth SSO] Module loaded - version 1.0.9');
   syncCookieToLocalStorage();
 }
