@@ -15,8 +15,8 @@
 // Shared storage key - must be identical across all apps
 export const SHARED_AUTH_STORAGE_KEY = 'sb-shared-auth-token';
 
-// Cookie name for cross-subdomain token sharing
-const SHARED_COOKIE_NAME = 'sb-shared-tokens';
+// Cookie name for cross-subdomain token sharing (matches localStorage key for consistency)
+const SHARED_COOKIE_NAME = 'sb-shared-auth-token';
 
 // URL parameter name for token relay
 export const AUTH_TOKEN_PARAM = 'auth_token';
@@ -43,17 +43,28 @@ function setCookie(name: string, value: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
   const isSecure = window.location.protocol === 'https:';
-  let cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+  // Build cookie string - domain must come before other attributes for some browsers
+  let cookie = `${name}=${encodeURIComponent(value)}`;
+
+  if (domain) {
+    cookie += `; Domain=${domain}`;
+  }
+
+  cookie += '; Path=/; Max-Age=31536000; SameSite=None';
 
   if (isSecure) {
     cookie += '; Secure';
   }
 
-  if (domain) {
-    cookie += `; domain=${domain}`;
-  }
-
+  console.log('[Auth SSO] Setting cookie string:', cookie.substring(0, 100) + '...');
   document.cookie = cookie;
+
+  // Verify it was set
+  setTimeout(() => {
+    const allCookies = document.cookie;
+    const hasIt = allCookies.includes(name);
+    console.log('[Auth SSO] Cookie verification:', { cookieWasSet: hasIt, allCookiesLength: allCookies.length });
+  }, 100);
 }
 
 /**
@@ -98,6 +109,7 @@ export const cookieStorage = {
 
     // First check localStorage
     const localValue = localStorage.getItem(key);
+    console.log('[Auth SSO] getItem called', { key, hasLocalValue: !!localValue, localValueLength: localValue?.length });
     if (localValue) {
       return localValue;
     }
@@ -106,17 +118,13 @@ export const cookieStorage = {
     const cookieValue = getCookie(SHARED_COOKIE_NAME);
     if (cookieValue) {
       try {
-        // Cookie contains minimal tokens, reconstruct session format
-        const tokens = JSON.parse(cookieValue);
-        if (tokens.access_token && tokens.refresh_token) {
+        // Cookie contains full session, store and return it as-is
+        const sessionData = JSON.parse(cookieValue);
+        if (sessionData.access_token && sessionData.refresh_token) {
           // Store in localStorage for faster future access
-          const sessionData = JSON.stringify({
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-          });
-          localStorage.setItem(key, sessionData);
+          localStorage.setItem(key, cookieValue);
           console.log('[Auth] Restored session from shared cookie');
-          return sessionData;
+          return cookieValue;
         }
       } catch (e) {
         console.error('[Auth] Error parsing cookie:', e);
@@ -142,9 +150,22 @@ export const cookieStorage = {
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
-        const cookieDomain = getCookieDomain();
-        setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
-        console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME });
+        const encodedSize = encodeURIComponent(minimalTokens).length;
+        console.log('[Auth SSO] Cookie data sizes', {
+          rawSize: minimalTokens.length,
+          encodedSize,
+          accessTokenLen: sessionData.access_token.length,
+          refreshTokenLen: sessionData.refresh_token.length
+        });
+
+        // Cookies have a ~4KB limit. If too large, skip cookie (will use URL token relay instead)
+        if (encodedSize > 4000) {
+          console.warn('[Auth SSO] Cookie too large, skipping cookie storage. Use URL token relay for SSO.');
+        } else {
+          const cookieDomain = getCookieDomain();
+          setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
+          console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME, encodedSize });
+        }
       }
     } catch (e) {
       // Value might not be JSON, just store in localStorage only
@@ -358,15 +379,15 @@ export function syncCookieToLocalStorage(): boolean {
 
   if (cookieValue) {
     try {
-      const tokens = JSON.parse(cookieValue);
-      if (tokens.access_token && tokens.refresh_token) {
-        // Restore to localStorage so Supabase finds it
-        const sessionData = JSON.stringify({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
+      const sessionData = JSON.parse(cookieValue);
+      if (sessionData.access_token && sessionData.refresh_token) {
+        // Restore full session to localStorage so Supabase finds it
+        // The cookie may contain the full session object, so store it as-is
+        localStorage.setItem(SHARED_AUTH_STORAGE_KEY, cookieValue);
+        console.log('[Auth SSO] Restored session from shared cookie to localStorage', {
+          hasUser: !!sessionData.user,
+          hasAccessToken: !!sessionData.access_token
         });
-        localStorage.setItem(SHARED_AUTH_STORAGE_KEY, sessionData);
-        console.log('[Auth SSO] Restored session from shared cookie to localStorage');
         return true;
       }
     } catch (e) {
@@ -381,5 +402,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
+  console.log('[Auth SSO] Module loaded - version 1.0.8');
   syncCookieToLocalStorage();
 }
