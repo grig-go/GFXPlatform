@@ -55,11 +55,21 @@ function setCookie(name: string, value: string, domain?: string): void {
   const hostname = window.location.hostname;
 
   // CRITICAL FIX: First delete ALL versions of this cookie to avoid shadowing
+  // IMPORTANT: When deleting a cookie that was set with SameSite=None; Secure,
+  // we must include those same attributes or the browser won't delete it!
   // Delete without domain (local cookie)
-  document.cookie = `${name}=; Path=/; Max-Age=0`;
+  if (isSecure) {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=None; Secure`;
+  } else {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+  }
   // Delete with domain (shared cookie) - must also be deleted before re-setting
   if (domain) {
-    document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}`;
+    if (isSecure) {
+      document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}; SameSite=None; Secure`;
+    } else {
+      document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}; SameSite=Lax`;
+    }
   }
 
   // Use base64url encoding for the value to avoid any special character issues
@@ -98,18 +108,25 @@ function setCookie(name: string, value: string, domain?: string): void {
 
   document.cookie = cookie;
 
-  // Verify it was set by looking for the cookie name
+  // Verify it was set by looking for the actual cookie
   setTimeout(() => {
     const allCookies = document.cookie;
-    const wasSet = allCookies.includes(name);
+    const cookieArray = allCookies.split(';').map(c => c.trim());
+    const foundCookie = cookieArray.find(c => c.startsWith(name + '='));
+    const wasSet = !!foundCookie;
+
     console.log('[Auth SSO] Cookie verification:', {
       wasSet,
-      cookieCount: allCookies.split(';').length,
-      preview: allCookies.substring(0, 300)
+      foundCookie: foundCookie ? foundCookie.substring(0, 100) + '...' : null,
+      cookieCount: cookieArray.length,
+      allCookieNames: cookieArray.map(c => c.split('=')[0]),
+      preview: allCookies.substring(0, 500)
     });
 
     if (!wasSet) {
-      console.error('[Auth SSO] Cookie was NOT set! Cookie string was:', cookie.substring(0, 200));
+      console.error('[Auth SSO] Cookie was NOT set! Cookie string attempted:', cookie.substring(0, 300));
+      console.error('[Auth SSO] This usually means the browser silently rejected the cookie.');
+      console.error('[Auth SSO] Check Chrome DevTools > Application > Cookies for warning icons.');
     }
   }, 100);
 }
@@ -172,20 +189,29 @@ function getCookie(name: string): string | null {
 
 /**
  * Delete a cookie
+ * IMPORTANT: Must use the same attributes (SameSite, Secure) that were used when setting
  */
 function deleteCookie(name: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
-  console.log('[Auth SSO] deleteCookie called:', { name, domain });
+  const isSecure = window.location.protocol === 'https:';
+  console.log('[Auth SSO] deleteCookie called:', { name, domain, isSecure });
 
-  let cookie = `${name}=; path=/; max-age=0`;
+  // Delete with domain (if provided) - must include SameSite/Secure to match set attributes
   if (domain) {
-    cookie += `; domain=${domain}`;
+    if (isSecure) {
+      document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}; SameSite=None; Secure`;
+    } else {
+      document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}; SameSite=Lax`;
+    }
   }
-  document.cookie = cookie;
 
   // Also delete without domain in case it was set that way
-  document.cookie = `${name}=; path=/; max-age=0`;
+  if (isSecure) {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=None; Secure`;
+  } else {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+  }
 }
 
 /**
@@ -533,7 +559,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.16 (fixed cookie deletion bug)');
+  console.log('[Auth SSO] Module loaded - version 1.0.18 (fixed SameSite=None on delete)');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
