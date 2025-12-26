@@ -532,40 +532,15 @@ if (_supabase && typeof window !== 'undefined') {
     } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
       // Sync tokens to shared cookie for cross-subdomain access
       // This ensures the cookie stays up-to-date with the latest tokens
+      // NOTE: We delegate to cookieStorage.setItem which handles the encoding
       console.log('[Auth SSO] Syncing session to cookie on', event);
-      const minimalTokens = JSON.stringify({
+      const sessionData = JSON.stringify({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
-
-      const encodedSize = encodeURIComponent(minimalTokens).length;
-      if (encodedSize <= 4000) {
-        // Get cookie domain for cross-subdomain sharing
-        const hostname = window.location.hostname;
-        let cookieDomain: string | undefined;
-        if (hostname.endsWith('.emergent.new')) {
-          cookieDomain = '.emergent.new';
-        }
-
-        // Set cookie with proper attributes for cross-subdomain sharing
-        const isSecure = window.location.protocol === 'https:';
-        const parts: string[] = [
-          `sb-shared-auth-token=${encodeURIComponent(minimalTokens)}`,
-        ];
-        if (cookieDomain) {
-          parts.push(`Domain=${cookieDomain}`);
-        }
-        parts.push('Path=/');
-        parts.push('Max-Age=31536000');
-        if (isSecure) {
-          parts.push('SameSite=None');
-          parts.push('Secure');
-        } else {
-          parts.push('SameSite=Lax');
-        }
-        document.cookie = parts.join('; ');
-        console.log('[Auth SSO] Cookie synced via onAuthStateChange:', { event, cookieDomain, encodedSize });
-      }
+      // Use the storage adapter which handles proper cookie setting
+      cookieStorage.setItem(SHARED_AUTH_STORAGE_KEY, sessionData);
+      console.log('[Auth SSO] Cookie synced via onAuthStateChange:', { event });
     }
   });
   console.log('[Auth SSO] onAuthStateChange listener registered');

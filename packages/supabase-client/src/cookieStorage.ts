@@ -44,69 +44,79 @@ function getCookieDomain(): string | undefined {
  * 2. SameSite=None is required for cross-site cookie access
  * 3. Secure is REQUIRED when using SameSite=None (even on HTTPS)
  * 4. Path=/ ensures cookie is available on all paths
+ *
+ * KEY INSIGHT FROM RESEARCH: The cookie value must NOT contain characters
+ * that could break parsing. We use base64url encoding (no +, /, or =) to be safe.
  */
 function setCookie(name: string, value: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
-  // SameSite=None REQUIRES Secure attribute - always include it on HTTPS
-  // On HTTP (localhost), we can't use Secure, but SameSite=None won't work anyway
   const isSecure = window.location.protocol === 'https:';
   const hostname = window.location.hostname;
 
-  // Delete any existing cookie WITHOUT domain to avoid shadowing
-  // A local cookie (without domain) takes precedence over a shared cookie (with domain)
-  // So we must delete any local cookie first
-  // NOTE: We do NOT delete the shared domain cookie - we want to preserve it for SSO
+  // CRITICAL FIX: First delete ALL versions of this cookie to avoid shadowing
+  // Delete without domain (local cookie)
   document.cookie = `${name}=; Path=/; Max-Age=0`;
-
-  // Build cookie parts as an array for clarity
-  const parts: string[] = [
-    `${name}=${encodeURIComponent(value)}`,
-  ];
-
-  // Domain MUST come early in the cookie string
+  // Delete with domain (shared cookie) - must also be deleted before re-setting
   if (domain) {
-    parts.push(`Domain=${domain}`);
+    document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}`;
   }
 
-  parts.push('Path=/');
-  parts.push('Max-Age=31536000'); // 1 year
+  // Use base64url encoding for the value to avoid any special character issues
+  // This is safer than just encodeURIComponent for cookie values
+  const encodedValue = btoa(value)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
-  // For cross-subdomain to work on HTTPS, we need SameSite=None + Secure
+  // Build cookie with all required attributes
+  // Order matters: name=value; Domain=x; Path=y; Secure; SameSite=z
+  let cookie = `${name}=${encodedValue}`;
+
+  if (domain) {
+    cookie += `; Domain=${domain}`;
+  }
+
+  cookie += '; Path=/';
+  cookie += '; Max-Age=31536000'; // 1 year
+
   if (isSecure) {
-    parts.push('SameSite=None');
-    parts.push('Secure');
+    cookie += '; SameSite=None; Secure';
   } else {
-    // On localhost/HTTP, use Lax (None won't work without Secure)
-    parts.push('SameSite=Lax');
+    cookie += '; SameSite=Lax';
   }
-
-  const cookie = parts.join('; ');
 
   console.log('[Auth SSO] Setting cookie:', {
     name,
     domain,
     hostname,
     isSecure,
-    valueLength: value.length,
-    fullCookieString: cookie
+    rawValueLength: value.length,
+    encodedValueLength: encodedValue.length,
+    cookieStringLength: cookie.length
   });
 
   document.cookie = cookie;
 
-  // Verify it was set
-  const allCookies = document.cookie;
-  const wasSet = allCookies.includes(name);
-  console.log('[Auth SSO] Cookie set result:', { wasSet, allCookies: allCookies.substring(0, 200) });
+  // Verify it was set by looking for the cookie name
+  setTimeout(() => {
+    const allCookies = document.cookie;
+    const wasSet = allCookies.includes(name);
+    console.log('[Auth SSO] Cookie verification:', {
+      wasSet,
+      cookieCount: allCookies.split(';').length,
+      preview: allCookies.substring(0, 300)
+    });
 
-  if (!wasSet) {
-    console.error('[Auth SSO] Cookie was NOT set! This may be due to browser restrictions.');
-    console.error('[Auth SSO] Attempted cookie string:', cookie);
-  }
+    if (!wasSet) {
+      console.error('[Auth SSO] Cookie was NOT set! Cookie string was:', cookie.substring(0, 200));
+    }
+  }, 100);
 }
 
 /**
  * Get a cookie value by name
+ * Handles both base64url encoded values (new format) and plain encoded values (legacy)
  */
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
@@ -124,9 +134,35 @@ function getCookie(name: string): string | null {
   for (const cookie of cookies) {
     const [cookieName, ...cookieValueParts] = cookie.trim().split('=');
     if (cookieName === name) {
-      const value = decodeURIComponent(cookieValueParts.join('='));
-      console.log('[Auth SSO] Found cookie:', { name, valueLength: value.length });
-      return value;
+      const rawValue = cookieValueParts.join('=');
+
+      // Try to decode as base64url first (new format)
+      try {
+        // Restore standard base64 from base64url
+        let base64 = rawValue
+          .replace(/-/g, '+')
+          .replace(/_/g, '/');
+        // Add padding if needed
+        while (base64.length % 4) {
+          base64 += '=';
+        }
+        const decoded = atob(base64);
+        // Verify it's valid JSON (our token format)
+        JSON.parse(decoded);
+        console.log('[Auth SSO] Found cookie (base64url):', { name, valueLength: decoded.length });
+        return decoded;
+      } catch {
+        // Not base64url, try legacy URI decoding
+        try {
+          const decoded = decodeURIComponent(rawValue);
+          console.log('[Auth SSO] Found cookie (URI encoded):', { name, valueLength: decoded.length });
+          return decoded;
+        } catch {
+          // Return raw value as last resort
+          console.log('[Auth SSO] Found cookie (raw):', { name, valueLength: rawValue.length });
+          return rawValue;
+        }
+      }
     }
   }
 
@@ -203,21 +239,25 @@ export const cookieStorage = {
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
-        const encodedSize = encodeURIComponent(minimalTokens).length;
+
+        // Base64 encoding adds ~33% overhead. Cookie limit is ~4KB.
+        // We use base64url encoding in setCookie, so calculate that size
+        const base64Size = Math.ceil(minimalTokens.length * 4 / 3);
+
         console.log('[Auth SSO] Cookie data sizes', {
           rawSize: minimalTokens.length,
-          encodedSize,
+          base64Size,
           accessTokenLen: sessionData.access_token.length,
           refreshTokenLen: sessionData.refresh_token.length
         });
 
         // Cookies have a ~4KB limit. If too large, skip cookie (will use URL token relay instead)
-        if (encodedSize > 4000) {
+        if (base64Size > 3800) { // Leave some room for cookie name and attributes
           console.warn('[Auth SSO] Cookie too large, skipping cookie storage. Use URL token relay for SSO.');
         } else {
           const cookieDomain = getCookieDomain();
           setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
-          console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME, encodedSize });
+          console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME, base64Size });
         }
       }
     } catch (e) {
@@ -469,7 +509,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.14');
+  console.log('[Auth SSO] Module loaded - version 1.0.15 (base64url encoding)');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
