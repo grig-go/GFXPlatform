@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, sessionReady, startConnectionMonitor, stopConnectionMonitor, withAutoRecovery } from '../utils/supabase/client';
-import { cookieStorage, SHARED_AUTH_STORAGE_KEY, receiveAuthTokenFromUrl, signOut as sharedSignOut } from '@emergent-platform/supabase-client';
+import { receiveAuthTokenFromUrl, signOut as sharedSignOut } from '@emergent-platform/supabase-client';
 import type { Session } from '@supabase/supabase-js';
 import type {
   AuthState,
