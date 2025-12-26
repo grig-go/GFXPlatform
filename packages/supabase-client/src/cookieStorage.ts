@@ -21,6 +21,20 @@ const SHARED_COOKIE_NAME = 'sb-shared-auth-token';
 // URL parameter name for token relay
 export const AUTH_TOKEN_PARAM = 'auth_token';
 
+// Track the last cookie value we set to avoid redundant writes
+let lastCookieValueHash: string | null = null;
+
+// Simple hash function for deduplication
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
 /**
  * Get the cookie domain for cross-subdomain sharing
  * Returns undefined for localhost (cookies work without domain on localhost)
@@ -50,6 +64,13 @@ function getCookieDomain(): string | undefined {
  */
 function setCookie(name: string, value: string, domain?: string): void {
   if (typeof document === 'undefined') return;
+
+  // Skip if we're setting the same value we just set (prevents redundant writes)
+  const valueHash = simpleHash(value);
+  if (lastCookieValueHash === valueHash) {
+    console.log('[Auth SSO] Cookie value unchanged, skipping write');
+    return;
+  }
 
   const isSecure = window.location.protocol === 'https:';
   const hostname = window.location.hostname;
@@ -108,27 +129,18 @@ function setCookie(name: string, value: string, domain?: string): void {
 
   document.cookie = cookie;
 
-  // Verify it was set by looking for the actual cookie
-  setTimeout(() => {
-    const allCookies = document.cookie;
-    const cookieArray = allCookies.split(';').map(c => c.trim());
-    const foundCookie = cookieArray.find(c => c.startsWith(name + '='));
-    const wasSet = !!foundCookie;
+  // Remember what we set to avoid redundant writes
+  lastCookieValueHash = valueHash;
 
-    console.log('[Auth SSO] Cookie verification:', {
-      wasSet,
-      foundCookie: foundCookie ? foundCookie.substring(0, 100) + '...' : null,
-      cookieCount: cookieArray.length,
-      allCookieNames: cookieArray.map(c => c.split('=')[0]),
-      preview: allCookies.substring(0, 500)
-    });
+  // Verify it was set (only on first write, not repeatedly)
+  const allCookies = document.cookie;
+  const wasSet = allCookies.includes(name + '=');
+  console.log('[Auth SSO] Cookie set:', { wasSet, name, domain });
 
-    if (!wasSet) {
-      console.error('[Auth SSO] Cookie was NOT set! Cookie string attempted:', cookie.substring(0, 300));
-      console.error('[Auth SSO] This usually means the browser silently rejected the cookie.');
-      console.error('[Auth SSO] Check Chrome DevTools > Application > Cookies for warning icons.');
-    }
-  }, 100);
+  if (!wasSet) {
+    console.error('[Auth SSO] Cookie was NOT set! Check browser DevTools > Application > Cookies');
+    lastCookieValueHash = null; // Allow retry
+  }
 }
 
 /**
@@ -140,13 +152,6 @@ function getCookie(name: string): string | null {
 
   const rawCookies = document.cookie;
   const cookies = rawCookies.split(';');
-
-  console.log('[Auth SSO] getCookie called:', {
-    lookingFor: name,
-    hostname: window.location.hostname,
-    totalCookies: cookies.length,
-    rawCookiesPreview: rawCookies.substring(0, 300)
-  });
 
   for (const cookie of cookies) {
     const [cookieName, ...cookieValueParts] = cookie.trim().split('=');
@@ -166,24 +171,19 @@ function getCookie(name: string): string | null {
         const decoded = atob(base64);
         // Verify it's valid JSON (our token format)
         JSON.parse(decoded);
-        console.log('[Auth SSO] Found cookie (base64url):', { name, valueLength: decoded.length });
         return decoded;
       } catch {
         // Not base64url, try legacy URI decoding
         try {
-          const decoded = decodeURIComponent(rawValue);
-          console.log('[Auth SSO] Found cookie (URI encoded):', { name, valueLength: decoded.length });
-          return decoded;
+          return decodeURIComponent(rawValue);
         } catch {
           // Return raw value as last resort
-          console.log('[Auth SSO] Found cookie (raw):', { name, valueLength: rawValue.length });
           return rawValue;
         }
       }
     }
   }
 
-  console.log('[Auth SSO] Cookie not found:', name);
   return null;
 }
 
@@ -224,7 +224,6 @@ export const cookieStorage = {
 
     // First check localStorage
     const localValue = localStorage.getItem(key);
-    console.log('[Auth SSO] getItem called', { key, hasLocalValue: !!localValue, localValueLength: localValue?.length });
     if (localValue) {
       return localValue;
     }
@@ -238,11 +237,11 @@ export const cookieStorage = {
         if (sessionData.access_token && sessionData.refresh_token) {
           // Store in localStorage for faster future access
           localStorage.setItem(key, cookieValue);
-          console.log('[Auth] Restored session from shared cookie');
+          console.log('[Auth SSO] Restored session from shared cookie');
           return cookieValue;
         }
       } catch (e) {
-        console.error('[Auth] Error parsing cookie:', e);
+        console.error('[Auth SSO] Error parsing cookie:', e);
       }
     }
 
@@ -251,8 +250,6 @@ export const cookieStorage = {
 
   setItem: (key: string, value: string): void => {
     if (typeof window === 'undefined') return;
-
-    console.log('[Auth SSO] setItem called', { key, valueLength: value?.length });
 
     // Always store in localStorage
     localStorage.setItem(key, value);
@@ -267,52 +264,28 @@ export const cookieStorage = {
         });
 
         // Base64 encoding adds ~33% overhead. Cookie limit is ~4KB.
-        // We use base64url encoding in setCookie, so calculate that size
         const base64Size = Math.ceil(minimalTokens.length * 4 / 3);
 
-        console.log('[Auth SSO] Cookie data sizes', {
-          rawSize: minimalTokens.length,
-          base64Size,
-          accessTokenLen: sessionData.access_token.length,
-          refreshTokenLen: sessionData.refresh_token.length
-        });
-
-        // Cookies have a ~4KB limit. If too large, skip cookie (will use URL token relay instead)
-        if (base64Size > 3800) { // Leave some room for cookie name and attributes
-          console.warn('[Auth SSO] Cookie too large, skipping cookie storage. Use URL token relay for SSO.');
-        } else {
+        // Cookies have a ~4KB limit. If too large, skip cookie
+        if (base64Size <= 3800) {
           const cookieDomain = getCookieDomain();
           setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
-          console.log('[Auth SSO] Cookie set on login', { cookieDomain, cookieName: SHARED_COOKIE_NAME, base64Size });
         }
       }
-    } catch (e) {
+    } catch {
       // Value might not be JSON, just store in localStorage only
-      console.log('[Auth SSO] setItem value is not JSON, skipping cookie sync');
     }
   },
 
   removeItem: (key: string): void => {
     if (typeof window === 'undefined') return;
 
-    console.log('[Auth SSO] removeItem called', { key });
-
     // Always remove from localStorage
     localStorage.removeItem(key);
 
-    // CRITICAL FIX: Do NOT delete the shared cookie here!
-    // Supabase calls removeItem for various keys during internal session management:
-    // - sb-shared-auth-token (main session)
-    // - sb-shared-auth-token-code-verifier (PKCE)
-    // - sb-shared-auth-token-user (user data cache)
-    //
-    // The problem: During SIGNED_IN, Supabase internally calls _removeSession -> removeItem
-    // as part of its __loadSession flow, which would delete our cookie immediately after
-    // we set it. This is why the cookie was disappearing!
-    //
-    // Solution: Only delete the cookie via clearSharedCookie() which is called explicitly
-    // from the SIGNED_OUT event handler in client.ts
-    console.log('[Auth SSO] localStorage removed, shared cookie preserved (use clearSharedCookie for logout)');
+    // CRITICAL: Do NOT delete the shared cookie here!
+    // Supabase calls removeItem during internal session management even during sign-in.
+    // Cookie deletion only happens via clearSharedCookie() during actual logout.
   },
 };
 
@@ -492,46 +465,36 @@ export function navigateWithAuth(targetUrl: string, path = ''): void {
 export function syncCookieToLocalStorage(): boolean {
   if (typeof window === 'undefined') return false;
 
-  const hostname = window.location.hostname;
   const cookieDomain = getCookieDomain();
-  console.log('[Auth SSO] syncCookieToLocalStorage called', { hostname, cookieDomain });
 
   // If we already have a session in localStorage, sync it TO the cookie
-  // (in case this is the first login and other subdomains need it)
   const existingLocal = localStorage.getItem(SHARED_AUTH_STORAGE_KEY);
-  console.log('[Auth SSO] localStorage check:', { hasLocal: !!existingLocal, key: SHARED_AUTH_STORAGE_KEY });
 
   if (existingLocal) {
     try {
       const sessionData = JSON.parse(existingLocal);
       if (sessionData.access_token && sessionData.refresh_token) {
-        // Ensure the cookie is set
+        // Ensure the cookie is set for other subdomains
         const minimalTokens = JSON.stringify({
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
         });
         setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
-        console.log('[Auth SSO] Synced existing localStorage session to shared cookie', { cookieDomain });
         return false; // Session existed, no restoration needed
       }
-    } catch (e) {
-      console.error('[Auth SSO] Error parsing localStorage:', e);
+    } catch {
       // Continue to check cookie
     }
   }
 
   // No localStorage session, check if there's a shared cookie to restore from
   const cookieValue = getCookie(SHARED_COOKIE_NAME);
-  console.log('[Auth SSO] Cookie check:', { hasCookie: !!cookieValue, cookieName: SHARED_COOKIE_NAME });
 
   if (cookieValue) {
     try {
       const sessionData = JSON.parse(cookieValue);
       if (sessionData.access_token && sessionData.refresh_token) {
         // Store tokens as pending for client.ts to use with setSession()
-        // This is the key fix: instead of just writing to localStorage and hoping
-        // Supabase picks it up, we store pending tokens so ensureSessionInitialized()
-        // can explicitly call setSession() which properly initializes the auth state
         pendingAuthTokens = {
           accessToken: sessionData.access_token,
           refreshToken: sessionData.refresh_token,
@@ -541,17 +504,12 @@ export function syncCookieToLocalStorage(): boolean {
         // Also write to localStorage for Supabase's storage adapter
         localStorage.setItem(SHARED_AUTH_STORAGE_KEY, cookieValue);
 
-        console.log('[Auth SSO] Restored session from shared cookie - tokens pending for setSession', {
-          hasAccessToken: !!sessionData.access_token,
-          accessTokenLength: sessionData.access_token?.length
-        });
+        console.log('[Auth SSO] Found shared cookie, restoring session...');
         return true;
       }
     } catch (e) {
       console.error('[Auth SSO] Error parsing shared cookie:', e);
     }
-  } else {
-    console.log('[Auth SSO] No shared cookie found, user not logged in on any subdomain');
   }
 
   return false;
@@ -559,8 +517,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.18 (fixed SameSite=None on delete)');
-  console.log('[Auth SSO] Current hostname:', window.location.hostname);
-  console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
+  console.log('[Auth SSO] v1.0.19 - ' + window.location.hostname);
   syncCookieToLocalStorage();
 }
