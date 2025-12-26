@@ -267,6 +267,12 @@ export const cookieStorage = {
     try {
       const sessionData = JSON.parse(value);
       if (sessionData.access_token && sessionData.refresh_token) {
+        // Reset signout flag - user is logging in again
+        if (isSigningOut) {
+          console.log('[Auth SSO] New login detected, resetting signout flag');
+          isSigningOut = false;
+        }
+
         const minimalTokens = JSON.stringify({
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
@@ -537,6 +543,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] v1.0.21 - ' + window.location.hostname);
+  console.log('[Auth SSO] v1.0.22 - ' + window.location.hostname);
   syncCookieToLocalStorage();
 }
