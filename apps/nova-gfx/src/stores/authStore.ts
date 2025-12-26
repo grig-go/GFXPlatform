@@ -375,22 +375,19 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // Clear state first for immediate UI response
     set({ user: null, organization: null, accessToken: null, error: null });
 
-    // Clear legacy localStorage keys
+    // Use the shared signOut which properly handles SSO cookie cleanup
+    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    // IMPORTANT: This must happen BEFORE clearing localStorage, otherwise
+    // Supabase's internal getItem calls will try to restore from cookie
+    console.log('[Auth] Signing out via shared signOut...');
+    await sharedSignOut();
+
+    // Clear legacy localStorage keys AFTER signOut is complete
     try {
       localStorage.removeItem('emergent-auth');
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-')) {
-          localStorage.removeItem(key);
-        }
-      });
     } catch (e) {
       console.warn('Failed to clear localStorage:', e);
     }
-
-    // Use the shared signOut which properly handles SSO cookie cleanup
-    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
-    console.log('[Auth] Signing out via shared signOut...');
-    await sharedSignOut();
   },
 
   clearError: () => set({ error: null }),
