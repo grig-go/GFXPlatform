@@ -51,6 +51,16 @@ function setCookie(name: string, value: string, domain?: string): void {
   // SameSite=None REQUIRES Secure attribute - always include it on HTTPS
   // On HTTP (localhost), we can't use Secure, but SameSite=None won't work anyway
   const isSecure = window.location.protocol === 'https:';
+  const hostname = window.location.hostname;
+
+  // CRITICAL: First delete any existing cookie without domain to avoid conflicts
+  // A cookie without domain takes precedence on the exact subdomain and shadows the shared one
+  document.cookie = `${name}=; Path=/; Max-Age=0`;
+
+  // Also delete with explicit domain in case it was set wrong
+  if (domain) {
+    document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}`;
+  }
 
   // Build cookie parts as an array for clarity
   const parts: string[] = [
@@ -79,19 +89,22 @@ function setCookie(name: string, value: string, domain?: string): void {
   console.log('[Auth SSO] Setting cookie:', {
     name,
     domain,
+    hostname,
     isSecure,
     valueLength: value.length,
-    cookieString: cookie.substring(0, 150) + '...'
+    fullCookieString: cookie
   });
 
   document.cookie = cookie;
 
-  // Verify it was set (synchronous check is more reliable than setTimeout)
-  const wasSet = document.cookie.includes(name);
-  console.log('[Auth SSO] Cookie set result:', { wasSet, allCookiesLength: document.cookie.length });
+  // Verify it was set
+  const allCookies = document.cookie;
+  const wasSet = allCookies.includes(name);
+  console.log('[Auth SSO] Cookie set result:', { wasSet, allCookies: allCookies.substring(0, 200) });
 
   if (!wasSet) {
     console.error('[Auth SSO] Cookie was NOT set! This may be due to browser restrictions.');
+    console.error('[Auth SSO] Attempted cookie string:', cookie);
   }
 }
 
@@ -101,13 +114,26 @@ function setCookie(name: string, value: string, domain?: string): void {
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
 
-  const cookies = document.cookie.split(';');
+  const rawCookies = document.cookie;
+  const cookies = rawCookies.split(';');
+
+  console.log('[Auth SSO] getCookie called:', {
+    lookingFor: name,
+    hostname: window.location.hostname,
+    totalCookies: cookies.length,
+    rawCookiesPreview: rawCookies.substring(0, 300)
+  });
+
   for (const cookie of cookies) {
     const [cookieName, ...cookieValueParts] = cookie.trim().split('=');
     if (cookieName === name) {
-      return decodeURIComponent(cookieValueParts.join('='));
+      const value = decodeURIComponent(cookieValueParts.join('='));
+      console.log('[Auth SSO] Found cookie:', { name, valueLength: value.length });
+      return value;
     }
   }
+
+  console.log('[Auth SSO] Cookie not found:', name);
   return null;
 }
 
@@ -430,6 +456,8 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.9');
+  console.log('[Auth SSO] Module loaded - version 1.0.10');
+  console.log('[Auth SSO] Current hostname:', window.location.hostname);
+  console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
 }
