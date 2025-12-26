@@ -143,6 +143,8 @@ function getCookie(name: string): string | null {
 function deleteCookie(name: string, domain?: string): void {
   if (typeof document === 'undefined') return;
 
+  console.log('[Auth SSO] deleteCookie called:', { name, domain });
+
   let cookie = `${name}=; path=/; max-age=0`;
   if (domain) {
     cookie += `; domain=${domain}`;
@@ -229,6 +231,9 @@ export const cookieStorage = {
 
   removeItem: (key: string): void => {
     if (typeof window === 'undefined') return;
+
+    console.log('[Auth SSO] removeItem called - DELETING cookie and localStorage', { key });
+    console.trace('[Auth SSO] removeItem stack trace');
 
     localStorage.removeItem(key);
     deleteCookie(SHARED_COOKIE_NAME, getCookieDomain());
@@ -456,7 +461,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.10');
+  console.log('[Auth SSO] Module loaded - version 1.0.11');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
