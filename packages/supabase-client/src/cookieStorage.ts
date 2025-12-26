@@ -53,14 +53,11 @@ function setCookie(name: string, value: string, domain?: string): void {
   const isSecure = window.location.protocol === 'https:';
   const hostname = window.location.hostname;
 
-  // CRITICAL: First delete any existing cookie without domain to avoid conflicts
-  // A cookie without domain takes precedence on the exact subdomain and shadows the shared one
+  // Delete any existing cookie WITHOUT domain to avoid shadowing
+  // A local cookie (without domain) takes precedence over a shared cookie (with domain)
+  // So we must delete any local cookie first
+  // NOTE: We do NOT delete the shared domain cookie - we want to preserve it for SSO
   document.cookie = `${name}=; Path=/; Max-Age=0`;
-
-  // Also delete with explicit domain in case it was set wrong
-  if (domain) {
-    document.cookie = `${name}=; Path=/; Max-Age=0; Domain=${domain}`;
-  }
 
   // Build cookie parts as an array for clarity
   const parts: string[] = [
@@ -461,7 +458,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.11');
+  console.log('[Auth SSO] Module loaded - version 1.0.12');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();

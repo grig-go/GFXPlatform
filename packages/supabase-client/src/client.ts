@@ -902,11 +902,15 @@ export async function waitForAuth(): Promise<User | null> {
 
 /**
  * Sign out the current user
+ * This clears both localStorage and the shared cookie for SSO logout
  */
 export async function signOut(): Promise<void> {
   if (supabase) {
     await supabase.auth.signOut();
     currentUser = null;
+    // Explicitly clear the shared cookie for SSO logout across all subdomains
+    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+    console.log('[Auth] Signed out and cleared SSO cookie');
   }
 }
 
@@ -1134,8 +1138,9 @@ const ensureSessionInitialized = async (): Promise<void> => {
 
       if (result.error) {
         console.error('[Supabase] Failed to set session from URL tokens:', result.error.message);
-        // Clear the invalid tokens from storage
-        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        // Only clear storage if the error indicates invalid tokens, not network issues
+        // Don't delete cookie - it may still be valid for other subdomains
+        localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
       } else if (result.data.session) {
         console.log('[Supabase] Session set from URL tokens, user:', result.data.session.user?.email);
         return; // Done - session is set
@@ -1144,7 +1149,9 @@ const ensureSessionInitialized = async (): Promise<void> => {
       }
     } catch (e) {
       console.warn('[Supabase] setSession from URL tokens timed out:', e);
-      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      // Don't delete cookie on timeout - it may still be valid
+      // Only clear localStorage to retry on next load
+      localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
     }
   }
 
@@ -1194,15 +1201,19 @@ const ensureSessionInitialized = async (): Promise<void> => {
           console.log('[Supabase] Session restored successfully');
         } catch (e) {
           console.warn('[Supabase] setSession timed out or failed:', e);
-          cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+          // Don't delete cookie on timeout - it may still be valid for SSO
+          // Only clear localStorage to allow retry
+          localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
         }
       } else {
         console.warn('[Supabase] Storage exists but missing tokens');
-        cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        // Clear only localStorage, preserve cookie for SSO
+        localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
       }
     } catch (e) {
       console.error('[Supabase] Error parsing session from storage:', e);
-      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      // Clear only localStorage on parse error, preserve cookie for SSO
+      localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
     }
   } else {
     console.log('[Supabase] No stored session found');
