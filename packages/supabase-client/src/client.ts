@@ -518,6 +518,59 @@ let _supabase: SupabaseClient | null = createSupabaseClient();
 // Export a proxy that allows us to swap the underlying client
 export const supabase = _supabase as SupabaseClient;
 
+// IMPORTANT: Register onAuthStateChange listener to sync cookies on auth events
+// This is the recommended approach from Supabase for cross-subdomain SSO
+// See: https://github.com/supabase/supabase/discussions/5742
+if (_supabase && typeof window !== 'undefined') {
+  _supabase.auth.onAuthStateChange((event, session) => {
+    console.log('[Auth SSO] onAuthStateChange:', event, session ? 'has session' : 'no session');
+
+    if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      // Clear the shared cookie on logout
+      console.log('[Auth SSO] User signed out, clearing cookie');
+      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+    } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+      // Sync tokens to shared cookie for cross-subdomain access
+      // This ensures the cookie stays up-to-date with the latest tokens
+      console.log('[Auth SSO] Syncing session to cookie on', event);
+      const minimalTokens = JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+
+      const encodedSize = encodeURIComponent(minimalTokens).length;
+      if (encodedSize <= 4000) {
+        // Get cookie domain for cross-subdomain sharing
+        const hostname = window.location.hostname;
+        let cookieDomain: string | undefined;
+        if (hostname.endsWith('.emergent.new')) {
+          cookieDomain = '.emergent.new';
+        }
+
+        // Set cookie with proper attributes for cross-subdomain sharing
+        const isSecure = window.location.protocol === 'https:';
+        const parts: string[] = [
+          `sb-shared-auth-token=${encodeURIComponent(minimalTokens)}`,
+        ];
+        if (cookieDomain) {
+          parts.push(`Domain=${cookieDomain}`);
+        }
+        parts.push('Path=/');
+        parts.push('Max-Age=31536000');
+        if (isSecure) {
+          parts.push('SameSite=None');
+          parts.push('Secure');
+        } else {
+          parts.push('SameSite=Lax');
+        }
+        document.cookie = parts.join('; ');
+        console.log('[Auth SSO] Cookie synced via onAuthStateChange:', { event, cookieDomain, encodedSize });
+      }
+    }
+  });
+  console.log('[Auth SSO] onAuthStateChange listener registered');
+}
+
 // IMPORTANT: Check for auth tokens from URL IMMEDIATELY after client creation
 // This must happen BEFORE sessionReady is initialized so the tokens are available
 // for ensureSessionInitialized() to use
@@ -1113,10 +1166,13 @@ const ensureSessionInitialized = async (): Promise<void> => {
     }
   }
 
-  // Now check for pending tokens (either from module-level call or the call above)
+  // Now check for pending tokens (from URL, cookie, or module-level calls)
+  // This is the KEY part of cross-subdomain SSO: if tokens exist in the shared cookie,
+  // syncCookieToLocalStorage() will have stored them as pending tokens, and we use
+  // setSession() to properly initialize Supabase's auth state
   const pendingTokens = getPendingAuthTokens();
   if (pendingTokens) {
-    console.log('[Supabase] Found pending auth tokens from URL, setting session...');
+    console.log('[Supabase] Found pending auth tokens from', pendingTokens.source, ', setting session...');
     console.log('[Supabase] Access token length:', pendingTokens.accessToken.length);
     try {
       const result = await Promise.race([
@@ -1137,18 +1193,18 @@ const ensureSessionInitialized = async (): Promise<void> => {
       });
 
       if (result.error) {
-        console.error('[Supabase] Failed to set session from URL tokens:', result.error.message);
+        console.error('[Supabase] Failed to set session from', pendingTokens.source, 'tokens:', result.error.message);
         // Only clear storage if the error indicates invalid tokens, not network issues
         // Don't delete cookie - it may still be valid for other subdomains
         localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
       } else if (result.data.session) {
-        console.log('[Supabase] Session set from URL tokens, user:', result.data.session.user?.email);
+        console.log('[Supabase] Session set from', pendingTokens.source, 'tokens, user:', result.data.session.user?.email);
         return; // Done - session is set
       } else {
         console.warn('[Supabase] setSession returned no error but also no session');
       }
     } catch (e) {
-      console.warn('[Supabase] setSession from URL tokens timed out:', e);
+      console.warn('[Supabase] setSession from', pendingTokens.source, 'tokens timed out:', e);
       // Don't delete cookie on timeout - it may still be valid
       // Only clear localStorage to retry on next load
       localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);

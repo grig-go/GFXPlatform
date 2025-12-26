@@ -297,18 +297,19 @@ export function getUrlWithAuthToken(targetUrl: string): string {
 }
 
 /**
- * Parsed auth tokens from URL (stored for later use by setSession)
+ * Parsed auth tokens from URL or cookie (stored for later use by setSession)
+ * Source indicates where the tokens came from for logging purposes
  */
-let pendingAuthTokens: { accessToken: string; refreshToken: string } | null = null;
+let pendingAuthTokens: { accessToken: string; refreshToken: string; source: 'url' | 'cookie' } | null = null;
 
 /**
- * Get pending auth tokens that were received from URL
+ * Get pending auth tokens that were received from URL or cookie
  * Used by client.ts to set the session after receiving tokens
  */
-export function getPendingAuthTokens(): { accessToken: string; refreshToken: string } | null {
+export function getPendingAuthTokens(): { accessToken: string; refreshToken: string; source: 'url' | 'cookie' } | null {
   const tokens = pendingAuthTokens;
   if (tokens) {
-    console.log('[Auth] getPendingAuthTokens: returning tokens (accessToken length:', tokens.accessToken.length, ')');
+    console.log('[Auth] getPendingAuthTokens: returning tokens from', tokens.source, '(accessToken length:', tokens.accessToken.length, ')');
   } else {
     console.log('[Auth] getPendingAuthTokens: no pending tokens');
   }
@@ -354,7 +355,7 @@ export function receiveAuthTokenFromUrl(): boolean {
       }));
 
       // Also store for immediate use by client.ts
-      pendingAuthTokens = { accessToken, refreshToken };
+      pendingAuthTokens = { accessToken, refreshToken, source: 'url' };
 
       console.log('[Auth] Received and stored session from URL');
 
@@ -437,12 +438,22 @@ export function syncCookieToLocalStorage(): boolean {
     try {
       const sessionData = JSON.parse(cookieValue);
       if (sessionData.access_token && sessionData.refresh_token) {
-        // Restore full session to localStorage so Supabase finds it
-        // The cookie may contain the full session object, so store it as-is
+        // Store tokens as pending for client.ts to use with setSession()
+        // This is the key fix: instead of just writing to localStorage and hoping
+        // Supabase picks it up, we store pending tokens so ensureSessionInitialized()
+        // can explicitly call setSession() which properly initializes the auth state
+        pendingAuthTokens = {
+          accessToken: sessionData.access_token,
+          refreshToken: sessionData.refresh_token,
+          source: 'cookie'
+        };
+
+        // Also write to localStorage for Supabase's storage adapter
         localStorage.setItem(SHARED_AUTH_STORAGE_KEY, cookieValue);
-        console.log('[Auth SSO] Restored session from shared cookie to localStorage', {
-          hasUser: !!sessionData.user,
-          hasAccessToken: !!sessionData.access_token
+
+        console.log('[Auth SSO] Restored session from shared cookie - tokens pending for setSession', {
+          hasAccessToken: !!sessionData.access_token,
+          accessTokenLength: sessionData.access_token?.length
         });
         return true;
       }
@@ -458,7 +469,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.13');
+  console.log('[Auth SSO] Module loaded - version 1.0.14');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
