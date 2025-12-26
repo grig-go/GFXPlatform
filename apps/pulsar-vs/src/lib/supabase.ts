@@ -10,6 +10,7 @@ export {
   sessionReady,
   receiveAuthTokenFromUrl,
   checkAuthStatus,
+  signOut,
   // Connection management
   isSupabaseHealthy,
   reconnectSupabase,
@@ -22,7 +23,7 @@ export {
   getSupabaseUrl,
   getSupabaseAnonKey,
   getEdgeFunctionUrl,
-  // Cookie storage for SSO
+  // Cookie storage for SSO (no longer needed - use signOut instead)
   cookieStorage,
   SHARED_AUTH_STORAGE_KEY,
 } from '@emergent-platform/supabase-client';

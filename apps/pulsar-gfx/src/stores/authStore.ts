@@ -1,27 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { supabase, isSupabaseConfigured, receiveAuthTokenFromUrl, sessionReady } from '@/lib/supabase';
-import type { User } from '@supabase/supabase-js';
-
-// Timeout helper for async operations
-function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
-// Timeout helper that resolves to null instead of rejecting
-function withTimeoutNull<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<T | null>((resolve) =>
-      setTimeout(() => resolve(null), ms)
-    ),
-  ]);
-}
+import { supabase, isSupabaseConfigured, receiveAuthTokenFromUrl, sessionReady, signOut as sharedSignOut } from '@/lib/supabase';
 
 // Types
 export interface AppUser {
@@ -155,115 +133,110 @@ async function fetchAndSetUserData(
   }
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      user: null,
-      organization: null,
-      accessToken: null,
-      isLoading: false,
-      isInitialized: false,
-      error: null,
+// Create store WITHOUT persist - Supabase SDK handles cookie storage for SSO
+export const useAuthStore = create<AuthState>()((set, get) => ({
+  user: null,
+  organization: null,
+  accessToken: null,
+  isLoading: false,
+  isInitialized: false,
+  error: null,
 
-      initialize: async () => {
-        // If already initialized, just return (prevents re-init loops)
-        if (get().isInitialized) {
-          console.log('[authStore] Already initialized, skipping');
+  initialize: async () => {
+    // If already initialized, just return (prevents re-init loops)
+    if (get().isInitialized) {
+      return;
+    }
+
+    if (!isSupabaseConfigured() || !supabase) {
+      set({ isInitialized: true, isLoading: false });
+      return;
+    }
+
+    set({ isLoading: true });
+
+    try {
+      // Check for auth token in URL (from cross-app SSO)
+      // This must happen BEFORE checking session to store the token first
+      const receivedToken = receiveAuthTokenFromUrl();
+      if (receivedToken) {
+        console.log('[Auth] Received auth token from URL (cross-app SSO)');
+      }
+
+      // Wait for session to be restored from cookie storage before proceeding
+      console.log('[Auth] Waiting for session restoration from cookie storage...');
+      await sessionReady;
+      console.log('[Auth] Session restoration complete');
+
+      // Get current session (matches Nova/Pulsar-Hub's simple approach)
+      console.log('[Auth] Getting session...');
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log('[Auth] Session result:', { hasSession: !!session, error });
+
+      if (error) {
+        console.error('[Auth] Error getting session:', error);
+      }
+
+      if (session) {
+        console.log('[Auth] Processing session for user:', session.user.email);
+        set({ accessToken: session.access_token });
+        await fetchAndSetUserData(session.user.id, set);
+      } else {
+        console.log('[Auth] No existing session found');
+      }
+    } catch (err) {
+      console.error('[Auth] Error during auth initialization:', err);
+      // Don't set error - allow app to function
+    } finally {
+      set({ isLoading: false, isInitialized: true });
+      console.log('[Auth] Initialization complete');
+    }
+
+    // Subscribe to auth state changes for token refresh
+    // Note: This matches Nova/Pulsar's onAuthStateChange pattern exactly
+    if (supabase && !authListenerSetup) {
+      authListenerSetup = true;
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        const isInitialized = get().isInitialized;
+        console.log('[Auth] Auth state change:', event, '| initialized:', isInitialized);
+
+        // Skip INITIAL_SESSION and SIGNED_IN during initialization - we handle it in initialize()
+        // This prevents race conditions where setSession triggers SIGNED_IN before initialize() completes
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !isInitialized) {
+          console.log('[Auth] Skipping auth event during initialization');
           return;
         }
 
-        if (!isSupabaseConfigured() || !supabase) {
-          console.log('[authStore] Supabase not configured');
-          set({ isInitialized: true, isLoading: false });
-          return;
-        }
+        if (event === 'SIGNED_OUT') {
+          set({ user: null, organization: null, accessToken: null, error: null });
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // TOKEN_REFRESHED: Only update access token, don't re-fetch user data
+          console.log('[Auth] Token refreshed, updating access token only');
+          set({ accessToken: session.access_token });
+        } else if (event === 'SIGNED_IN' && session && isInitialized) {
+          // SIGNED_IN after initialization: Check if this is a session recovery or new login
+          const currentUser = get().user;
 
-        console.log('[authStore] Starting initialization...');
-        set({ isLoading: true });
-
-        try {
-          // Check for auth token in URL (from cross-app SSO)
-          // This must happen BEFORE checking session to store the token first
-          const receivedToken = receiveAuthTokenFromUrl();
-          if (receivedToken) {
-            console.log('[authStore] Received auth token from URL (cross-app SSO)');
-          }
-
-          // Wait for session to be restored from cookie storage before proceeding
-          console.log('[authStore] Waiting for session restoration from cookie storage...');
-          await sessionReady;
-          console.log('[authStore] Session restoration complete');
-
-          // Get current session with a timeout to prevent hanging
-          // If session fetch times out, continue without session (user can log in manually)
-          const sessionResult = await withTimeoutNull(
-            supabase.auth.getSession(),
-            5000 // 5 second timeout
-          );
-
-          const session = sessionResult?.data?.session;
-          console.log('[authStore] Session result:', session ? `Found session for ${session.user?.email}` : 'No session');
-
-          if (session?.user) {
-            // Store the access token
-            console.log('[authStore] Storing access token');
+          if (currentUser && currentUser.id === session.user.id) {
+            // Same user - just update access token, don't refetch
+            console.log('[Auth] SIGNED_IN for same user, updating access token only');
             set({ accessToken: session.access_token });
-
-            // Fetch user data from our users table (also with timeout)
-            try {
-              await withTimeout(
-                fetchAndSetUserData(session.user.id, set),
-                5000,
-                'Fetch user data'
-              );
-            } catch (userDataErr) {
-              console.warn('Failed to fetch user data (continuing):', userDataErr);
-              // Continue anyway - user is authenticated but we don't have their full profile
-            }
-          } else if (sessionResult === null) {
-            console.warn('Auth session check timed out - continuing without session');
+            return;
           }
 
-          // Set up auth listener only once
-          if (!authListenerSetup) {
-            authListenerSetup = true;
-            supabase.auth.onAuthStateChange(async (event, session) => {
-              console.log('[authStore] Auth state change:', event);
-
-              if (event === 'SIGNED_OUT') {
-                set({ user: null, organization: null, accessToken: null });
-              } else if (event === 'TOKEN_REFRESHED' && session) {
-                // TOKEN_REFRESHED: Only update access token, don't refetch user data
-                // User data hasn't changed, just the access token was refreshed
-                console.log('[authStore] Token refreshed, updating access token only');
-                set({ accessToken: session.access_token });
-              } else if (event === 'SIGNED_IN' && session?.user) {
-                // SIGNED_IN can be triggered by:
-                // 1. Actual new login (need to fetch user data)
-                // 2. _recoverAndRefresh on page focus (same user, skip refetch)
-                const currentUser = get().user;
-
-                if (currentUser && currentUser.id === session.user.id) {
-                  // Same user - just update access token, don't refetch
-                  // This prevents unnecessary DB calls from _recoverAndRefresh
-                  console.log('[authStore] SIGNED_IN for same user, updating access token only');
-                  set({ accessToken: session.access_token });
-                } else {
-                  // Different user or no previous user - full refresh needed
-                  console.log('[authStore] SIGNED_IN with different/new user, fetching user data');
-                  set({ accessToken: session.access_token });
-                  await fetchAndSetUserData(session.user.id, set);
-                }
-              }
-            });
-          }
-        } catch (err) {
-          console.error('Auth initialization error:', err);
-          set({ error: 'Failed to initialize authentication' });
-        } finally {
-          set({ isLoading: false, isInitialized: true });
+          // Different user or no previous user - full refresh needed
+          console.log('[Auth] SIGNED_IN with different/new user, fetching user data');
+          set({ accessToken: session.access_token });
+          await fetchAndSetUserData(session.user.id, set);
+        } else if (session && isInitialized) {
+          // Other events (USER_UPDATED, etc.): Full user data refresh
+          console.log('[Auth] Processing auth state change for session, event:', event);
+          set({ accessToken: session.access_token });
+          await fetchAndSetUserData(session.user.id, set);
         }
-      },
+      });
+    }
+  },
 
       signIn: async (email, password) => {
         if (!supabase) {
@@ -490,10 +463,15 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
-        if (supabase) {
-          await supabase.auth.signOut();
-        }
+        // Clear state first for immediate UI response
         set({ user: null, organization: null, accessToken: null, error: null });
+
+        // Use the shared signOut which properly handles SSO cookie cleanup
+        // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+        // IMPORTANT: This must happen BEFORE clearing localStorage, otherwise
+        // Supabase's internal getItem calls will try to restore from cookie
+        console.log('[Auth] Signing out via shared signOut...');
+        await sharedSignOut();
       },
 
       clearError: () => set({ error: null }),
@@ -693,19 +671,4 @@ export const useAuthStore = create<AuthState>()(
           return { success: false, error: 'Failed to remove member' };
         }
       },
-    }),
-    {
-      name: 'emergent-auth', // Shared key between Nova and Pulsar for SSO
-      partialize: (state) => ({
-        // Only persist user basic info for fast hydration
-        // Full data will be refreshed on initialize()
-        user: state.user ? {
-          id: state.user.id,
-          email: state.user.email,
-          name: state.user.name,
-          isEmergentUser: state.user.isEmergentUser,
-        } : null,
-      }),
-    }
-  )
-);
+}));

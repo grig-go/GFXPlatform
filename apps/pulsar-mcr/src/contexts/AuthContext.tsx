@@ -11,11 +11,10 @@ import {
   supabase,
   sessionReady,
   receiveAuthTokenFromUrl,
-  cookieStorage,
-  SHARED_AUTH_STORAGE_KEY,
   withAutoRecovery,
   startConnectionMonitor,
   stopConnectionMonitor,
+  signOut as sharedSignOut,
 } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -505,7 +504,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign out
   const signOut = useCallback(async () => {
-    // Clear React state immediately
+    // Clear React state immediately for instant UI feedback
     setState(prev => ({
       ...prev,
       user: null,
@@ -522,22 +521,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setAvailableOrganizations([]);
     sessionStorage.removeItem('pulsar_impersonated_org');
 
-    // Clear the shared auth cookie (already imported at top of file)
-    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-
-    // Also clear any legacy localStorage keys for backwards compatibility
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-')) {
-        localStorage.removeItem(key);
-      }
-    });
-
-    // Call official signOut to clear server-side session
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // Ignore errors - storage is already cleared
-    }
+    // Use the shared signOut which properly handles SSO cookie cleanup
+    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    // IMPORTANT: This must happen BEFORE clearing localStorage, otherwise
+    // Supabase's internal getItem calls will try to restore from cookie
+    await sharedSignOut();
   }, []);
 
   // Refresh user data (e.g., after permission changes)

@@ -11,9 +11,8 @@ import {
   sessionReady,
   startConnectionMonitor,
   stopConnectionMonitor,
-  cookieStorage,
-  SHARED_AUTH_STORAGE_KEY,
   receiveAuthTokenFromUrl,
+  signOut as sharedSignOut,
 } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import type { AuthState, AppUser, Organization } from '../types/auth';
@@ -260,6 +259,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign out
   const signOut = useCallback(async () => {
+    // Clear React state immediately for instant UI feedback
     setState(prev => ({
       ...prev,
       user: null,
@@ -271,21 +271,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isOrgAdmin: false,
     }));
 
-    // Clear the shared auth cookie
-    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-
-    // Clear legacy localStorage keys
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-')) {
-        localStorage.removeItem(key);
-      }
-    });
-
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // Ignore errors - storage is already cleared
-    }
+    // Use the shared signOut which properly handles SSO cookie cleanup
+    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    // IMPORTANT: This must happen BEFORE clearing localStorage, otherwise
+    // Supabase's internal getItem calls will try to restore from cookie
+    await sharedSignOut();
   }, []);
 
   // Refresh user data
