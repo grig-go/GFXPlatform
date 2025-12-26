@@ -9,6 +9,7 @@ import {
   navigateWithAuth,
   AUTH_TOKEN_PARAM,
   syncCookieToLocalStorage,
+  clearSharedCookie,
 } from './cookieStorage';
 
 // Re-export cookie storage and SSO helpers for apps that need it
@@ -526,9 +527,10 @@ if (_supabase && typeof window !== 'undefined') {
     console.log('[Auth SSO] onAuthStateChange:', event, session ? 'has session' : 'no session');
 
     if (event === 'SIGNED_OUT') {
-      // Clear the shared cookie on logout
-      console.log('[Auth SSO] User signed out, clearing cookie');
-      cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      // Clear the shared cookie on logout - use dedicated function, not removeItem
+      // This is the ONLY place where the shared cookie should be deleted
+      console.log('[Auth SSO] User signed out, clearing shared cookie');
+      clearSharedCookie();
     } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
       // Sync tokens to shared cookie for cross-subdomain access
       // This ensures the cookie stays up-to-date with the latest tokens
@@ -936,9 +938,9 @@ export async function signOut(): Promise<void> {
   if (supabase) {
     await supabase.auth.signOut();
     currentUser = null;
-    // Explicitly clear the shared cookie for SSO logout across all subdomains
-    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-    console.log('[Auth] Signed out and cleared SSO cookie');
+    // Note: The shared cookie is cleared by onAuthStateChange SIGNED_OUT handler
+    // We don't need to clear it here, but we log for debugging
+    console.log('[Auth] Signed out - cookie will be cleared by onAuthStateChange');
   }
 }
 

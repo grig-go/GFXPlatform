@@ -269,13 +269,37 @@ export const cookieStorage = {
   removeItem: (key: string): void => {
     if (typeof window === 'undefined') return;
 
-    console.log('[Auth SSO] removeItem called - DELETING cookie and localStorage', { key });
-    console.trace('[Auth SSO] removeItem stack trace');
+    console.log('[Auth SSO] removeItem called', { key });
 
+    // Always remove from localStorage
     localStorage.removeItem(key);
-    deleteCookie(SHARED_COOKIE_NAME, getCookieDomain());
+
+    // CRITICAL FIX: Do NOT delete the shared cookie here!
+    // Supabase calls removeItem for various keys during internal session management:
+    // - sb-shared-auth-token (main session)
+    // - sb-shared-auth-token-code-verifier (PKCE)
+    // - sb-shared-auth-token-user (user data cache)
+    //
+    // The problem: During SIGNED_IN, Supabase internally calls _removeSession -> removeItem
+    // as part of its __loadSession flow, which would delete our cookie immediately after
+    // we set it. This is why the cookie was disappearing!
+    //
+    // Solution: Only delete the cookie via clearSharedCookie() which is called explicitly
+    // from the SIGNED_OUT event handler in client.ts
+    console.log('[Auth SSO] localStorage removed, shared cookie preserved (use clearSharedCookie for logout)');
   },
 };
+
+/**
+ * Explicitly clear the shared SSO cookie
+ * Call this ONLY during actual logout (SIGNED_OUT event)
+ * Do NOT call this during internal session management
+ */
+export function clearSharedCookie(): void {
+  if (typeof window === 'undefined') return;
+  console.log('[Auth SSO] clearSharedCookie called - deleting shared cookie');
+  deleteCookie(SHARED_COOKIE_NAME, getCookieDomain());
+}
 
 /**
  * Migrate existing localStorage session (legacy function - now a no-op since we use localStorage)
@@ -509,7 +533,7 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] Module loaded - version 1.0.15 (base64url encoding)');
+  console.log('[Auth SSO] Module loaded - version 1.0.16 (fixed cookie deletion bug)');
   console.log('[Auth SSO] Current hostname:', window.location.hostname);
   console.log('[Auth SSO] Cookie domain will be:', getCookieDomain());
   syncCookieToLocalStorage();
