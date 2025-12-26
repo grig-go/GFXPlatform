@@ -1128,12 +1128,16 @@ const ensureSessionInitialized = async (): Promise<void> => {
     }
   }
 
+  // Track if we've already attempted setSession to avoid duplicate calls
+  let attemptedSetSession = false;
+
   // Now check for pending tokens (from URL, cookie, or module-level calls)
   // This is the KEY part of cross-subdomain SSO: if tokens exist in the shared cookie,
   // syncCookieToLocalStorage() will have stored them as pending tokens, and we use
   // setSession() to properly initialize Supabase's auth state
   const pendingTokens = getPendingAuthTokens();
   if (pendingTokens) {
+    attemptedSetSession = true;
     console.log('[Supabase] Found pending auth tokens from', pendingTokens.source, ', setting session...');
     console.log('[Supabase] Access token length:', pendingTokens.accessToken.length);
     try {
@@ -1170,6 +1174,9 @@ const ensureSessionInitialized = async (): Promise<void> => {
       // Don't delete cookie on timeout - it may still be valid
       // Only clear localStorage to retry on next load
       localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      // On timeout, don't continue trying - just return and let the app handle unauthenticated state
+      console.log('[Supabase] Returning after timeout - app will handle unauthenticated state');
+      return;
     }
   }
 
@@ -1189,12 +1196,24 @@ const ensureSessionInitialized = async (): Promise<void> => {
       return;
     }
   } catch (error) {
-    console.warn('[Supabase] getSession() timed out, checking storage:', error);
+    console.warn('[Supabase] getSession() timed out:', error);
+    // On timeout, return early rather than trying more operations that might also hang
+    console.log('[Supabase] Returning after getSession timeout');
+    return;
   }
 
-  // If no session from Supabase, check storage
-  const storedSession = cookieStorage.getItem(SHARED_AUTH_STORAGE_KEY);
-  console.log('[Supabase] Storage check:', { hasStored: !!storedSession, length: storedSession?.length });
+  // If we already attempted setSession with pending tokens, don't try again from storage
+  // This prevents the double-attempt issue that can cause hangs
+  if (attemptedSetSession) {
+    console.log('[Supabase] Already attempted setSession, skipping storage check');
+    return;
+  }
+
+  // If no session from Supabase, check storage (only read from localStorage, not cookie)
+  // We don't call cookieStorage.getItem here because that would restore from cookie,
+  // which we've already handled via getPendingAuthTokens above
+  const storedSession = localStorage.getItem(SHARED_AUTH_STORAGE_KEY);
+  console.log('[Supabase] localStorage check:', { hasStored: !!storedSession, length: storedSession?.length });
 
   if (storedSession) {
     try {
@@ -1205,7 +1224,7 @@ const ensureSessionInitialized = async (): Promise<void> => {
       const refreshToken = sessionData.refresh_token;
 
       if (accessToken && refreshToken) {
-        console.log('[Supabase] Restoring session from storage');
+        console.log('[Supabase] Restoring session from localStorage');
         try {
           await Promise.race([
             _supabase.auth.setSession({
