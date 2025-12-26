@@ -519,34 +519,15 @@ let _supabase: SupabaseClient | null = createSupabaseClient();
 // Export a proxy that allows us to swap the underlying client
 export const supabase = _supabase as SupabaseClient;
 
-// IMPORTANT: Register onAuthStateChange listener to sync cookies on auth events
-// This is the recommended approach from Supabase for cross-subdomain SSO
-// See: https://github.com/supabase/supabase/discussions/5742
-if (_supabase && typeof window !== 'undefined') {
-  _supabase.auth.onAuthStateChange((event, session) => {
-    console.log('[Auth SSO] onAuthStateChange:', event, session ? 'has session' : 'no session');
-
-    if (event === 'SIGNED_OUT') {
-      // Clear the shared cookie on logout - use dedicated function, not removeItem
-      // This is the ONLY place where the shared cookie should be deleted
-      console.log('[Auth SSO] User signed out, clearing shared cookie');
-      clearSharedCookie();
-    } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-      // Sync tokens to shared cookie for cross-subdomain access
-      // This ensures the cookie stays up-to-date with the latest tokens
-      // NOTE: We delegate to cookieStorage.setItem which handles the encoding
-      console.log('[Auth SSO] Syncing session to cookie on', event);
-      const sessionData = JSON.stringify({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-      // Use the storage adapter which handles proper cookie setting
-      cookieStorage.setItem(SHARED_AUTH_STORAGE_KEY, sessionData);
-      console.log('[Auth SSO] Cookie synced via onAuthStateChange:', { event });
-    }
-  });
-  console.log('[Auth SSO] onAuthStateChange listener registered');
-}
+// NOTE: We do NOT use onAuthStateChange to sync cookies anymore.
+// The problem: Supabase fires SIGNED_OUT during internal session management
+// (specifically during __loadSession -> _removeSession flow) even when signing IN.
+// This caused our cookie to be deleted immediately after being set.
+//
+// Instead, the cookie is synced in cookieStorage.setItem() which is called
+// by Supabase's storage adapter whenever the session is saved.
+// For logout, we handle it in the signOut() function directly.
+console.log('[Auth SSO] Cookie sync handled via storage adapter, not onAuthStateChange');
 
 // IMPORTANT: Check for auth tokens from URL IMMEDIATELY after client creation
 // This must happen BEFORE sessionReady is initialized so the tokens are available
@@ -938,9 +919,9 @@ export async function signOut(): Promise<void> {
   if (supabase) {
     await supabase.auth.signOut();
     currentUser = null;
-    // Note: The shared cookie is cleared by onAuthStateChange SIGNED_OUT handler
-    // We don't need to clear it here, but we log for debugging
-    console.log('[Auth] Signed out - cookie will be cleared by onAuthStateChange');
+    // Explicitly clear the shared cookie for SSO logout across all subdomains
+    clearSharedCookie();
+    console.log('[Auth] Signed out and cleared SSO cookie');
   }
 }
 
