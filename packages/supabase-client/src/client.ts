@@ -525,7 +525,7 @@ if (_supabase && typeof window !== 'undefined') {
   _supabase.auth.onAuthStateChange((event, session) => {
     console.log('[Auth SSO] onAuthStateChange:', event, session ? 'has session' : 'no session');
 
-    if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+    if (event === 'SIGNED_OUT') {
       // Clear the shared cookie on logout
       console.log('[Auth SSO] User signed out, clearing cookie');
       cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
