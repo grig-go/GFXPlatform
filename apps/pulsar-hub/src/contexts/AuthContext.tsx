@@ -491,15 +491,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }));
     setChannelAccess([]);
 
-    // Also clear any legacy localStorage keys for backwards compatibility
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-')) {
-        localStorage.removeItem(key);
-      }
-    });
-
     // Use the shared signOut which properly handles SSO cookie cleanup
     // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    // IMPORTANT: This must happen BEFORE clearing localStorage, otherwise
+    // Supabase's internal getItem calls will try to restore from cookie
     await sharedSignOut();
   }, []);
 

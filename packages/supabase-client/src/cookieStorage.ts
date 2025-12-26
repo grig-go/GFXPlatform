@@ -543,6 +543,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] v1.0.23 - ' + window.location.hostname);
+  console.log('[Auth SSO] v1.0.24 - ' + window.location.hostname);
   syncCookieToLocalStorage();
 }
