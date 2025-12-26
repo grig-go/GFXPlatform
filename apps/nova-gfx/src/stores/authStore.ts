@@ -131,48 +131,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       await sessionReady;
       console.log('[Auth] Session restoration complete');
 
-      // Use Supabase SDK to get session - it reads from cookie storage automatically
-      // This enables SSO because all apps share the same cookie
-      console.log('[Auth] Checking for existing session via Supabase SDK...');
+      // Get current session (matches Pulsar's simple approach)
+      console.log('[Auth] Getting session...');
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log('[Auth] Session result:', { hasSession: !!session, error });
 
-      // Try to get session with a generous timeout (15s) - token refresh can be slow
-      let session = null;
-      let sessionError = null;
-
-      try {
-        const result = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise<{ data: { session: null }, error: Error }>((_, reject) =>
-            setTimeout(() => reject(new Error('Session check timed out after 15s')), 15000)
-          )
-        ]);
-        session = result.data?.session;
-        sessionError = result.error;
-      } catch (err: any) {
-        console.warn('[Auth] Session check error:', err.message);
-        sessionError = err;
-
-        // On timeout, try one more time with a direct call (no timeout)
-        // This handles cases where the network is just slow
-        console.log('[Auth] Retrying session check without timeout...');
-        try {
-          const retryResult = await supabase.auth.getSession();
-          session = retryResult.data?.session;
-          sessionError = retryResult.error;
-          if (session) {
-            console.log('[Auth] Retry successful - found session');
-          }
-        } catch (retryErr) {
-          console.warn('[Auth] Retry also failed:', retryErr);
-        }
+      if (error) {
+        console.error('[Auth] Error getting session:', error);
       }
 
-      if (sessionError && !session) {
-        console.warn('[Auth] Session check failed:', sessionError.message || sessionError);
-      }
-
-      if (session?.access_token && session?.user?.id) {
-        console.log('[Auth] Found valid session for:', session.user.email);
+      if (session) {
+        console.log('[Auth] Processing session for user:', session.user.email);
 
         // Fetch user data from u_users table - simple query matching current schema
         const { data: userData, error: userError } = await supabase
@@ -207,24 +176,75 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         console.log('[Auth] No existing session found');
       }
     } catch (err) {
-      console.error('[Auth] Initialization error:', err);
+      console.error('[Auth] Error during auth initialization:', err);
       // Don't set error - allow app to function
     } finally {
       set({ isLoading: false, isInitialized: true });
+      console.log('[Auth] Initialization complete');
     }
 
     // Subscribe to auth state changes for token refresh
+    // Note: This matches Pulsar's onAuthStateChange pattern exactly
     if (supabase) {
       supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('[Auth] Auth state change:', event);
+        const isInitialized = get().isInitialized;
+        console.log('[Auth] Auth state change:', event, '| initialized:', isInitialized);
+
+        // Skip INITIAL_SESSION and SIGNED_IN during initialization - we handle it in initialize()
+        // This prevents race conditions where setSession triggers SIGNED_IN before initialize() completes
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !isInitialized) {
+          console.log('[Auth] Skipping auth event during initialization');
+          return;
+        }
 
         if (event === 'SIGNED_OUT') {
           set({ user: null, organization: null, accessToken: null, error: null });
         } else if (event === 'TOKEN_REFRESHED' && session) {
-          console.log('[Auth] Token refreshed successfully');
+          // TOKEN_REFRESHED: Only update access token, don't re-fetch user data
+          // User data hasn't changed, just the access token was refreshed
+          console.log('[Auth] Token refreshed, updating access token only');
           set({ accessToken: session.access_token });
-        } else if (event === 'SIGNED_IN' && session) {
-          // Update access token
+        } else if (event === 'SIGNED_IN' && session && isInitialized) {
+          // SIGNED_IN after initialization: Check if this is a session recovery or new login
+          // _recoverAndRefresh emits SIGNED_IN when recovering session on page focus
+          // Only refetch user data if the user ID changed (actual new login)
+          const currentUser = get().user;
+          const currentUserId = currentUser?.auth_user_id;
+          const newUserId = session.user.id;
+
+          if (currentUserId && currentUserId === newUserId) {
+            // Same user - just update access token, don't refetch user data
+            // This prevents unnecessary DB calls from _recoverAndRefresh
+            console.log('[Auth] SIGNED_IN for same user, updating access token only');
+            set({ accessToken: session.access_token });
+            return;
+          }
+
+          // Different user or no previous user - need full refresh
+          console.log('[Auth] SIGNED_IN with different/new user, fetching user data');
+          set({ accessToken: session.access_token });
+
+          // Refresh user data
+          const { data: userData } = await supabase
+            .from('u_users')
+            .select('id, auth_user_id, email, full_name, avatar_url, status, is_superuser, created_at, updated_at, last_login, organization_id')
+            .eq('auth_user_id', session.user.id)
+            .single();
+
+          if (userData) {
+            const orgId = userData.organization_id || DEV_ORGANIZATION_ID;
+            const organization = await fetchOrganization(orgId);
+            set({ user: userData as AppUser, organization });
+            // Initialize AI models from backend providers
+            if (organization) {
+              initializeAIModelsFromBackend().catch(err => {
+                console.warn('[Auth] Failed to initialize AI models:', err);
+              });
+            }
+          }
+        } else if (session && isInitialized) {
+          // Other events (USER_UPDATED, etc.): Full user data refresh
+          console.log('[Auth] Processing auth state change for session, event:', event);
           set({ accessToken: session.access_token });
 
           // Refresh user data
