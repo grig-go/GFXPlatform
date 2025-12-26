@@ -24,6 +24,9 @@ export const AUTH_TOKEN_PARAM = 'auth_token';
 // Track the last cookie value we set to avoid redundant writes
 let lastCookieValueHash: string | null = null;
 
+// Flag to prevent cookie restoration during/after signout
+let isSigningOut = false;
+
 // Simple hash function for deduplication
 function simpleHash(str: string): string {
   let hash = 0;
@@ -228,6 +231,12 @@ export const cookieStorage = {
       return localValue;
     }
 
+    // Don't restore from cookie if we're in the process of signing out
+    // This prevents an infinite loop where signout triggers getItem which restores from cookie
+    if (isSigningOut) {
+      return null;
+    }
+
     // If not in localStorage, check shared cookie (for cross-subdomain SSO)
     const cookieValue = getCookie(SHARED_COOKIE_NAME);
     if (cookieValue) {
@@ -290,14 +299,25 @@ export const cookieStorage = {
 };
 
 /**
+ * Mark that we're starting the signout process
+ * This prevents the storage adapter from restoring from cookie during signout
+ */
+export function beginSignOut(): void {
+  isSigningOut = true;
+  lastCookieValueHash = null; // Reset so cookie can be set again after re-login
+  console.log('[Auth SSO] Beginning signout...');
+}
+
+/**
  * Explicitly clear the shared SSO cookie
  * Call this ONLY during actual logout (SIGNED_OUT event)
  * Do NOT call this during internal session management
  */
 export function clearSharedCookie(): void {
   if (typeof window === 'undefined') return;
-  console.log('[Auth SSO] clearSharedCookie called - deleting shared cookie');
+  console.log('[Auth SSO] Clearing shared cookie');
   deleteCookie(SHARED_COOKIE_NAME, getCookieDomain());
+  // Keep isSigningOut true until page reload or new login
 }
 
 /**
@@ -517,6 +537,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] v1.0.19 - ' + window.location.hostname);
+  console.log('[Auth SSO] v1.0.20 - ' + window.location.hostname);
   syncCookieToLocalStorage();
 }

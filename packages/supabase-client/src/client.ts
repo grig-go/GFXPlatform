@@ -10,6 +10,7 @@ import {
   AUTH_TOKEN_PARAM,
   syncCookieToLocalStorage,
   clearSharedCookie,
+  beginSignOut,
 } from './cookieStorage';
 
 // Re-export cookie storage and SSO helpers for apps that need it
@@ -917,9 +918,12 @@ export async function waitForAuth(): Promise<User | null> {
  */
 export async function signOut(): Promise<void> {
   if (supabase) {
+    // CRITICAL: Set the signout flag BEFORE calling signOut()
+    // This prevents the storage adapter from restoring from cookie during signout
+    beginSignOut();
     await supabase.auth.signOut();
     currentUser = null;
-    // Explicitly clear the shared cookie for SSO logout across all subdomains
+    // Clear the shared cookie for SSO logout across all subdomains
     clearSharedCookie();
     console.log('[Auth] Signed out and cleared SSO cookie');
   }
