@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured, setJwtExpiredHandler, resetJwtExpiredTrigger, receiveAuthTokenFromUrl, sessionReady } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, setJwtExpiredHandler, resetJwtExpiredTrigger, receiveAuthTokenFromUrl, sessionReady, signOut as sharedSignOut } from '@/lib/supabase';
 import { initializeAIModelsFromBackend } from '@/lib/ai';
 
 // Default dev organization ID - used when user has no organization_id
@@ -387,15 +387,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       console.warn('Failed to clear localStorage:', e);
     }
 
-    // Sign out via Supabase SDK - this automatically clears the cookie storage
-    if (supabase) {
-      console.log('[Auth] Signing out via Supabase SDK...');
-      try {
-        await supabase.auth.signOut({ scope: 'local' });
-      } catch (err) {
-        console.warn('[Auth] Sign out error:', err);
-      }
-    }
+    // Use the shared signOut which properly handles SSO cookie cleanup
+    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    console.log('[Auth] Signing out via shared signOut...');
+    await sharedSignOut();
   },
 
   clearError: () => set({ error: null }),

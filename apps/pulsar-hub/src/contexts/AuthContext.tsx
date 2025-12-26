@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, sessionReady, startConnectionMonitor, stopConnectionMonitor, withAutoRecovery } from '../utils/supabase/client';
-import { cookieStorage, SHARED_AUTH_STORAGE_KEY, receiveAuthTokenFromUrl } from '@emergent-platform/supabase-client';
+import { cookieStorage, SHARED_AUTH_STORAGE_KEY, receiveAuthTokenFromUrl, signOut as sharedSignOut } from '@emergent-platform/supabase-client';
 import type { Session } from '@supabase/supabase-js';
 import type {
   AuthState,
@@ -491,9 +491,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }));
     setChannelAccess([]);
 
-    // Clear the shared auth cookie (this is where the session is stored)
-    cookieStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-
     // Also clear any legacy localStorage keys for backwards compatibility
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('sb-')) {
@@ -501,12 +498,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     });
 
-    // Also call official signOut to clear server-side session
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // Ignore errors - storage is already cleared
-    }
+    // Use the shared signOut which properly handles SSO cookie cleanup
+    // This calls beginSignOut() to prevent infinite loops, then clears the shared cookie
+    await sharedSignOut();
   }, []);
 
   // Refresh user data (e.g., after permission changes)
