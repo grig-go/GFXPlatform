@@ -273,9 +273,11 @@ export const cookieStorage = {
           isSigningOut = false;
         }
 
+        // Include expires_at if available - helps Supabase know if token needs refresh
         const minimalTokens = JSON.stringify({
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
+          ...(sessionData.expires_at && { expires_at: sessionData.expires_at }),
         });
 
         // Base64 encoding adds ~33% overhead. Cookie limit is ~4KB.
@@ -501,9 +503,11 @@ export function syncCookieToLocalStorage(): boolean {
       const sessionData = JSON.parse(existingLocal);
       if (sessionData.access_token && sessionData.refresh_token) {
         // Ensure the cookie is set for other subdomains
+        // Include expires_at if available - helps Supabase know if token needs refresh
         const minimalTokens = JSON.stringify({
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
+          ...(sessionData.expires_at && { expires_at: sessionData.expires_at }),
         });
         setCookie(SHARED_COOKIE_NAME, minimalTokens, cookieDomain);
         return false; // Session existed, no restoration needed
@@ -543,6 +547,6 @@ export function syncCookieToLocalStorage(): boolean {
 
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] v1.0.25 - ' + window.location.hostname);
+  console.log('[Auth SSO] v1.0.26 - ' + window.location.hostname);
   syncCookieToLocalStorage();
 }

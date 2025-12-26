@@ -1155,6 +1155,7 @@ const ensureSessionInitialized = async (): Promise<void> => {
         hasData: !!result.data,
         hasSession: !!result.data?.session,
         hasUser: !!result.data?.user,
+        userEmail: result.data?.session?.user?.email || result.data?.user?.email,
         error: result.error?.message
       });
 
@@ -1163,11 +1164,20 @@ const ensureSessionInitialized = async (): Promise<void> => {
         // Only clear storage if the error indicates invalid tokens, not network issues
         // Don't delete cookie - it may still be valid for other subdomains
         localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
-      } else if (result.data.session) {
+        // Return early - don't continue trying other methods
+        return;
+      } else if (result.data?.session) {
         console.log('[Supabase] Session set from', pendingTokens.source, 'tokens, user:', result.data.session.user?.email);
         return; // Done - session is set
+      } else if (result.data?.user) {
+        // Got user but no session - this can happen, session might still be set internally
+        console.log('[Supabase] Got user from', pendingTokens.source, 'but no session object, user:', result.data.user.email);
+        return; // Still return - Supabase may have set the session internally
       } else {
-        console.warn('[Supabase] setSession returned no error but also no session');
+        console.warn('[Supabase] setSession returned no error, no session, and no user - tokens may be invalid');
+        // Clear localStorage but preserve cookie for SSO
+        localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        return; // Return early - don't continue trying
       }
     } catch (e) {
       console.warn('[Supabase] setSession from', pendingTokens.source, 'tokens timed out:', e);
