@@ -27,6 +27,9 @@ let lastCookieValueHash: string | null = null;
 // Flag to prevent cookie restoration during/after signout
 let isSigningOut = false;
 
+// Flag to prevent multiple restorations from cookie in the same session
+let hasRestoredFromCookie = false;
+
 // Simple hash function for deduplication
 function simpleHash(str: string): string {
   let hash = 0;
@@ -238,19 +241,23 @@ export const cookieStorage = {
     }
 
     // If not in localStorage, check shared cookie (for cross-subdomain SSO)
-    const cookieValue = getCookie(SHARED_COOKIE_NAME);
-    if (cookieValue) {
-      try {
-        // Cookie contains full session, store and return it as-is
-        const sessionData = JSON.parse(cookieValue);
-        if (sessionData.access_token && sessionData.refresh_token) {
-          // Store in localStorage for faster future access
-          localStorage.setItem(key, cookieValue);
-          console.log('[Auth SSO] Restored session from shared cookie');
-          return cookieValue;
+    // Only restore once per session to prevent rate limiting from repeated token refreshes
+    if (!hasRestoredFromCookie) {
+      const cookieValue = getCookie(SHARED_COOKIE_NAME);
+      if (cookieValue) {
+        try {
+          // Cookie contains full session, store and return it as-is
+          const sessionData = JSON.parse(cookieValue);
+          if (sessionData.access_token && sessionData.refresh_token) {
+            // Store in localStorage for faster future access
+            localStorage.setItem(key, cookieValue);
+            hasRestoredFromCookie = true;
+            console.log('[Auth SSO] Restored session from shared cookie (once per session)');
+            return cookieValue;
+          }
+        } catch (e) {
+          console.error('[Auth SSO] Error parsing cookie:', e);
         }
-      } catch (e) {
-        console.error('[Auth SSO] Error parsing cookie:', e);
       }
     }
 
@@ -267,10 +274,11 @@ export const cookieStorage = {
     try {
       const sessionData = JSON.parse(value);
       if (sessionData.access_token && sessionData.refresh_token) {
-        // Reset signout flag - user is logging in again
+        // Reset flags - user is logging in again
         if (isSigningOut) {
-          console.log('[Auth SSO] New login detected, resetting signout flag');
+          console.log('[Auth SSO] New login detected, resetting flags');
           isSigningOut = false;
+          hasRestoredFromCookie = false;
         }
 
         // Include expires_at if available - helps Supabase know if token needs refresh
@@ -313,6 +321,7 @@ export const cookieStorage = {
 export function beginSignOut(): void {
   isSigningOut = true;
   lastCookieValueHash = null; // Reset so cookie can be set again after re-login
+  hasRestoredFromCookie = false; // Reset so cookie can be restored after re-login
   console.log('[Auth SSO] Beginning signout...');
 }
 
