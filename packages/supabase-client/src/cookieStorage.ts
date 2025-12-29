@@ -30,6 +30,129 @@ let isSigningOut = false;
 // Flag to prevent multiple restorations from cookie in the same session
 let hasRestoredFromCookie = false;
 
+// Key for tracking failed refresh attempts in sessionStorage
+const REFRESH_FAILURE_KEY = 'sb-refresh-failures';
+const MAX_REFRESH_FAILURES = 3;
+
+// Key for cross-tab token refresh coordination (localStorage)
+const REFRESH_LOCK_KEY = 'sb-refresh-lock';
+const REFRESH_LOCK_TIMEOUT = 10000; // 10 seconds max lock duration
+
+/**
+ * Try to acquire a cross-tab lock for token refresh
+ * Uses localStorage with timestamps for coordination
+ * Returns true if lock acquired, false if another tab holds it
+ */
+function tryAcquireRefreshLock(): boolean {
+  try {
+    const now = Date.now();
+    const existingLock = localStorage.getItem(REFRESH_LOCK_KEY);
+
+    if (existingLock) {
+      const lockTime = parseInt(existingLock, 10);
+      // Check if existing lock is still valid (not expired)
+      if (now - lockTime < REFRESH_LOCK_TIMEOUT) {
+        console.log('[Auth SSO] Another tab is refreshing token, skipping');
+        return false;
+      }
+      // Lock expired, we can take it
+    }
+
+    // Acquire the lock
+    localStorage.setItem(REFRESH_LOCK_KEY, String(now));
+    return true;
+  } catch {
+    return true; // If localStorage fails, proceed anyway
+  }
+}
+
+/**
+ * Release the refresh lock (call after setSession completes)
+ */
+export function releaseRefreshLock(): void {
+  try {
+    localStorage.removeItem(REFRESH_LOCK_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Check if another tab currently holds the refresh lock
+ */
+function isRefreshLockHeld(): boolean {
+  try {
+    const existingLock = localStorage.getItem(REFRESH_LOCK_KEY);
+    if (!existingLock) return false;
+
+    const lockTime = parseInt(existingLock, 10);
+    const now = Date.now();
+    return (now - lockTime) < REFRESH_LOCK_TIMEOUT;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if the JWT access token is expired
+ * JWTs have 3 parts separated by dots: header.payload.signature
+ * The payload contains 'exp' (expiration timestamp in seconds)
+ */
+function isTokenExpired(accessToken: string): boolean {
+  try {
+    const parts = accessToken.split('.');
+    if (parts.length !== 3) return true;
+
+    // Decode the payload (second part)
+    const payload = JSON.parse(atob(parts[1]));
+    if (!payload.exp) return false; // No expiration means not expired
+
+    // exp is in seconds, Date.now() is in milliseconds
+    // Add 60 second buffer to avoid edge cases
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    return payload.exp < nowInSeconds + 60;
+  } catch {
+    return true; // If we can't parse it, assume expired
+  }
+}
+
+/**
+ * Track refresh failures in sessionStorage to prevent infinite retry loops
+ */
+function incrementRefreshFailures(): number {
+  try {
+    const current = parseInt(sessionStorage.getItem(REFRESH_FAILURE_KEY) || '0', 10);
+    const newCount = current + 1;
+    sessionStorage.setItem(REFRESH_FAILURE_KEY, String(newCount));
+    return newCount;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Clear refresh failure counter (call on successful login)
+ */
+export function clearRefreshFailures(): void {
+  try {
+    sessionStorage.removeItem(REFRESH_FAILURE_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Check if we've exceeded max refresh failures
+ */
+function hasExceededRefreshFailures(): boolean {
+  try {
+    const current = parseInt(sessionStorage.getItem(REFRESH_FAILURE_KEY) || '0', 10);
+    return current >= MAX_REFRESH_FAILURES;
+  } catch {
+    return false;
+  }
+}
+
 // Simple hash function for deduplication
 function simpleHash(str: string): string {
   let hash = 0;
@@ -281,6 +404,9 @@ export const cookieStorage = {
           hasRestoredFromCookie = false;
         }
 
+        // Clear refresh failure counter on successful session save
+        clearRefreshFailures();
+
         // Include expires_at if available - helps Supabase know if token needs refresh
         const minimalTokens = JSON.stringify({
           access_token: sessionData.access_token,
@@ -526,6 +652,13 @@ export function syncCookieToLocalStorage(): boolean {
     }
   }
 
+  // Check if we've already failed too many times - don't keep trying
+  if (hasExceededRefreshFailures()) {
+    console.log('[Auth SSO] Exceeded max refresh failures, clearing stale session');
+    deleteCookie(SHARED_COOKIE_NAME, cookieDomain);
+    return false;
+  }
+
   // No localStorage session, check if there's a shared cookie to restore from
   const cookieValue = getCookie(SHARED_COOKIE_NAME);
 
@@ -533,6 +666,37 @@ export function syncCookieToLocalStorage(): boolean {
     try {
       const sessionData = JSON.parse(cookieValue);
       if (sessionData.access_token && sessionData.refresh_token) {
+        // Check if the access token is expired
+        if (isTokenExpired(sessionData.access_token)) {
+          // Token is expired - need to refresh
+          // Check if another tab is already refreshing to avoid rate limiting
+          if (isRefreshLockHeld()) {
+            console.log('[Auth SSO] Another tab is refreshing, waiting for result...');
+            // Don't set pending tokens - let the other tab handle it
+            // The storage event listener will update us when tokens are refreshed
+            return false;
+          }
+
+          // Try to acquire the lock for this tab
+          if (!tryAcquireRefreshLock()) {
+            console.log('[Auth SSO] Could not acquire refresh lock, skipping');
+            return false;
+          }
+
+          // We have the lock - proceed with refresh attempt
+          const failures = incrementRefreshFailures();
+          console.log(`[Auth SSO] Token expired, refresh attempt ${failures}/${MAX_REFRESH_FAILURES} (this tab has lock)`);
+
+          if (failures >= MAX_REFRESH_FAILURES) {
+            // Too many failures, clear the stale cookie entirely
+            console.log('[Auth SSO] Max refresh failures reached, clearing stale cookie');
+            deleteCookie(SHARED_COOKIE_NAME, cookieDomain);
+            releaseRefreshLock();
+            return false;
+          }
+          // Still under limit, proceed with refresh (lock will be released after setSession)
+        }
+
         // Store tokens as pending for client.ts to use with setSession()
         pendingAuthTokens = {
           accessToken: sessionData.access_token,
@@ -554,8 +718,46 @@ export function syncCookieToLocalStorage(): boolean {
   return false;
 }
 
+// Version for cache-busting stale tokens
+const AUTH_SSO_VERSION = 30;
+const AUTH_VERSION_KEY = 'sb-auth-version';
+
+/**
+ * Check if we need to clear stale auth due to version upgrade
+ * This helps users with old tabs get a clean slate
+ */
+function clearStaleAuthIfNeeded(): void {
+  try {
+    const storedVersion = parseInt(localStorage.getItem(AUTH_VERSION_KEY) || '0', 10);
+
+    if (storedVersion < AUTH_SSO_VERSION) {
+      console.log(`[Auth SSO] Version upgrade ${storedVersion} -> ${AUTH_SSO_VERSION}, clearing stale auth`);
+
+      // Clear all auth-related storage
+      localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      sessionStorage.removeItem(REFRESH_FAILURE_KEY);
+      localStorage.removeItem(REFRESH_LOCK_KEY);
+
+      // Clear the cookie
+      const cookieDomain = getCookieDomain();
+      deleteCookie(SHARED_COOKIE_NAME, cookieDomain);
+
+      // Store the new version
+      localStorage.setItem(AUTH_VERSION_KEY, String(AUTH_SSO_VERSION));
+
+      console.log('[Auth SSO] Stale auth cleared, user will need to re-login');
+    }
+  } catch (e) {
+    console.error('[Auth SSO] Error checking version:', e);
+  }
+}
+
 // Auto-run sync on module load (for immediate SSO on page load)
 if (typeof window !== 'undefined') {
-  console.log('[Auth SSO] v1.0.28 - ' + window.location.hostname);
+  console.log('[Auth SSO] v1.0.30 - ' + window.location.hostname);
+
+  // Clear stale auth from older versions first
+  clearStaleAuthIfNeeded();
+
   syncCookieToLocalStorage();
 }

@@ -11,6 +11,8 @@ import {
   syncCookieToLocalStorage,
   clearSharedCookie,
   beginSignOut,
+  releaseRefreshLock,
+  clearRefreshFailures,
 } from './cookieStorage';
 
 // Re-export cookie storage and SSO helpers for apps that need it
@@ -1161,22 +1163,51 @@ const ensureSessionInitialized = async (): Promise<void> => {
 
       if (result.error) {
         console.error('[Supabase] Failed to set session from', pendingTokens.source, 'tokens:', result.error.message);
-        // Only clear storage if the error indicates invalid tokens, not network issues
-        // Don't delete cookie - it may still be valid for other subdomains
-        localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+
+        // Check if this is a token-related error that means the tokens are invalid
+        const errorMsg = result.error.message.toLowerCase();
+        const isInvalidToken = errorMsg.includes('invalid') ||
+                               errorMsg.includes('expired') ||
+                               errorMsg.includes('refresh_token') ||
+                               errorMsg.includes('jwt') ||
+                               errorMsg.includes('token') ||
+                               result.error.message.includes('400') ||
+                               result.error.message.includes('401') ||
+                               result.error.message.includes('403');
+
+        if (isInvalidToken) {
+          // Token is definitively invalid - clear everything including cookie
+          console.log('[Supabase] Token is invalid, clearing all auth storage including cookie');
+          localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+          clearSharedCookie();
+        } else {
+          // Might be a network error - only clear localStorage, preserve cookie for retry
+          console.log('[Supabase] Possible network error, preserving cookie for retry');
+          localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        }
+        // Release the refresh lock so other tabs can try
+        releaseRefreshLock();
         // Return early - don't continue trying other methods
         return;
       } else if (result.data?.session) {
         console.log('[Supabase] Session set from', pendingTokens.source, 'tokens, user:', result.data.session.user?.email);
+        // Success! Clear the failure counter and release lock
+        clearRefreshFailures();
+        releaseRefreshLock();
         return; // Done - session is set
       } else if (result.data?.user) {
         // Got user but no session - this can happen, session might still be set internally
         console.log('[Supabase] Got user from', pendingTokens.source, 'but no session object, user:', result.data.user.email);
+        // Treat as success - release lock
+        clearRefreshFailures();
+        releaseRefreshLock();
         return; // Still return - Supabase may have set the session internally
       } else {
-        console.warn('[Supabase] setSession returned no error, no session, and no user - tokens may be invalid');
-        // Clear localStorage but preserve cookie for SSO
+        console.warn('[Supabase] setSession returned no error, no session, and no user - tokens are invalid');
+        // This means the tokens couldn't be used at all - clear everything
         localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+        clearSharedCookie();
+        releaseRefreshLock();
         return; // Return early - don't continue trying
       }
     } catch (e) {
@@ -1184,6 +1215,8 @@ const ensureSessionInitialized = async (): Promise<void> => {
       // Don't delete cookie on timeout - it may still be valid
       // Only clear localStorage to retry on next load
       localStorage.removeItem(SHARED_AUTH_STORAGE_KEY);
+      // Release lock so other tabs can try
+      releaseRefreshLock();
       // On timeout, don't continue trying - just return and let the app handle unauthenticated state
       console.log('[Supabase] Returning after timeout - app will handle unauthenticated state');
       return;
