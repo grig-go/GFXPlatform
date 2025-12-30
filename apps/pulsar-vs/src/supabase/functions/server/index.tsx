@@ -213,40 +213,4 @@ app.post("/make-server-58b4ce0e/fetch-proxy", async (c) => {
   }
 });
 
-app.post("/make-server-58b4ce0e/google-ai", async (c) => {
-  try {
-    const { model, action, body } = await c.req.json();
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-
-    if (!apiKey) {
-      return c.json({ error: "Server-side API key not configured" }, 500);
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}?key=${apiKey}`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      return c.json({
-        error: `Google AI API Error: ${response.status}`,
-        details: responseData
-      }, response.status);
-    }
-
-    return c.json(responseData);
-
-  } catch (error) {
-    console.error("Google AI Proxy Error:", error);
-    return c.json({ error: "Internal Server Error" }, 500);
-  }
-});
-
 Deno.serve(app.fetch);

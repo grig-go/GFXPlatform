@@ -69,8 +69,6 @@ import {
   generateTextViaBackend,
   generateImageViaBackend,
   editImageViaBackend,
-  GEMINI_MODELS,
-  IMAGEN_MODELS,
   ASPECT_RATIOS,
   AISettings,
   DEFAULT_AI_SETTINGS,
@@ -2074,9 +2072,8 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
       const aiSettings = await loadAIImageGenSettings();
       const selectedRatio = aiSettings.virtualSet?.defaultAspectRatio || '16:9';
-      const selectedModel = aiProviders.imageGen?.model || 'imagen-3.0-generate-001';
 
-      addDebugLog(`Using model: ${selectedModel}, ratio: ${selectedRatio}`);
+      addDebugLog(`Using ratio: ${selectedRatio}`);
       addDebugLog(`Mode: ${isEditMode ? 'EDIT (with mask)' : 'GENERATE (new image)'}`);
 
       let result: { imageUrl?: string; base64?: string; error?: string };
@@ -2156,7 +2153,9 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
                   : prompt,
                 description: isEditMode ? `Edited: ${prompt}` : prompt,
                 media_type: "image",
-                ai_model_used: selectedModel,
+                ai_model_used: isEditMode
+                  ? (aiProviders.imageEdit?.model || 'gemini-image-edit')
+                  : (aiProviders.imageGen?.model || 'imagen'),
                 ai_prompt: prompt,
                 tags: isEditMode
                   ? ["virtual-set", "backdrop", "ai-edited"]
