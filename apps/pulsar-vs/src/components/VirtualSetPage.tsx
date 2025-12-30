@@ -1337,7 +1337,10 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
   // Existing: Build VirtualSet system prompt
   const buildVirtualSetSystemPrompt = (options: VirtualSetAvailableOptions): string => {
-    const buildPromptSection = (sectionName: string, sectionOptions: string[]): string => {
+    const buildPromptSection = (sectionName: string, sectionOptions: string[] | undefined): string => {
+      if (!sectionOptions || sectionOptions.length === 0) {
+        return `${sectionName}: "" (not available)`;
+      }
       if (!sceneDescriptor) return `${sectionName}: ${sectionOptions.join(", ")}, ""`;
       const lines: string[] = [`\n${sectionName} options:`];
       const actorGroups: Record<string, string[]> = {};
