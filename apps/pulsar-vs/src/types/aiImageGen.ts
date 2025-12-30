@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, sessionReady } from '../lib/supabase';
 import { supabaseUrl } from '../src/supabaseConfig';
 
 // AI Generation Types
@@ -47,6 +47,9 @@ export interface AISettings {
     screenToCapture: number;
     captureTarget: string;
   };
+  preview?: {
+    url?: string;
+  };
 }
 
 // Default Settings (no API keys - those come from backend ai_providers table)
@@ -64,6 +67,9 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
     type: 'screen',
     screenToCapture: 0,
     captureTarget: 'chrome'
+  },
+  preview: {
+    url: ''
   }
 };
 
@@ -345,29 +351,55 @@ export const editImageViaBackend = async (
 // ============================================
 
 export const saveSettingsToSupabase = async (
-  userId: string,
+  _userId: string, // kept for backward compatibility, but we use org now
   settings: AISettings
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     // Always save to localStorage as backup
-    localStorage.setItem('ai_settings_backup', JSON.stringify(settings));
+    localStorage.setItem('pulsarvs_settings_backup', JSON.stringify(settings));
 
-    // Try to save to Supabase if we have a userId
-    if (userId) {
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: userId,
-          ai_settings: settings,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId);
+    // Wait for session to be fully initialized
+    await sessionReady;
 
-      if (error) {
-        console.warn('Failed to save settings to Supabase (using local backup):', error);
-      }
+    // Check if user is authenticated before calling RPC
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn('[Settings] No active session, skipping Supabase save');
+      return { success: true }; // Return success since we saved to localStorage
+    }
+    console.log('[Settings] Session active, user:', session.user.email, 'auth_id:', session.user.id);
+
+    // First, get the user's organization_id from u_users
+    const { data: userData, error: userError } = await supabase
+      .from('u_users')
+      .select('organization_id')
+      .eq('auth_user_id', session.user.id)
+      .single();
+
+    if (userError || !userData?.organization_id) {
+      console.warn('[Settings] Could not get organization_id:', userError);
+      return { success: false, error: 'Could not find user organization' };
     }
 
+    console.log('[Settings] Found organization_id:', userData.organization_id);
+
+    // Save via RPC function with org_id parameter
+    const { data, error } = await supabase.rpc('pulsarvs_save_settings', {
+      p_org_id: userData.organization_id,
+      p_settings: settings,
+    });
+
+    if (error) {
+      console.warn('Failed to save settings to Supabase (using local backup):', error);
+      return { success: false, error: error.message };
+    }
+
+    if (data && !data.success) {
+      console.warn('Failed to save settings:', data.error);
+      return { success: false, error: data.error };
+    }
+
+    console.log('[Settings] Saved to Supabase successfully');
     return { success: true };
   } catch (error) {
     console.error('Error saving settings:', error);
@@ -376,35 +408,64 @@ export const saveSettingsToSupabase = async (
 };
 
 export const loadSettingsFromSupabase = async (
-  userId: string
+  _userId: string // kept for backward compatibility, but we use org now
 ): Promise<AISettings> => {
   try {
-    // Try to load from Supabase if we have a userId
-    if (userId) {
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('ai_settings')
-        .eq('user_id', userId)
-        .single();
+    // Wait for session to be fully initialized
+    await sessionReady;
 
-      if (data?.ai_settings) {
-        return data.ai_settings as AISettings;
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn('[Settings] No active session, loading from localStorage');
+      const backup = localStorage.getItem('pulsarvs_settings_backup');
+      if (backup) {
+        console.log('[Settings] Loaded from localStorage backup');
+        return JSON.parse(backup);
       }
-      if (error) {
-        console.warn('Supabase settings load error (using local backup):', error);
+      return DEFAULT_AI_SETTINGS;
+    }
+
+    // Get user's organization_id
+    const { data: userData, error: userError } = await supabase
+      .from('u_users')
+      .select('organization_id')
+      .eq('auth_user_id', session.user.id)
+      .single();
+
+    if (userError || !userData?.organization_id) {
+      console.warn('[Settings] Could not get organization_id:', userError);
+      const backup = localStorage.getItem('pulsarvs_settings_backup');
+      if (backup) {
+        console.log('[Settings] Loaded from localStorage backup');
+        return JSON.parse(backup);
       }
+      return DEFAULT_AI_SETTINGS;
+    }
+
+    // Load via RPC function with org_id parameter
+    const { data, error } = await supabase.rpc('pulsarvs_get_settings', {
+      p_org_id: userData.organization_id,
+    });
+
+    if (error) {
+      console.warn('Supabase settings load error (using local backup):', error);
+    } else if (data?.success && data?.data && Object.keys(data.data).length > 0) {
+      console.log('[Settings] Loaded from Supabase');
+      return data.data as AISettings;
     }
 
     // Fallback to local storage
-    const backup = localStorage.getItem('ai_settings_backup');
+    const backup = localStorage.getItem('pulsarvs_settings_backup');
     if (backup) {
+      console.log('[Settings] Loaded from localStorage backup');
       return JSON.parse(backup);
     }
     return DEFAULT_AI_SETTINGS;
 
   } catch (error) {
     console.error('Error loading settings:', error);
-    const backup = localStorage.getItem('ai_settings_backup');
+    const backup = localStorage.getItem('pulsarvs_settings_backup');
     if (backup) {
       return JSON.parse(backup);
     }
@@ -516,7 +577,7 @@ export const loadAIImageGenSettings = async (): Promise<AISettings> => {
   }
 
   // If no user, load from local storage directly
-  const backup = localStorage.getItem('ai_settings_backup');
+  const backup = localStorage.getItem('pulsarvs_settings_backup');
   if (backup) {
     return JSON.parse(backup);
   }
@@ -531,7 +592,7 @@ export const saveAIImageGenSettings = async (settings: AISettings): Promise<void
     await saveSettingsToSupabase(user.id, settings);
   }
   // Always save to local storage as backup
-  localStorage.setItem('ai_settings_backup', JSON.stringify(settings));
+  localStorage.setItem('pulsarvs_settings_backup', JSON.stringify(settings));
 };
 
 // Export for backward compatibility

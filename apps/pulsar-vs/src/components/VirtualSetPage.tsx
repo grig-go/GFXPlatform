@@ -53,6 +53,10 @@ import {
   Settings,
   Plane,
   Edit2,
+  MonitorPlay,
+  ChevronLeft,
+  FolderOpen,
+  Radio,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
@@ -138,15 +142,21 @@ interface VirtualSetSceneParameters {
 }
 
 interface VirtualSetAvailableOptions {
-  Floor: string[];
-  WallLeft: string[];
-  WallBack: string[];
-  WallRight: string[];
-  Platform: string[];
-  Columns: string[];
-  Roof: string[];
-  Back: string[];
-  Screen: string[];
+  Floor?: string[];
+  WallLeft?: string[];
+  WallBack?: string[];
+  WallRight?: string[];
+  WallFront?: string[];
+  Platform?: string[];
+  Columns?: string[];
+  Roof?: string[];
+  Back?: string[];
+  Screen?: string[];
+  Prop?: string[];
+  Stage?: string[];
+  General?: string[];
+  // Dynamic sections support
+  [key: string]: string[] | undefined;
 }
 
 // Airport types (NEW)
@@ -358,7 +368,7 @@ export default function VirtualSetPage({
   const { t: tCommon } = useTranslation('common');
 
   // Project context
-  const { activeProject, updateProjectChannel } = useProject();
+  const { activeProject, updateProjectChannel, projects, setActiveProject } = useProject();
 
   // State
   const [isGeneratingEnvironment, setIsGeneratingEnvironment] = useState(false);
@@ -368,7 +378,8 @@ export default function VirtualSetPage({
   const [showGeneratedFields, setShowGeneratedFields] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
-  const [layoutMode, setLayoutMode] = useState<"vertical" | "horizontal">("vertical");
+  const [viewMode, setViewMode] = useState<"vertical" | "horizontal" | "preview">("vertical");
+  const [previewUrl, setPreviewUrl] = useState<string>("");
 
   // Project type state (NEW)
   const [currentProjectType, setCurrentProjectType] = useState<ProjectType>("VirtualSet");
@@ -387,12 +398,16 @@ export default function VirtualSetPage({
   const [isRecordingEnvironment, setIsRecordingEnvironment] = useState(false);
   const [isRecordingBackground, setIsRecordingBackground] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
 
   // Channel and connection
   const [selectedChannel, setSelectedChannel] = useState("");
   const [availableChannels, setAvailableChannels] = useState<ChannelConfig[]>([]);
   const [isLoadingInstance, setIsLoadingInstance] = useState(false);
   const [instanceData, setInstanceData] = useState<PulsarInstance | null>(null);
+  const [isToolbarHidden, setIsToolbarHidden] = useState(false);
   const [instanceError, setInstanceError] = useState<string | null>(null);
 
   // Scene data
@@ -432,6 +447,7 @@ export default function VirtualSetPage({
   // Dialog states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [backdropToDelete, setBackdropToDelete] = useState<string | null>(null);
+  const [nothingToSaveOpen, setNothingToSaveOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveDescription, setSaveDescription] = useState("");
@@ -470,6 +486,269 @@ export default function VirtualSetPage({
     };
     loadProviders();
   }, []);
+
+  // Load preview URL from settings
+  useEffect(() => {
+    const loadPreviewSettings = async () => {
+      try {
+        const settings = await loadAIImageGenSettings();
+        console.log("[PixelStreaming] Loaded settings, preview URL:", settings.preview?.url || "(none)");
+        if (settings.preview?.url) {
+          setPreviewUrl(settings.preview.url);
+        }
+      } catch (error) {
+        console.error("[VirtualSetPage] Failed to load preview settings:", error);
+      }
+    };
+    loadPreviewSettings();
+
+  }, []);
+
+  // WebRTC connection for preview mode (Unreal Pixel Streaming)
+  const webSocketRef = useRef<WebSocket | null>(null);
+
+  // Toggle body background for preview mode
+  useEffect(() => {
+    if (viewMode === "preview") {
+      document.body.style.background = "transparent";
+      document.documentElement.style.background = "transparent";
+    } else {
+      document.body.style.background = "";
+      document.documentElement.style.background = "";
+    }
+    return () => {
+      document.body.style.background = "";
+      document.documentElement.style.background = "";
+    };
+  }, [viewMode]);
+
+  // Store stream ref so we can reassign it when video element remounts
+  const streamRef = useRef<MediaStream | null>(null);
+  // Track if we should reconnect (to avoid stale closures in timeouts)
+  const shouldReconnectRef = useRef<boolean>(false);
+  // Store reconnect timeout ID to cancel on cleanup
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    console.log("[PixelStreaming] Effect triggered - viewMode:", viewMode, "previewUrl:", previewUrl || "(none)");
+
+    if (viewMode !== "preview" || !previewUrl) {
+      // Cleanup when not in preview mode or no URL
+      console.log("[PixelStreaming] Not in preview mode or no URL, cleaning up");
+      // Prevent reconnection attempts
+      shouldReconnectRef.current = false;
+      // Cancel any pending reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (webSocketRef.current) {
+        webSocketRef.current.close();
+        webSocketRef.current = null;
+      }
+      if (previewVideoRef.current) {
+        previewVideoRef.current.srcObject = null;
+      }
+      streamRef.current = null;
+      return;
+    }
+
+    // Enable reconnection for preview mode
+    shouldReconnectRef.current = true;
+
+    // If we already have a stream and the video element exists, reassign it
+    if (streamRef.current && previewVideoRef.current && !previewVideoRef.current.srcObject) {
+      console.log("[PixelStreaming] Reassigning existing stream to video element");
+      previewVideoRef.current.srcObject = streamRef.current;
+      previewVideoRef.current.play().catch(err => {
+        console.warn("[PixelStreaming] Play failed on reassign:", err);
+      });
+    }
+
+    // If already connected, don't reconnect
+    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+      console.log("[PixelStreaming] Already connected, skipping reconnect");
+      return;
+    }
+
+    console.log("[PixelStreaming] Starting connection to:", previewUrl);
+
+    const connectPixelStreaming = () => {
+      try {
+        // Convert https:// to wss:// for WebSocket connection
+        let wsUrl = previewUrl;
+        if (wsUrl.startsWith("https://")) {
+          wsUrl = wsUrl.replace("https://", "wss://");
+        } else if (wsUrl.startsWith("http://")) {
+          wsUrl = wsUrl.replace("http://", "ws://");
+        }
+        // Ensure it ends with proper WebSocket path if not already
+        if (!wsUrl.includes("/ws") && !wsUrl.endsWith("/")) {
+          wsUrl = wsUrl + "/";
+        }
+
+        console.log("[PixelStreaming] Connecting to:", wsUrl);
+
+        const ws = new WebSocket(wsUrl);
+        webSocketRef.current = ws;
+
+        ws.onopen = () => {
+          console.log("[PixelStreaming] WebSocket connected");
+          // Request streamer list
+          ws.send(JSON.stringify({ type: "listStreamers" }));
+        };
+
+        ws.onmessage = async (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            console.log("[PixelStreaming] Received:", msg.type, msg);
+
+            if (msg.type === "config") {
+              // Server config received, create peer connection
+              const pc = new RTCPeerConnection({
+                iceServers: msg.peerConnectionOptions?.iceServers || [
+                  { urls: "stun:stun.l.google.com:19302" }
+                ]
+              });
+              peerConnectionRef.current = pc;
+
+              pc.ontrack = (trackEvent) => {
+                console.log("[PixelStreaming] Received track:", trackEvent.track.kind, "stream:", trackEvent.streams[0]?.id);
+                if (trackEvent.track.kind === "video" && trackEvent.streams[0]) {
+                  // Store stream ref for reassignment if video element remounts
+                  streamRef.current = trackEvent.streams[0];
+                  // Set srcObject for video element
+                  if (previewVideoRef.current) {
+                    previewVideoRef.current.srcObject = trackEvent.streams[0];
+                    console.log("[PixelStreaming] Set video srcObject:", trackEvent.streams[0]?.id);
+                    // Attempt to play
+                    previewVideoRef.current.play().catch(err => {
+                      console.warn("[PixelStreaming] Auto-play on track:", err);
+                    });
+                  }
+                }
+              };
+
+              pc.onicecandidate = (iceEvent) => {
+                if (iceEvent.candidate) {
+                  ws.send(JSON.stringify({
+                    type: "iceCandidate",
+                    candidate: iceEvent.candidate
+                  }));
+                }
+              };
+
+              pc.oniceconnectionstatechange = () => {
+                console.log("[PixelStreaming] ICE state:", pc.iceConnectionState);
+              };
+
+              // Handle incoming data channel from server
+              pc.ondatachannel = (event) => {
+                console.log("[PixelStreaming] Data channel received:", event.channel.label);
+                const dc = event.channel;
+                dataChannelRef.current = dc;
+                dc.onopen = () => console.log("[PixelStreaming] Data channel open");
+                dc.onclose = () => console.log("[PixelStreaming] Data channel closed");
+                dc.onmessage = (e) => console.log("[PixelStreaming] Data channel message:", e.data);
+              };
+
+              // Request to subscribe after config
+              ws.send(JSON.stringify({ type: "subscribe", streamerId: "" }));
+
+            } else if (msg.type === "streamerList") {
+              // Got list of streamers, subscribe to first one
+              console.log("[PixelStreaming] Available streamers:", msg.ids);
+              if (msg.ids && msg.ids.length > 0) {
+                ws.send(JSON.stringify({ type: "subscribe", streamerId: msg.ids[0] }));
+              } else {
+                // No specific streamer, try empty subscribe
+                ws.send(JSON.stringify({ type: "subscribe", streamerId: "" }));
+              }
+
+            } else if (msg.type === "offer") {
+              // Received offer from Pixel Streaming server
+              const pc = peerConnectionRef.current;
+              if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(msg));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send(JSON.stringify({
+                  type: "answer",
+                  sdp: answer.sdp
+                }));
+                console.log("[PixelStreaming] Sent answer");
+              }
+
+            } else if (msg.type === "iceCandidate" && msg.candidate) {
+              // Received ICE candidate from server
+              const pc = peerConnectionRef.current;
+              if (pc) {
+                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+              }
+            }
+          } catch (error) {
+            console.error("[PixelStreaming] Message handling error:", error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error("[PixelStreaming] WebSocket error:", error);
+        };
+
+        ws.onclose = () => {
+          console.log("[PixelStreaming] WebSocket closed");
+          // Reconnect after delay if still in preview mode (use ref to avoid stale closure)
+          if (shouldReconnectRef.current) {
+            console.log("[PixelStreaming] Scheduling reconnect in 3s...");
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (shouldReconnectRef.current) {
+                connectPixelStreaming();
+              }
+            }, 3000);
+          } else {
+            console.log("[PixelStreaming] Not reconnecting - preview mode closed");
+          }
+        };
+
+      } catch (error) {
+        console.error("[PixelStreaming] Connection failed:", error);
+        toast.error("Failed to connect to preview stream");
+      }
+    };
+
+    connectPixelStreaming();
+
+    // Keep-alive ping every 30 seconds
+    const pingInterval = setInterval(() => {
+      if (webSocketRef.current?.readyState === WebSocket.OPEN) {
+        webSocketRef.current.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 30000);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      console.log("[PixelStreaming] Cleanup - disconnecting");
+      shouldReconnectRef.current = false;
+      clearInterval(pingInterval);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (webSocketRef.current) {
+        webSocketRef.current.close();
+        webSocketRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      streamRef.current = null;
+    };
+  }, [viewMode, previewUrl]);
 
   useEffect(() => {
     loadChannels();
@@ -1335,47 +1614,181 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
     return { ...baseState, ...previousState, ...filteredParams };
   };
 
-  // Existing: Build VirtualSet system prompt
+  // Existing: Build VirtualSet system prompt (now dynamic with rich metadata)
   const buildVirtualSetSystemPrompt = (options: VirtualSetAvailableOptions): string => {
-    const buildPromptSection = (sectionName: string, sectionOptions: string[] | undefined): string => {
-      if (!sectionOptions || sectionOptions.length === 0) {
-        return `${sectionName}: "" (not available)`;
+    // Build lookup maps for descriptions from sceneDescriptor
+    const getMaterialDescriptions = (): Record<string, { description: string; theme: string }> => {
+      const materialMap: Record<string, { description: string; theme: string }> = {};
+      if (!sceneDescriptor) return materialMap;
+
+      // Check for new schema format with _allMaterials
+      const allMaterials = (sceneDescriptor as any)._allMaterials;
+      if (allMaterials && Array.isArray(allMaterials)) {
+        allMaterials.forEach((mat: any) => {
+          const id = mat.materialid || mat.MaterialID || mat.id;
+          if (id) {
+            materialMap[id] = {
+              description: mat.description || mat.Description || "",
+              theme: mat.theme || mat.Theme || ""
+            };
+          }
+        });
       }
-      if (!sceneDescriptor) return `${sectionName}: ${sectionOptions.join(", ")}, ""`;
-      const lines: string[] = [`\n${sectionName} options:`];
+
+      // Also check old format Styles array
+      const styles = (sceneDescriptor as VirtualSetSceneDescriptor).Styles;
+      if (styles && Array.isArray(styles)) {
+        styles.forEach((style: StyleInfo) => {
+          if (style.MaterialID || style.Name) {
+            const id = style.MaterialID || style.Name;
+            materialMap[id] = {
+              description: style.Description || "",
+              theme: style.Theme || ""
+            };
+          }
+        });
+      }
+
+      return materialMap;
+    };
+
+    const getActorDescriptions = (): Record<string, string> => {
+      const actorMap: Record<string, string> = {};
+      if (!sceneDescriptor) return actorMap;
+
+      // Check for new schema format with actors array
+      const actors = (sceneDescriptor as any).actors;
+      if (actors && Array.isArray(actors)) {
+        actors.forEach((actor: any) => {
+          const id = actor.BlueprintClassName || actor.blueprintClassName || actor.actorName || actor.name;
+          if (id && actor.description) {
+            actorMap[id] = actor.description;
+          }
+        });
+      }
+
+      // Check for ActorDetails array (old format)
+      const actorDetails = (sceneDescriptor as VirtualSetSceneDescriptor).ActorDetails;
+      if (actorDetails && Array.isArray(actorDetails)) {
+        actorDetails.forEach((actor: ActorDetail) => {
+          if (actor.ActorName && actor.Description) {
+            actorMap[actor.ActorName] = actor.Description;
+            // Also map with BP_ prefix variations
+            actorMap[`BP_${actor.ActorName}`] = actor.Description;
+            actorMap[`BP_${actor.ActorName}_C`] = actor.Description;
+          }
+        });
+      }
+
+      // Check for ActorTags (JSON strings with descriptions)
+      const actorTags = (sceneDescriptor as VirtualSetSceneDescriptor).ActorTags;
+      if (actorTags && typeof actorTags === 'object') {
+        Object.entries(actorTags).forEach(([actorName, tagJson]) => {
+          try {
+            const parsed = typeof tagJson === 'string' ? JSON.parse(tagJson) : tagJson;
+            if (parsed.description) {
+              actorMap[actorName] = parsed.description;
+              // Also map without BP_ prefix
+              if (actorName.startsWith('BP_')) {
+                actorMap[actorName.replace('BP_', '')] = parsed.description;
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        });
+      }
+
+      return actorMap;
+    };
+
+    const materialDescriptions = getMaterialDescriptions();
+    const actorDescriptions = getActorDescriptions();
+
+    const buildPromptSection = (sectionName: string, sectionOptions: string[] | undefined): string => {
+      if (!sectionOptions || sectionOptions.length === 0) return "";
+
+      const lines: string[] = [`\n## ${sectionName}`];
       const actorGroups: Record<string, string[]> = {};
+
+      // Group options by actor
       sectionOptions.forEach((opt) => {
+        if (opt === "__none__" || opt === "") return;
         const [actorName] = opt.split(":");
         if (!actorGroups[actorName]) actorGroups[actorName] = [];
         actorGroups[actorName].push(opt);
       });
+
+      // Build actor sections with descriptions
       Object.entries(actorGroups).forEach(([actorName, actorOptions]) => {
-        lines.push(`  ${actorName}`);
-        actorOptions.forEach((opt) => lines.push(`    - ${opt}`));
+        const actorDesc = actorDescriptions[actorName];
+        if (actorDesc) {
+          lines.push(`\n### ${actorName}`);
+          lines.push(`Description: ${actorDesc}`);
+        } else {
+          lines.push(`\n### ${actorName}`);
+        }
+
+        lines.push("Available styles:");
+        actorOptions.forEach((opt) => {
+          const [, materialId] = opt.split(":");
+          if (materialId) {
+            const matInfo = materialDescriptions[materialId];
+            if (matInfo && (matInfo.description || matInfo.theme)) {
+              const desc = matInfo.description || matInfo.theme;
+              lines.push(`  - "${opt}" - ${desc}`);
+            } else {
+              lines.push(`  - "${opt}"`);
+            }
+          } else {
+            lines.push(`  - "${opt}"`);
+          }
+        });
       });
-      lines.push('  - "" (empty/disabled)');
+
+      lines.push(`  - "" (empty/disabled)`);
       return lines.join("\n");
     };
 
-    return `Virtual set designer AI. Select Actor:Style combinations based on user description.
+    // Dynamically build sections from available options
+    const dynamicOptions = options as unknown as Record<string, string[]>;
+    const sectionPrompts = Object.entries(dynamicOptions)
+      .filter(([_, opts]) => Array.isArray(opts) && opts.length > 0)
+      .map(([sectionName, opts]) => buildPromptSection(sectionName, opts))
+      .filter(Boolean)
+      .join("\n");
 
-FORMAT: Each parameter uses "<ActorName>:<StyleName>" format.
-${buildPromptSection("Floor", options.Floor)}
-${buildPromptSection("WallLeft", options.WallLeft)}
-${buildPromptSection("WallBack", options.WallBack)}
-${buildPromptSection("WallRight", options.WallRight)}
-${buildPromptSection("Platform", options.Platform)}
-${buildPromptSection("Columns", options.Columns)}
-${buildPromptSection("Roof", options.Roof)}
-${buildPromptSection("Back", options.Back)}
-${buildPromptSection("Screen", options.Screen)}
+    const sectionKeys = Object.keys(dynamicOptions).filter(k => Array.isArray(dynamicOptions[k]) && dynamicOptions[k].length > 0);
 
-RULES:
-- This is an ITERATIVE process - build upon existing scene configuration
-- ONLY modify parameters explicitly mentioned by user
-- PRESERVE values for unmentioned parameters from current scene
-- Use "" (empty string) to explicitly disable/remove an element
-- Return valid JSON with ALL section keys PLUS a "summary" field`;
+    // Debug: Log what sections and actors are being included in the AI prompt
+    console.log('🤖 AI System Prompt - Sections:', sectionKeys);
+    console.log('🤖 AI System Prompt - Actor Descriptions found:', Object.keys(actorDescriptions).length);
+    console.log('🤖 AI System Prompt - Material Descriptions found:', Object.keys(materialDescriptions).length);
+
+    return `You are a Virtual Set Designer AI. Your job is to select Actor:Style combinations to create professional broadcast virtual sets based on user descriptions.
+
+# RESPONSE FORMAT
+Each parameter uses "<ActorName>:<StyleName>" format (e.g., "BP_Floor:Wood1").
+Return a JSON object with section keys and a "summary" field.
+
+# AVAILABLE SET ELEMENTS
+${sectionPrompts}
+
+# AVAILABLE SECTIONS
+${sectionKeys.join(", ")}
+
+# DESIGN RULES
+1. ITERATIVE DESIGN: Build upon the existing scene configuration
+2. SELECTIVE CHANGES: ONLY modify parameters the user explicitly mentions
+3. PRESERVE STATE: Keep existing values for unmentioned parameters
+4. REMOVAL: Use "" (empty string) to explicitly disable/remove an element
+5. ALWAYS include a "summary" field with a friendly 1-2 sentence explanation
+
+# STYLE MATCHING TIPS
+- For "modern" looks: prefer Glass, White, Blue materials
+- For "warm/cozy" looks: prefer Wood, Brick, Fabric materials
+- For "professional/corporate": prefer Stone, Marble, White materials
+- For "industrial/creative": prefer Brick, SciFi, Plastic materials`;
   };
 
   // Existing: Build VirtualSet user prompt
@@ -1389,28 +1802,33 @@ Return JSON preserving current values, only updating what's mentioned. Use "" to
 IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of what you created or changed.`;
   };
 
-  // Existing: Process VirtualSet AI response
+  // Existing: Process VirtualSet AI response (now dynamic - supports all sections from schema)
   const processVirtualSetAIResponse = (
     sceneParams: VirtualSetSceneParameters,
     previousScene: VirtualSetSceneParameters | null,
     previousGenerated: VirtualSetSceneParameters | null
   ): VirtualSetSceneParameters => {
-    const baseState: VirtualSetSceneParameters = {
-      Floor: "", WallLeft: "", WallBack: "", WallRight: "",
-      Platform: "", Columns: "", Roof: "", Back: "", Screen: "", summary: "",
-    };
+    // Build dynamic base state from availableOptions keys
+    const dynamicKeys = availableOptions
+      ? Object.keys(availableOptions).filter(k => (availableOptions as any)[k]?.length > 0)
+      : ["Floor", "WallLeft", "WallBack", "WallRight", "Platform", "Columns", "Roof", "Back", "Screen"];
 
-    const previousState = previousGenerated || previousScene || baseState;
+    const baseState: Record<string, string> = { summary: "" };
+    dynamicKeys.forEach(key => {
+      baseState[key] = "";
+    });
 
-    const filteredParams: Partial<VirtualSetSceneParameters> = {};
-    const paramKeys: (keyof VirtualSetSceneParameters)[] = [
-      "Floor", "WallLeft", "WallBack", "WallRight",
-      "Platform", "Columns", "Roof", "Back", "Screen"
-    ];
+    const previousState = previousGenerated || previousScene || baseState as VirtualSetSceneParameters;
 
-    paramKeys.forEach((key) => {
-      const newValue = sceneParams[key];
-      const oldValue = previousState[key];
+    const filteredParams: Record<string, string> = {};
+
+    // Process ALL keys from the AI response (not just hardcoded ones)
+    // This allows Prop, Stage, FurnitureBackDecor, etc. to be included
+    Object.keys(sceneParams).forEach((key) => {
+      if (key === 'summary') return; // Handle summary separately
+
+      const newValue = (sceneParams as any)[key];
+      const oldValue = (previousState as any)[key];
 
       if (newValue !== undefined && newValue !== null) {
         if (newValue !== "" || (newValue === "" && oldValue && oldValue !== "")) {
@@ -1423,7 +1841,15 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
       filteredParams.summary = sceneParams.summary;
     }
 
-    return { ...baseState, ...previousState, ...filteredParams };
+    const result = { ...baseState, ...previousState, ...filteredParams } as VirtualSetSceneParameters;
+
+    // Debug: Log what sections are being processed
+    const changedKeys = Object.keys(filteredParams).filter(k => k !== 'summary');
+    if (changedKeys.length > 0) {
+      console.log('🤖 AI Response processed - Changed sections:', changedKeys);
+    }
+
+    return result;
   };
   // ============================================
   // APPLY SCENE PARAMETERS (UPDATED FOR BOTH TYPES)
@@ -1900,19 +2326,22 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
   // ============================================
 
   const handleSaveContent = async () => {
+    console.log("[Save] handleSaveContent called");
     // For Airport: just parameters
     // For VirtualSet: parameters + backdrop image
     // Check both currentScene and generatedFields (manual selections go to generatedFields)
     const sceneToSave = currentScene || generatedFields;
     const hasParameters = sceneToSave && Object.keys(sceneToSave).length > 0;
 
+    console.log("[Save] State:", { currentProjectType, hasParameters, selectedBackdrop, sceneToSave });
+
     if (currentProjectType === "Airport" && !hasParameters) {
-      toast.error("Nothing to save. Please configure the airport display first.");
+      setNothingToSaveOpen(true);
       return;
     }
 
     if (currentProjectType === "VirtualSet" && !hasParameters && !selectedBackdrop) {
-      toast.error("Nothing to save. Please set parameters or generate a backdrop first.");
+      setNothingToSaveOpen(true);
       return;
     }
 
@@ -2284,171 +2713,342 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
   // ============================================
 
   return (
-    <div className={`mt-3 ${layoutMode === "vertical" ? "max-w-2xl" : "max-w-[95%]"} mx-auto`}>
-      <div className="mb-6">
-        {/* Channel and Actions Section */}
-        <div className="mb-6 flex gap-4">
-          <ProjectSelector
-            onManageProjects={() => setShowProjectModal(true)}
-            onCreateProject={() => setShowProjectModal(true)}
+    <>
+      {/* WebRTC Preview Video Background with interaction */}
+      {viewMode === "preview" && (
+        <>
+          {/* Black overlay behind video for fallback */}
+          <div className="fixed inset-0 bg-black -z-20" />
+          <video
+            key="preview-video"
+            ref={previewVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="fixed top-0 left-0 w-screen h-screen object-cover -z-10 cursor-pointer"
+            onLoadedData={() => {
+              console.log("[PixelStreaming] Video data loaded");
+              // Try to play when data is loaded
+              previewVideoRef.current?.play().catch(err => {
+                console.warn("[PixelStreaming] Auto-play failed:", err);
+              });
+            }}
+            onPlay={() => console.log("[PixelStreaming] Video playing")}
+            onError={(e) => console.error("[PixelStreaming] Video error:", e)}
+            onClick={(e) => {
+              const dc = dataChannelRef.current;
+              if (!dc || dc.readyState !== "open" || !previewVideoRef.current) return;
+              const rect = previewVideoRef.current.getBoundingClientRect();
+              const x = Math.round(((e.clientX - rect.left) / rect.width) * 65535);
+              const y = Math.round(((e.clientY - rect.top) / rect.height) * 65535);
+              // Pixel Streaming binary format: [messageType, button, x(2 bytes), y(2 bytes)]
+              // MouseDown = 66, MouseUp = 67
+              const mouseDown = new Uint8Array(6);
+              mouseDown[0] = 66; // MouseDown
+              mouseDown[1] = 0;  // Left button
+              mouseDown[2] = x & 0xFF;
+              mouseDown[3] = (x >> 8) & 0xFF;
+              mouseDown[4] = y & 0xFF;
+              mouseDown[5] = (y >> 8) & 0xFF;
+              dc.send(mouseDown.buffer);
+
+              setTimeout(() => {
+                const mouseUp = new Uint8Array(6);
+                mouseUp[0] = 67; // MouseUp
+                mouseUp[1] = 0;  // Left button
+                mouseUp[2] = x & 0xFF;
+                mouseUp[3] = (x >> 8) & 0xFF;
+                mouseUp[4] = y & 0xFF;
+                mouseUp[5] = (y >> 8) & 0xFF;
+                dc.send(mouseUp.buffer);
+              }, 50);
+              console.log("[PixelStreaming] Click sent at", x, y);
+            }}
+            onMouseMove={(e) => {
+              const dc = dataChannelRef.current;
+              if (!dc || dc.readyState !== "open" || !previewVideoRef.current) return;
+              const rect = previewVideoRef.current.getBoundingClientRect();
+              const x = Math.round(((e.clientX - rect.left) / rect.width) * 65535);
+              const y = Math.round(((e.clientY - rect.top) / rect.height) * 65535);
+              // MouseMove = 65
+              const mouseMove = new Uint8Array(9);
+              mouseMove[0] = 65; // MouseMove
+              mouseMove[1] = x & 0xFF;
+              mouseMove[2] = (x >> 8) & 0xFF;
+              mouseMove[3] = y & 0xFF;
+              mouseMove[4] = (y >> 8) & 0xFF;
+              // Delta X and Y as signed 16-bit
+              const deltaX = Math.max(-32768, Math.min(32767, e.movementX));
+              const deltaY = Math.max(-32768, Math.min(32767, e.movementY));
+              mouseMove[5] = deltaX & 0xFF;
+              mouseMove[6] = (deltaX >> 8) & 0xFF;
+              mouseMove[7] = deltaY & 0xFF;
+              mouseMove[8] = (deltaY >> 8) & 0xFF;
+              dc.send(mouseMove.buffer);
+            }}
+            onWheel={(e) => {
+              const dc = dataChannelRef.current;
+              if (!dc || dc.readyState !== "open") return;
+              // MouseWheel = 68
+              const mouseWheel = new Uint8Array(3);
+              mouseWheel[0] = 68; // MouseWheel
+              const delta = Math.round(e.deltaY);
+              mouseWheel[1] = delta & 0xFF;
+              mouseWheel[2] = (delta >> 8) & 0xFF;
+              dc.send(mouseWheel.buffer);
+            }}
           />
-
-          {/* Channel Box */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="flex-1 space-y-2 border rounded-lg p-4 bg-card transition-all duration-300 hover:shadow-md"
-          >
-            <div className="flex items-center justify-between">
-              <Label htmlFor="channel-select" className="text-sm font-medium">{t('channel.label')}</Label>
-              {/* Project Type Badge */}
-              <Badge variant={currentProjectType === "Airport" ? "default" : "secondary"} className="text-xs">
-                {currentProjectType === "Airport" ? <Plane className="size-3 me-1" /> : <Sparkles className="size-3 me-1" />}
-                {currentProjectType === "Airport" ? t('projectType.airport') : t('projectType.virtualSet')}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3">
-              <Select
-                value={selectedChannel}
-                onValueChange={(value) => {
-                  if (value === "__create_channel__") {
-                    toast.info(t('channel.creationComingSoon'));
-                    return;
-                  }
-                  if (value === "__manage_channels__") {
-                    toast.info(t('channel.managementComingSoon'));
-                    return;
-                  }
-                  setSelectedChannel(value);
-                  if (activeProject) updateProjectChannel(value);
-                }}
+        </>
+      )}
+      <div className={`relative mt-3 ${viewMode === "preview" ? "max-w-[22%] ml-4" : viewMode === "vertical" ? "max-w-2xl" : "max-w-[95%]"} mx-auto`}>
+      <div className="mb-6">
+        {/* Compact Toolbar */}
+        <div className="mb-6">
+          <AnimatePresence mode="wait">
+            {isToolbarHidden ? (
+              <motion.div
+                key="collapsed"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
               >
-                <SelectTrigger id="channel-select" className="flex-1">
-                  <SelectValue placeholder={t('channel.selectChannel')}>
-                    {selectedChannel && availableChannels.find((c) => c.id === selectedChannel)?.name}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableChannels.map((channel) => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span>{channel.name}</span>
-                        <div className="flex items-center gap-1.5">
-                          {channel.type && (
-                            <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-300">
-                              {channel.type}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant={channel.active ? "default" : "secondary"}
-                            className={channel.active
-                              ? "text-xs bg-green-100 text-green-800 border-green-300"
-                              : "text-xs bg-muted text-muted-foreground"
-                            }
-                          >
-                            {channel.active ? tCommon('status.active') : tCommon('status.inactive')}
-                          </Badge>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                  {availableChannels.length > 0 && (
-                    <div className="border-t mt-2 pt-2">
-                      <SelectItem value="__create_channel__">
-                        <div className="flex items-center gap-2 text-blue-600">
-                          <Plus className="size-4" />
-                          <span>{t('channel.newChannel')}</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="__manage_channels__">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Settings className="size-4" />
-                          <span>{t('channel.manageChannels')}</span>
-                        </div>
-                      </SelectItem>
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-
-              <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap max-md-900:hidden">
-                {isLoadingInstance ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin text-blue-500" />
-                    <span>{t('channel.loading')}</span>
-                  </>
-                ) : instanceData ? (
-                  <button
-                    onClick={() => setShowInstanceDialog(true)}
-                    className="flex items-center gap-2 hover:opacity-70 transition-opacity cursor-pointer"
-                  >
-                    <Database className="size-3 text-green-500" />
-                    <span className="text-green-600">{t('channel.connected')}</span>
-                  </button>
-                ) : selectedChannel && instanceError ? (
-                  <>
-                    <CloudOff className="size-3 text-amber-500" />
-                    <span className="text-amber-600">{t('channel.notConnected')}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse"></span>
-                    <span>{t('channel.offlineMode')}</span>
-                  </>
-                )}
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={refreshInstanceData}
-                disabled={isLoadingInstance || !selectedChannel}
-                className="h-9 w-9"
-                title="Refresh instance data"
-              >
-                <RefreshCw className={`size-4 ${isLoadingInstance ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </motion.div>
-
-          {/* Actions Box */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
-            className="flex-1 space-y-2 border rounded-lg p-4 bg-card transition-all duration-300 hover:shadow-md"
-          >
-            <Label className="text-sm font-medium">{t('actions.label')}</Label>
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSaveContent}
-                className="h-7 px-2 bg-black text-white hover:bg-gray-800 border-black"
-              >
-                <Save className="size-3" />
-              </Button>
-              <div className="flex items-center gap-2">
                 <Button
-                  variant={layoutMode === "vertical" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setLayoutMode("vertical")}
-                  className="h-7 px-2"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsToolbarHidden(false)}
+                  className="h-10 w-10 rounded-lg bg-card shadow-md hover:shadow-lg transition-all"
+                  title="Show toolbar"
+                >
+                  <ChevronLeft className="size-5 rotate-180" />
+                </Button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="expanded"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center gap-1 p-2 rounded-lg border bg-card shadow-sm w-full"
+              >
+                {/* Hide Toolbar Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsToolbarHidden(true)}
+                  className="h-9 w-9 shrink-0"
+                  title="Hide toolbar"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+
+                {/* Project Selector */}
+                <Select
+                  value={activeProject?.id || ''}
+                  onValueChange={async (value) => {
+                    if (value === '__manage__') {
+                      setShowProjectModal(true);
+                      return;
+                    }
+                    if (value === '__create__') {
+                      setShowProjectModal(true);
+                      return;
+                    }
+                    await setActiveProject(value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-9 p-0 border-0 bg-transparent justify-center [&>svg:last-child]:hidden" title={activeProject?.name || t('channel.selectChannel')}>
+                    {activeProject ? (
+                      <span className="text-lg">{activeProject.icon}</span>
+                    ) : (
+                      <FolderOpen className="size-4 text-muted-foreground" />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.length === 0 ? (
+                      <div className="p-4 text-center">
+                        <FolderOpen className="size-10 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm text-muted-foreground mb-3">No projects yet</p>
+                        <Button
+                          size="sm"
+                          onClick={() => setShowProjectModal(true)}
+                          className="w-full"
+                        >
+                          <Plus className="size-4 mr-2" />
+                          Create First Project
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        {projects.map(project => (
+                          <SelectItem key={project.id} value={project.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{project.icon}</span>
+                              <span>{project.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                        <div className="border-t border-gray-200 mt-2 pt-2">
+                          <SelectItem value="__create__">
+                            <div className="flex items-center gap-2 text-blue-600">
+                              <Plus className="size-4" />
+                              <span>New Project</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="__manage__">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Settings className="size-4" />
+                              <span>Manage Projects</span>
+                            </div>
+                          </SelectItem>
+                        </div>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+
+                {/* Channel Selector */}
+                <Select
+                  value={selectedChannel}
+                  onValueChange={(value) => {
+                    if (value === "__create_channel__") {
+                      toast.info(t('channel.creationComingSoon'));
+                      return;
+                    }
+                    if (value === "__manage_channels__") {
+                      toast.info(t('channel.managementComingSoon'));
+                      return;
+                    }
+                    setSelectedChannel(value);
+                    if (activeProject) updateProjectChannel(value);
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-9 px-2 border-0 bg-transparent gap-1.5 [&>svg:last-child]:hidden"
+                    title={selectedChannel ? availableChannels.find((c) => c.id === selectedChannel)?.name : t('channel.selectChannel')}
+                  >
+                    <SelectValue placeholder="Channel">
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative">
+                          <Radio className="size-4" />
+                          {instanceData ? (
+                            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-green-500" />
+                          ) : selectedChannel && instanceError ? (
+                            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber-500" />
+                          ) : isLoadingInstance ? (
+                            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-blue-500 animate-pulse" />
+                          ) : null}
+                        </div>
+                        <span className="text-sm truncate max-w-24">
+                          {availableChannels.find((c) => c.id === selectedChannel)?.name || 'Channel'}
+                        </span>
+                      </div>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableChannels.map((channel) => (
+                      <SelectItem key={channel.id} value={channel.id}>
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span>{channel.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            {channel.type && (
+                              <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-300">
+                                {channel.type}
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={channel.active ? "default" : "secondary"}
+                              className={channel.active
+                                ? "text-xs bg-green-100 text-green-800 border-green-300"
+                                : "text-xs bg-muted text-muted-foreground"
+                              }
+                            >
+                              {channel.active ? tCommon('status.active') : tCommon('status.inactive')}
+                            </Badge>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {availableChannels.length > 0 && (
+                      <div className="border-t mt-2 pt-2">
+                        <SelectItem value="__create_channel__">
+                          <div className="flex items-center gap-2 text-blue-600">
+                            <Plus className="size-4" />
+                            <span>{t('channel.newChannel')}</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="__manage_channels__">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Settings className="size-4" />
+                            <span>{t('channel.manageChannels')}</span>
+                          </div>
+                        </SelectItem>
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+
+                {/* Separator */}
+                <div className="w-px h-6 bg-border mx-1" />
+
+                {/* Save Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleSaveContent}
+                  className="h-9 w-9"
+                  title="Save"
+                >
+                  <Save className="size-4" />
+                </Button>
+
+                {/* Separator */}
+                <div className="w-px h-6 bg-border mx-1" />
+
+                {/* Preview Mode */}
+                <Button
+                  variant={viewMode === "preview" ? "default" : "ghost"}
+                  size="icon"
+                  onClick={() => {
+                    setViewMode("preview");
+                    setTimeout(() => {
+                      if (previewVideoRef.current) {
+                        console.log("[PixelStreaming] User initiated play");
+                        previewVideoRef.current.play().catch(err => {
+                          console.warn("[PixelStreaming] Play failed:", err);
+                        });
+                      }
+                    }, 2000);
+                  }}
+                  className="h-9 w-9"
+                  title="Preview Mode"
+                >
+                  <MonitorPlay className="size-4" />
+                </Button>
+
+                {/* View Mode Toggles */}
+                <Button
+                  variant={viewMode === "vertical" ? "default" : "ghost"}
+                  size="icon"
+                  onClick={() => setViewMode("vertical")}
+                  className="h-9 w-9"
+                  title="Vertical Layout"
                 >
                   <Rows3 className="size-4" />
                 </Button>
                 <Button
-                  variant={layoutMode === "horizontal" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setLayoutMode("horizontal")}
-                  className="h-7 px-2"
+                  variant={viewMode === "horizontal" ? "default" : "ghost"}
+                  size="icon"
+                  onClick={() => setViewMode("horizontal")}
+                  className="h-9 w-9"
+                  title="Horizontal Layout"
                 >
                   <Columns2 className="size-4" />
                 </Button>
-              </div>
-            </div>
-          </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Loading State */}
@@ -2538,13 +3138,13 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
         )}
 
         {/* Two-column container */}
-        <div className={layoutMode === "horizontal" ? "grid grid-cols-2 gap-6" : ""}>
+        <div className={viewMode === "preview" ? "" : viewMode === "horizontal" ? "grid grid-cols-2 gap-6" : ""}>
           {/* Environment Panel */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
-            className={`${layoutMode === "vertical" ? "mb-6" : ""} border rounded-lg p-4 bg-card transition-all duration-300 hover:shadow-2xl group`}
+            className={`${viewMode === "vertical" || viewMode === "preview" ? "mb-6" : ""} border rounded-lg p-4 bg-card transition-all duration-300 hover:shadow-2xl group`}
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -3265,7 +3865,28 @@ IMPORTANT: Include a "summary" field with a friendly 1-2 sentence explanation of
 
       <ProjectManagementModal open={showProjectModal} onOpenChange={setShowProjectModal} />
 
+      {/* Nothing to Save Dialog */}
+      <Dialog open={nothingToSaveOpen} onOpenChange={setNothingToSaveOpen}>
+        <DialogContent className="max-w-md">
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="size-5 text-amber-500" />
+            {t('save.nothingToSaveTitle', 'Nothing to Save')}
+          </DialogTitle>
+          <DialogDescription className="pt-2">
+            {currentProjectType === "Airport"
+              ? t('save.nothingToSaveAirport', 'Please configure the airport display settings before saving.')
+              : t('save.nothingToSaveVirtualSet', 'Please set scene parameters or generate a backdrop before saving.')}
+          </DialogDescription>
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setNothingToSaveOpen(false)}>
+              {tCommon('buttons.ok', 'OK')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <canvas ref={canvasRef} style={{ display: "none" }} width={1920} height={1080} />
     </div>
+    </>
   );
 }
